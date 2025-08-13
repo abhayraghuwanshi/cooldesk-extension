@@ -589,10 +589,24 @@ function filterAndRender() {
         return inCategory && inWorkspace && inSearch;
     });
 
+    // Deduplicate by exact URL when viewing a specific workspace
+    let toRender = filteredData;
+    if (workspace && workspace !== 'All') {
+        const seen = new Set();
+        toRender = filteredData.filter(it => {
+            const raw = (it && typeof it.url === 'string') ? it.url.trim() : '';
+            if (!raw) return false;
+            const key = raw.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }
+
     if (currentView === 'category' && category !== 'All') {
-        displayCategoryItems(filteredData, category);
+        displayCategoryItems(toRender, category);
     } else {
-        displayItems(filteredData);
+        displayItems(toRender);
     }
 }
 
@@ -617,14 +631,27 @@ async function createItemHTML(item) {
             ${item.tags.map(t => `<span class="tag">${t}</span>`).join('')}
         </div>` : '';
     const favicon = createFaviconElement(item.url, 'normal');
-    const domain = getDomainFromUrl(item.url);
+    const urlKey = cleanUrl(item.url) || getDomainFromUrl(item.url);
     const categoryName = item.category ? item.category.name : 'Uncategorized';
+    // Determine if the URL has a specific path/query/hash beyond the base key
+    let hasFullPath = false;
+    try {
+        const u = new URL(item.url);
+        hasFullPath = (u.pathname && u.pathname !== '/') || !!u.search || !!u.hash;
+    } catch {}
+    const fullUrlLink = hasFullPath ? `
+        <a href="${item.url}"
+           class="full-url-link"
+           style="margin-left:8px; font-size:12px; color:#60a5fa; text-decoration:none;"
+           title="${item.url}"
+           target="_blank" rel="noopener noreferrer"
+           onclick="event.stopPropagation();">Open full URL ↗</a>` : '';
 
     // Minimal card for category view: only icon, URL/domain, and tags
     if (currentView === 'category') {
         return `
             <li class="item" style="border-color: ${getCategoryColor(categoryName)};" onclick="window.open('${item.url}', '_blank')">
-                <div class="item-url">${favicon}${domain}</div>
+                <div class="item-url">${favicon}${urlKey}${fullUrlLink}</div>
                 ${tags}
             </li>`;
     }
@@ -664,7 +691,7 @@ async function createItemHTML(item) {
 
     return `
         <li class="item" style="border-color: ${getCategoryColor(categoryName)};" onclick="window.open('${item.url}', '_blank')">
-            <div class="item-url">${favicon}${domain}</div>
+            <div class="item-url">${favicon}${urlKey}${fullUrlLink}</div>
             ${toolName}
             ${workspaceBadge}
             ${bigButton}
@@ -883,6 +910,16 @@ function cleanUrl(url) {
     } catch { return null; }
 }
 
+// Fallback cleaner to match background.js storage key (last two hostname labels)
+function naiveCleanUrl(url) {
+    try {
+        const u = new URL(url);
+        const parts = u.hostname.split('.');
+        const domain = parts.length >= 2 ? parts.slice(-2).join('.') : u.hostname;
+        return `${u.protocol}//${domain}`;
+    } catch { return null; }
+}
+
 function getFaviconUrl(url, size = 64) {
     try {
         const urlObj = new URL(url);
@@ -921,9 +958,13 @@ async function hydrateFromIndexedDb(items) {
     const results = [];
     for (const item of items) {
         const cleaned = cleanUrl(item.url);
-        if (!cleaned) { results.push(item); continue; }
+        const fallbackKey = naiveCleanUrl(item.url);
+        if (!cleaned && !fallbackKey) { results.push(item); continue; }
         try {
-            const cached = await getEnrichmentFromDb(cleaned);
+            let cached = cleaned ? await getEnrichmentFromDb(cleaned) : null;
+            if (!cached && fallbackKey && fallbackKey !== cleaned) {
+                cached = await getEnrichmentFromDb(fallbackKey);
+            }
             if (cached) {
                 results.push({
                     ...item,

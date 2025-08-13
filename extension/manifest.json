@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "cooldesk",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "cooldesk"
+  },
+  "options_page": "index.html",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "bookmarks",
+    "history",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/*",
+        "index.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

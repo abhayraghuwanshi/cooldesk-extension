@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.1.0"
+  }
+}
