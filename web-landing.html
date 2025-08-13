@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>My Synced Data</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+        }
+
+        .header p {
+            margin: 5px 0 0;
+            opacity: 0.8;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: -40px auto 0;
+            padding: 20px;
+            position: relative;
+        }
+
+        .controls {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        #search-input {
+            flex-grow: 1;
+            padding: 12px;
+            font-size: 1em;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        #category-filters {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background-color: #e9ecef;
+            border: 1px solid #ced4da;
+            color: #495057;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn.active,
+        .filter-btn:hover {
+            background-color: #5e72e4;
+            color: white;
+            border-color: #5e72e4;
+        }
+
+        .tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            background: #fff;
+            border: none;
+            padding: 15px 30px;
+            cursor: pointer;
+            font-size: 1.1em;
+            border-radius: 8px 8px 0 0;
+            margin: 0 5px;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .tab-button.active {
+            background: #5e72e4;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .item-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+            list-style: none;
+            padding: 0;
+        }
+
+        .item {
+            padding: 20px;
+            border-radius: 8px;
+            background: #fff;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #e0e0e0;
+        }
+
+        .item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        .item-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .item-summary {
+            font-size: 0.95em;
+            color: #555;
+            margin-bottom: 12px;
+            flex-grow: 1;
+        }
+
+        .item-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        .item-category {
+            background-color: #e9ecef;
+            color: #495057;
+            padding: 4px 10px;
+            border-radius: 15px;
+        }
+
+        .item-url {
+            color: #007bff;
+            text-decoration: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 150px;
+        }
+
+        .loading,
+        .empty {
+            text-align: center;
+            color: #666;
+            font-size: 18px;
+            padding: 50px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>My Synced Data</h1>
+        <p id="lastSyncTime">Last sync: Never</p>
+    </div>
+    <div class="container">
+        <div class="controls">
+            <input type="search" id="search-input" placeholder="Search by title, summary, or URL...">
+            <div id="category-filters"></div>
+        </div>
+        <div class="tabs">
+            <button class="tab-button active" onclick="openTab('bookmarks')">Bookmarks</button>
+            <button class="tab-button" onclick="openTab('history')">History</button>
+        </div>
+        <div id="bookmarks" class="tab-content active">
+            <p class="loading">Loading...</p>
+        </div>
+        <div id="history" class="tab-content">
+            <p class="loading">Loading...</p>
+        </div>
+    </div>
+
+    <script>
+        const userId = window.location.pathname.split('/').pop();
+        let fullData = { bookmarks: [], history: [] };
+        let activeFilters = { search: '', category: 'All' };
+
+        function openTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            document.querySelector(`.tab-button[onclick="openTab('${tabName}')"]`).classList.add('active');
+        }
+
+        async function loadData() {
+            try {
+                const response = await fetch(`/api/data/${userId}`);
+                fullData = await response.json();
+                if (fullData.lastSync) {
+                    document.getElementById('lastSyncTime').textContent = `Last sync: ${new Date(fullData.lastSync).toLocaleString()}`;
+                }
+                renderPage();
+            } catch (error) {
+                document.getElementById('bookmarks').innerHTML = '<p class="empty">Error loading data.</p>';
+                document.getElementById('history').innerHTML = '<p class="empty">Error loading data.</p>';
+            }
+        }
+
+        function renderPage() {
+            const allItems = [...fullData.bookmarks, ...fullData.history];
+            const categories = ['All', ...new Set(allItems.map(item => item.category || 'Uncategorized'))];
+
+            const filtersContainer = document.getElementById('category-filters');
+            filtersContainer.innerHTML = categories.map(cat =>
+                `<button class="filter-btn ${cat === activeFilters.category ? 'active' : ''}" onclick="setCategoryFilter('${cat}')">${cat}</button>`
+            ).join('');
+
+            filterAndRender();
+        }
+
+        function filterAndRender() {
+            const { search, category } = activeFilters;
+            const searchLower = search.toLowerCase();
+
+            const filterLogic = item => {
+                const inCategory = category === 'All' || item.category === category;
+                const inSearch = !searchLower ||
+                    (item.title && item.title.toLowerCase().includes(searchLower)) ||
+                    (item.summary && item.summary.toLowerCase().includes(searchLower)) ||
+                    (item.url && item.url.toLowerCase().includes(searchLower));
+                return inCategory && inSearch;
+            };
+
+            displayItems('bookmarks', fullData.bookmarks.filter(filterLogic));
+            displayItems('history', fullData.history.filter(filterLogic));
+        }
+
+        function displayItems(containerId, items) {
+            const container = document.getElementById(containerId);
+            if (items.length === 0) {
+                container.innerHTML = '<p class="empty">No items match your filters.</p>';
+                return;
+            }
+            container.innerHTML = '<ul class="item-list">' + items.map(createItemHTML).join('') + '</ul>';
+        }
+
+        function createItemHTML(item) {
+            return `
+                <li class="item">
+                    <div class="item-title" title="${item.title || ''}">${item.title || 'No Title'}</div>
+                    <p class="item-summary">${item.summary || 'No summary available.'}</p>
+                    <div class="item-footer">
+                        <span class="item-category">${item.category || 'Uncategorized'}</span>
+                        <a href="${item.url}" target="_blank" class="item-url" title="${item.url}">${item.cleanUrl || item.url}</a>
+                    </div>
+                </li>`;
+        }
+
+        function setCategoryFilter(category) {
+            activeFilters.category = category;
+            document.querySelectorAll('#category-filters .filter-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`#category-filters .filter-btn[onclick="setCategoryFilter('${category}')"]`).classList.add('active');
+            filterAndRender();
+        }
+
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            activeFilters.search = e.target.value;
+            filterAndRender();
+        });
+
+        loadData();
+    </script>
+</body>
+
+</html>
