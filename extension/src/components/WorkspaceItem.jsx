@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { getFaviconUrl, formatTime, getUrlParts } from '../utils';
+import React, { useMemo, useState } from 'react';
+import { formatTime, getFaviconUrl, getUrlParts } from '../utils';
 
 export function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLink }) {
   const [showDetails, setShowDetails] = useState(false);
@@ -43,11 +43,6 @@ export function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLi
         </div>
         <div className="item-actions">
           {timeString && <span className="time-spent-badge">{timeString}</span>}
-          {onAddLink && (
-            <button className="details-btn" onClick={handleAddLinkClick} title="Add Link">
-              <i className="fas fa-plus"></i>
-            </button>
-          )}
           {values.length > 0 && (
             <button
               className="details-btn"

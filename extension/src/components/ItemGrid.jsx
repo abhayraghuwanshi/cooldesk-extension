@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAISuggestions } from '../hooks/useAISuggestions';
 import { getDomainFromUrl, getUrlParts } from '../utils';
-import { AddToWorkspaceModal } from './AddToWorkspaceModal';
 import { WorkspaceItem } from './WorkspaceItem';
 
 export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
@@ -92,7 +91,7 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
       </div>
       <ul className="workspace-grid fixed-four">
         {displayGroups.map(({ key, values, workspace }) => (
-          <WorkspaceItem key={key} base={key} values={values} onAddRelated={onAddRelated} timeSpentMs={timeSpent[key]} onAddLink={onAddLink ? () => onAddLink(workspace) : null} />
+          <WorkspaceItem key={key} base={key} values={values} onAddRelated={onAddRelated} timeSpentMs={timeSpent[key]} onAddLink={onAddLink && workspace ? () => onAddLink(workspace) : undefined} />
         ))}
       </ul>
       {/* <div className="suggestion-controls">
@@ -100,6 +99,7 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
           {loading ? 'Getting Suggestions...' : 'Get Workspace Suggestions'}
         </button>
       </div> */}
+
 
     </div>
   )

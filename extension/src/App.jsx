@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
+import { AddToWorkspaceModal } from './components/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/CreateWorkspaceModal';
+import { Header } from './components/Header';
 import { ItemGrid } from './components/ItemGrid';
 import { RelatedProductsSection } from './components/RelatedProductsSection';
 import { SettingsModal } from './components/SettingsModal';
 import { StatsView } from './components/StatsView';
+import { SystemPrompt } from './components/SystemPrompt';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
-import { Header } from './components/Header';
-import { AddToWorkspaceModal } from './components/AddToWorkspaceModal';
 
 
-import { getSettings as getSettingsDB, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges } from './db';
+import { AddLinkFlow } from './components/AddLinkFlow';
+import { getSettings as getSettingsDB, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
 import { getDomainFromUrl, getFaviconUrl } from './utils';
 
@@ -26,6 +28,7 @@ export default function App() {
   const [savedWsFilter, setSavedWsFilter] = useState('All')
   const [loadingRelated, setLoadingRelated] = useState(false)
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
+  const [addingToWorkspace, setAddingToWorkspace] = useState(null);
 
   const [showAddLinkModal, setShowAddLinkModal] = useState(false)
   const [workspaceForLinkAdd, setWorkspaceForLinkAdd] = useState(null)
@@ -33,6 +36,9 @@ export default function App() {
 
   const [currentTab, setCurrentTab] = useState(null)
   const [savedWorkspaces, setSavedWorkspaces] = useState([])
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false)
+  const [showSavedWorkspaces, setShowSavedWorkspaces] = useState(true)
+  const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
 
   useEffect(() => {
     // Load settings initially from IndexedDB
@@ -166,6 +172,13 @@ export default function App() {
     }
   }
 
+  const handleAddItemToWorkspace = async (item, workspaceName) => {
+    await updateItemWorkspace(item.id, workspaceName);
+    // Refresh data to reflect the change
+    populateData();
+    setAddingToWorkspace(null);
+  };
+
   const openInTab = () => {
     if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage()
   }
@@ -195,6 +208,17 @@ export default function App() {
 
   const clearRelatedProducts = () => {
     setRelatedProducts([])
+  }
+
+  // Save updated workspace (including systemPrompt) and refresh list
+  const handleSaveWorkspacePrompt = async (updatedWorkspace) => {
+    try {
+      await saveWorkspace(updatedWorkspace);
+      const ws = await listWorkspaces();
+      setSavedWorkspaces(Array.isArray(ws) ? ws : []);
+    } catch (e) {
+      console.error('Failed to save workspace prompt', e);
+    }
   }
 
   const handleOpenAddLinkModal = (workspace) => {
@@ -324,12 +348,72 @@ export default function App() {
 
       {savedWorkspaces.length > 0 && (
         <section className="saved-workspaces">
-          <h3>Saved Workspaces</h3>
-          <WorkspaceFilters items={savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }))} active={savedWsFilter} onChange={setSavedWsFilter} />
-          <ItemGrid items={savedUrlsFlat} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>Saved Workspaces</h3>
+            <button
+              onClick={() => setShowSavedWorkspaces(v => !v)}
+              className="add-link-btn"
+              style={{
+                padding: '4px 10px',
+                borderRadius: 999,
+                border: '1px solid #273043',
+                background: '#1b2331',
+                color: '#e5e7eb',
+                fontSize: 12,
+                lineHeight: '16px',
+                cursor: 'pointer'
+              }}
+              title={showSavedWorkspaces ? 'Hide saved workspaces' : 'Show saved workspaces'}
+            >
+              {showSavedWorkspaces ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {showSavedWorkspaces && (
+            <>
+              <WorkspaceFilters items={savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }))} active={savedWsFilter} onChange={setSavedWsFilter} />
+              <ItemGrid items={savedUrlsFlat} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setAddingToWorkspace(workspace)}
+                  className="add-link-btn"
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: '1px solid #273043',
+                    background: '#1b2331',
+                    color: '#e5e7eb',
+                    fontSize: 12,
+                    lineHeight: '16px',
+                    cursor: 'pointer'
+                  }}
+                  title="Add link"
+                >
+                  +
+                </button>
+                <button
+                  onClick={startEnrichment}
+                  className="add-link-btn"
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 999,
+                    border: '1px solid #273043',
+                    background: '#1b2331',
+                    color: '#e5e7eb',
+                    fontSize: 12,
+                    lineHeight: '16px',
+                    cursor: 'pointer'
+                  }}
+                  title="Organize using AI"
+                >
+                  Enhance
+                </button>
+              </div>
+            </>
+          )}
         </section>
       )}
 
+      <div style={{ height: 1, background: '#273043', margin: '10px 0' }} />
       <WorkspaceFilters items={data} active={workspace} onChange={setWorkspace} />
 
       {progress.running && (
@@ -350,9 +434,44 @@ export default function App() {
         </>
       ) : (
         <>
-          <ItemGrid items={filtered} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} />
-          <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
+          {showSystemPrompt && (
+            <SystemPrompt
+              workspaceName={workspace}
+              workspaces={savedWorkspaces}
+              onSave={handleSaveWorkspacePrompt}
+            />
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
+            <span style={{ opacity: 0.85, fontSize: 12 }}>Workspace: {workspace}</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowSystemPrompt(v => !v)} className="add-link-btn">
+                {showSystemPrompt ? 'Hide Prompt' : 'Prompt'}
+              </button>
+              <button onClick={() => setShowCurrentWorkspace(v => !v)} className="add-link-btn">
+                {showCurrentWorkspace ? 'Hide Workspace' : 'Show Workspace'}
+              </button>
+            </div>
+          </div>
+          {showCurrentWorkspace && (
+            <>
+              <ItemGrid items={filtered} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={() => setAddingToWorkspace(workspace)} />
+              <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
+              <div style={{ display: 'flex', gap: 8, marginTop: '14px' }}>
+                <button onClick={() => setAddingToWorkspace(workspace)} className="add-link-btn">+ Add Link</button>
+                <button onClick={startEnrichment} className="add-link-btn">Organize using AI</button>
+              </div>
+            </>
+          )}
         </>
+      )}
+
+      {addingToWorkspace && (
+        <AddLinkFlow
+          allItems={data}
+          currentWorkspace={addingToWorkspace}
+          onAdd={handleAddItemToWorkspace}
+          onCancel={() => setAddingToWorkspace(null)}
+        />
       )}
 
       {loadingRelated && (

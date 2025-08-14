@@ -400,6 +400,67 @@ body {
   gap: 12px;
 }
 
+.workspace-filters-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.search-input-container {
+  position: relative;
+}
+
+.search-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #888;
+}
+
+.workspace-search-input {
+  padding: 6px 10px 6px 30px;
+  border-radius: 16px;
+  border: 1px solid #3e4c66;
+  background-color: #1b2331;
+  color: #e5e7eb;
+  font-size: 13px;
+  width: 180px;
+  transition: all 0.2s ease-in-out;
+}
+
+.workspace-search-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background-color: #121720;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.workspace-item .add-link-btn-ws-item {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: 8px;
+}
+
+.workspace-item:hover .add-link-btn-ws-item {
+  opacity: 1;
+  visibility: visible;
+}
+
+.add-link-btn-ws-item:hover {
+  filter: brightness(1.15);
+}
+
 /* Stats grids (Most Visited / Recently Accessed) */
 .stats-grid {
   list-style: none;

@@ -25,7 +25,7 @@ export function AddToWorkspaceModal({ show, onClose, onSave, workspace }) {
   return (
     <div className="modal-overlay">
       <div className="modal">
-        <h3>Add Link to "{workspace.name}"</h3>
+
         {workspace.description && (
           <p className="workspace-description">{workspace.description}</p>
         )}
@@ -51,7 +51,7 @@ export function AddToWorkspaceModal({ show, onClose, onSave, workspace }) {
           }
         `}</style>
 
-        <div className="modal-actions">
+        {/* <div className="modal-actions">
           <button className="filter-btn" onClick={handleClose}>Cancel</button>
           <button
             className="filter-btn primary"
@@ -60,7 +60,7 @@ export function AddToWorkspaceModal({ show, onClose, onSave, workspace }) {
           >
             Add Link
           </button>
-        </div>
+        </div> */}
       </div>
     </div>
   );

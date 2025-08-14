@@ -111,6 +111,45 @@ export async function saveSettings(value) {
   } catch {}
 }
 
+export async function updateItemWorkspace(itemId, workspaceName) {
+  try {
+    const { dashboardData } = await chrome.storage.local.get(['dashboardData']);
+    if (!dashboardData) return;
+
+    const bookmarks = dashboardData.bookmarks || [];
+    const history = dashboardData.history || [];
+
+    let itemUpdated = false;
+
+    const newBookmarks = bookmarks.map(item => {
+      if (item.id === itemId) {
+        itemUpdated = true;
+        return { ...item, workspaceGroup: workspaceName };
+      }
+      return item;
+    });
+
+    let newHistory = history;
+    if (!itemUpdated) {
+      newHistory = history.map(item => {
+        if (item.id === itemId) {
+          itemUpdated = true;
+          return { ...item, workspaceGroup: workspaceName };
+        }
+        return item;
+      });
+    }
+
+    if (itemUpdated) {
+      await chrome.storage.local.set({ 
+        dashboardData: { ...dashboardData, bookmarks: newBookmarks, history: newHistory } 
+      });
+    }
+  } catch (e) {
+    console.error('Error updating item workspace:', e);
+  }
+}
+
 export function subscribeSettingsChanges(callback) {
   let bc
   try {
