@@ -3,9 +3,16 @@
   "name": "cooldesk",
   "version": "0.1.0",
   "action": {
-    "default_title": "cooldesk"
+    "default_title": "cooldesk",
+    "default_popup": "index.html"
+  },
+  "side_panel": {
+    "default_path": "index.html"
   },
   "options_page": "index.html",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -14,7 +21,9 @@
     "storage",
     "bookmarks",
     "history",
-    "tabs"
+    "tabs",
+    "sidePanel",
+    "search"
   ],
   "host_permissions": [
     "<all_urls>"

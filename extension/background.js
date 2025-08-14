@@ -2,6 +2,59 @@
 
 const DAYS_30 = 1000 * 60 * 60 * 24 * 30
 
+// Up to 5 suggestions based on current screen context and base URL
+async function getAiSuggestions(urls, apiKey) {
+  const cleanedUrls = (Array.isArray(urls) ? urls : [urls]).map(cleanUrl).filter(Boolean);
+  if (cleanedUrls.length === 0) return [];
+
+  const primaryUrl = cleanedUrls[0];
+  const ms = timeSpent[primaryUrl] || 0;
+  const minutesSpent = Math.round(ms / 60000);
+  const current = currentActive?.url ? cleanUrl(currentActive.url) : null;
+
+  const context = {
+    workspace_urls: cleanedUrls,
+    current_screen_url: current,
+    minutes_spent_on_primary_url: minutesSpent,
+  };
+
+  const prompt = `You are assisting a developer inside a Chrome extension. Given the context JSON below, which contains a list of URLs from the user's current workspace, propose up to 5 helpful https URLs to open next. Your suggestions should be highly relevant to the collection of URLs provided. Format strictly as JSON: { "suggestions": [ { "url": string, "label": string, "suggestion": string } ] } where label is a short name and suggestion is a one-line reason. Do not include markdown fences.\n\nCONTEXT:\n${JSON.stringify(context, null, 2)}`;
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+  const controller = new AbortController()
+  const timeoutMs = 12000
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const resp = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      signal: controller.signal,
+    })
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => '')
+      console.warn('[AI][suggest*] Non-OK', resp.status, t?.slice?.(0, 200))
+      return [{ url: primaryUrl, label: 'Home', suggestion: 'Open base site' }]
+    }
+    const data = await resp.json()
+    clearTimeout(timeoutId)
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    const rawJson = text.replace(/```json|```/g, '').trim()
+    let obj = {}
+    try { obj = JSON.parse(rawJson) } catch { }
+    const arr = Array.isArray(obj.suggestions) ? obj.suggestions : []
+    const normalized = arr
+      .filter((s) => s && typeof s.url === 'string' && s.url.startsWith('http'))
+      .slice(0, 5)
+      .map((s) => ({ url: s.url, label: s.label || 'Suggested', suggestion: typeof s.suggestion === 'string' ? s.suggestion : null }))
+    return normalized.length ? normalized : [{ url: primaryUrl, label: 'Home', suggestion: 'Open base site' }]
+  } catch (e) {
+    clearTimeout(timeoutId)
+    const reason = e?.name === 'AbortError' ? `timeout ${timeoutMs}ms` : (e?.message || String(e))
+    console.warn('[AI][suggest*] Failed', reason)
+    return [{ url: primaryUrl, label: 'Home', suggestion: 'Open base site' }]
+  }
+}
+
 async function collectBookmarks() {
   console.log('[AI][collect] Collecting bookmarks...')
   const tree = await chrome.bookmarks.getTree()
@@ -18,55 +71,6 @@ async function collectBookmarks() {
           type: 'Bookmark',
         })
       }
-
-// Up to 5 suggestions based on current screen context and base URL
-async function getAiSuggestions(url, apiKey) {
-  const cleaned = cleanUrl(url)
-  if (!cleaned) return []
-  const ms = timeSpent[cleaned] || 0
-  const minutesSpent = Math.round(ms / 60000)
-  const current = currentActive?.url ? cleanUrl(currentActive.url) : null
-  const context = {
-    base_url: cleaned,
-    current_screen_url: current,
-    minutes_spent_on_base: minutesSpent,
-  }
-  const prompt = `You are assisting a developer inside a Chrome extension. Given the context JSON below, propose up to 5 helpful https URLs to open next. Prefer URLs on the same site as base_url, but include closely related deep links if truly helpful. Format strictly as JSON: { "suggestions": [ { "url": string, "label": string, "suggestion": string } ] } where label is a short name and suggestion is a one-line reason. Do not include markdown fences.\n\nCONTEXT:\n${JSON.stringify(context, null, 2)}`
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
-  const controller = new AbortController()
-  const timeoutMs = 12000
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const resp = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      signal: controller.signal,
-    })
-    if (!resp.ok) {
-      const t = await resp.text().catch(() => '')
-      console.warn('[AI][suggest*] Non-OK', resp.status, t?.slice?.(0, 200))
-      return [{ url: cleaned, label: 'Home', suggestion: 'Open base site' }]
-    }
-    const data = await resp.json()
-    clearTimeout(timeoutId)
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    const rawJson = text.replace(/```json|```/g, '').trim()
-    let obj = {}
-    try { obj = JSON.parse(rawJson) } catch { }
-    const arr = Array.isArray(obj.suggestions) ? obj.suggestions : []
-    const normalized = arr
-      .filter((s) => s && typeof s.url === 'string' && s.url.startsWith('http'))
-      .slice(0, 5)
-      .map((s) => ({ url: s.url, label: s.label || 'Suggested', suggestion: typeof s.suggestion === 'string' ? s.suggestion : null }))
-    return normalized.length ? normalized : [{ url: cleaned, label: 'Home', suggestion: 'Open base site' }]
-  } catch (e) {
-    clearTimeout(timeoutId)
-    const reason = e?.name === 'AbortError' ? `timeout ${timeoutMs}ms` : (e?.message || String(e))
-    console.warn('[AI][suggest*] Failed', reason)
-    return [{ url: cleaned, label: 'Home', suggestion: 'Open base site' }]
-  }
-}
       if (n.children) walk(n.children)
     }
   }
@@ -186,20 +190,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.action === 'getSuggestionFor') {
     ; (async () => {
       try {
-        const { geminiApiKey } = await chrome.storage.local.get(['geminiApiKey'])
-        const url = msg.url
-        if (!url) { sendResponse({ ok: false, error: 'Missing url' }); return }
-        if (!geminiApiKey) { sendResponse({ ok: false, error: 'Missing API key' }); return }
-        // Return up to 5 suggestions; also keep first for backward-compat
-        const list = await getAiSuggestions(url, geminiApiKey)
-        const first = list?.[0]
-        const suggestedUrl = first?.url || cleanUrl(url)
-        sendResponse({ ok: true, suggestedUrl, suggestion: first?.suggestion || null, suggestions: list || [] })
+        const { geminiApiKey } = await chrome.storage.local.get(['geminiApiKey']);
+        const urls = msg.urls; // Expect an array of URLs
+        if (!urls || !Array.isArray(urls) || urls.length === 0) {
+          sendResponse({ ok: false, error: 'Missing or invalid urls array' });
+          return;
+        }
+        if (!geminiApiKey) {
+          sendResponse({ ok: false, error: 'Missing API key' });
+          return;
+        }
+        const list = await getAiSuggestions(urls, geminiApiKey);
+        const first = list?.[0];
+        const suggestedUrl = first?.url || cleanUrl(urls[0]);
+        sendResponse({ ok: true, suggestedUrl, suggestion: first?.suggestion || null, suggestions: JSON.stringify({ suggestions: list || [] }) });
       } catch (e) {
-        sendResponse({ ok: false, error: String(e) })
+        sendResponse({ ok: false, error: String(e) });
       }
-    })()
-    return true
+    })();
+    return true;
+  }
+
+  if (msg?.action === 'getTimeSpent') {
+    sendResponse({ ok: true, timeSpent });
+    return true;
   }
 })
 
@@ -210,8 +224,22 @@ chrome.storage.local.get(null).then(() => {
 
 // ---- Active tab time tracking (for context-aware prompts) ----
 let currentActive = { tabId: null, url: null, since: 0 }
-let timeSpent = {}
-chrome.storage.local.get(['timeSpent']).then(({ timeSpent: ts }) => { if (ts && typeof ts === 'object') timeSpent = ts })
+let timeSpent = {};
+(async () => {
+  const db = await openAiDb();
+  const tx = db.transaction('timeTracking', 'readonly');
+  const store = tx.objectStore('timeTracking');
+  const allRecords = await new Promise((resolve, reject) => {
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  timeSpent = allRecords.reduce((acc, record) => {
+    acc[record.url] = record.time;
+    return acc;
+  }, {});
+  console.log('[Background] Time tracking data loaded from IndexedDB');
+})();
 
 function cleanUrl(url) {
   try {
@@ -225,13 +253,14 @@ function cleanUrl(url) {
   }
 }
 
-function accumulateTime(url, now = Date.now()) {
-  if (!url || !currentActive.since) return
-  const cleaned = cleanUrl(url)
-  if (!cleaned) return
-  const delta = Math.max(0, now - currentActive.since)
-  timeSpent[cleaned] = (timeSpent[cleaned] || 0) + delta
-  chrome.storage.local.set({ timeSpent })
+async function accumulateTime(url, now = Date.now()) {
+  if (!url || !currentActive.since) return;
+  const cleaned = cleanUrl(url);
+  if (!cleaned) return;
+  const delta = Math.max(0, now - currentActive.since);
+  const newTime = (timeSpent[cleaned] || 0) + delta;
+  timeSpent[cleaned] = newTime;
+  await putTimeToDb({ url: cleaned, time: newTime });
 }
 
 async function handleActivated(tabId) {
@@ -281,6 +310,9 @@ function openAiDb() {
         const store = db.createObjectStore('enrichments', { keyPath: 'url' })
         store.createIndex('timestamp', 'timestamp')
       }
+      if (!db.objectStoreNames.contains('timeTracking')) {
+        db.createObjectStore('timeTracking', { keyPath: 'url' })
+      }
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
@@ -307,6 +339,28 @@ async function putEnrichmentToDb(record) {
     req.onsuccess = () => resolve(true)
     req.onerror = () => reject(req.error)
   })
+}
+
+async function getTimeFromDb(url) {
+  const db = await openAiDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('timeTracking', 'readonly');
+    const store = tx.objectStore('timeTracking');
+    const req = store.get(url);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function putTimeToDb(record) {
+  const db = await openAiDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('timeTracking', 'readwrite');
+    const store = tx.objectStore('timeTracking');
+    const req = store.put(record);
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error);
+  });
 }
 
 const ENRICHMENT_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
@@ -398,8 +452,28 @@ async function openOrFocusApp() {
   }
 }
 
-chrome.action.onClicked.addListener(() => {
-  openOrFocusApp()
+chrome.action.onClicked.addListener(async (tab) => {
+  // Open sidebar instead of popup/tab
+  try {
+    await chrome.sidePanel.open({ tabId: tab.id })
+  } catch (error) {
+    console.log('Sidebar not supported, falling back to tab:', error)
+    openOrFocusApp()
+  }
+})
+
+// Enable sidebar for all tabs
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  if (!tab.url) return
+  try {
+    await chrome.sidePanel.setOptions({
+      tabId,
+      path: 'index.html',
+      enabled: true
+    })
+  } catch (error) {
+    // Sidebar not supported in this context
+  }
 })
 
 // Separate lightweight AI suggestion API (keeps enrichment unchanged)
