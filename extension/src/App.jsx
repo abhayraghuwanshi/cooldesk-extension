@@ -153,12 +153,7 @@ export default function App() {
     setProgress({ running: true, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
     try {
       await chrome.runtime.sendMessage({
-        action: 'runAiEnrichment',
-        context: {
-          items: data,
-          workspaces: savedWorkspaces,
-          settings: settings,
-        },
+        action: 'enrichWithAI'
       })
     } catch (err) {
       if (err.message.includes('Receiving end does not exist')) {

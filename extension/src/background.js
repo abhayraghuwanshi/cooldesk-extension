@@ -4,6 +4,7 @@
 let globalLastPopulateTime = 0;
 
 async function main() {
+  console.log('[Background] Main function started');
 
   const DAYS_30 = 1000 * 60 * 60 * 24 * 30
 
@@ -131,14 +132,22 @@ async function main() {
 
   chrome.runtime.onInstalled.addListener(async () => {
     console.log('[Background] Extension installed - populating data')
-    await populateAndStore()
+    try {
+      await populateAndStore()
+    } catch (e) {
+      console.error('[Background] Error during onInstalled populate:', e)
+    }
   })
 
   chrome.runtime.onStartup?.addListener(async () => {
     console.log('[Background] Startup - ensuring data present')
-    const { dashboardData } = await chrome.storage.local.get(['dashboardData'])
-    if (!dashboardData || (!dashboardData.bookmarks?.length && !dashboardData.history?.length)) {
-      await populateAndStore()
+    try {
+      const { dashboardData } = await chrome.storage.local.get(['dashboardData'])
+      if (!dashboardData || (!dashboardData.bookmarks?.length && !dashboardData.history?.length)) {
+        await populateAndStore()
+      }
+    } catch (e) {
+      console.error('[Background] Error during onStartup:', e)
     }
   })
 
@@ -543,6 +552,14 @@ async function main() {
 
 }
 
+console.log('[Background] Starting background script initialization...');
+
 main()
-  .then(() => console.log('[Background] Main function executed'))
-  .catch(e => console.error('[Background] Main function failed', e));
+  .then(() => {
+    console.log('[Background] Main function executed successfully');
+    console.log('[Background] Service worker is ready for connections');
+  })
+  .catch(e => {
+    console.error('[Background] Main function failed:', e);
+    console.error('[Background] Stack trace:', e.stack);
+  });
