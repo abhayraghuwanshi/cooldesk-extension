@@ -5,5 +5,15 @@ import manifest from './manifest.json'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), crx({ manifest })],
+  plugins: [
+    crx({
+      manifest,
+      // Explicitly define background script as a separate entry
+      background: {
+        entry: './src/background.js',
+        type: 'module'
+      }
+    }),
+    react(),
+  ],
 })

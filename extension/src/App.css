@@ -290,7 +290,7 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   margin: 8px 0 12px 0;
-  overflow-x: auto;
+  /* overflow-x: auto; */
   -webkit-overflow-scrolling: touch;
 }
 
