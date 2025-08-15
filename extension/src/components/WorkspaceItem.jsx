@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatTime, getFaviconUrl, getUrlParts, getDomainFromUrl } from '../utils';
 
-export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLink }, ref) {
+export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLink, onDelete }, ref) {
   const [showDetails, setShowDetails] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const [fallbackTimeMs, setFallbackTimeMs] = useState(0);
   const favicon = getFaviconUrl(base);
   const cleanedBase = getUrlParts(base).key;
@@ -55,6 +56,8 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
       className="workspace-item"
       tabIndex={0}
       ref={ref}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -79,6 +82,22 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
               title={`${showDetails ? 'Hide' : 'Show'} ${values.length} paths`}
             >
               {values.length} paths
+            </button>
+          )}
+          {onDelete && (
+            <button
+              className="delete-btn"
+              title="Delete from workspace"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(base, values);
+              }}
+              style={{
+                display: hovered ? 'inline-flex' : 'none',
+                marginLeft: 8,
+              }}
+            >
+              🗑
             </button>
           )}
         </div>

@@ -3,7 +3,7 @@ import { useAISuggestions } from '../hooks/useAISuggestions';
 import { getDomainFromUrl, getUrlParts } from '../utils';
 import { WorkspaceItem } from './WorkspaceItem';
 
-export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
+export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDelete }) {
   const [timeSpent, setTimeSpent] = useState({});
   const [selectedGroup, setSelectedGroup] = useState('All');
   const itemRefs = useRef([]);
@@ -55,16 +55,14 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
   const groups = useMemo(() => {
     const map = new Map()
     items
-      .filter((it) => it.type === 'History' && (it.visitCount || 0) > 1)
+      .filter((it) => it && typeof it.url === 'string' && it.url.length > 0)
       .forEach((it) => {
         const parts = getUrlParts(it.url)
-        if (parts.queryEntries.length > 0) return
-        const { key, remainder } = parts
-        const val = remainder && remainder !== '' ? remainder : '/'
+        const key = (parts && parts.key) ? parts.key : it.url
         if (!map.has(key)) map.set(key, new Set())
         map.get(key).add(it)
       })
-    return Array.from(map.entries()).map(([key, set]) => {
+    let grouped = Array.from(map.entries()).map(([key, set]) => {
       const firstItem = set.values().next().value;
       return {
         key,
@@ -72,6 +70,10 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
         workspace: firstItem?.workspaceId ? workspaces.find(w => w.id === firstItem.workspaceId) : null,
       };
     });
+    if (grouped.length === 0 && items.length > 0) {
+      grouped = [{ key: 'All URLs', values: items.slice(), workspace: null }];
+    }
+    return grouped;
   }, [items])
 
   const displayGroups = useMemo(() => {
@@ -192,6 +194,7 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
             onAddRelated={onAddRelated}
             timeSpentMs={timeSpent[cleanedKey]}
             onAddLink={onAddLink && workspace ? () => onAddLink(workspace) : undefined}
+            onDelete={onDelete}
           />
             );
           })()

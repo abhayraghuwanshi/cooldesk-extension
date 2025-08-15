@@ -1,11 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { getFaviconUrl } from '../utils';
 
-export function AddToWorkspaceModal({ show, onClose, onSave, workspace }) {
+export function AddToWorkspaceModal({ show, onClose, onSave, workspace, suggestions = [] }) {
   const [newUrl, setNewUrl] = useState('');
-
-  if (!show || !workspace) {
-    return null;
-  }
 
   const handleSave = () => {
     // Basic URL validation could be improved
@@ -22,9 +19,48 @@ export function AddToWorkspaceModal({ show, onClose, onSave, workspace }) {
     onClose();
   };
 
+  const filtered = useMemo(() => {
+    const q = (newUrl || '').trim().toLowerCase();
+    const existing = new Set((workspace?.urls || []).map(u => u.url));
+    const base = suggestions.filter(it => !existing.has(it.url));
+    if (!q) return base.slice(0, 20);
+    const res = base.filter((it) => {
+      const t = (it.title || '').toLowerCase();
+      const u = (it.url || '').toLowerCase();
+      const s = (it.summary || '').toLowerCase();
+      return t.includes(q) || u.includes(q) || s.includes(q);
+    });
+    return res.slice(0, 20);
+  }, [newUrl, suggestions, workspace]);
+
+  // Only after hooks are declared can we conditionally return
+  if (!show || !workspace) {
+    return null;
+  }
+
   return (
     <div className="modal-overlay">
       <div className="modal">
+        <div
+          className="add-link-header"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            paddingBottom: 8,
+            borderBottom: '1px solid #273043',
+            marginBottom: 10,
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+            Add to "{workspace.name}"
+            <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.8 }}>
+              ({(workspace.urls || []).length} existing)
+            </span>
+          </h3>
+          <button onClick={handleClose} className="cancel-btn">Done</button>
+        </div>
 
         {workspace.description && (
           <p className="workspace-description">{workspace.description}</p>
@@ -41,6 +77,33 @@ export function AddToWorkspaceModal({ show, onClose, onSave, workspace }) {
           />
         </label>
 
+        {/* Suggestions list */}
+        <div className="suggestions" style={{ marginTop: 8 }}>
+          {filtered.length > 0 && (
+            <ul className="workspace-grid" style={{ maxHeight: 260, overflowY: 'auto' }}>
+              {filtered.map((it) => {
+                const favicon = getFaviconUrl(it.url);
+                return (
+                  <li key={it.id} className="workspace-item" onClick={() => setNewUrl(it.url)} title={it.url}>
+                    <div className="item-header">
+                      <div className="item-info">
+                        {favicon && <img className="favicon" src={favicon} alt="" />}
+                        <div className="domain-info">
+                          <span className="title" style={{ display: 'block' }}>{it.title || it.url}</span>
+                          <span className="url-key" style={{ opacity: 0.8, fontSize: 12 }}>{it.url}</span>
+                        </div>
+                      </div>
+                      <div className="item-actions">
+                        <button className="details-btn" onClick={(e) => { e.stopPropagation(); setNewUrl(it.url); }}>Use</button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
 
         <style>{`
           .workspace-description {
@@ -51,7 +114,7 @@ export function AddToWorkspaceModal({ show, onClose, onSave, workspace }) {
           }
         `}</style>
 
-        {/* <div className="modal-actions">
+        <div className="modal-actions" style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="filter-btn" onClick={handleClose}>Cancel</button>
           <button
             className="filter-btn primary"
@@ -60,7 +123,7 @@ export function AddToWorkspaceModal({ show, onClose, onSave, workspace }) {
           >
             Add Link
           </button>
-        </div> */}
+        </div>
       </div>
     </div>
   );

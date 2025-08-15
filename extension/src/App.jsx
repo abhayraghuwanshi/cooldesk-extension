@@ -202,6 +202,28 @@ export default function App() {
     }
   };
 
+  // Delete URL(s) from the current workspace
+  const handleDeleteFromWorkspace = async (baseUrl, values) => {
+    try {
+      if (!workspace || workspace === 'All') return;
+      const norm = (s) => (s || '').trim().toLowerCase();
+      const workspaces = await listWorkspaces();
+      const ws = workspaces.find(w => norm(w.name) === norm(workspace));
+      if (!ws) return;
+
+      const urlsToRemove = new Set(values && values.length ? values.map(v => v.url) : [baseUrl]);
+      const updated = {
+        ...ws,
+        urls: (ws.urls || []).filter(u => !urlsToRemove.has(u.url)),
+      };
+      await saveWorkspace(updated);
+      const refreshed = await listWorkspaces();
+      setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+    } catch (e) {
+      console.error('Failed to delete from workspace:', e);
+    }
+  };
+
   const startEnrichment = async () => {
     setProgress({ running: true, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
     try {
@@ -268,8 +290,22 @@ export default function App() {
     }
   }
 
-  const handleOpenAddLinkModal = (workspace) => {
-    setWorkspaceForLinkAdd(workspace);
+  const handleOpenAddLinkModal = (ws) => {
+    // Accept either a workspace object or a workspace name
+    let resolved = ws;
+    if (ws && typeof ws === 'string') {
+      const norm = (s) => (s || '').trim().toLowerCase();
+      resolved = savedWorkspaces.find(w => norm(w.name) === norm(ws));
+      if (!resolved) {
+        // Create a temporary workspace object (by name) to allow adding links
+        resolved = { id: `name:${ws}`, name: ws, description: '', urls: [] };
+      }
+    }
+    if (!resolved) {
+      console.warn('Workspace not found for AddToWorkspaceModal:', ws);
+      return;
+    }
+    setWorkspaceForLinkAdd(resolved);
     setShowAddLinkModal(true);
   };
 
@@ -281,15 +317,35 @@ export default function App() {
   const handleSaveLink = async (workspaceId, newUrl) => {
     try {
       const workspaces = await listWorkspaces();
-      const workspaceToUpdate = workspaces.find(ws => ws.id === workspaceId);
+      let workspaceToUpdate = workspaces.find(ws => ws.id === workspaceId);
+
+      // If not found by id, try resolving by name (when id is of form name:WorkspaceName)
+      if (!workspaceToUpdate) {
+        const byName = (typeof workspaceForLinkAdd?.name === 'string') ? workspaceForLinkAdd.name : null;
+        if (byName) {
+          const norm = (s) => (s || '').trim().toLowerCase();
+          workspaceToUpdate = workspaces.find(ws => norm(ws.name) === norm(byName)) || null;
+          if (!workspaceToUpdate) {
+            // Create a new workspace
+            workspaceToUpdate = {
+              id: Date.now().toString(),
+              name: byName,
+              description: '',
+              createdAt: Date.now(),
+              urls: [],
+              context: {},
+            };
+          }
+        }
+      }
 
       if (!workspaceToUpdate) {
-        console.error('Workspace not found');
+        console.error('Workspace not found and could not resolve name');
         return;
       }
 
       // Avoid adding duplicate URLs
-      if (workspaceToUpdate.urls.some(u => u.url === newUrl)) {
+      if (Array.isArray(workspaceToUpdate.urls) && workspaceToUpdate.urls.some(u => u.url === newUrl)) {
         console.log('URL already exists in this workspace.');
         handleCloseAddLinkModal();
         return;
@@ -298,7 +354,7 @@ export default function App() {
       const updatedWorkspace = {
         ...workspaceToUpdate,
         urls: [
-          ...workspaceToUpdate.urls,
+          ...(workspaceToUpdate.urls || []),
           {
             url: newUrl,
             title: newUrl, // Using URL as title for simplicity
@@ -309,6 +365,9 @@ export default function App() {
       };
 
       await saveWorkspace(updatedWorkspace);
+      // Refresh local list so the newly created workspace appears immediately
+      const ws = await listWorkspaces();
+      setSavedWorkspaces(Array.isArray(ws) ? ws : []);
       handleCloseAddLinkModal();
     } catch (err) {
       console.error('Error saving link to workspace:', err);
@@ -329,6 +388,31 @@ export default function App() {
       }))
     );
   }, [savedWorkspaces, savedWsFilter]);
+
+  // Saved items for the currently selected workspace (by name)
+  const workspaceSavedItems = useMemo(() => {
+    if (!workspace || workspace === 'All') return [];
+    const ws = savedWorkspaces.find(w => (w?.name || '').trim().toLowerCase() === (workspace || '').trim().toLowerCase());
+    if (!ws) return [];
+    return (ws.urls || []).map(u => ({
+      ...u,
+      workspaceGroup: ws.name,
+      id: `${ws.id}-${u.url}`,
+    }));
+  }, [savedWorkspaces, workspace]);
+
+  // Merge history/data items in this workspace with saved URLs for this workspace
+  const mergedWorkspaceItems = useMemo(() => {
+    if (workspace === 'All') return filtered;
+    const byUrl = new Map();
+    for (const it of filtered) {
+      if (it?.url) byUrl.set(it.url, it);
+    }
+    for (const it of workspaceSavedItems) {
+      if (it?.url && !byUrl.has(it.url)) byUrl.set(it.url, it);
+    }
+    return Array.from(byUrl.values());
+  }, [filtered, workspace, workspaceSavedItems]);
 
   const getCurrentTabInfo = async () => {
     try {
@@ -532,7 +616,7 @@ export default function App() {
               />
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
-              <span style={{ opacity: 0.85, fontSize: 12 }}>Workspace: {workspace} ({filtered.length})</span>
+              <span style={{ opacity: 0.85, fontSize: 12 }}>Workspace: {workspace} ({mergedWorkspaceItems.length})</span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setShowSystemPrompt(v => !v)} className="add-link-btn">
                   {showSystemPrompt ? 'Hide Prompt' : 'Prompt'}
@@ -544,10 +628,10 @@ export default function App() {
             </div>
             {showCurrentWorkspace && (
               <>
-                <ItemGrid items={filtered} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={() => setAddingToWorkspace(workspace)} />
+                <ItemGrid items={mergedWorkspaceItems} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={() => handleOpenAddLinkModal(workspace)} onDelete={handleDeleteFromWorkspace} />
                 <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
                 <div style={{ display: 'flex', gap: 8, marginTop: '14px' }}>
-                  <button onClick={() => setAddingToWorkspace(workspace)} className="add-link-btn">+ Add Link</button>
+                  <button onClick={() => handleOpenAddLinkModal(workspace)} className="add-link-btn">+ Add Link</button>
                   <button onClick={startEnrichment} className="add-link-btn">Organize using AI</button>
                 </div>
               </>
@@ -577,6 +661,7 @@ export default function App() {
         workspace={workspaceForLinkAdd}
         onClose={handleCloseAddLinkModal}
         onSave={handleSaveLink}
+        suggestions={data.filter(it => !it.workspaceGroup)}
       />
 
       <CreateWorkspaceModal
