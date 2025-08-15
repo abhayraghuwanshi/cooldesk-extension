@@ -1,10 +1,29 @@
-import React, { useMemo, useState } from 'react';
-import { formatTime, getFaviconUrl, getUrlParts } from '../utils';
+import React, { useEffect, useMemo, useState } from 'react';
+import { formatTime, getFaviconUrl, getUrlParts, getDomainFromUrl } from '../utils';
 
-export function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLink }) {
+export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLink }, ref) {
   const [showDetails, setShowDetails] = useState(false);
+  const [fallbackTimeMs, setFallbackTimeMs] = useState(0);
   const favicon = getFaviconUrl(base);
-  const timeString = formatTime(timeSpentMs);
+  const cleanedBase = getUrlParts(base).key;
+  const timeString = formatTime(timeSpentMs || fallbackTimeMs);
+
+  useEffect(() => {
+    if (timeSpentMs) return; // already provided by parent
+    let mounted = true;
+    (async () => {
+      try {
+        const resp = await chrome.runtime.sendMessage({ action: 'getTimeSpent' });
+        if (mounted && resp?.ok) {
+          const ms = resp.timeSpent?.[cleanedBase] || 0;
+          setFallbackTimeMs(ms);
+        }
+      } catch (e) {
+        // non-fatal
+      }
+    })();
+    return () => { mounted = false };
+  }, [cleanedBase, timeSpentMs]);
 
   // Get unique tags from all items in the workspace
   const tags = useMemo(() => {
@@ -32,7 +51,17 @@ export function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLi
   };
 
   return (
-    <li className="workspace-item">
+    <li
+      className="workspace-item"
+      tabIndex={0}
+      ref={ref}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleItemClick();
+        }
+      }}
+    >
       <div className="item-header" onClick={handleItemClick}>
         <div className="item-info">
           {favicon && <img className="favicon" src={favicon} alt="" />}
@@ -89,4 +118,4 @@ export function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLi
       )}
     </li>
   );
-}
+});

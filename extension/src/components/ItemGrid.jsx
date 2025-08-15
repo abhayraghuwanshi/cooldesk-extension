@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAISuggestions } from '../hooks/useAISuggestions';
 import { getDomainFromUrl, getUrlParts } from '../utils';
 import { WorkspaceItem } from './WorkspaceItem';
@@ -6,6 +6,33 @@ import { WorkspaceItem } from './WorkspaceItem';
 export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
   const [timeSpent, setTimeSpent] = useState({});
   const [selectedGroup, setSelectedGroup] = useState('All');
+  const itemRefs = useRef([]);
+  const columns = 4; // matches .workspace-grid.fixed-four
+  const chipRefs = useRef([]);
+  const rootRef = useRef(null);
+
+  const onChipKeyDown = useCallback((e, index, keyValue) => {
+    if (e.defaultPrevented) return;
+    const isArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown';
+    const isActivate = e.key === 'Enter' || e.key === ' ';
+    if (!(isArrow || isActivate)) return;
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (isActivate) {
+      e.preventDefault();
+      setSelectedGroup(keyValue);
+      return;
+    }
+    const flat = chipRefs.current.filter(Boolean);
+    const total = flat.length;
+    if (total === 0) return;
+    const dir = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
+    const nextIdx = (index + dir + total) % total;
+    const nextEl = flat[nextIdx];
+    if (nextEl && typeof nextEl.focus === 'function') {
+      nextEl.focus();
+      e.preventDefault();
+    }
+  }, []);
 
   useEffect(() => {
     const fetchTimeSpent = async () => {
@@ -64,25 +91,88 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
     }
   }
 
+  const onKeyDown = useCallback((e) => {
+    if (e.defaultPrevented) return;
+    if (!(e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) return;
+    // Let Alt/Ctrl combos be handled elsewhere
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const flat = itemRefs.current.filter(Boolean);
+    const activeIndex = flat.findIndex(el => el === document.activeElement);
+    const total = flat.length;
+    if (total === 0) return;
+    const getNextIndex = (idx, key) => {
+      if (key === 'ArrowRight') return Math.min(total - 1, idx + 1);
+      if (key === 'ArrowLeft') return Math.max(0, idx - 1);
+      if (key === 'ArrowDown') return Math.min(total - 1, idx + columns);
+      if (key === 'ArrowUp') return Math.max(0, idx - columns);
+      return idx;
+    };
+    let nextIndex = activeIndex;
+    if (activeIndex === -1) {
+      nextIndex = 0; // focus first
+    } else {
+      nextIndex = getNextIndex(activeIndex, e.key);
+    }
+    const nextEl = flat[nextIndex];
+    if (nextEl && typeof nextEl.focus === 'function') {
+      nextEl.focus();
+      e.preventDefault();
+    }
+  }, [columns]);
+
+  // Default focus: first card, else first chip
+  useEffect(() => {
+    const tag = (document.activeElement && document.activeElement.tagName)
+      ? document.activeElement.tagName.toLowerCase() : ''
+    if (tag === 'input' || tag === 'textarea' || (document.activeElement && document.activeElement.isContentEditable)) return
+    const flat = itemRefs.current.filter(Boolean)
+    if (flat.length > 0) {
+      // Defer to ensure refs are set
+      setTimeout(() => flat[0]?.focus?.(), 0)
+    } else {
+      const firstChip = chipRefs.current.find(Boolean)
+      if (firstChip) setTimeout(() => firstChip.focus(), 0)
+    }
+  }, [displayGroups.length])
+
+  // Global key handler to route arrows to grid when not typing
+  useEffect(() => {
+    const handler = (e) => {
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : ''
+      if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return
+      onKeyDown(e)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onKeyDown])
+
+  // Reset refs before rendering lists to avoid stale entries
+  itemRefs.current = []
+  chipRefs.current = []
+
   return (
-    <div>
+    <div ref={rootRef} onKeyDown={onKeyDown} role="grid" tabIndex={-1}>
       <div className="workspace-chips">
         <button
           key="All"
           className={`tag-chip workspace-chip ${selectedGroup === 'All' ? 'active' : ''}`}
           onClick={() => setSelectedGroup('All')}
           type="button"
+          ref={el => chipRefs.current[0] = el}
+          onKeyDown={(e) => onChipKeyDown(e, 0, 'All')}
         >
           All
           <span className="chip-badge">{groups.reduce((sum, g) => sum + g.values.length, 0)}</span>
         </button>
-        {groups.map(({ key, values }) => (
+        {groups.map(({ key, values }, i) => (
           <button
             key={key}
             className={`tag-chip workspace-chip ${selectedGroup === key ? 'active' : ''}`}
             title={key}
             onClick={() => setSelectedGroup(key)}
             type="button"
+            ref={el => chipRefs.current[i + 1] = el}
+            onKeyDown={(e) => onChipKeyDown(e, i + 1, key)}
           >
             {getDomainFromUrl(key)}
             <span className="chip-badge">{values.length}</span>
@@ -90,8 +180,21 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink }) {
         ))}
       </div>
       <ul className="workspace-grid fixed-four">
-        {displayGroups.map(({ key, values, workspace }) => (
-          <WorkspaceItem key={key} base={key} values={values} onAddRelated={onAddRelated} timeSpentMs={timeSpent[key]} onAddLink={onAddLink && workspace ? () => onAddLink(workspace) : undefined} />
+        {displayGroups.map(({ key, values, workspace }, idx) => (
+          (() => {
+            const cleanedKey = getUrlParts(key).key;
+            return (
+          <WorkspaceItem
+            key={key}
+            ref={el => itemRefs.current[idx] = el}
+            base={key}
+            values={values}
+            onAddRelated={onAddRelated}
+            timeSpentMs={timeSpent[cleanedKey]}
+            onAddLink={onAddLink && workspace ? () => onAddLink(workspace) : undefined}
+          />
+            );
+          })()
         ))}
       </ul>
       {/* <div className="suggestion-controls">

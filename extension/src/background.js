@@ -1,4 +1,5 @@
 // MV3 background service worker (type: module)
+import { getSettings } from './db.js'
 
 // Global variable to track last populate time
 let globalLastPopulateTime = 0;
@@ -86,9 +87,22 @@ async function main() {
   }
 
   async function collectHistory() {
-    console.log('[AI][collect] Collecting history (last 30 days, max 500)...')
-    const startTime = Date.now() - DAYS_30
-    const results = await chrome.history.search({ text: '', startTime, maxResults: 500 })
+    // Read user-configured inputs from IndexedDB settings store
+    const settings = await getSettings();
+    let daysNum = Number(settings?.historyDays);
+    let maxResultsNum = Number(settings?.historyMaxResults);
+    // Fallback to chrome.storage.local if DB settings missing
+    if (!Number.isFinite(daysNum) || daysNum <= 0 || !Number.isFinite(maxResultsNum) || maxResultsNum <= 0) {
+      const legacy = await chrome.storage.local.get(['historyDays', 'historyMaxResults']);
+      if (!Number.isFinite(daysNum) || daysNum <= 0) daysNum = Number(legacy?.historyDays);
+      if (!Number.isFinite(maxResultsNum) || maxResultsNum <= 0) maxResultsNum = Number(legacy?.historyMaxResults);
+      console.log('[AI][collect] Using legacy storage fallback for history params', { legacyDays: legacy?.historyDays, legacyMaxResults: legacy?.historyMaxResults });
+    }
+    const days = Number.isFinite(daysNum) && daysNum > 0 ? daysNum : 30;
+    const maxResults = Number.isFinite(maxResultsNum) && maxResultsNum > 0 ? maxResultsNum : 500;
+    console.log(`[AI][collect] Collecting history (last ${days} days, max ${maxResults})...`, { rawDays: settings?.historyDays, rawMaxResults: settings?.historyMaxResults })
+    const startTime = Date.now() - (1000 * 60 * 60 * 24 * days);
+    const results = await chrome.history.search({ text: '', startTime, maxResults })
     console.log(`[AI][collect] History collected: ${results.length}`)
     return results.map((h) => ({
       title: h.title || (h.url ? new URL(h.url).hostname : 'Untitled'),
@@ -174,13 +188,19 @@ async function main() {
           console.time('[AI][enrich] enrichWithAI')
           console.log('[AI][enrich] Received enrichWithAI message')
           const { dashboardData, geminiApiKey, historyMaxResults } = await chrome.storage.local.get(['dashboardData', 'geminiApiKey', 'historyMaxResults'])
+          const settings = await getSettings();
           if (!geminiApiKey) {
             chrome.runtime.sendMessage({ action: 'aiError', error: 'Gemini API key not set. Open Settings to add it.' })
             console.warn('[AI][enrich] Aborting: missing API key')
             return
           }
           const rawHistory = dashboardData?.history || []
-          const limit = Number.isFinite(historyMaxResults) && historyMaxResults > 0 ? historyMaxResults : rawHistory.length
+          const fromSettings = Number(settings?.historyMaxResults)
+          const fromLocal = Number(historyMaxResults)
+          const limit = Number.isFinite(fromSettings) && fromSettings > 0
+            ? fromSettings
+            : (Number.isFinite(fromLocal) && fromLocal > 0 ? fromLocal : rawHistory.length)
+          console.log('[AI][enrich] Using historyMaxResults limit:', { fromSettings: settings?.historyMaxResults, fromLocal: historyMaxResults, chosen: limit })
           const history = rawHistory.slice(0, limit)
           const total = history.length
           if (!total) {

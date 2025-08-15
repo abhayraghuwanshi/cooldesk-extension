@@ -39,6 +39,7 @@ export default function App() {
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
   const [showSavedWorkspaces, setShowSavedWorkspaces] = useState(true)
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
+  const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
 
   useEffect(() => {
     // Load settings initially from IndexedDB
@@ -114,6 +115,51 @@ export default function App() {
     }
   }, [showCreateWorkspace])
 
+  // Options for keyboard navigation (must be declared before effects that depend on them)
+  const workspaceOptions = useMemo(() => {
+    const set = new Set(['All'])
+    for (const it of data) {
+      const g = it.workspaceGroup || (it.category && typeof it.category === 'object' ? it.category.name : null)
+      if (g) set.add(g)
+    }
+    return Array.from(set)
+  }, [data])
+
+  const savedWorkspaceOptions = useMemo(() => {
+    return ['All', ...savedWorkspaces.map(ws => ws.name)]
+  }, [savedWorkspaces])
+
+  // When user changes the Saved filter, ensure the Saved section is visible
+  useEffect(() => {
+    // Switch to 'All' so Saved section shows up while user is interacting with Saved filter
+    if (workspace !== 'All') setWorkspace('All')
+    // Ensure the Saved section is expanded so the user sees the change
+    setShowSavedWorkspaces(true)
+  }, [savedWsFilter])
+
+  // Keyboard shortcuts for tab navigation
+  useEffect(() => {
+    const onKey = (e) => {
+      // Ignore when typing in inputs/contentEditable
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : ''
+      if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return
+      // Ctrl+1 => Workspace, Ctrl+2 => Saved (Windows/Linux)
+      if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+        if (e.key === '1') { setActiveTab('workspace'); e.preventDefault(); }
+        if (e.key === '2') { setActiveTab('saved'); e.preventDefault(); }
+        if (e.key === 'ArrowRight') { setActiveTab((t) => (t === 'workspace' ? 'saved' : 'workspace')); e.preventDefault(); }
+        if (e.key === 'ArrowLeft') { setActiveTab((t) => (t === 'saved' ? 'workspace' : 'saved')); e.preventDefault(); }
+      }
+      // Alt+Left/Right toggles tabs (to avoid conflicting with card navigation)
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        if (e.key === 'ArrowRight') { setActiveTab((t) => (t === 'workspace' ? 'saved' : 'workspace')); e.preventDefault(); }
+        if (e.key === 'ArrowLeft') { setActiveTab((t) => (t === 'saved' ? 'workspace' : 'saved')); e.preventDefault(); }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [activeTab])
+
   const filtered = useMemo(() => {
     const s = search.toLowerCase()
     return data.filter((it) => {
@@ -124,6 +170,7 @@ export default function App() {
       return inWs && inSearch
     })
   }, [data, workspace, search])
+
 
   const saveSettings = async (newSettings) => {
     try {
@@ -175,7 +222,7 @@ export default function App() {
   const handleAddItemToWorkspace = async (item, workspaceName) => {
     await updateItemWorkspace(item.id, workspaceName);
     // Refresh data to reflect the change
-    populateData();
+    populate();
     setAddingToWorkspace(null);
   };
 
@@ -346,7 +393,7 @@ export default function App() {
         openInTab={openInTab}
       />
 
-      {savedWorkspaces.length > 0 && (
+      {/* {savedWorkspaces.length > 0 && (
         <section className="saved-workspaces">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <h3 style={{ margin: 0 }}>Saved Workspaces</h3>
@@ -408,13 +455,19 @@ export default function App() {
                   Enhance
                 </button>
               </div>
-            </>
-          )}
-        </section>
-      )}
+              
+      {/* Filters */}
+      <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span>
+          <WorkspaceFilters items={data} active={workspace} onChange={setWorkspace} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, opacity: 0.8 }}>Saved:</span>
+          <WorkspaceFilters items={savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }))} active={savedWsFilter} onChange={setSavedWsFilter} />
+        </div>
+      </div>
 
-      <div style={{ height: 1, background: '#273043', margin: '10px 0' }} />
-      <WorkspaceFilters items={data} active={workspace} onChange={setWorkspace} />
 
       {progress.running && (
         <div className="progress">
@@ -425,44 +478,82 @@ export default function App() {
 
       {progress.error && <div className="error">{progress.error}</div>}
 
-      {loading ? (
-        <div className="empty">Loading...</div>
-      ) : workspace === 'All' ? (
-        <>
-          <StatsView items={data} search={search} workspace={workspace} onAddRelated={handleAddRelated} />
-          <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
-        </>
-      ) : (
-        <>
-          {showSystemPrompt && (
-            <SystemPrompt
-              workspaceName={workspace}
-              workspaces={savedWorkspaces}
-              onSave={handleSaveWorkspacePrompt}
-            />
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
-            <span style={{ opacity: 0.85, fontSize: 12 }}>Workspace: {workspace}</span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShowSystemPrompt(v => !v)} className="add-link-btn">
-                {showSystemPrompt ? 'Hide Prompt' : 'Prompt'}
-              </button>
-              <button onClick={() => setShowCurrentWorkspace(v => !v)} className="add-link-btn">
-                {showCurrentWorkspace ? 'Hide Workspace' : 'Show Workspace'}
-              </button>
-            </div>
+      {/* Saved Workspaces section */}
+      {workspace === 'All' && (savedWorkspaces.length > 0 ? (
+        <section className="saved-workspaces">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}>
+              Saved Workspaces
+              {savedWsFilter && savedWsFilter !== 'All' && (
+                <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.8 }}>
+                  • Filter: {savedWsFilter} ({savedUrlsFlat.length})
+                </span>
+              )}
+            </h3>
+            <button
+              onClick={() => setShowSavedWorkspaces(v => !v)}
+              className="add-link-btn"
+              style={{
+                padding: '4px 10px',
+                borderRadius: 999,
+                border: '1px solid #273043',
+                background: '#1b2331',
+                color: '#e5e7eb',
+                fontSize: 12,
+                lineHeight: '16px',
+                cursor: 'pointer'
+              }}
+              title={showSavedWorkspaces ? 'Hide saved workspaces' : 'Show saved workspaces'}
+            >
+              {showSavedWorkspaces ? 'Hide' : 'Show'}
+            </button>
           </div>
-          {showCurrentWorkspace && (
+          {showSavedWorkspaces && (
             <>
-              <ItemGrid items={filtered} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={() => setAddingToWorkspace(workspace)} />
-              <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
-              <div style={{ display: 'flex', gap: 8, marginTop: '14px' }}>
-                <button onClick={() => setAddingToWorkspace(workspace)} className="add-link-btn">+ Add Link</button>
-                <button onClick={startEnrichment} className="add-link-btn">Organize using AI</button>
-              </div>
+              <ItemGrid key={`saved-${savedWsFilter}`} items={savedUrlsFlat} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} />
             </>
           )}
-        </>
+        </section>
+      ) : (
+        <div className="empty">No saved workspaces</div>
+      ))}
+
+      {/* Workspace section (only when a specific workspace is selected) */}
+      {workspace !== 'All' && (
+        loading ? (
+          <div className="empty">Loading...</div>
+        ) : (
+          <>
+            {showSystemPrompt && (
+              <SystemPrompt
+                workspaceName={workspace}
+                workspaces={savedWorkspaces}
+                onSave={handleSaveWorkspacePrompt}
+              />
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
+              <span style={{ opacity: 0.85, fontSize: 12 }}>Workspace: {workspace} ({filtered.length})</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setShowSystemPrompt(v => !v)} className="add-link-btn">
+                  {showSystemPrompt ? 'Hide Prompt' : 'Prompt'}
+                </button>
+                <button onClick={() => setShowCurrentWorkspace(v => !v)} className="add-link-btn">
+                  {showCurrentWorkspace ? 'Hide Workspace' : 'Show Workspace'}
+                </button>
+              </div>
+            </div>
+            {showCurrentWorkspace && (
+              <>
+                <ItemGrid items={filtered} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={() => setAddingToWorkspace(workspace)} />
+                <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
+                <div style={{ display: 'flex', gap: 8, marginTop: '14px' }}>
+                  <button onClick={() => setAddingToWorkspace(workspace)} className="add-link-btn">+ Add Link</button>
+                  <button onClick={startEnrichment} className="add-link-btn">Organize using AI</button>
+                </div>
+              </>
+            )}
+          </>
+        )
       )}
 
       {addingToWorkspace && (

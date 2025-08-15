@@ -81,12 +81,13 @@ export async function getSettings() {
   if (existing) return existing.value || {}
   // Migration from chrome.storage.local if present
   try {
-    const legacy = await chrome.storage.local.get(['geminiApiKey', 'serverUrl', 'visitCountThreshold', 'historyMaxResults'])
+    const legacy = await chrome.storage.local.get(['geminiApiKey', 'serverUrl', 'visitCountThreshold', 'historyMaxResults', 'historyDays'])
     const value = {
       geminiApiKey: legacy.geminiApiKey || '',
       serverUrl: legacy.serverUrl || '',
       visitCountThreshold: typeof legacy.visitCountThreshold === 'number' ? legacy.visitCountThreshold : '',
-      historyMaxResults: typeof legacy.historyMaxResults === 'number' ? legacy.historyMaxResults : ''
+      historyMaxResults: typeof legacy.historyMaxResults === 'number' ? legacy.historyMaxResults : '',
+      historyDays: typeof legacy.historyDays === 'number' ? legacy.historyDays : ''
     }
     await saveSettings(value)
     return value

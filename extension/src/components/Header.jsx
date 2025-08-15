@@ -50,6 +50,28 @@ export function Header({
         <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">
           <i className="fas fa-plus"></i>
         </button>
+
+        {/* Help: show keyboard commands */}
+        <button
+          className="icon-btn"
+          onClick={() => {
+            const msg = [
+              'Navigation Shortcuts',
+              '',
+              'Arrows (← ↑ → ↓): Move between cards in the grid',
+              'Enter/Click: Open selected card',
+              '',
+              'Alt+← / Alt+→: Switch between Workspace and Saved tabs',
+              'Ctrl+1 / Ctrl+2: Jump to Workspace/Saved tabs',
+              'Ctrl+← / Ctrl+→: Switch tabs',
+            ].join('\n');
+            alert(msg);
+          }}
+          title="Help (shortcuts)"
+        >
+          <i className="fas fa-question-circle"></i>
+        </button>
+
         <button className="icon-btn" onClick={openInTab} title="Open in Tab">
           <i className="fas fa-external-link-alt"></i>
         </button>
