@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { getFaviconUrl } from '../utils';
 
-export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onCancel }) {
+export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onCancel }) {
   const [search, setSearch] = useState('');
   // Debounce the search input to avoid filtering on every keystroke
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -14,6 +14,18 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onCancel }) {
   const handleAddItem = (item) => {
     onAdd(item, currentWorkspace);
   };
+
+  const looksLikeUrl = React.useMemo(() => {
+    const s = search.trim();
+    if (!s) return null;
+    try {
+      const u = new URL(s.includes('://') ? s : `https://${s}`);
+      // Only accept hostname presence
+      return u.protocol.startsWith('http') ? u.toString() : null;
+    } catch {
+      return null;
+    }
+  }, [search]);
 
   const filteredItems = React.useMemo(() => {
     const q = debouncedSearch;
@@ -104,6 +116,17 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onCancel }) {
           marginBottom: 8,
         }}
       />
+      {looksLikeUrl && (
+        <div style={{ marginBottom: 8 }}>
+          <button
+            className="details-btn"
+            onClick={() => onAddSaved && onAddSaved(looksLikeUrl, currentWorkspace)}
+            title={`Add ${looksLikeUrl} to ${currentWorkspace}`}
+          >
+            Add this URL → {currentWorkspace}
+          </button>
+        </div>
+      )}
       <ul className="workspace-grid">
         {filteredItems.map((item) => {
           const base = item.url;

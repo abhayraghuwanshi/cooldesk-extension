@@ -1,6 +1,6 @@
 // MV3 background service worker (type: module)
 import { getSettings } from './db.js';
-import { buildEnrichmentPrompt } from './prompts.js';
+import { buildEnrichmentPrompt, buildEnrichmentPromptForWorkspace } from './prompts.js';
 
 // Global variable to track last populate time
 let globalLastPopulateTime = 0;
@@ -297,8 +297,84 @@ async function main() {
       return true;
     }
 
+    if (msg?.action === 'categorizeWorkspaceUrls') {
+      ;(async () => {
+        try {
+          const { geminiApiKey } = await chrome.storage.local.get(['geminiApiKey']);
+          if (!geminiApiKey) {
+            sendResponse({ ok: false, error: 'Missing API key' });
+            return;
+          }
+          const workspace = typeof msg.workspace === 'string' && msg.workspace ? msg.workspace : 'Workspace';
+          const urls = Array.isArray(msg.urls) ? msg.urls.filter(Boolean).slice(0, 100) : [];
+          if (!urls.length) {
+            sendResponse({ ok: false, error: 'No URLs provided' });
+            return;
+          }
+          const override = typeof msg.systemPrompt === 'string' && msg.systemPrompt.trim() ? msg.systemPrompt : null;
+          const prompt = override || buildEnrichmentPromptForWorkspace(workspace, urls);
+
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+          const controller = new AbortController();
+          const timeoutMs = 15000;
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const resp = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+              signal: controller.signal,
+            });
+            if (!resp.ok) {
+              const t = await resp.text().catch(() => '');
+              clearTimeout(timeoutId);
+              sendResponse({ ok: false, error: `API error ${resp.status}`, details: t?.slice?.(0, 200) || '' });
+              return;
+            }
+            const data = await resp.json();
+            clearTimeout(timeoutId);
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            const rawJson = text.replace(/```json|```/g, '').trim();
+            let arr = [];
+            try { arr = JSON.parse(rawJson); } catch {}
+            const results = (Array.isArray(arr) ? arr : []).map((it) => {
+              const u = typeof it?.url === 'string' ? it.url : null;
+              const included = typeof it?.included === 'boolean' ? it.included : false;
+              return u ? { url: u, included } : null;
+            }).filter(Boolean);
+            sendResponse({ ok: true, results });
+          } catch (e) {
+            clearTimeout(timeoutId);
+            const reason = e?.name === 'AbortError' ? `timeout ${timeoutMs}ms` : (e?.message || String(e));
+            sendResponse({ ok: false, error: reason });
+          }
+        } catch (e) {
+          sendResponse({ ok: false, error: String(e) });
+        }
+      })();
+      return true;
+    }
+
     if (msg?.action === 'getTimeSpent') {
       sendResponse({ ok: true, timeSpent });
+      return true;
+    }
+    if (msg?.action === 'getActivityData') {
+      (async () => {
+        try {
+          const db = await openAiDb();
+          const tx = db.transaction('activity', 'readonly');
+          const store = tx.objectStore('activity');
+          const rows = await new Promise((resolve, reject) => {
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+          });
+          sendResponse({ ok: true, rows });
+        } catch (e) {
+          sendResponse({ ok: false, error: String(e) });
+        }
+      })();
       return true;
     }
   })
@@ -426,7 +502,8 @@ async function main() {
   // ---- IndexedDB persistent cache for AI enrichment ----
   function openAiDb() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('devlink-ai', 1)
+      // Bump version to 2 to ensure new stores (e.g., 'activity') are created for existing users
+      const request = indexedDB.open('devlink-ai', 2)
       request.onupgradeneeded = (event) => {
         const db = event.target.result
         if (!db.objectStoreNames.contains('enrichments')) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { AddToWorkspaceModal } from './components/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/CreateWorkspaceModal';
@@ -10,10 +10,40 @@ import { SystemPrompt } from './components/SystemPrompt';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 
 
+import ActivityPanel from './components/ActivityPanel';
 import { AddLinkFlow } from './components/AddLinkFlow';
-import { getSettings as getSettingsDB, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, getUIState, saveUIState } from './db';
+import { getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
-import { getDomainFromUrl, getFaviconUrl } from './utils';
+import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
+
+// Simple error boundary to prevent entire app crash due to child errors
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('ErrorBoundary caught error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error" style={{ marginTop: 8 }}>
+          <div>Something went wrong while rendering this section.</div>
+          {this.state.error && (
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
+              {String(this.state.error.message || this.state.error)}
+            </div>
+          )}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Main App Component
 export default function App() {
@@ -45,7 +75,7 @@ export default function App() {
       const params = new URLSearchParams(window.location.search)
       const q = (params.get('q') || '').trim()
       if (q) setSearch(q)
-    } catch {}
+    } catch { }
   }, [])
 
   // Also hydrate from chrome.storage.local 'pendingQuery' (set by Header when opening side panel)
@@ -57,9 +87,9 @@ export default function App() {
         if (q) {
           setSearch(q)
           // Clear after consumption
-          try { await chrome.storage.local.remove('pendingQuery') } catch {}
+          try { await chrome.storage.local.remove('pendingQuery') } catch { }
         }
-      } catch {}
+      } catch { }
     })()
   }, [])
 
@@ -141,7 +171,7 @@ export default function App() {
         if (typeof ui?.lastWorkspace === 'string' && ui.lastWorkspace) {
           setWorkspace(ui.lastWorkspace);
         }
-      } catch {}
+      } catch { }
     })();
   }, [])
 
@@ -150,7 +180,7 @@ export default function App() {
     (async () => {
       try {
         await saveUIState({ lastActiveTab: activeTab, lastWorkspace: workspace });
-      } catch {}
+      } catch { }
     })();
   }, [activeTab])
 
@@ -159,7 +189,7 @@ export default function App() {
     (async () => {
       try {
         await saveUIState({ lastActiveTab: activeTab, lastWorkspace: workspace });
-      } catch {}
+      } catch { }
     })();
   }, [workspace])
 
@@ -254,6 +284,45 @@ export default function App() {
     }
   };
 
+  // Save an arbitrary URL (not from history/bookmarks) into a workspace by name
+  const handleAddSavedUrlToWorkspace = async (newUrl, workspaceName) => {
+    try {
+      const workspaces = await listWorkspaces();
+      const norm = (s) => (s || '').trim().toLowerCase();
+      let ws = workspaces.find(w => norm(w.name) === norm(workspaceName));
+      if (!ws) {
+        ws = {
+          id: Date.now().toString(),
+          name: workspaceName,
+          description: '',
+          createdAt: Date.now(),
+          urls: [],
+          context: {},
+        };
+      }
+      // Prevent duplicate URL entries
+      if (!Array.isArray(ws.urls)) ws.urls = [];
+      if (ws.urls.some(u => u.url === newUrl)) {
+        setAddingToWorkspace(null);
+        return;
+      }
+      const updated = {
+        ...ws,
+        urls: [
+          ...ws.urls,
+          { url: newUrl, title: newUrl, addedAt: Date.now(), favicon: getFaviconUrl(newUrl) },
+        ],
+      };
+      await saveWorkspace(updated);
+      const refreshed = await listWorkspaces();
+      setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+    } catch (e) {
+      console.error('Failed to add URL to workspace:', e);
+    } finally {
+      setAddingToWorkspace(null);
+    }
+  };
+
   // Delete URL(s) from the current workspace
   const handleDeleteFromWorkspace = async (baseUrl, values) => {
     try {
@@ -263,12 +332,27 @@ export default function App() {
       const ws = workspaces.find(w => norm(w.name) === norm(workspace));
       if (!ws) return;
 
+      // Remove any saved URL that either:
+      // - exactly matches one of the group's value URLs, or
+      // - has the same normalized base (scheme + eTLD+1) as the group base
       const urlsToRemove = new Set(values && values.length ? values.map(v => v.url) : [baseUrl]);
+      const baseKey = getUrlParts(baseUrl).key;
       const updated = {
         ...ws,
-        urls: (ws.urls || []).filter(u => !urlsToRemove.has(u.url)),
+        urls: (ws.urls || []).filter(u => {
+          const uKey = getUrlParts(u.url).key;
+          const matchByBase = uKey === baseKey;
+          const matchByExact = urlsToRemove.has(u.url);
+          return !(matchByBase || matchByExact);
+        }),
       };
       await saveWorkspace(updated);
+      // Also re-categorize underlying items to 'Unknown' so they no longer belong to this workspace
+      try {
+        const syntheticPrefix = `${ws.id}-`;
+        const toUpdate = Array.isArray(values) ? values.filter(v => typeof v?.id === 'string' ? !v.id.startsWith(syntheticPrefix) : !!v?.id) : [];
+        await Promise.all(toUpdate.map(v => updateItemWorkspace(v.id, 'Unknown')));
+      } catch { }
       const refreshed = await listWorkspaces();
       setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
     } catch (e) {
@@ -294,10 +378,26 @@ export default function App() {
   }
 
   const handleAddItemToWorkspace = async (item, workspaceName) => {
-    await updateItemWorkspace(item.id, workspaceName);
-    // Refresh data to reflect the change
-    populate();
-    setAddingToWorkspace(null);
+    try {
+      await updateItemWorkspace(item.id, workspaceName);
+      // Optimistically patch chrome.storage.local.dashboardData so UI updates immediately
+      try {
+        const { dashboardData } = await chrome.storage.local.get(['dashboardData']);
+        if (dashboardData && Array.isArray(dashboardData.history)) {
+          const patch = (arr) => arr.map((it) => it.url === item.url ? { ...it, workspaceGroup: workspaceName } : it);
+          const updated = {
+            ...dashboardData,
+            history: patch(dashboardData.history || []),
+            bookmarks: patch(dashboardData.bookmarks || []),
+          };
+          await chrome.storage.local.set({ dashboardData: updated });
+          // Notify listeners to reload data
+          chrome.runtime.sendMessage({ action: 'updateData' });
+        }
+      } catch { }
+    } finally {
+      setAddingToWorkspace(null);
+    }
   };
 
   const openInTab = () => {
@@ -441,6 +541,18 @@ export default function App() {
     );
   }, [savedWorkspaces, workspace]);
 
+  // For 'All' view, merge history/bookmarks with all saved URLs and de-duplicate by URL
+  const allItemsCombined = useMemo(() => {
+    const map = new Map();
+    for (const it of filtered) {
+      if (it?.url) map.set(it.url, it);
+    }
+    for (const it of savedUrlsFlat) {
+      if (it?.url && !map.has(it.url)) map.set(it.url, it);
+    }
+    return Array.from(map.values());
+  }, [filtered, savedUrlsFlat]);
+
   // Saved items for the currently selected workspace (by name)
   const workspaceSavedItems = useMemo(() => {
     if (!workspace || workspace === 'All') return [];
@@ -536,7 +648,7 @@ export default function App() {
       {/* Filters */}
       <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span>
+          {/* <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span> */}
           <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} />
         </div>
       </div>
@@ -586,6 +698,20 @@ export default function App() {
       ) : (
         <div className="empty">No saved workspaces</div>
       ))} */}
+
+      {/* All items view */}
+      {workspace === 'All' && (
+        loading ? (
+          <div className="empty">Loading...</div>
+        ) : (
+          <>
+            {/* <ItemGrid items={allItemsCombined} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} /> */}
+            <ErrorBoundary>
+              <ActivityPanel />
+            </ErrorBoundary>
+          </>
+        )
+      )}
 
       {/* Workspace section (only when a specific workspace is selected) */}
       {workspace !== 'All' && (
@@ -704,6 +830,7 @@ export default function App() {
               allItems={data}
               currentWorkspace={addingToWorkspace}
               onAdd={handleAddItemToWorkspace}
+              onAddSaved={handleAddSavedUrlToWorkspace}
               onCancel={() => setAddingToWorkspace(null)}
             />
           </div>
