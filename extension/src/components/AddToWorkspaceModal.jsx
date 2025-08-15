@@ -39,7 +39,7 @@ export function AddToWorkspaceModal({ show, onClose, onSave, workspace, suggesti
   }
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
       <div className="modal">
         <div
           className="add-link-header"
@@ -59,7 +59,15 @@ export function AddToWorkspaceModal({ show, onClose, onSave, workspace, suggesti
               ({(workspace.urls || []).length} existing)
             </span>
           </h3>
-          <button onClick={handleClose} className="cancel-btn">Done</button>
+          <button
+            onClick={handleClose}
+            className="cancel-btn"
+            aria-label="Close"
+            title="Close"
+            style={{ padding: '4px 8px' }}
+          >
+            ×
+          </button>
         </div>
 
         {workspace.description && (

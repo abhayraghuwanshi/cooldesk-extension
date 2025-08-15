@@ -1,5 +1,6 @@
 // MV3 background service worker (type: module)
-import { getSettings } from './db.js'
+import { getSettings } from './db.js';
+import { buildEnrichmentPrompt } from './prompts.js';
 
 // Global variable to track last populate time
 let globalLastPopulateTime = 0;
@@ -166,6 +167,37 @@ async function main() {
   })
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    // Interaction messages from content script
+    if (msg && msg.url && msg.type) {
+      const cleaned = cleanUrl(msg.url);
+      if (cleaned) {
+        if (!activityData[cleaned]) activityData[cleaned] = { time: timeSpent[cleaned] || 0, scroll: 0, clicks: 0, forms: 0 };
+        switch (msg.type) {
+          case 'scroll':
+            activityData[cleaned].scroll = Math.max(activityData[cleaned].scroll || 0, Number(msg.scrollPercent) || 0);
+            break;
+          case 'click':
+            activityData[cleaned].clicks = (activityData[cleaned].clicks || 0) + 1;
+            break;
+          case 'formSubmit':
+            activityData[cleaned].forms = (activityData[cleaned].forms || 0) + 1;
+            break;
+          case 'visibility':
+            if (typeof msg.visible === 'boolean' && currentActive.url === msg.url) {
+              if (!msg.visible) {
+                accumulateTime(currentActive.url, Date.now());
+                currentActive.since = 0;
+              } else {
+                currentActive.since = Date.now();
+              }
+            }
+            break;
+        }
+        // Mark for batched persistence
+        activityDirty.add(cleaned);
+      }
+      // Do not consume other handlers
+    }
     if (msg?.ping === 'bg') {
       sendResponse({ pong: true, time: Date.now() })
       return true
@@ -279,6 +311,26 @@ async function main() {
   // ---- Active tab time tracking (for context-aware prompts) ----
   let currentActive = { tabId: null, url: null, since: 0 }
   let timeSpent = {};
+  let activityData = {}; // { [cleanedUrl]: { time, scroll, clicks, forms } }
+  const activityDirty = new Set();
+
+  async function flushActivityBatch() {
+    if (activityDirty.size === 0) return;
+    const urls = Array.from(activityDirty);
+    activityDirty.clear();
+    for (const url of urls) {
+      try {
+        const payload = { url, time: timeSpent[url] || 0, ...activityData[url] };
+        await putActivityToDb(payload);
+      } catch (e) {
+        // If write fails, keep it dirty for next round
+        activityDirty.add(url);
+      }
+    }
+  }
+
+  // Periodic flush every 5s
+  setInterval(() => { flushActivityBatch().catch(() => {}) }, 5000);
   (async () => {
     const db = await openAiDb();
     const tx = db.transaction('timeTracking', 'readonly');
@@ -315,6 +367,10 @@ async function main() {
     const newTime = (timeSpent[cleaned] || 0) + delta;
     timeSpent[cleaned] = newTime;
     await putTimeToDb({ url: cleaned, time: newTime });
+    // Mirror into activity aggregation and mark dirty
+    if (!activityData[cleaned]) activityData[cleaned] = { time: newTime, scroll: 0, clicks: 0, forms: 0 };
+    else activityData[cleaned].time = newTime;
+    activityDirty.add(cleaned);
   }
 
   async function handleActivated(tabId) {
@@ -354,6 +410,19 @@ async function main() {
   chrome.windows.onFocusChanged.addListener(handleFocusChanged)
   chrome.tabs.onUpdated.addListener(handleTabUpdated)
 
+  // Pause/resume time counting based on OS idle state
+  chrome.idle.onStateChanged.addListener((state) => {
+    const now = Date.now();
+    if (state === 'idle' || state === 'locked') {
+      if (currentActive.url) accumulateTime(currentActive.url, now);
+      currentActive.since = 0;
+      flushActivityBatch().catch(() => {});
+    } else if (state === 'active') {
+      if (currentActive.tabId && currentActive.url) currentActive.since = now;
+      flushActivityBatch().catch(() => {});
+    }
+  })
+
   // ---- IndexedDB persistent cache for AI enrichment ----
   function openAiDb() {
     return new Promise((resolve, reject) => {
@@ -366,6 +435,9 @@ async function main() {
         }
         if (!db.objectStoreNames.contains('timeTracking')) {
           db.createObjectStore('timeTracking', { keyPath: 'url' })
+        }
+        if (!db.objectStoreNames.contains('activity')) {
+          db.createObjectStore('activity', { keyPath: 'url' })
         }
       }
       request.onsuccess = () => resolve(request.result)
@@ -417,6 +489,17 @@ async function main() {
     });
   }
 
+  async function putActivityToDb(record) {
+    const db = await openAiDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('activity', 'readwrite');
+      const store = tx.objectStore('activity');
+      const req = store.put(record);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   const ENRICHMENT_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
   async function getAiEnrichment(url, apiKey) {
@@ -437,7 +520,8 @@ async function main() {
     console.debug(`[AI][cache] MISS ${cleaned} — calling Gemini API`)
     const ms = timeSpent[cleaned] || 0
     const minutesSpent = Math.round(ms / 60000)
-    const prompt = `### INSTRUCTIONS ###\n\n**Persona:**\nYou are an expert AI assistant specializing in software development tools and developer productivity workflows.\n\n**Core Task:**\nAnalyze the given URL and classify it according to the schema. Also provide a concise user-centric suggestion informed by how much time the user spent on this site.\n\n**Rules:**\n1. Determine the tool/platform the URL represents.\n2. Assign exactly one primary_category from the Category List.\n3. Assign zero or more secondary_categories.\n4. Assign exactly one workspace_group from the Workspace List.\n5. Provide a concise justification.\n6. Suggest 1 short actionable suggestion (max 140 chars) in plain text under the 'suggestion' field. Consider user time spent: ${minutesSpent} minutes.\n7. Suggest 3-5 relevant suggested_tags in lowercase.\n8. Return a single well-formed JSON using the Output Schema.\n\n**Output Schema (JSON):**\n{\n  "tool_name": "The common name of the tool or platform.",\n  "primary_category": "The single most fitting category from the list.",\n  "secondary_categories": ["An array of other relevant categories from the list."],\n  "workspace_group": "The single high-level bucket from the workspace list.",\n  "justification": "A brief, one-sentence explanation for your categorization choices.",\n  "suggested_tags": ["An array of 3-5 relevant lowercase keywords."],\n  "suggestion": "One concise actionable recommendation for the user."\n}\n\n**Category List:**\n*   Source Control & Versioning\n*   Cloud & Infrastructure\n*   Code Assistance & AI Coding\n*   Documentation & Knowledge Search\n*   Testing & QA Automation\n*   Project Management & Collaboration\n*   Data Analysis & Visualization\n*   DevOps & CI/CD\n*   UI/UX & Design\n*   APIs & Integrations\n*   Learning & Upskilling\n*   AI & Machine Learning\n*   Security & Compliance\n*   Monitoring & Observability\n*   Local Development & Environments\n*   Package Management\n*   Database Management\n*   Communication\n\n**Workspace List:**\n*   Code & Versioning\n*   Cloud & Infrastructure\n*   AI & ML\n*   DevOps & Automation\n*   Testing & Quality\n*   Data & Analytics\n*   Design & UX\n*   Project & Team\n\n### URL TO CLASSIFY ###\n\n${cleaned}`;
+    const prompt = buildEnrichmentPrompt(minutesSpent, cleaned)
+;
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
     const controller = new AbortController()
     const timeoutMs = 15000

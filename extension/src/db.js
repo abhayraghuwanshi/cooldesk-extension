@@ -2,9 +2,10 @@
 // Object store: 'workspaces' with keyPath 'id'
 
 const DB_NAME = 'cooldesk-db'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const STORE = 'workspaces'
 const SETTINGS_STORE = 'settings'
+const UI_STORE = 'ui'
 
 let dbPromise = null
 
@@ -19,6 +20,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(UI_STORE)) {
+        db.createObjectStore(UI_STORE, { keyPath: 'id' })
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -110,6 +114,29 @@ export async function saveSettings(value) {
     bc.postMessage({ type: 'settingsChanged' })
     bc.close()
   } catch {}
+}
+
+// UI state helpers (persist selected tab/workspace)
+export async function getUIState() {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(UI_STORE, 'readonly')
+    const store = tx.objectStore(UI_STORE)
+    const req = store.get('default')
+    req.onsuccess = () => resolve((req.result && req.result.value) || {})
+    req.onerror = () => reject(req.error)
+  })
+}
+
+export async function saveUIState(value) {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(UI_STORE, 'readwrite')
+    const store = tx.objectStore(UI_STORE)
+    const req = store.put({ id: 'default', value })
+    req.onsuccess = () => resolve()
+    req.onerror = () => reject(req.error)
+  })
 }
 
 export async function updateItemWorkspace(itemId, workspaceName) {

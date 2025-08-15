@@ -16,7 +16,29 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal">
-        <h3>Settings</h3>
+        <div
+          className="modal-header"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            paddingBottom: 8,
+            borderBottom: '1px solid #273043',
+            marginBottom: 10,
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Settings</h3>
+          <button
+            onClick={onClose}
+            className="cancel-btn"
+            aria-label="Close"
+            title="Close"
+            style={{ padding: '4px 8px' }}
+          >
+            ×
+          </button>
+        </div>
         <label>
           <span>Gemini API Key</span>
           <input

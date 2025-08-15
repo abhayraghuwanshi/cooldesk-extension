@@ -6,13 +6,12 @@ import { Header } from './components/Header';
 import { ItemGrid } from './components/ItemGrid';
 import { RelatedProductsSection } from './components/RelatedProductsSection';
 import { SettingsModal } from './components/SettingsModal';
-import { StatsView } from './components/StatsView';
 import { SystemPrompt } from './components/SystemPrompt';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 
 
 import { AddLinkFlow } from './components/AddLinkFlow';
-import { getSettings as getSettingsDB, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
+import { getSettings as getSettingsDB, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, getUIState, saveUIState } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
 import { getDomainFromUrl, getFaviconUrl } from './utils';
 
@@ -25,7 +24,6 @@ export default function App() {
   const [settings, setSettings] = useState({ geminiApiKey: '', serverUrl: '', visitCountThreshold: '', historyMaxResults: '' })
   const [progress, setProgress] = useState({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
   const [relatedProducts, setRelatedProducts] = useState([])
-  const [savedWsFilter, setSavedWsFilter] = useState('All')
   const [loadingRelated, setLoadingRelated] = useState(false)
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
   const [addingToWorkspace, setAddingToWorkspace] = useState(null);
@@ -40,6 +38,30 @@ export default function App() {
   const [showSavedWorkspaces, setShowSavedWorkspaces] = useState(true)
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
+
+  // Prefill search from URL (?q=...) when opened in side panel or new tab
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const q = (params.get('q') || '').trim()
+      if (q) setSearch(q)
+    } catch {}
+  }, [])
+
+  // Also hydrate from chrome.storage.local 'pendingQuery' (set by Header when opening side panel)
+  useEffect(() => {
+    (async () => {
+      try {
+        const { pendingQuery } = await chrome.storage.local.get(['pendingQuery'])
+        const q = (pendingQuery || '').trim()
+        if (q) {
+          setSearch(q)
+          // Clear after consumption
+          try { await chrome.storage.local.remove('pendingQuery') } catch {}
+        }
+      } catch {}
+    })()
+  }, [])
 
   useEffect(() => {
     // Load settings initially from IndexedDB
@@ -108,6 +130,39 @@ export default function App() {
     }
   }, [])
 
+  // Restore last selected tab and workspace on mount (IndexedDB)
+  useEffect(() => {
+    (async () => {
+      try {
+        const ui = await getUIState();
+        if (ui?.lastActiveTab === 'workspace' || ui?.lastActiveTab === 'saved') {
+          setActiveTab(ui.lastActiveTab);
+        }
+        if (typeof ui?.lastWorkspace === 'string' && ui.lastWorkspace) {
+          setWorkspace(ui.lastWorkspace);
+        }
+      } catch {}
+    })();
+  }, [])
+
+  // Persist activeTab whenever it changes (IndexedDB)
+  useEffect(() => {
+    (async () => {
+      try {
+        await saveUIState({ lastActiveTab: activeTab, lastWorkspace: workspace });
+      } catch {}
+    })();
+  }, [activeTab])
+
+  // Persist selected workspace whenever it changes (IndexedDB)
+  useEffect(() => {
+    (async () => {
+      try {
+        await saveUIState({ lastActiveTab: activeTab, lastWorkspace: workspace });
+      } catch {}
+    })();
+  }, [workspace])
+
   // When opening the Create Workspace modal, fetch current tab for auto-suggest
   useEffect(() => {
     if (showCreateWorkspace) {
@@ -119,23 +174,20 @@ export default function App() {
   const workspaceOptions = useMemo(() => {
     const set = new Set(['All'])
     for (const it of data) {
-      const g = it.workspaceGroup || (it.category && typeof it.category === 'object' ? it.category.name : null)
+      const g = it.workspaceGroup
       if (g) set.add(g)
     }
     return Array.from(set)
   }, [data])
 
-  const savedWorkspaceOptions = useMemo(() => {
-    return ['All', ...savedWorkspaces.map(ws => ws.name)]
-  }, [savedWorkspaces])
-
-  // When user changes the Saved filter, ensure the Saved section is visible
-  useEffect(() => {
-    // Switch to 'All' so Saved section shows up while user is interacting with Saved filter
-    if (workspace !== 'All') setWorkspace('All')
-    // Ensure the Saved section is expanded so the user sees the change
-    setShowSavedWorkspaces(true)
-  }, [savedWsFilter])
+  // Items to build the unified workspace filter options
+  const filterItems = useMemo(() => {
+    // merge history/data workspaces with saved workspace names
+    const extras = savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }));
+    // Ensure 'All' is available as a selectable option
+    const all = [{ workspaceGroup: 'All' }];
+    return [...all, ...data, ...extras];
+  }, [data, savedWorkspaces])
 
   // Keyboard shortcuts for tab navigation
   useEffect(() => {
@@ -163,8 +215,8 @@ export default function App() {
   const filtered = useMemo(() => {
     const s = search.toLowerCase()
     return data.filter((it) => {
-      // Check workspaceGroup or fallback to category.name
-      const itemWorkspace = it.workspaceGroup || (it.category && typeof it.category === 'object' ? it.category.name : null)
+      // Only use explicit workspaceGroup; do not fallback to category.name
+      const itemWorkspace = it.workspaceGroup
       const inWs = workspace === 'All' || itemWorkspace === workspace
       const inSearch = !s || it.title?.toLowerCase().includes(s) || it.summary?.toLowerCase().includes(s) || it.url?.toLowerCase().includes(s)
       return inWs && inSearch
@@ -305,8 +357,8 @@ export default function App() {
       console.warn('Workspace not found for AddToWorkspaceModal:', ws);
       return;
     }
-    setWorkspaceForLinkAdd(resolved);
-    setShowAddLinkModal(true);
+    // Open the in-page AddLinkFlow so the user can search history/bookmarks to add
+    setAddingToWorkspace(resolved.name);
   };
 
   const handleCloseAddLinkModal = () => {
@@ -376,9 +428,9 @@ export default function App() {
 
   // Flatten saved workspaces' URLs into items suitable for ItemGrid
   const savedUrlsFlat = useMemo(() => {
-    const sourceWorkspaces = savedWsFilter === 'All'
+    const sourceWorkspaces = workspace === 'All'
       ? savedWorkspaces
-      : savedWorkspaces.filter(ws => ws.name === savedWsFilter);
+      : savedWorkspaces.filter(ws => ws.name === workspace);
 
     return sourceWorkspaces.flatMap(ws =>
       (ws.urls || []).map(u => ({
@@ -387,7 +439,7 @@ export default function App() {
         id: `${ws.id}-${u.url}` // for unique key
       }))
     );
-  }, [savedWorkspaces, savedWsFilter]);
+  }, [savedWorkspaces, workspace]);
 
   // Saved items for the currently selected workspace (by name)
   const workspaceSavedItems = useMemo(() => {
@@ -464,6 +516,10 @@ export default function App() {
     }
   }
 
+  const handleWorspaceFilterChange = useEffect(() => {
+
+  }, [workspace, savedWorkspaces]);
+
   return (
     <div className="popup-wrap">
       <Header
@@ -477,7 +533,26 @@ export default function App() {
         openInTab={openInTab}
       />
 
-      {/* {savedWorkspaces.length > 0 && (
+      {/* Filters */}
+      <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span>
+          <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} />
+        </div>
+      </div>
+
+
+      {progress.running && (
+        <div className="progress">
+          <div className="progress-bar" style={{ width: `${progress.total ? (progress.processed / progress.total) * 100 : 0}%` }} />
+          <div className="progress-text">{progress.processed}/{progress.total} (API {progress.apiHits}) — {progress.currentItem}</div>
+        </div>
+      )}
+
+      {progress.error && <div className="error">{progress.error}</div>}
+
+      {/* Saved Workspaces section */}
+      {/* {(savedWorkspaces.length > 0 ? (
         <section className="saved-workspaces">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <h3 style={{ margin: 0 }}>Saved Workspaces</h3>
@@ -498,109 +573,19 @@ export default function App() {
             >
               {showSavedWorkspaces ? 'Hide' : 'Show'}
             </button>
+
+            <button onClick={() => handleOpenAddLinkModal(workspace)} className="add-link-btn">+ Add Link</button>
+            <button onClick={startEnrichment} className="add-link-btn">Organize using AI</button>
           </div>
           {showSavedWorkspaces && (
             <>
-              <WorkspaceFilters items={savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }))} active={savedWsFilter} onChange={setSavedWsFilter} />
-              <ItemGrid items={savedUrlsFlat} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setAddingToWorkspace(workspace)}
-                  className="add-link-btn"
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: 999,
-                    border: '1px solid #273043',
-                    background: '#1b2331',
-                    color: '#e5e7eb',
-                    fontSize: 12,
-                    lineHeight: '16px',
-                    cursor: 'pointer'
-                  }}
-                  title="Add link"
-                >
-                  +
-                </button>
-                <button
-                  onClick={startEnrichment}
-                  className="add-link-btn"
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: 999,
-                    border: '1px solid #273043',
-                    background: '#1b2331',
-                    color: '#e5e7eb',
-                    fontSize: 12,
-                    lineHeight: '16px',
-                    cursor: 'pointer'
-                  }}
-                  title="Organize using AI"
-                >
-                  Enhance
-                </button>
-              </div>
-              
-      {/* Filters */}
-      <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span>
-          <WorkspaceFilters items={data} active={workspace} onChange={setWorkspace} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>Saved:</span>
-          <WorkspaceFilters items={savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }))} active={savedWsFilter} onChange={setSavedWsFilter} />
-        </div>
-      </div>
-
-
-      {progress.running && (
-        <div className="progress">
-          <div className="progress-bar" style={{ width: `${progress.total ? (progress.processed / progress.total) * 100 : 0}%` }} />
-          <div className="progress-text">{progress.processed}/{progress.total} (API {progress.apiHits}) — {progress.currentItem}</div>
-        </div>
-      )}
-
-      {progress.error && <div className="error">{progress.error}</div>}
-
-      {/* Saved Workspaces section */}
-      {workspace === 'All' && (savedWorkspaces.length > 0 ? (
-        <section className="saved-workspaces">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>
-              Saved Workspaces
-              {savedWsFilter && savedWsFilter !== 'All' && (
-                <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.8 }}>
-                  • Filter: {savedWsFilter} ({savedUrlsFlat.length})
-                </span>
-              )}
-            </h3>
-            <button
-              onClick={() => setShowSavedWorkspaces(v => !v)}
-              className="add-link-btn"
-              style={{
-                padding: '4px 10px',
-                borderRadius: 999,
-                border: '1px solid #273043',
-                background: '#1b2331',
-                color: '#e5e7eb',
-                fontSize: 12,
-                lineHeight: '16px',
-                cursor: 'pointer'
-              }}
-              title={showSavedWorkspaces ? 'Hide saved workspaces' : 'Show saved workspaces'}
-            >
-              {showSavedWorkspaces ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          {showSavedWorkspaces && (
-            <>
-              <ItemGrid key={`saved-${savedWsFilter}`} items={savedUrlsFlat} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} />
+              <ItemGrid key={`saved-${workspace}`} items={savedUrlsFlat} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} />
             </>
           )}
         </section>
       ) : (
         <div className="empty">No saved workspaces</div>
-      ))}
+      ))} */}
 
       {/* Workspace section (only when a specific workspace is selected) */}
       {workspace !== 'All' && (
@@ -609,20 +594,75 @@ export default function App() {
         ) : (
           <>
             {showSystemPrompt && (
-              <SystemPrompt
-                workspaceName={workspace}
-                workspaces={savedWorkspaces}
-                onSave={handleSaveWorkspacePrompt}
-              />
+              <div
+                className="modal-overlay"
+                onClick={(e) => { if (e.target === e.currentTarget) setShowSystemPrompt(false) }}
+              >
+                <div className="modal">
+                  <div
+                    className="modal-header"
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
+                    }}
+                  >
+                    <h3 style={{ margin: 0 }}>Workspace Instructions</h3>
+                    <button
+                      onClick={() => setShowSystemPrompt(false)}
+                      className="cancel-btn"
+                      aria-label="Close"
+                      title="Close"
+                      style={{ padding: '4px 8px' }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <SystemPrompt
+                    workspaceName={workspace}
+                    workspaces={savedWorkspaces}
+                    onSave={handleSaveWorkspacePrompt}
+                  />
+                </div>
+              </div>
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
-              <span style={{ opacity: 0.85, fontSize: 12 }}>Workspace: {workspace} ({mergedWorkspaceItems.length})</span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setShowSystemPrompt(v => !v)} className="add-link-btn">
-                  {showSystemPrompt ? 'Hide Prompt' : 'Prompt'}
+              <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({mergedWorkspaceItems.length})</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => setShowSystemPrompt(v => !v)}
+                  className="add-link-btn"
+                  aria-label={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
+                  title={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
+                  style={{ padding: '4px 8px' }}
+                >
+                  📝
                 </button>
-                <button onClick={() => setShowCurrentWorkspace(v => !v)} className="add-link-btn">
-                  {showCurrentWorkspace ? 'Hide Workspace' : 'Show Workspace'}
+                <button
+                  onClick={() => setShowCurrentWorkspace(v => !v)}
+                  className="add-link-btn"
+                  aria-label={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
+                  title={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
+                  style={{ padding: '4px 8px' }}
+                >
+                  👁️
+                </button>
+                <button
+                  onClick={() => handleOpenAddLinkModal(workspace)}
+                  className="add-link-btn"
+                  aria-label="Add link"
+                  title="Add link"
+                  style={{ padding: '4px 8px' }}
+                >
+                  +
+                </button>
+                <button
+                  onClick={startEnrichment}
+                  className="add-link-btn"
+                  aria-label="Organize using AI"
+                  title="Organize using AI"
+                  style={{ padding: '4px 8px' }}
+                >
+                  ✨
                 </button>
               </div>
             </div>
@@ -630,10 +670,6 @@ export default function App() {
               <>
                 <ItemGrid items={mergedWorkspaceItems} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={() => handleOpenAddLinkModal(workspace)} onDelete={handleDeleteFromWorkspace} />
                 <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
-                <div style={{ display: 'flex', gap: 8, marginTop: '14px' }}>
-                  <button onClick={() => handleOpenAddLinkModal(workspace)} className="add-link-btn">+ Add Link</button>
-                  <button onClick={startEnrichment} className="add-link-btn">Organize using AI</button>
-                </div>
               </>
             )}
           </>
@@ -641,12 +677,37 @@ export default function App() {
       )}
 
       {addingToWorkspace && (
-        <AddLinkFlow
-          allItems={data}
-          currentWorkspace={addingToWorkspace}
-          onAdd={handleAddItemToWorkspace}
-          onCancel={() => setAddingToWorkspace(null)}
-        />
+        <div
+          className="modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setAddingToWorkspace(null) }}
+        >
+          <div className="modal">
+            <div
+              className="modal-header"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
+              }}
+            >
+              <h3 style={{ margin: 0 }}>Add to "{addingToWorkspace}"</h3>
+              <button
+                onClick={() => setAddingToWorkspace(null)}
+                className="cancel-btn"
+                aria-label="Close"
+                title="Close"
+                style={{ padding: '4px 8px' }}
+              >
+                ×
+              </button>
+            </div>
+            <AddLinkFlow
+              allItems={data}
+              currentWorkspace={addingToWorkspace}
+              onAdd={handleAddItemToWorkspace}
+              onCancel={() => setAddingToWorkspace(null)}
+            />
+          </div>
+        </div>
       )}
 
       {loadingRelated && (

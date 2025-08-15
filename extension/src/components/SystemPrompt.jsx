@@ -29,10 +29,6 @@ export function SystemPrompt({ workspaceName, workspaces, onSave }) {
       padding: 12,
       margin: '10px 0'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <h4 style={{ margin: 0 }}>Workspace Instructions</h4>
-        <span style={{ opacity: 0.8, fontSize: 12 }}>{workspaceName}</span>
-      </div>
       <p style={{ marginTop: 0, marginBottom: 8, opacity: 0.85, fontSize: 12 }}>
         Define guidance for how AI should organize, name, and prioritize links in this workspace.
       </p>

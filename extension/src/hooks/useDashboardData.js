@@ -11,9 +11,7 @@ const normalize = (dashboardData) => {
     if (!prev) {
       // Apply fallback logic even for single items
       let item = { ...it }
-      if (!item.workspaceGroup && item.category && typeof item.category === 'object' && item.category.name) {
-        item = { ...item, workspaceGroup: item.category.name }
-      }
+      // Do NOT derive workspaceGroup from category.name. Only use explicit workspaceGroup.
       map.set(it.url, item)
     } else {
       // Merge to preserve enriched fields from either source
@@ -34,10 +32,7 @@ const normalize = (dashboardData) => {
         // Prefer a meaningful title
         title: (it.title && it.title.trim()) ? it.title : prev.title,
       }
-      // Fallback: derive workspaceGroup from category.name if missing
-      if (!merged.workspaceGroup && merged.category && typeof merged.category === 'object' && merged.category.name) {
-        merged = { ...merged, workspaceGroup: merged.category.name }
-      }
+      // Do NOT derive workspaceGroup from category.name. Only use explicit workspaceGroup.
       map.set(it.url, merged)
     }
   })

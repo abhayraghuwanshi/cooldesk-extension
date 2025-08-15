@@ -23,7 +23,8 @@
     "history",
     "tabs",
     "sidePanel",
-    "search"
+    "search",
+    "idle"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -37,6 +38,13 @@
       "matches": [
         "<all_urls>"
       ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/interactionContent.js"],
+      "run_at": "document_idle"
     }
   ]
 }

@@ -39,7 +39,29 @@ export function CreateWorkspaceModal({ show, onClose, onCreate, currentTab }) {
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}>
       <div className="modal">
-        <h3>Create New Workspace</h3>
+        <div
+          className="modal-header"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            paddingBottom: 8,
+            borderBottom: '1px solid #273043',
+            marginBottom: 10,
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Create New Workspace</h3>
+          <button
+            onClick={handleClose}
+            className="cancel-btn"
+            aria-label="Close"
+            title="Close"
+            style={{ padding: '4px 8px' }}
+          >
+            ×
+          </button>
+        </div>
 
         {currentTab && (
           <div className="current-tab-info">

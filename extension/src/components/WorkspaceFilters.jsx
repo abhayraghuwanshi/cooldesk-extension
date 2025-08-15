@@ -1,10 +1,10 @@
-import React, { useMemo, useRef, useCallback } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 
 export function WorkspaceFilters({ items, active, onChange }) {
   const workspaces = useMemo(() => {
     const set = new Set()
     items.forEach((i) => i.workspaceGroup && set.add(i.workspaceGroup))
-    return ['All', ...Array.from(set)]
+    return Array.from(set)
   }, [items])
 
   const btnRefs = useRef([])

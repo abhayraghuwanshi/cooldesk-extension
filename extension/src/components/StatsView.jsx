@@ -4,8 +4,8 @@ import { StatsCard } from './StatsCard';
 export function StatsView({ items, search, workspace, onAddRelated }) {
   const searchLower = (search || '').toLowerCase()
   const filtered = items.filter((it) => {
-    // Check workspaceGroup or fallback to category.name
-    const itemWorkspace = it.workspaceGroup || (it.category && typeof it.category === 'object' ? it.category.name : null)
+    // Only use explicit workspaceGroup; do not fallback to category.name
+    const itemWorkspace = it.workspaceGroup
     const inWs = workspace === 'All' || itemWorkspace === workspace
     const inSearch = !searchLower || (it.title?.toLowerCase().includes(searchLower) || it.url?.toLowerCase().includes(searchLower))
     return inWs && inSearch
