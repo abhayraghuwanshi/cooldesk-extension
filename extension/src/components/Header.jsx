@@ -35,7 +35,7 @@ export function Header({
     }
   };
   return (
-    <header className="header">
+    <header className="header ai-header">
       <div className="logo-placeholder">
         <div className="logo-icon">🚀</div>
         <span className="logo-text">CoolDesk AI</span>
@@ -257,7 +257,7 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         placeholder="Search Google..."
-        className="search"
+        className="search ai-input"
       />
       {showList && (
         <div

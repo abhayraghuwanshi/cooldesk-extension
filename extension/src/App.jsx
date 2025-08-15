@@ -521,7 +521,7 @@ export default function App() {
   }, [workspace, savedWorkspaces]);
 
   return (
-    <div className="popup-wrap">
+    <div className="popup-wrap bg-ai-midnight-nebula">
       <Header
         search={search}
         setSearch={setSearch}
@@ -630,7 +630,7 @@ export default function App() {
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
                   onClick={() => setShowSystemPrompt(v => !v)}
-                  className="add-link-btn"
+                  className="add-link-btn ai-button"
                   aria-label={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
                   title={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
                   style={{ padding: '4px 8px' }}
@@ -639,7 +639,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setShowCurrentWorkspace(v => !v)}
-                  className="add-link-btn"
+                  className="add-link-btn ai-button"
                   aria-label={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
                   title={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
                   style={{ padding: '4px 8px' }}
@@ -648,7 +648,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => handleOpenAddLinkModal(workspace)}
-                  className="add-link-btn"
+                  className="add-link-btn ai-button"
                   aria-label="Add link"
                   title="Add link"
                   style={{ padding: '4px 8px' }}
@@ -657,7 +657,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={startEnrichment}
-                  className="add-link-btn"
+                  className="add-link-btn ai-button"
                   aria-label="Organize using AI"
                   title="Organize using AI"
                   style={{ padding: '4px 8px' }}
