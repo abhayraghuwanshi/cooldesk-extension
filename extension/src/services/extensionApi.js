@@ -7,6 +7,24 @@ export function hasChrome() {
   return typeof chrome !== 'undefined' && !!chrome;
 }
 
+// Ask the host to enqueue an action for the Chrome extension to open/focus a URL
+export async function enqueueOpenInChrome(url) {
+  if (!url || typeof url !== 'string') return { ok: false, error: 'Invalid url' };
+  try {
+    const res = await fetch('http://127.0.0.1:4000/actions/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    if (res.status === 204) return { ok: true };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => ({}));
+    return data?.ok ? data : { ok: false, error: data?.error || 'Failed to enqueue action' };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
 // --- Host Tabs helpers ---
 export async function setHostTabs(tabs) {
   try {
@@ -107,6 +125,23 @@ export async function getHostDashboard() {
   }
 }
 
+// Ask the Electron host if a URL should be redirected before opening.
+// Expected host response shape: { ok: boolean, target?: string }
+export async function getRedirectDecision(url) {
+  if (!url || typeof url !== 'string') return { ok: false, error: 'Invalid url' };
+  try {
+    const q = encodeURIComponent(url);
+    const res = await fetch(`http://127.0.0.1:4000/redirect?url=${q}`);
+    if (res.status === 204) return { ok: true, target: null };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => ({}));
+    const target = typeof data?.target === 'string' && data.target ? data.target : null;
+    return { ok: true, target };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
 // Open a URL in the system default browser (Electron app mode)
 export async function openExternalUrl(url) {
   if (!url || typeof url !== 'string') return { ok: false, error: 'Invalid url' };
@@ -141,6 +176,7 @@ export async function focusWindow(pid) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pid: id }),
     });
+    if (res.status === 204) return { ok: true };
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json().catch(() => ({}));
     return data?.ok ? data : { ok: false, error: data?.error || 'Failed' };

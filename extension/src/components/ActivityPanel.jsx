@@ -1,7 +1,8 @@
+import { faArrowUpRightFromSquare, faRotateRight } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
+import { enqueueOpenInChrome, getHostDashboard, getHostTabs } from '../services/extensionApi';
 import { getFaviconUrl } from '../utils';
-import { getHostTabs, getHostDashboard } from '../services/extensionApi';
-import { openExternalUrl, enqueueOpenInChrome } from '../services/extensionApi';
 // No favicon or extra UI; render URLs only
 
 export default function ActivityPanel() {
@@ -191,7 +192,7 @@ export default function ActivityPanel() {
         chrome.tabs.create({ url });
       } else {
         // Electron: use extension bridge only to avoid duplicate opens
-        enqueueOpenInChrome(url).catch(() => {});
+        enqueueOpenInChrome(url).catch(() => { });
       }
     } catch (e) {
       console.warn('Failed to open/focus url', url, e);
@@ -226,7 +227,15 @@ export default function ActivityPanel() {
       {/* Current Tabs Section */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h3 style={{ margin: 0 }}>Current Tabs <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({tabs.length})</span></h3>
-        <button onClick={refreshTabs} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>Refresh</button>
+        <button
+          onClick={refreshTabs}
+          style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}
+          className="icon-btn"
+          aria-label="Reload"
+          title="Reload"
+        >
+          <FontAwesomeIcon icon={faRotateRight} />
+        </button>
       </div>
       {tabsError ? (
         <div className="error" style={{ marginBottom: 12 }}>{String(tabsError)}</div>
@@ -268,9 +277,12 @@ export default function ActivityPanel() {
                 const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
                 if (hasTabsUpdate) return focusTab(tab);
                 if (tab?.url) {
-                  enqueueOpenInChrome(tab.url).catch(() => {});
+                  enqueueOpenInChrome(tab.url).catch(() => { });
                 }
-              }} style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>Go</button>
+              }} style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>
+                <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ marginRight: 6 }} />
+                Go
+              </button>
             </div>
           ))}
           {!tabs.length && !tabsError && (
@@ -337,7 +349,10 @@ export default function ActivityPanel() {
                   <div className="activity-card__title" style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{host}</div>
                   <div className="activity-card__url" style={{ fontSize: 11, opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.url}</div>
                 </div>
-                <button onClick={() => openOrFocusUrl(r.url)} style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>Open</button>
+                <button onClick={() => openOrFocusUrl(r.url)} style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>
+                  <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ marginRight: 6 }} />
+                  Open
+                </button>
               </div>
             );
           })}

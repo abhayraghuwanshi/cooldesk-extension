@@ -1,6 +1,7 @@
 // MV3 background service worker (type: module)
 import { getSettings } from './db.js';
 import { buildEnrichmentPrompt, buildEnrichmentPromptForWorkspace } from './prompts.js';
+import { getRedirectDecision } from './services/extensionApi.js';
 
 // Global variable to track last populate time
 let globalLastPopulateTime = 0;
@@ -488,6 +489,44 @@ async function main() {
   chrome.windows.onFocusChanged.addListener(handleFocusChanged)
   chrome.tabs.onUpdated.addListener(handleTabUpdated)
 
+  // ---- Global redirect integration with Electron host ----
+  const redirectInFlight = new Set(); // guard per-tab to avoid loops
+  function isHttpUrl(u) {
+    try { const x = new URL(u); return x.protocol === 'http:' || x.protocol === 'https:'; } catch { return false; }
+  }
+
+  async function maybeRedirect(tabId, rawUrl) {
+    if (!tabId || !rawUrl || redirectInFlight.has(tabId)) return;
+    if (!isHttpUrl(rawUrl)) return;
+    // Do not try to redirect our own extension pages
+    if (rawUrl.startsWith(chrome.runtime.getURL(''))) return;
+    try {
+      redirectInFlight.add(tabId);
+      const decision = await getRedirectDecision(rawUrl);
+      const target = decision?.ok && typeof decision?.target === 'string' && decision.target ? decision.target : null;
+      if (target && target !== rawUrl) {
+        // Navigate without activating to keep it passive
+        try { await chrome.tabs.update(tabId, { url: target, active: false }); } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+    finally {
+      // Slight delay to prevent immediate re-trigger in onUpdated
+      setTimeout(() => redirectInFlight.delete(tabId), 300);
+    }
+  }
+
+  // Redirect when a new tab is created with a URL (or pendingUrl)
+  chrome.tabs.onCreated.addListener((tab) => {
+    const url = tab?.pendingUrl || tab?.url;
+    if (url) maybeRedirect(tab.id, url);
+  });
+
+  // Redirect on updates when a navigational URL appears
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    const url = changeInfo?.url || tab?.pendingUrl || tab?.url;
+    if (url) maybeRedirect(tabId, url);
+  });
+
   // Pause/resume time counting based on OS idle state
   chrome.idle.onStateChanged.addListener((state) => {
     const now = Date.now();
@@ -703,20 +742,18 @@ async function main() {
         try { return t.url && new URL(t.url).href === target; } catch { return false; }
       }) || null;
       if (match) {
-        await chrome.tabs.update(match.id, { active: true });
-        if (match.windowId != null) {
-          try { await chrome.windows.update(match.windowId, { focused: true }); } catch {}
-        }
+        // Leave existing tab as-is (do not activate) to avoid taskbar highlight
         return;
       }
-      await chrome.tabs.create({ url });
+      // Open in background (not active) to avoid taskbar highlight
+      await chrome.tabs.create({ url, active: false });
     } catch (e) {
       console.warn('[Bridge] openOrFocusUrlInChrome failed:', e);
     }
   }
 
   function startHostActionPolling() {
-    const INTERVAL_MS = 2000;
+    const INTERVAL_MS = 200; // faster reaction to host enqueued opens
     async function pollOnce() {
       try {
         const res = await fetch('http://127.0.0.1:4000/actions/next');

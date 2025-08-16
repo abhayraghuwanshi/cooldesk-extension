@@ -1,3 +1,5 @@
+import { faEye, faEyeSlash, faPenToSquare, faPlus, faRotateRight, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { AddToWorkspaceModal } from './components/AddToWorkspaceModal';
@@ -794,6 +796,16 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span> */}
           <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} />
+          {/* Reload data */}
+          <button
+            onClick={() => { try { populate(); } catch { } }}
+            className="icon-btn"
+            aria-label="Reload"
+            title="Reload"
+            style={{ padding: '4px 8px' }}
+          >
+            <FontAwesomeIcon icon={faRotateRight} />
+          </button>
         </div>
       </div>
 
@@ -955,7 +967,7 @@ export default function App() {
                   title={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
                   style={{ padding: '4px 8px' }}
                 >
-                  📝
+                  <FontAwesomeIcon icon={faPenToSquare} />
                 </button>
                 <button
                   onClick={() => setShowCurrentWorkspace(v => !v)}
@@ -964,7 +976,7 @@ export default function App() {
                   title={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
                   style={{ padding: '4px 8px' }}
                 >
-                  👁️
+                  <FontAwesomeIcon icon={showCurrentWorkspace ? faEyeSlash : faEye} />
                 </button>
                 <button
                   onClick={() => handleOpenAddLinkModal(workspace)}
@@ -973,7 +985,7 @@ export default function App() {
                   title="Add link"
                   style={{ padding: '4px 8px' }}
                 >
-                  +
+                  <FontAwesomeIcon icon={faPlus} />
                 </button>
                 <button
                   onClick={startEnrichment}
@@ -982,7 +994,7 @@ export default function App() {
                   title="Organize using AI"
                   style={{ padding: '4px 8px' }}
                 >
-                  ✨
+                  <FontAwesomeIcon icon={faWandMagicSparkles} />
                 </button>
               </div>
             </div>

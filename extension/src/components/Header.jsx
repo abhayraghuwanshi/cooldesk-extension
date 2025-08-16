@@ -1,4 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faRobot,
+  faSpinner,
+  faPlus,
+  faGear,
+  faCircleQuestion,
+  faArrowUpRightFromSquare,
+} from '@fortawesome/free-solid-svg-icons';
 import { getUIState, saveUIState } from '../db';
 
 export function Header({
@@ -45,13 +54,13 @@ export function Header({
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
         </div>
         <button className="icon-btn" onClick={startEnrichment} title="Organize using AI">
-          <i className={`fas ${progress.running ? 'fa-spinner fa-spin' : 'fa-robot'}`}></i>
+          <FontAwesomeIcon icon={progress.running ? faSpinner : faRobot} spin={!!progress.running} />
         </button>
         <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">
-          <i className="fas fa-plus"></i>
+          <FontAwesomeIcon icon={faPlus} />
         </button>
         <button className="icon-btn" onClick={() => setShowSettings(true)} title="Settings">
-          <i className="fas fa-cog"></i>
+          <FontAwesomeIcon icon={faGear} />
         </button>
         <button
           className="icon-btn"
@@ -70,10 +79,10 @@ export function Header({
           }}
           title="Help (shortcuts)"
         >
-          <i className="fas fa-question-circle"></i>
+          <FontAwesomeIcon icon={faCircleQuestion} />
         </button>
         <button className="icon-btn" onClick={openInSidePanel} title="Open in Sidebar">
-          <i className="fas fa-external-link-alt"></i>
+          <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
         </button>
       </div>
     </header>
