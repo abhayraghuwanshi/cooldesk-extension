@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:electron": "vite --mode electron",
     "build": "vite build",
+    "build:electron": "vite build --mode electron",
     "lint": "eslint .",
     "preview": "vite preview"
   },

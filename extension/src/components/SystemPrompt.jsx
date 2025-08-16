@@ -6,7 +6,8 @@ import { buildEnrichmentPromptForWorkspace } from '../prompts';
 // - workspaceName: string (current workspace name)
 // - workspaces: array of workspace objects
 // - onSave: function(updatedWorkspace)
-export function SystemPrompt({ workspaceName, workspaces, onSave }) {
+// - candidateUrls?: string[] (fallback URLs from history/bookmarks when workspace has none)
+export function SystemPrompt({ workspaceName, workspaces, onSave, candidateUrls = [] }) {
   const ws = useMemo(() => workspaces.find(w => w?.name === workspaceName) || null, [workspaces, workspaceName]);
   const [prompt, setPrompt] = useState('');
   const defaultPrompt = useMemo(() => buildEnrichmentPromptForWorkspace(workspaceName || 'Workspace', []), [workspaceName]);
@@ -29,17 +30,31 @@ export function SystemPrompt({ workspaceName, workspaces, onSave }) {
       setError('');
       setResult(null);
       setRunning(true);
-      const urls = Array.isArray(ws?.urls) ? ws.urls.map(u => u?.url).filter(Boolean).slice(0, 100) : [];
+      const saved = Array.isArray(ws?.urls) ? ws.urls.map(u => u?.url).filter(Boolean) : [];
+      const fallback = Array.isArray(candidateUrls) ? candidateUrls.filter(Boolean) : [];
+      const urls = (saved.length ? saved : fallback).slice(0, 100);
       if (urls.length === 0) {
-        setError('This workspace has no saved URLs to categorize.');
+        setError('No URLs found to categorize for this workspace.');
         setRunning(false);
         return;
       }
-      const resp = await chrome.runtime.sendMessage({
-        action: 'categorizeWorkspaceUrls',
-        workspace: workspaceName,
-        urls,
-        systemPrompt: prompt,
+      const resp = await new Promise((resolve) => {
+        const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage;
+        if (!hasRuntime) return resolve({ ok: false, error: 'Chrome runtime not available' });
+        try {
+          chrome.runtime.sendMessage({
+            action: 'categorizeWorkspaceUrls',
+            workspace: workspaceName,
+            urls,
+            systemPrompt: prompt,
+          }, (res) => {
+            const lastErr = chrome.runtime?.lastError;
+            if (lastErr) return resolve({ ok: false, error: lastErr.message || 'Service worker unavailable' });
+            resolve(res);
+          });
+        } catch (e) {
+          resolve({ ok: false, error: String(e?.message || e) });
+        }
       });
       if (!resp?.ok) {
         setError(resp?.error || 'Failed to categorize URLs');

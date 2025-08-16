@@ -801,6 +801,32 @@ body {
   gap: 12px;
 }
 
+/* ActivityPanel: Tabs grid/cards */
+.activity-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+/* Force exactly 2 columns on small screens */
+@media (max-width: 700px) {
+  .activity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.activity-card__title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-card__url {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .related-item {
   background: rgba(15, 20, 29, 0.6);
   border: 1px solid #374151;

@@ -1,19 +1,36 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 import { crx } from '@crxjs/vite-plugin'
+import react from '@vitejs/plugin-react'
+import { defineConfig, loadEnv } from 'vite'
 import manifest from './manifest.json'
 
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [
-    crx({
-      manifest,
-      // Explicitly define background script as a separate entry
-      background: {
-        entry: './src/background.js',
-        type: 'module'
-      }
-    }),
-    react(),
-  ],
+// Switch between Chrome Extension (default) and Electron builds using env TARGET=electron
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const target = env.TARGET || process.env.TARGET
+  const isElectron = mode === 'electron' || target === 'electron'
+
+  if (isElectron) {
+    // Electron build: no crx(), relative paths for file:// protocol
+    return {
+      base: './',
+      plugins: [react()],
+      build: { outDir: 'dist-electron', emptyOutDir: true },
+    }
+  }
+
+  // Chrome extension build (default)
+  return {
+    base: './',
+    plugins: [
+      crx({
+        manifest,
+        // Explicitly define background script as a separate entry
+        background: {
+          entry: './src/background.js',
+          type: 'module',
+        },
+      }),
+      react(),
+    ],
+  }
 })

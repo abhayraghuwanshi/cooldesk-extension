@@ -11,7 +11,17 @@ export function StatsCard({ item, showCount = false, onAISuggest }) {
     let mounted = true;
     (async () => {
       try {
-        const resp = await chrome.runtime.sendMessage({ action: 'getTimeSpent' });
+        const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage;
+        if (!hasRuntime) return;
+        const resp = await new Promise((resolve) => {
+          try {
+            chrome.runtime.sendMessage({ action: 'getTimeSpent' }, (res) => {
+              const lastErr = chrome.runtime?.lastError;
+              if (lastErr) return resolve({ ok: false, error: lastErr.message });
+              resolve(res);
+            });
+          } catch (e) { resolve({ ok: false, error: String(e) }); }
+        });
         if (mounted && resp?.ok && cleanedKey) {
           setTimeMs(resp.timeSpent?.[cleanedKey] || 0);
         }

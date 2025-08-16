@@ -312,7 +312,9 @@ async function main() {
             return;
           }
           const override = typeof msg.systemPrompt === 'string' && msg.systemPrompt.trim() ? msg.systemPrompt : null;
-          const prompt = override || buildEnrichmentPromptForWorkspace(workspace, urls);
+          // Always include the URL list in the prompt body so the model has concrete inputs
+          const basePrompt = override || buildEnrichmentPromptForWorkspace(workspace, urls);
+          const prompt = `${basePrompt}\n\nInput URLs:\n${urls.join('\n')}`;
 
           const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
           const controller = new AbortController();
@@ -690,6 +692,47 @@ async function main() {
       // Sidebar not supported in this context
     }
   })
+
+  // ---- Host bridge: consume queued actions from Electron API ----
+  async function openOrFocusUrlInChrome(url) {
+    try {
+      if (!url) return;
+      const target = new URL(url).href;
+      const all = await chrome.tabs.query({});
+      const match = all.find(t => {
+        try { return t.url && new URL(t.url).href === target; } catch { return false; }
+      }) || null;
+      if (match) {
+        await chrome.tabs.update(match.id, { active: true });
+        if (match.windowId != null) {
+          try { await chrome.windows.update(match.windowId, { focused: true }); } catch {}
+        }
+        return;
+      }
+      await chrome.tabs.create({ url });
+    } catch (e) {
+      console.warn('[Bridge] openOrFocusUrlInChrome failed:', e);
+    }
+  }
+
+  function startHostActionPolling() {
+    const INTERVAL_MS = 2000;
+    async function pollOnce() {
+      try {
+        const res = await fetch('http://127.0.0.1:4000/actions/next');
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        const action = data?.action;
+        if (action && action.type === 'open' && action.url) {
+          await openOrFocusUrlInChrome(action.url);
+        }
+      } catch { /* ignore transient errors */ }
+    }
+    setInterval(() => { pollOnce().catch(() => {}) }, INTERVAL_MS);
+  }
+
+  // Start polling bridge
+  startHostActionPolling();
 
   // Separate lightweight AI suggestion API (keeps enrichment unchanged)
   async function getAiSuggestion(url, apiKey) {

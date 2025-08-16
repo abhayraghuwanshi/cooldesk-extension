@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getHostDashboard, setHostDashboard } from '../services/extensionApi';
 
 const normalize = (dashboardData) => {
   const bookmarks = (dashboardData?.bookmarks || []).map((b) => ({ ...b, type: 'Bookmark' }))
@@ -46,8 +47,34 @@ export function useDashboardData() {
 
   const load = async () => {
     try {
-      const { dashboardData } = await chrome.storage.local.get(['dashboardData'])
+      const hasStorage = typeof chrome !== 'undefined' && chrome?.storage?.local && typeof chrome.storage.local.get === 'function'
+      let dashboardData = null
+      if (hasStorage) {
+        try {
+          const res = await chrome.storage.local.get(['dashboardData'])
+          dashboardData = res?.dashboardData || null
+        } catch { /* ignore */ }
+      }
+      // Fallback to host (Electron app) if storage missing or empty
+      if (!hasStorage || !dashboardData || (
+        !Array.isArray(dashboardData.history) && !Array.isArray(dashboardData.bookmarks)
+      )) {
+        try {
+          const host = await getHostDashboard();
+          if (host?.ok && host.dashboard && (
+            Array.isArray(host.dashboard.history) || Array.isArray(host.dashboard.bookmarks)
+          )) {
+            dashboardData = host.dashboard;
+          }
+        } catch { /* ignore */ }
+      }
       const arr = normalize(dashboardData)
+      // Mirror enriched dashboard to host so Electron renderer can show categories
+      try {
+        if (dashboardData && (Array.isArray(dashboardData.history) || Array.isArray(dashboardData.bookmarks))) {
+          await setHostDashboard(dashboardData)
+        }
+      } catch { }
       try {
         const histLen = (dashboardData?.history || []).length
         const bmLen = (dashboardData?.bookmarks || []).length
@@ -68,9 +95,12 @@ export function useDashboardData() {
       if (!arr.length && !populating) {
         setPopulating(true)
         try {
-          await new Promise((resolve) => {
-            chrome.runtime.sendMessage({ action: 'populateData' }, () => resolve())
-          })
+          const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage
+          if (hasRuntime) {
+            await new Promise((resolve) => {
+              try { chrome.runtime.sendMessage({ action: 'populateData' }, () => resolve()) } catch { resolve() }
+            })
+          }
         } finally {
           setPopulating(false)
         }
@@ -87,9 +117,23 @@ export function useDashboardData() {
         load()
       }
     }
-    chrome.runtime.onMessage.addListener(listener)
-    return () => chrome.runtime.onMessage.removeListener(listener)
+    const canListen = typeof chrome !== 'undefined' && chrome?.runtime && typeof chrome.runtime.onMessage?.addListener === 'function'
+    if (canListen) {
+      chrome.runtime.onMessage.addListener(listener)
+    }
+    return () => {
+      if (canListen && typeof chrome.runtime.onMessage?.removeListener === 'function') {
+        chrome.runtime.onMessage.removeListener(listener)
+      }
+    }
   }, [])
 
-  return { data, loading, populate: () => chrome.runtime.sendMessage({ action: 'populateData' }) }
+  const populate = () => {
+    try {
+      const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage
+      if (hasRuntime) chrome.runtime.sendMessage({ action: 'populateData' })
+    } catch { /* ignore */ }
+  }
+
+  return { data, loading, populate }
 }

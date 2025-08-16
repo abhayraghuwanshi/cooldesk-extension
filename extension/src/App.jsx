@@ -14,6 +14,7 @@ import ActivityPanel from './components/ActivityPanel';
 import { AddLinkFlow } from './components/AddLinkFlow';
 import { getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
+import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
 
 // Simple error boundary to prevent entire app crash due to child errors
@@ -68,6 +69,141 @@ export default function App() {
   const [showSavedWorkspaces, setShowSavedWorkspaces] = useState(true)
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
+  const [processes, setProcesses] = useState([])
+
+  // Side panel visibility control via runtime messages
+  const [showPanel, setShowPanel] = useState(false)
+  useEffect(() => {
+    const handler = (req) => {
+      switch (req?.action) {
+        case 'showPanel': setShowPanel(true); break;
+        case 'hidePanel': setShowPanel(false); break;
+        case 'togglePanel': setShowPanel(v => !v); break;
+        default: break;
+      }
+    };
+    if (hasRuntime()) {
+      onMessage.add(handler);
+      return () => onMessage.remove(handler);
+    } else {
+      // Fallback in app/non-extension context: show panel by default
+      setShowPanel(true);
+      return () => { };
+    }
+  }, [])
+
+  // Populate settings on load from host (Electron app API), then mirror locally
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await getHostSettings();
+        if (res?.ok && res.settings && Object.keys(res.settings).length) {
+          const s = res.settings;
+          setSettings({
+            geminiApiKey: s.geminiApiKey || '',
+            serverUrl: (s.serverUrl || '').replace(/\/$/, ''),
+            visitCountThreshold: Number.isFinite(s.visitCountThreshold) ? String(s.visitCountThreshold) : '',
+            historyMaxResults: Number.isFinite(s.historyMaxResults) ? String(s.historyMaxResults) : ''
+          });
+          try {
+            await saveSettingsDB(s);
+            await storageSet(s);
+          } catch { }
+        }
+      } catch { }
+    })();
+  }, [])
+
+  // Populate dashboard on load from host and notify listeners
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await getHostDashboard();
+        const dash = res?.ok ? res.dashboard : null;
+        if (dash && (Array.isArray(dash.history) || Array.isArray(dash.bookmarks))) {
+          try {
+            await storageSet({ dashboardData: dash });
+            await sendMessage({ action: 'updateData' });
+          } catch { }
+        }
+      } catch { }
+    })();
+  }, [])
+
+  // Poll running processes from the host app
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const list = await getProcesses();
+        if (!cancelled && Array.isArray(list)) setProcesses(list);
+      } catch {
+        // ignore
+      }
+    };
+    // Always attempt an initial load
+    load();
+    // Use lower frequency inside Chrome extension to reduce traffic
+    const intervalMs = hasRuntime() ? 30000 : 15000;
+    const id = setInterval(load, intervalMs);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [])
+
+  // Mirror Chrome tabs to host (/tabs) so Electron app can read them
+  useEffect(() => {
+    // Only in extension context with chrome.tabs available
+    const canUseTabs = typeof chrome !== 'undefined' && chrome?.tabs;
+    if (!canUseTabs) return;
+
+    let disposed = false;
+
+    const pushTabs = async () => {
+      try {
+        const res = await tabs.query({});
+        if (!disposed && res?.ok && Array.isArray(res.tabs)) {
+          await setHostTabs(res.tabs);
+        }
+      } catch { /* noop */ }
+    };
+
+    // Initial push
+    pushTabs();
+
+    // Periodic sync
+    const interval = setInterval(pushTabs, 15000);
+
+    // Event-driven sync
+    const handlers = [];
+    try {
+      if (chrome.tabs?.onCreated?.addListener) {
+        const h = () => pushTabs();
+        chrome.tabs.onCreated.addListener(h); handlers.push(['onCreated', h]);
+      }
+      if (chrome.tabs?.onUpdated?.addListener) {
+        const h = () => pushTabs();
+        chrome.tabs.onUpdated.addListener(h); handlers.push(['onUpdated', h]);
+      }
+      if (chrome.tabs?.onRemoved?.addListener) {
+        const h = () => pushTabs();
+        chrome.tabs.onRemoved.addListener(h); handlers.push(['onRemoved', h]);
+      }
+      if (chrome.tabs?.onActivated?.addListener) {
+        const h = () => pushTabs();
+        chrome.tabs.onActivated.addListener(h); handlers.push(['onActivated', h]);
+      }
+    } catch { /* ignore */ }
+
+    return () => {
+      disposed = true;
+      clearInterval(interval);
+      try {
+        for (const [evt, h] of handlers) {
+          const obj = chrome.tabs?.[evt];
+          if (obj?.removeListener) obj.removeListener(h);
+        }
+      } catch { /* ignore */ }
+    };
+  }, [])
 
   // Prefill search from URL (?q=...) when opened in side panel or new tab
   useEffect(() => {
@@ -82,12 +218,12 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const { pendingQuery } = await chrome.storage.local.get(['pendingQuery'])
+        const { pendingQuery } = await storageGet(['pendingQuery'])
         const q = (pendingQuery || '').trim()
         if (q) {
           setSearch(q)
           // Clear after consumption
-          try { await chrome.storage.local.remove('pendingQuery') } catch { }
+          try { await storageRemove('pendingQuery') } catch { }
         }
       } catch { }
     })()
@@ -130,6 +266,16 @@ export default function App() {
         }
       })()
 
+      // After loading local settings, mirror to host so app sees them
+      ; (async () => {
+        try {
+          const s = await getSettingsDB();
+          if (s && Object.keys(s).length) {
+            await setHostSettings(s);
+          }
+        } catch { }
+      })()
+
     const onMsg = (req) => {
       if (req?.action === 'aiProgress') {
         setProgress((p) => ({ ...p, running: true, processed: req.processed || 0, total: req.total || 0, currentItem: req.currentItem || '', apiHits: req.apiHits || 0 }))
@@ -142,7 +288,7 @@ export default function App() {
         // data reloaded via hook
       }
     }
-    chrome.runtime.onMessage.addListener(onMsg)
+    onMessage.add(onMsg)
 
     // Subscribe to IndexedDB changes via BroadcastChannel
     const unsubscribe = subscribeWorkspaceChanges(async () => {
@@ -155,7 +301,7 @@ export default function App() {
     })
 
     return () => {
-      chrome.runtime.onMessage.removeListener(onMsg)
+      onMessage.remove(onMsg)
       unsubscribe && unsubscribe()
     }
   }, [])
@@ -264,17 +410,18 @@ export default function App() {
 
       // Save to IndexedDB
       await saveSettingsDB(payload);
-      // Mirror to chrome.storage.local for background/service worker compatibility
-      try { await chrome.storage.local.set(payload) } catch (e) { console.warn('Could not save settings to chrome.storage.local', e) }
+      // Mirror to storage for background/service worker compatibility
+      try { await storageSet(payload) } catch (e) { console.warn('Could not save settings to storage', e) }
+      // Push to host so Electron app stays in sync
+      try { await setHostSettings(payload) } catch { }
 
       setSettings(newSettings);
       setShowSettings(false);
 
       // Notify background script about the changes
-      await chrome.runtime.sendMessage({
-        action: 'settingsUpdated',
-        settings: newSettings,
-      });
+      try {
+        await sendMessage({ action: 'settingsUpdated', settings: newSettings })
+      } catch (e) { /* ignore */ }
     } catch (err) {
       if (err.message.includes('Receiving end does not exist')) {
         console.warn('Could not notify background script of settings change. It might be inactive.');
@@ -363,9 +510,8 @@ export default function App() {
   const startEnrichment = async () => {
     setProgress({ running: true, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
     try {
-      await chrome.runtime.sendMessage({
-        action: 'enrichWithAI'
-      })
+      const res = await sendMessage({ action: 'enrichWithAI' })
+      if (!res?.ok) throw new Error(res?.error || 'Failed to start enrichment')
     } catch (err) {
       if (err.message.includes('Receiving end does not exist')) {
         const error = 'Could not connect to the background service.'
@@ -380,9 +526,9 @@ export default function App() {
   const handleAddItemToWorkspace = async (item, workspaceName) => {
     try {
       await updateItemWorkspace(item.id, workspaceName);
-      // Optimistically patch chrome.storage.local.dashboardData so UI updates immediately
+      // Optimistically patch storage.dashboardData so UI updates immediately
       try {
-        const { dashboardData } = await chrome.storage.local.get(['dashboardData']);
+        const { dashboardData } = await storageGet(['dashboardData']);
         if (dashboardData && Array.isArray(dashboardData.history)) {
           const patch = (arr) => arr.map((it) => it.url === item.url ? { ...it, workspaceGroup: workspaceName } : it);
           const updated = {
@@ -390,9 +536,9 @@ export default function App() {
             history: patch(dashboardData.history || []),
             bookmarks: patch(dashboardData.bookmarks || []),
           };
-          await chrome.storage.local.set({ dashboardData: updated });
+          await storageSet({ dashboardData: updated });
           // Notify listeners to reload data
-          chrome.runtime.sendMessage({ action: 'updateData' });
+          await sendMessage({ action: 'updateData' });
         }
       } catch { }
     } finally {
@@ -400,17 +546,14 @@ export default function App() {
     }
   };
 
-  const openInTab = () => {
-    if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage()
+  const openInTab = async () => {
+    try { await openOptionsPage() } catch { /* noop */ }
   }
 
   const handleAddRelated = async (url, title) => {
     setLoadingRelated(true);
     try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'getRelated',
-        context: { url, title, settings },
-      });
+      const response = await sendMessage({ action: 'getRelated', context: { url, title, settings } })
       if (response?.ok) {
         setRelatedProducts(response.related);
       } else {
@@ -580,8 +723,9 @@ export default function App() {
 
   const getCurrentTabInfo = async () => {
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      setCurrentTab(tab)
+      const res = await tabs.query({ active: true, currentWindow: true })
+      const tab = (res.ok && Array.isArray(res.tabs) && res.tabs.length) ? res.tabs[0] : null
+      if (tab) setCurrentTab(tab)
       return tab
     } catch (err) {
       console.error('Error getting current tab:', err)
@@ -701,16 +845,65 @@ export default function App() {
 
       {/* All items view */}
       {workspace === 'All' && (
-        loading ? (
-          <div className="empty">Loading...</div>
-        ) : (
-          <>
-            {/* <ItemGrid items={allItemsCombined} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} /> */}
-            <ErrorBoundary>
-              <ActivityPanel />
-            </ErrorBoundary>
-          </>
-        )
+        <>
+          {/* Running Apps (Electron/app mode) - show regardless of dashboard loading */}
+          {Array.isArray(processes) && processes.length > 0 && (
+            <section className="saved-workspaces" style={{ margin: '6px 0 10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <h3 style={{ margin: 0 }}>Running Apps</h3>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+                {processes.map((p, idx) => (
+                  <div
+                    key={p.pid || p.processId || idx}
+                    className="card"
+                    style={{ padding: 10, cursor: 'pointer', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                    title="Click to focus this app"
+                    onClick={async () => {
+                      try { await focusWindow(p.pid ?? p.processId); } catch { }
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>
+                        {p.title || p.name || p.processName || 'Unknown App'}
+                      </div>
+                      <button
+                        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', cursor: 'pointer' }}
+                        title="Focus this app"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try { await focusWindow(p.pid ?? p.processId); } catch { }
+                        }}
+                      >
+                        Go
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>
+                      PID: {p.pid ?? p.processId ?? 'n/a'}
+                    </div>
+                    {p.path && (
+                      <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.path}>
+                        {p.path}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {loading ? (
+            <div className="empty">Loading...</div>
+          ) : (
+            <>
+              {/* <ItemGrid items={allItemsCombined} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} /> */}
+              <ErrorBoundary>
+                {showPanel && (<div>Sample panel data</div>)}
+                <ActivityPanel />
+              </ErrorBoundary>
+            </>
+          )}
+        </>
       )}
 
       {/* Workspace section (only when a specific workspace is selected) */}
@@ -747,6 +940,7 @@ export default function App() {
                     workspaceName={workspace}
                     workspaces={savedWorkspaces}
                     onSave={handleSaveWorkspacePrompt}
+                    candidateUrls={mergedWorkspaceItems.map(i => i.url).filter(Boolean)}
                   />
                 </div>
               </div>

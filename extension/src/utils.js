@@ -48,7 +48,15 @@ export const getUrlParts = (url) => {
 }
 
 export const getFaviconUrl = (url, size = 32) => {
-  try { return `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=${size}` } catch { return null }
+  // Use a highly cached provider to avoid repeated network requests during re-renders.
+  // DuckDuckGo ip3 is lightweight and generally returns long-lived cache headers.
+  try {
+    const host = new URL(url).hostname;
+    // Note: ip3 endpoint ignores size, but serves a reasonable favicon; keeping size for future flexibility.
+    return `https://icons.duckduckgo.com/ip3/${host}.ico`;
+  } catch {
+    return null;
+  }
 };
 
 export const formatTime = (ms) => {

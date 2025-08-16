@@ -1,5 +1,7 @@
 import React from 'react';
 import { getFaviconUrl } from '../utils';
+import { getHostTabs, getHostDashboard } from '../services/extensionApi';
+import { openExternalUrl, enqueueOpenInChrome } from '../services/extensionApi';
 // No favicon or extra UI; render URLs only
 
 export default function ActivityPanel() {
@@ -8,57 +10,79 @@ export default function ActivityPanel() {
   const [error, setError] = React.useState('');
   const [sortBy, setSortBy] = React.useState('time'); // 'time' | 'clicks' | 'scroll' | 'forms'
 
-  React.useEffect(() => {
+  const loadActivity = React.useCallback(async () => {
     let mounted = true;
-    const sendMessage = (msg, timeoutMs = 5000) => new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error('Timed out waiting for background response'));
-      }, timeoutMs);
-      try {
-        chrome.runtime.sendMessage(msg, (res) => {
-          clearTimeout(timer);
-          // Handle MV3 lastError (service worker inactive, etc.)
-          const lastErr = chrome.runtime.lastError;
-          if (lastErr) {
-            return reject(new Error(`Service worker not reachable: ${lastErr.message || 'unknown error'}`));
-          }
-          resolve(res);
-        });
-      } catch (e) {
-        clearTimeout(timer);
-        reject(e);
-      }
-    });
-    (async () => {
-      try {
-        setLoading(true);
-        const resp = await sendMessage({ action: 'getActivityData' }, 6000);
+    const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage;
+    try {
+      setLoading(true);
+      setError('');
+      if (!hasRuntime) {
+        // Electron host fallback: use mirrored dashboard history if available
+        const host = await getHostDashboard();
         if (!mounted) return;
-        if (resp && resp.ok) {
-          const arr = Array.isArray(resp.rows) ? resp.rows : [];
-          // Normalize defaults and sort by time desc
-          const norm = arr.map(r => ({
-            url: r.url,
-            time: Number(r.time) || 0,
-            scroll: Number(r.scroll) || 0,
-            clicks: Number(r.clicks) || 0,
-            forms: Number(r.forms) || 0,
+        if (host.ok && host.dashboard && Array.isArray(host.dashboard.history)) {
+          const norm = host.dashboard.history.map(h => ({
+            url: h.url,
+            // Approximate time using visitCount to drive ranking visuals
+            time: Number(h.visitCount || 0) * 60000,
+            scroll: 0,
+            clicks: 0,
+            forms: 0,
           })).sort((a, b) => b.time - a.time);
           setRows(norm);
+          setError('');
         } else {
-          setError((resp && resp.error) ? String(resp.error) : 'Failed to load activity data');
+          // Keep UI clean in Electron mode
+          setRows([]);
+          setError('');
         }
-      } catch (e) {
-        if (mounted) {
-          console.warn('getActivityData failed:', e);
-          setError(String(e && e.message ? e.message : e));
-        }
-      } finally {
-        if (mounted) setLoading(false);
+        return;
       }
-    })();
-    return () => { mounted = false; };
+
+      // Chrome extension mode: ask background for IndexedDB-backed activity
+      const resp = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timed out waiting for background response')), 6000);
+        try {
+          chrome.runtime.sendMessage({ action: 'getActivityData' }, (res) => {
+            clearTimeout(timer);
+            const lastErr = chrome.runtime?.lastError;
+            if (lastErr) return reject(new Error(lastErr.message || 'Service worker unavailable'));
+            resolve(res);
+          });
+        } catch (e) {
+          clearTimeout(timer);
+          reject(e);
+        }
+      });
+      if (!mounted) return;
+      if (resp && resp.ok) {
+        const arr = Array.isArray(resp.rows) ? resp.rows : [];
+        const norm = arr.map(r => ({
+          url: r.url,
+          time: Number(r.time) || 0,
+          scroll: Number(r.scroll) || 0,
+          clicks: Number(r.clicks) || 0,
+          forms: Number(r.forms) || 0,
+        })).sort((a, b) => b.time - a.time);
+        setRows(norm);
+      } else {
+        setError((resp && resp.error) ? String(resp.error) : 'Failed to load activity data');
+      }
+    } catch (e) {
+      console.warn('getActivityData failed:', e);
+      // Suppress noisy error in Electron; show real errors only in extension context
+      setError(hasRuntime ? (String(e && e.message ? e.message : e)) : '');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  React.useEffect(() => {
+    let disposed = false;
+    (async () => { if (!disposed) await loadActivity(); })();
+    const id = setInterval(() => { if (!disposed) loadActivity(); }, 30000);
+    return () => { disposed = true; clearInterval(id); };
+  }, [loadActivity]);
 
   const fmt = (ms) => {
     const m = Math.round(ms / 60000);
@@ -99,30 +123,51 @@ export default function ActivityPanel() {
   const refreshTabs = React.useCallback(() => {
     setTabsError(null);
     try {
-      chrome.tabs.query({}, (list) => {
-        const lastErr = chrome.runtime.lastError;
-        if (lastErr) {
-          setTabsError(lastErr.message || 'Unable to query tabs');
-          setTabs([]);
-          return;
-        }
-        setTabs(Array.isArray(list) ? list : []);
-      });
+      const hasTabsQuery = typeof chrome !== 'undefined' && chrome?.tabs?.query;
+      if (hasTabsQuery) {
+        chrome.tabs.query({}, (list) => {
+          const lastErr = chrome.runtime?.lastError;
+          if (lastErr) {
+            setTabsError(lastErr.message || 'Unable to query tabs');
+            setTabs([]);
+            return;
+          }
+          setTabs(Array.isArray(list) ? list : []);
+        });
+      } else {
+        // Fallback: fetch tabs mirrored by the extension to the host (Electron mode)
+        (async () => {
+          const res = await getHostTabs();
+          if (res.ok) {
+            setTabs(res.tabs || []);
+            setTabsError(null);
+          } else {
+            setTabs([]);
+            // Keep UI clean in Electron: don't surface noisy errors
+            setTabsError('');
+          }
+        })();
+      }
     } catch (e) {
-      setTabsError(String(e));
+      // Keep UI quiet in non-Chrome environments
+      setTabsError('');
       setTabs([]);
     }
   }, []);
 
   React.useEffect(() => {
     refreshTabs();
+    const id = setInterval(refreshTabs, 15000);
+    return () => clearInterval(id);
   }, [refreshTabs]);
 
   const focusTab = React.useCallback((tab) => {
     if (!tab || !tab.id) return;
     try {
+      const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
+      if (!hasTabsUpdate) return;
       chrome.tabs.update(tab.id, { active: true });
-      if (tab.windowId != null) {
+      if (tab.windowId != null && chrome?.windows?.update) {
         chrome.windows.update(tab.windowId, { focused: true });
       }
     } catch (e) {
@@ -140,8 +185,14 @@ export default function ActivityPanel() {
           try { return t.url && new URL(t.url).href === target; } catch { return false; }
         }) || null;
       } catch { }
-      if (match) return focusTab(match);
-      chrome.tabs.create({ url });
+      const hasTabsApi = typeof chrome !== 'undefined' && chrome?.tabs?.create;
+      if (match && (typeof chrome !== 'undefined' && chrome?.tabs?.update)) return focusTab(match);
+      if (hasTabsApi) {
+        chrome.tabs.create({ url });
+      } else {
+        // Electron: use extension bridge only to avoid duplicate opens
+        enqueueOpenInChrome(url).catch(() => {});
+      }
     } catch (e) {
       console.warn('Failed to open/focus url', url, e);
     }
@@ -168,10 +219,7 @@ export default function ActivityPanel() {
     return { suggestions: topByTime, fallbackUsed: true };
   }, [rows, scoreRow, sortBy]);
 
-  // Early returns must come after all hooks to satisfy Rules of Hooks
-  if (loading) return <div className="empty">Loading activity…</div>;
-  if (error) return <div className="error">{error}</div>;
-  if (!rows.length) return <div className="empty">No activity recorded yet</div>;
+  // Note: Do not early-return so that Current Tabs section is always visible
 
   return (
     <section style={{ marginTop: 12 }}>
@@ -183,14 +231,21 @@ export default function ActivityPanel() {
       {tabsError ? (
         <div className="error" style={{ marginBottom: 12 }}>{String(tabsError)}</div>
       ) : (
-        <div style={{ display: 'grid', gap: 8, marginBottom: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+        <div className="activity-grid" style={{ marginBottom: 16 }}>
           {tabs.map(tab => (
-            <div key={tab.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}>
+            <div key={tab.id} className="activity-card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}>
               {(() => {
-                const primary = tab.favIconUrl || getFaviconUrl(tab.url, 16);
+                // Derive favicon in a safe way; avoid file:// or chrome:// origins that yield "null/favicon.ico"
+                const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
+                const primaryRaw = (tab.favIconUrl && safeHttp(tab.favIconUrl)) ? tab.favIconUrl : getFaviconUrl(tab.url, 16);
                 let originIco = '';
-                try { const u = new URL(tab.url || ''); originIco = `${u.origin}/favicon.ico`; } catch { }
-                const src = primary || originIco || '';
+                try {
+                  const u = new URL(tab.url || '');
+                  if (u.protocol === 'http:' || u.protocol === 'https:') {
+                    originIco = `${u.origin}/favicon.ico`;
+                  }
+                } catch { }
+                const src = primaryRaw || originIco || '';
                 return src ? (
                   <img
                     src={src}
@@ -206,10 +261,16 @@ export default function ActivityPanel() {
                 ) : <div style={{ width: 16, height: 16 }} />;
               })()}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.title || tab.url}</div>
-                <div style={{ fontSize: 11, opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.url}</div>
+                <div className="activity-card__title" style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.title || tab.url}</div>
+                <div className="activity-card__url" style={{ fontSize: 11, opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.url}</div>
               </div>
-              <button onClick={() => focusTab(tab)} style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>Go</button>
+              <button onClick={() => {
+                const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
+                if (hasTabsUpdate) return focusTab(tab);
+                if (tab?.url) {
+                  enqueueOpenInChrome(tab.url).catch(() => {});
+                }
+              }} style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>Go</button>
             </div>
           ))}
           {!tabs.length && !tabsError && (
@@ -221,6 +282,7 @@ export default function ActivityPanel() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h3 style={{ margin: 0 }}>Activity Feed <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({rows.length}{fallbackUsed ? ', showing all' : ''})</span></h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={loadActivity} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>Refresh</button>
           <label style={{ fontSize: 12, opacity: 0.8 }}>Sort by</label>
           <select
             value={sortBy}
@@ -237,36 +299,51 @@ export default function ActivityPanel() {
           </select>
         </div>
       </div>
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-        {suggestions.map((r) => {
-          let host = r.url;
-          let originIco = '';
-          try { const u = new URL(r.url); host = u.hostname; originIco = `${u.origin}/favicon.ico`; } catch { }
-          const firstSrc = getFaviconUrl(r.url, 16) || originIco || '';
-          return (
-            <div key={r.url} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}>
-              {firstSrc ? (
-                <img
-                  src={firstSrc}
-                  alt=""
-                  width={16}
-                  height={16}
-                  style={{ borderRadius: 3 }}
-                  onError={(e) => {
-                    if (originIco && e.currentTarget.src !== originIco) { e.currentTarget.src = originIco; return; }
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              ) : <div style={{ width: 16, height: 16 }} />}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{host}</div>
-                <div style={{ fontSize: 11, opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.url}</div>
+      {loading ? (
+        <div className="empty">Loading activity…</div>
+      ) : error ? (
+        <div className="error">{error}</div>
+      ) : !rows.length ? (
+        <div className="empty">No activity recorded yet</div>
+      ) : (
+        <div className="activity-grid">
+          {suggestions.map((r) => {
+            let host = r.url;
+            let originIco = '';
+            try {
+              const u = new URL(r.url);
+              host = u.hostname;
+              if (u.protocol === 'http:' || u.protocol === 'https:') {
+                originIco = `${u.origin}/favicon.ico`;
+              }
+            } catch { }
+            const firstSrc = getFaviconUrl(r.url, 16) || originIco || '';
+            return (
+              <div key={r.url} className="activity-card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}>
+                {firstSrc ? (
+                  <img
+                    src={firstSrc}
+                    alt=""
+                    width={16}
+                    height={16}
+                    style={{ borderRadius: 3 }}
+                    onError={(e) => {
+                      if (originIco && e.currentTarget.src !== originIco) { e.currentTarget.src = originIco; return; }
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : <div style={{ width: 16, height: 16 }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="activity-card__title" style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{host}</div>
+                  <div className="activity-card__url" style={{ fontSize: 11, opacity: 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.url}</div>
+                </div>
+                <button onClick={() => openOrFocusUrl(r.url)} style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>Open</button>
               </div>
-              <button onClick={() => openOrFocusUrl(r.url)} style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>Open</button>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )
+      }
     </section>
   );
 }

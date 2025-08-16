@@ -1,4 +1,5 @@
 // Simple IndexedDB helper for workspaces
+import { getHostWorkspaces, setHostWorkspaces } from './services/extensionApi';
 // Object store: 'workspaces' with keyPath 'id'
 
 const DB_NAME = 'cooldesk-db'
@@ -33,13 +34,55 @@ function openDB() {
 
 export async function listWorkspaces() {
   const db = await openDB()
-  return new Promise((resolve, reject) => {
+  const items = await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly')
     const store = tx.objectStore(STORE)
     const req = store.getAll()
     req.onsuccess = () => resolve(req.result || [])
     req.onerror = () => reject(req.error)
   })
+  // If IndexedDB is empty, try to restore from chrome.storage.local backup
+  if (!items || items.length === 0) {
+    try {
+      const { workspacesBackupById } = await chrome.storage.local.get(['workspacesBackupById'])
+      const values = workspacesBackupById && typeof workspacesBackupById === 'object'
+        ? Object.values(workspacesBackupById)
+        : []
+      if (values && values.length) {
+        // Repopulate IDB from backup for durability
+        const tx = db.transaction(STORE, 'readwrite')
+        const store = tx.objectStore(STORE)
+        await Promise.all(values.map(v => new Promise((resolve) => {
+          const putReq = store.put(v)
+          putReq.onsuccess = () => resolve()
+          putReq.onerror = () => resolve() // ignore individual errors
+        })))
+        return values
+      }
+    } catch {}
+    // Fallback to host (Electron app) if available
+    try {
+      const host = await getHostWorkspaces();
+      const list = host?.ok && Array.isArray(host.workspaces) ? host.workspaces : [];
+      if (list.length) {
+        const tx = db.transaction(STORE, 'readwrite')
+        const store = tx.objectStore(STORE)
+        await Promise.all(list.map(v => new Promise((resolve) => {
+          const putReq = store.put(v)
+          putReq.onsuccess = () => resolve()
+          putReq.onerror = () => resolve()
+        })))
+        return list
+      }
+    } catch {}
+  }
+  // Mirror to host so Electron sees non-empty list immediately
+  try {
+    if (Array.isArray(items) && items.length) {
+      await setHostWorkspaces(items);
+    }
+  } catch {}
+  return items
 }
 
 export async function saveWorkspace(workspace) {
@@ -51,6 +94,20 @@ export async function saveWorkspace(workspace) {
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error)
   })
+  // Mirror to chrome.storage.local as a lightweight backup to mitigate potential IDB loss
+  try {
+    const { workspacesBackupById } = await chrome.storage.local.get(['workspacesBackupById'])
+    const next = (workspacesBackupById && typeof workspacesBackupById === 'object') ? workspacesBackupById : {}
+    if (workspace && workspace.id) {
+      next[workspace.id] = workspace
+      await chrome.storage.local.set({ workspacesBackupById: next })
+    }
+  } catch {}
+  // Mirror entire list to host so Electron app sees latest workspaces
+  try {
+    const all = await listWorkspaces();
+    await setHostWorkspaces(all);
+  } catch {}
   // Notify listeners via BroadcastChannel
   try {
     const bc = new BroadcastChannel('ws_db_changes')

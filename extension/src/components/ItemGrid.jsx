@@ -37,7 +37,17 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
   useEffect(() => {
     const fetchTimeSpent = async () => {
       try {
-        const response = await chrome.runtime.sendMessage({ action: 'getTimeSpent' });
+        const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage;
+        if (!hasRuntime) return;
+        const response = await new Promise((resolve) => {
+          try {
+            chrome.runtime.sendMessage({ action: 'getTimeSpent' }, (res) => {
+              const lastErr = chrome.runtime?.lastError;
+              if (lastErr) return resolve({ ok: false, error: lastErr.message });
+              resolve(res);
+            });
+          } catch (e) { resolve({ ok: false, error: String(e) }); }
+        });
         if (response?.ok) {
           setTimeSpent(response.timeSpent || {});
         }

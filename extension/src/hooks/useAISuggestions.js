@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { sendMessage } from '../services/extensionApi';
 
 export function useAISuggestions() {
   const [aiState, setAiState] = useState({ loading: false, suggestions: [], error: null })
@@ -6,21 +7,23 @@ export function useAISuggestions() {
   const getSuggestions = async (urls) => {
     try {
       setAiState({ loading: true, suggestions: [], error: null });
-      const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ action: 'getSuggestionFor', urls: Array.isArray(urls) ? urls : [urls] }, resolve);
-      });
+      const response = await sendMessage({ action: 'getSuggestionFor', urls: Array.isArray(urls) ? urls : [urls] });
 
       if (!response?.ok) {
         setAiState({ loading: false, suggestions: [], error: response?.error || 'AI error' });
         return;
       }
 
-      // The response from the background script is a string, so we need to parse it.
+      // The response from the background script may be a JSON string or already parsed.
       let suggestions = [];
       try {
-        const parsed = JSON.parse(response.suggestions);
-        if (parsed && Array.isArray(parsed.suggestions)) {
-          suggestions = parsed.suggestions;
+        if (Array.isArray(response.suggestions)) {
+          suggestions = response.suggestions;
+        } else if (typeof response.suggestions === 'string') {
+          const parsed = JSON.parse(response.suggestions);
+          if (parsed && Array.isArray(parsed.suggestions)) {
+            suggestions = parsed.suggestions;
+          }
         }
       } catch (e) {
         console.error('Failed to parse AI suggestions:', e);
