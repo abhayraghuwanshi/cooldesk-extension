@@ -1,4 +1,4 @@
-import { faEye, faEyeSlash, faPenToSquare, faPlus, faRotateRight, faWandMagicSparkles, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faEye, faEyeSlash, faPenToSquare, faPlus, faRotateRight, faTrash, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -15,7 +15,7 @@ import { WorkspaceFilters } from './components/WorkspaceFilters';
 
 import ActivityPanel from './components/ActivityPanel';
 import { AddLinkFlow } from './components/AddLinkFlow';
-import { getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, deleteWorkspaceById } from './db';
+import { deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
@@ -42,6 +42,15 @@ class ErrorBoundary extends React.Component {
               {String(this.state.error.message || this.state.error)}
             </div>
           )}
+          <div style={{ marginTop: 8 }}>
+            <button
+              className="add-link-btn"
+              style={{ padding: '4px 8px' }}
+              onClick={() => this.setState({ hasError: false, error: null })}
+            >
+              Retry
+            </button>
+          </div>
         </div>
       );
     }
@@ -73,6 +82,8 @@ export default function App() {
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [processes, setProcesses] = useState([])
+  // When viewing a specific workspace, toggle between saved-only vs merged (system+saved)
+  const [showOnlySaved, setShowOnlySaved] = useState(false)
 
   // Side panel visibility control via runtime messages
   const [showPanel, setShowPanel] = useState(false)
@@ -541,7 +552,7 @@ export default function App() {
 
   const handleAddItemToWorkspace = async (item, workspaceName) => {
     try {
-      try { console.log('[App] handleAddItemToWorkspace: start', { itemId: item?.id, url: item?.url, workspaceName }); } catch {}
+      try { console.log('[App] handleAddItemToWorkspace: start', { itemId: item?.id, url: item?.url, workspaceName }); } catch { }
       // 1) Tag the history/bookmark item
       await updateItemWorkspace(item.id, workspaceName);
       // Optimistically patch storage.dashboardData so UI updates immediately
@@ -558,7 +569,7 @@ export default function App() {
           // Notify listeners to reload data
           await sendMessage({ action: 'updateData' });
         }
-      } catch (e) { try { console.warn('[App] handleAddItemToWorkspace: storage patch failed', e); } catch {} }
+      } catch (e) { try { console.warn('[App] handleAddItemToWorkspace: storage patch failed', e); } catch { } }
 
       // 2) Also persist URL into saved Workspaces (so workspace view shows it)
       const workspaces = await listWorkspaces();
@@ -573,7 +584,7 @@ export default function App() {
           urls: [],
           context: {},
         };
-        try { console.log('[App] handleAddItemToWorkspace: creating new workspace', { id: ws.id, name: ws.name }); } catch {}
+        try { console.log('[App] handleAddItemToWorkspace: creating new workspace', { id: ws.id, name: ws.name }); } catch { }
       }
       const url = item?.url;
       if (url) {
@@ -587,12 +598,12 @@ export default function App() {
               { url, title: item.title || url, addedAt: Date.now(), favicon: getFaviconUrl(url) },
             ],
           };
-          try { console.log('[App] handleAddItemToWorkspace: saving workspace with new URL', { id: ws.id, name: ws.name, urls: ws.urls.length }); } catch {}
+          try { console.log('[App] handleAddItemToWorkspace: saving workspace with new URL', { id: ws.id, name: ws.name, urls: ws.urls.length }); } catch { }
           await saveWorkspace(ws);
           const refreshed = await listWorkspaces();
           setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
         } else {
-          try { console.log('[App] handleAddItemToWorkspace: URL already saved, skipping save'); } catch {}
+          try { console.log('[App] handleAddItemToWorkspace: URL already saved, skipping save'); } catch { }
         }
       }
     } catch (e) {
@@ -646,7 +657,7 @@ export default function App() {
     try {
       const name = (workspace || '').trim();
       if (!name || name.toLowerCase() === 'all') {
-        try { alert('Please select a specific workspace to delete.'); } catch {}
+        try { alert('Please select a specific workspace to delete.'); } catch { }
         return;
       }
       const confirmMsg = `Delete workspace "${name}"? This cannot be undone.`;
@@ -656,7 +667,7 @@ export default function App() {
       const norm = (s) => (s || '').trim().toLowerCase();
       const wsObj = savedWorkspaces.find(w => norm(w.name) === norm(name));
       if (!wsObj) {
-        try { alert('Workspace not found.'); } catch {}
+        try { alert('Workspace not found.'); } catch { }
         return;
       }
 
@@ -673,8 +684,8 @@ export default function App() {
             await storageSet({ dashboardData: { ...dashboardData, history: patch(dashboardData.history), bookmarks: patch(dashboardData.bookmarks) } });
             await sendMessage({ action: 'updateData' });
           }
-        } catch {}
-      } catch {}
+        } catch { }
+      } catch { }
 
       // Delete workspace from IndexedDB/backup and broadcast
       await deleteWorkspaceById(wsObj.id);
@@ -685,7 +696,7 @@ export default function App() {
       setWorkspace('All');
     } catch (e) {
       console.error('Failed to delete workspace:', e);
-      try { alert('Failed to delete workspace. See console for details.'); } catch {}
+      try { alert('Failed to delete workspace. See console for details.'); } catch { }
     }
   };
 
@@ -886,9 +897,7 @@ export default function App() {
     }
   }
 
-  const handleWorspaceFilterChange = useEffect(() => {
-
-  }, [workspace, savedWorkspaces]);
+  // (Removed) handleWorkspaceFilterChange: unused effect placeholder
 
   return (
     <div className="popup-wrap bg-ai-midnight-nebula">
@@ -1030,7 +1039,6 @@ export default function App() {
 
           {/* Always render content; hydration refreshes in background */}
           <>
-            {/* <ItemGrid items={allItemsCombined} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} /> */}
             <ErrorBoundary>
               <ActivityPanel />
             </ErrorBoundary>
@@ -1041,106 +1049,115 @@ export default function App() {
       {/* Workspace section (only when a specific workspace is selected) */}
       {workspace !== 'All' && (
         <>
-            {showSystemPrompt && (
-              <div
-                className="modal-overlay"
-                onClick={(e) => { if (e.target === e.currentTarget) setShowSystemPrompt(false) }}
-              >
-                <div className="modal">
-                  <div
-                    className="modal-header"
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
-                    }}
+          {showSystemPrompt && (
+            <div
+              className="modal-overlay"
+              onClick={(e) => { if (e.target === e.currentTarget) setShowSystemPrompt(false) }}
+            >
+              <div className="modal">
+                <div
+                  className="modal-header"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
+                  }}
+                >
+                  <h3 style={{ margin: 0 }}>Workspace Instructions</h3>
+                  <button
+                    onClick={() => setShowSystemPrompt(false)}
+                    className="cancel-btn"
+                    aria-label="Close"
+                    title="Close"
+                    style={{ padding: '4px 8px' }}
                   >
-                    <h3 style={{ margin: 0 }}>Workspace Instructions</h3>
-                    <button
-                      onClick={() => setShowSystemPrompt(false)}
-                      className="cancel-btn"
-                      aria-label="Close"
-                      title="Close"
-                      style={{ padding: '4px 8px' }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <SystemPrompt
-                    workspaceName={workspace}
-                    workspaces={savedWorkspaces}
-                    onSave={handleSaveWorkspacePrompt}
-                    candidateUrls={mergedWorkspaceItems.map(i => i.url).filter(Boolean)}
-                  />
+                    ×
+                  </button>
                 </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
-              <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({mergedWorkspaceItems.length})</span>
-              {refreshing && (
-                <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
-              )}
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button
-                  onClick={() => setShowSystemPrompt(v => !v)}
-                  className="add-link-btn ai-button"
-                  aria-label={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
-                  title={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
-                  style={{ padding: '4px 8px' }}
-                >
-                  <FontAwesomeIcon icon={faPenToSquare} />
-                </button>
-                <button
-                  onClick={() => setShowCurrentWorkspace(v => !v)}
-                  className="add-link-btn ai-button"
-                  aria-label={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
-                  title={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
-                  style={{ padding: '4px 8px' }}
-                >
-                  <FontAwesomeIcon icon={showCurrentWorkspace ? faEyeSlash : faEye} />
-                </button>
-                <button
-                  onClick={() => handleOpenAddLinkModal(workspace)}
-                  className="add-link-btn ai-button"
-                  aria-label="Add link"
-                  title="Add link"
-                  style={{ padding: '4px 8px' }}
-                >
-                  <FontAwesomeIcon icon={faPlus} />
-                </button>
-                <button
-                  onClick={handleDeleteWorkspace}
-                  className="add-link-btn ai-button"
-                  aria-label="Delete workspace (irreversible)"
-                  title="Delete workspace (irreversible)"
-                  style={{ padding: '4px 8px' }}
-                  disabled={!workspace || workspace.toLowerCase() === 'all'}
-                >
-                  <FontAwesomeIcon icon={faTrash} />
-                </button>
-                <button
-                  onClick={startEnrichment}
-                  className="add-link-btn ai-button"
-                  aria-label="Organize using AI"
-                  title="Organize using AI"
-                  style={{ padding: '4px 8px' }}
-                >
-                  <FontAwesomeIcon icon={faWandMagicSparkles} />
-                </button>
+                <SystemPrompt
+                  workspaceName={workspace}
+                  workspaces={savedWorkspaces}
+                  onSave={handleSaveWorkspacePrompt}
+                  candidateUrls={mergedWorkspaceItems.map(i => i.url).filter(Boolean)}
+                />
               </div>
             </div>
-            {showCurrentWorkspace && (
-              <>
-                <ItemGrid
-                  items={workspace === 'All' ? allItemsCombined : workspaceSavedItems}
-                  workspaces={savedWorkspaces}
-                  onAddRelated={handleAddRelated}
-                  onAddLink={() => handleOpenAddLinkModal(workspace)}
-                  onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
-                />
-                <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
-              </>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
+            <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({showOnlySaved ? workspaceSavedItems.length : mergedWorkspaceItems.length})</span>
+            {refreshing && (
+              <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
             )}
-          </>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={() => setShowSystemPrompt(v => !v)}
+                className="add-link-btn ai-button"
+                aria-label={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
+                title={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
+                style={{ padding: '4px 8px' }}
+              >
+                <FontAwesomeIcon icon={faPenToSquare} />
+              </button>
+              <button
+                onClick={() => setShowCurrentWorkspace(v => !v)}
+                className="add-link-btn ai-button"
+                aria-label={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
+                title={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
+                style={{ padding: '4px 8px' }}
+              >
+                <FontAwesomeIcon icon={showCurrentWorkspace ? faEyeSlash : faEye} />
+              </button>
+              <button
+                onClick={() => setShowOnlySaved(v => !v)}
+                className="add-link-btn ai-button"
+                aria-label={showOnlySaved ? 'Show all (saved + system)' : 'Show saved only'}
+                title={showOnlySaved ? 'Show all (saved + system)' : 'Show saved only'}
+                style={{ padding: '4px 8px' }}
+              >
+                {showOnlySaved ? 'All' : 'Saved'}
+              </button>
+              <button
+                onClick={() => handleOpenAddLinkModal(workspace)}
+                className="add-link-btn ai-button"
+                aria-label="Add link"
+                title="Add link"
+                style={{ padding: '4px 8px' }}
+              >
+                <FontAwesomeIcon icon={faPlus} />
+              </button>
+              <button
+                onClick={handleDeleteWorkspace}
+                className="add-link-btn ai-button"
+                aria-label="Delete workspace (irreversible)"
+                title="Delete workspace (irreversible)"
+                style={{ padding: '4px 8px' }}
+                disabled={!workspace || workspace.toLowerCase() === 'all'}
+              >
+                <FontAwesomeIcon icon={faTrash} />
+              </button>
+              <button
+                onClick={startEnrichment}
+                className="add-link-btn ai-button"
+                aria-label="Organize using AI"
+                title="Organize using AI"
+                style={{ padding: '4px 8px' }}
+              >
+                <FontAwesomeIcon icon={faWandMagicSparkles} />
+              </button>
+            </div>
+          </div>
+          {showCurrentWorkspace && (
+            <>
+              <ItemGrid
+                items={workspace === 'All' ? allItemsCombined : (showOnlySaved ? workspaceSavedItems : mergedWorkspaceItems)}
+                workspaces={savedWorkspaces}
+                onAddRelated={handleAddRelated}
+                onAddLink={() => handleOpenAddLinkModal(workspace)}
+                onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+              />
+              <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
+            </>
+          )}
+        </>
       )}
 
       {addingToWorkspace && (

@@ -294,7 +294,15 @@ export default function ActivityPanel() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h3 style={{ margin: 0 }}>Activity Feed <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({rows.length}{fallbackUsed ? ', showing all' : ''})</span></h3>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={loadActivity} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>Refresh</button>
+          <button
+            onClick={loadActivity}
+            style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}
+            className="icon-btn"
+            aria-label="Reload activity"
+            title="Reload activity"
+          >
+            <FontAwesomeIcon icon={faRotateRight} />
+          </button>
           <label style={{ fontSize: 12, opacity: 0.8 }}>Sort by</label>
           <select
             value={sortBy}

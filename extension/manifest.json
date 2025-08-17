@@ -19,7 +19,6 @@
   },
   "permissions": [
     "storage",
-    "bookmarks",
     "history",
     "tabs",
     "windows",
@@ -43,8 +42,13 @@
   ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/interactionContent.js"],
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "src/interactionContent.js"
+      ],
       "run_at": "document_idle"
     }
   ]

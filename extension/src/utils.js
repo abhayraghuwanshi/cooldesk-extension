@@ -20,7 +20,7 @@ const getBaseDomain = (host) => {
       const res = maybePsl.parse(host);
       if (res && res.domain) return res.domain; // eTLD+1
     }
-  } catch {}
+  } catch { }
   // Fallback: last two labels
   const labels = String(host).split('.');
   return labels.length >= 2 ? labels.slice(-2).join('.') : host;
@@ -48,12 +48,16 @@ export const getUrlParts = (url) => {
 }
 
 export const getFaviconUrl = (url, size = 32) => {
-  // Use a highly cached provider to avoid repeated network requests during re-renders.
-  // DuckDuckGo ip3 is lightweight and generally returns long-lived cache headers.
+  // Prefer Google's S2 favicon service. It supports a size parameter and is reliable.
+  // No special Chrome permissions are required to load this from an extension page.
   try {
-    const host = new URL(url).hostname;
-    // Note: ip3 endpoint ignores size, but serves a reasonable favicon; keeping size for future flexibility.
-    return `https://icons.duckduckgo.com/ip3/${host}.ico`;
+    const u = new URL(url);
+    // Only resolve favicons for http/https pages
+    if (!(u.protocol === 'http:' || u.protocol === 'https:')) return null;
+    const host = u.hostname;
+    const s = Math.max(16, Math.min(256, Number(size) || 32));
+    // Example: https://www.google.com/s2/favicons?domain=example.com&sz=32
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=${s}`;
   } catch {
     return null;
   }
