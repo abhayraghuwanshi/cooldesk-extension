@@ -876,8 +876,20 @@ export default function App() {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>
-                        {p.title || p.name || p.processName || 'Unknown App'}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {p.iconUrl && (
+                          <img
+                            src={p.iconUrl}
+                            alt=""
+                            width={16}
+                            height={16}
+                            style={{ borderRadius: 3, objectFit: 'cover' }}
+                            onError={(e) => { try { e.currentTarget.style.display = 'none'; } catch {} }}
+                          />
+                        )}
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          {p.title || p.name || p.processName || 'Unknown App'}
+                        </div>
                       </div>
                       <button
                         style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', cursor: 'pointer' }}
@@ -910,7 +922,6 @@ export default function App() {
             <>
               {/* <ItemGrid items={allItemsCombined} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} /> */}
               <ErrorBoundary>
-                {showPanel && (<div>Sample panel data</div>)}
                 <ActivityPanel />
               </ErrorBoundary>
             </>

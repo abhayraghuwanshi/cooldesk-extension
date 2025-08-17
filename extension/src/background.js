@@ -299,7 +299,7 @@ async function main() {
     }
 
     if (msg?.action === 'categorizeWorkspaceUrls') {
-      ;(async () => {
+      ; (async () => {
         try {
           const { geminiApiKey } = await chrome.storage.local.get(['geminiApiKey']);
           if (!geminiApiKey) {
@@ -339,7 +339,7 @@ async function main() {
             const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
             const rawJson = text.replace(/```json|```/g, '').trim();
             let arr = [];
-            try { arr = JSON.parse(rawJson); } catch {}
+            try { arr = JSON.parse(rawJson); } catch { }
             const results = (Array.isArray(arr) ? arr : []).map((it) => {
               const u = typeof it?.url === 'string' ? it.url : null;
               const included = typeof it?.included === 'boolean' ? it.included : false;
@@ -365,6 +365,11 @@ async function main() {
     if (msg?.action === 'getActivityData') {
       (async () => {
         try {
+          // Allow overriding cutoff via chrome.storage.local: activityDays (number)
+          const { activityDays } = await chrome.storage.local.get(['activityDays']);
+          const days = Number.isFinite(Number(activityDays)) && Number(activityDays) > 0 ? Number(activityDays) : 90;
+          const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
+
           const db = await openAiDb();
           const tx = db.transaction('activity', 'readonly');
           const store = tx.objectStore('activity');
@@ -373,7 +378,18 @@ async function main() {
             req.onsuccess = () => resolve(req.result || []);
             req.onerror = () => reject(req.error);
           });
-          sendResponse({ ok: true, rows });
+
+          // Filter to recent activity; if updatedAt is missing (older records), keep them only if we have non-zero time
+          const recent = (Array.isArray(rows) ? rows : [])
+            .filter(r => {
+              const ua = Number(r?.updatedAt);
+              if (Number.isFinite(ua)) return ua >= cutoffMs;
+              return (Number(r?.time) || 0) > 0; // legacy fallback
+            })
+            // Sort by time descending to keep most relevant first
+            .sort((a, b) => (Number(b?.time) || 0) - (Number(a?.time) || 0));
+
+          sendResponse({ ok: true, rows: recent });
         } catch (e) {
           sendResponse({ ok: false, error: String(e) });
         }
@@ -399,7 +415,7 @@ async function main() {
     activityDirty.clear();
     for (const url of urls) {
       try {
-        const payload = { url, time: timeSpent[url] || 0, ...activityData[url] };
+        const payload = { url, time: timeSpent[url] || 0, updatedAt: Date.now(), ...activityData[url] };
         await putActivityToDb(payload);
       } catch (e) {
         // If write fails, keep it dirty for next round
@@ -409,7 +425,7 @@ async function main() {
   }
 
   // Periodic flush every 5s
-  setInterval(() => { flushActivityBatch().catch(() => {}) }, 5000);
+  setInterval(() => { flushActivityBatch().catch(() => { }) }, 5000);
   (async () => {
     const db = await openAiDb();
     const tx = db.transaction('timeTracking', 'readonly');
@@ -533,10 +549,10 @@ async function main() {
     if (state === 'idle' || state === 'locked') {
       if (currentActive.url) accumulateTime(currentActive.url, now);
       currentActive.since = 0;
-      flushActivityBatch().catch(() => {});
+      flushActivityBatch().catch(() => { });
     } else if (state === 'active') {
       if (currentActive.tabId && currentActive.url) currentActive.since = now;
-      flushActivityBatch().catch(() => {});
+      flushActivityBatch().catch(() => { });
     }
   })
 
@@ -639,7 +655,7 @@ async function main() {
     const ms = timeSpent[cleaned] || 0
     const minutesSpent = Math.round(ms / 60000)
     const prompt = buildEnrichmentPrompt(minutesSpent, cleaned)
-;
+      ;
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
     const controller = new AbortController()
     const timeoutMs = 15000
@@ -694,6 +710,16 @@ async function main() {
 
   async function openOrFocusApp() {
     try {
+      // Prefer opening the Side Panel (tray) on the current active tab
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true })
+        if (activeTab && chrome?.sidePanel?.open) {
+          await chrome.sidePanel.setOptions({ tabId: activeTab.id, path: 'index.html', enabled: true })
+          await chrome.sidePanel.open({ tabId: activeTab.id })
+          return
+        }
+      } catch { /* fall through to tab/window fallback */ }
+
       const tabs = await chrome.tabs.query({ url: APP_URL })
       if (tabs && tabs.length > 0) {
         const t = tabs[0]
@@ -742,34 +768,121 @@ async function main() {
         try { return t.url && new URL(t.url).href === target; } catch { return false; }
       }) || null;
       if (match) {
-        // Leave existing tab as-is (do not activate) to avoid taskbar highlight
+        // Activate the existing tab and focus its window so the user sees it
+        try { await chrome.tabs.update(match.id, { active: true }); } catch { }
+        if (typeof match.windowId === 'number') {
+          try { await chrome.windows.update(match.windowId, { focused: true }); } catch { }
+        }
         return;
       }
-      // Open in background (not active) to avoid taskbar highlight
-      await chrome.tabs.create({ url, active: false });
+      // Create a new active tab and focus the window
+      const created = await chrome.tabs.create({ url, active: true });
+      if (created && typeof created.windowId === 'number') {
+        try { await chrome.windows.update(created.windowId, { focused: true }); } catch { }
+      }
     } catch (e) {
       console.warn('[Bridge] openOrFocusUrlInChrome failed:', e);
     }
   }
 
-  function startHostActionPolling() {
-    const INTERVAL_MS = 200; // faster reaction to host enqueued opens
-    async function pollOnce() {
-      try {
-        const res = await fetch('http://127.0.0.1:4000/actions/next');
-        if (!res.ok) return;
-        const data = await res.json().catch(() => ({}));
-        const action = data?.action;
-        if (action && action.type === 'open' && action.url) {
-          await openOrFocusUrlInChrome(action.url);
-        }
-      } catch { /* ignore transient errors */ }
+  // Poller (used only when WS is disconnected)
+  let hostPollTimer = null;
+  const HOST_POLL_INTERVAL_MS = 500;
+  async function pollOnceForAction() {
+    try {
+      const res = await fetch('http://127.0.0.1:4000/actions/next');
+      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      const action = data?.action;
+      if (action && action.type === 'open' && action.url) {
+        // Show the app tray first, then navigate/open the target tab
+        try { await openOrFocusApp(); } catch { }
+        await openOrFocusUrlInChrome(action.url);
+      }
+    } catch { /* ignore transient errors */ }
+  }
+  function ensureHostPolling(active) {
+    if (active) {
+      if (!hostPollTimer) hostPollTimer = setInterval(() => { pollOnceForAction().catch(() => {}) }, HOST_POLL_INTERVAL_MS);
+    } else {
+      if (hostPollTimer) { clearInterval(hostPollTimer); hostPollTimer = null; }
     }
-    setInterval(() => { pollOnce().catch(() => {}) }, INTERVAL_MS);
   }
 
   // Start polling bridge
-  startHostActionPolling();
+  // WebSocket-based bridge (event-driven) with auto-reconnect
+  let hostWs = null;
+  let hostWsConnected = false;
+  let hostWsReconnectTimer = null;
+
+  async function drainQueuedActionsOnConnect(maxLoops = 10) {
+    // Drain any queued actions that were enqueued while WS was disconnected
+    for (let i = 0; i < maxLoops; i++) {
+      const before = performance.now();
+      await pollOnceForAction();
+      // Small break to avoid hammering server
+      const elapsed = performance.now() - before;
+      if (elapsed < 10) await new Promise(r => setTimeout(r, 10));
+      // Heuristic: if no more actions, server returns null; pollOnceForAction will no-op. We break when two quick iterations did nothing.
+    }
+  }
+
+  function startHostActionWS() {
+    try {
+      if (hostWs && (hostWs.readyState === WebSocket.OPEN || hostWs.readyState === WebSocket.CONNECTING)) return;
+      hostWs = new WebSocket('ws://127.0.0.1:4000');
+      hostWs.onopen = () => {
+        hostWsConnected = true;
+        if (hostWsReconnectTimer) { clearTimeout(hostWsReconnectTimer); hostWsReconnectTimer = null; }
+        // Stop HTTP polling when WS is healthy
+        ensureHostPolling(false);
+        // Drain any actions queued while offline
+        drainQueuedActionsOnConnect().catch(() => {});
+      };
+      hostWs.onmessage = async (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg && msg.type === 'action') {
+            const a = msg.payload || {};
+            const t = a.type || null;
+            if (t === 'open') {
+              const url = (a.payload && a.payload.url) || a.url || null;
+              if (url) {
+                // Show the app tray first, then navigate/open the target tab
+                try { await openOrFocusApp(); } catch { }
+                await openOrFocusUrlInChrome(url);
+              }
+            }
+          }
+        } catch { /* ignore malformed frames */ }
+      };
+      const scheduleReconnect = () => {
+        hostWsConnected = false;
+        if (hostWsReconnectTimer) return; // already scheduled
+        hostWsReconnectTimer = setTimeout(() => {
+          hostWsReconnectTimer = null;
+          startHostActionWS();
+        }, 1500);
+        // While disconnected, keep a lightweight HTTP poller running to avoid missed opens
+        ensureHostPolling(true);
+      };
+      hostWs.onclose = scheduleReconnect;
+      hostWs.onerror = scheduleReconnect;
+    } catch {
+      // If construction fails, retry later
+      if (!hostWsReconnectTimer) {
+        hostWsReconnectTimer = setTimeout(() => {
+          hostWsReconnectTimer = null;
+          startHostActionWS();
+        }, 2000);
+      }
+      // Fall back to polling if WS cannot be created
+      ensureHostPolling(true);
+    }
+  }
+
+  // Prefer WS events; leave HTTP polling available as a fallback for debugging
+  startHostActionWS();
 
   // Separate lightweight AI suggestion API (keeps enrichment unchanged)
   async function getAiSuggestion(url, apiKey) {
