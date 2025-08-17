@@ -120,7 +120,10 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onC
         <div style={{ marginBottom: 8 }}>
           <button
             className="details-btn"
-            onClick={() => onAddSaved && onAddSaved(looksLikeUrl, currentWorkspace)}
+            onClick={() => {
+              try { console.log('[AddLinkFlow] onAddSaved click', { url: looksLikeUrl, workspace: currentWorkspace }); } catch { }
+              onAddSaved && onAddSaved(looksLikeUrl, currentWorkspace)
+            }}
             title={`Add ${looksLikeUrl} to ${currentWorkspace}`}
           >
             Add this URL → {currentWorkspace}
@@ -151,6 +154,7 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onC
                     className="details-btn"
                     onClick={(e) => {
                       e.stopPropagation();
+                      try { console.log('[AddLinkFlow] onAdd item click', { itemId: item.id, url: item.url, workspace: currentWorkspace }); } catch { }
                       handleAddItem(item);
                     }}
                     title="Add this link to the workspace"

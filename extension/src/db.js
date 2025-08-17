@@ -38,9 +38,15 @@ export async function listWorkspaces() {
     const tx = db.transaction(STORE, 'readonly')
     const store = tx.objectStore(STORE)
     const req = store.getAll()
-    req.onsuccess = () => resolve(req.result || [])
+    req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : [])
     req.onerror = () => reject(req.error)
   })
+  // Mirror to host in background; do not block UI if host is unavailable
+  try {
+    if (Array.isArray(items) && items.length) {
+      (async () => { try { await setHostWorkspaces(items); } catch {} })();
+    }
+  } catch {}
   // If IndexedDB is empty, try to restore from chrome.storage.local backup
   if (!items || items.length === 0) {
     try {
@@ -76,10 +82,10 @@ export async function listWorkspaces() {
       }
     } catch {}
   }
-  // Mirror to host so Electron sees non-empty list immediately
+  // Mirror to host in background; do not block UI if host is unavailable (secondary path)
   try {
     if (Array.isArray(items) && items.length) {
-      await setHostWorkspaces(items);
+      (async () => { try { await setHostWorkspaces(items); } catch {} })();
     }
   } catch {}
   return items
@@ -87,6 +93,7 @@ export async function listWorkspaces() {
 
 export async function saveWorkspace(workspace) {
   const db = await openDB()
+  try { console.log('[db.saveWorkspace] start', { id: workspace?.id, name: workspace?.name, urls: Array.isArray(workspace?.urls) ? workspace.urls.length : 0 }); } catch {}
   await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite')
     const store = tx.objectStore(STORE)
@@ -94,6 +101,7 @@ export async function saveWorkspace(workspace) {
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error)
   })
+  try { console.log('[db.saveWorkspace] wrote to IDB'); } catch {}
   // Mirror to chrome.storage.local as a lightweight backup to mitigate potential IDB loss
   try {
     const { workspacesBackupById } = await chrome.storage.local.get(['workspacesBackupById'])
@@ -102,18 +110,25 @@ export async function saveWorkspace(workspace) {
       next[workspace.id] = workspace
       await chrome.storage.local.set({ workspacesBackupById: next })
     }
-  } catch {}
-  // Mirror entire list to host so Electron app sees latest workspaces
+    try { console.log('[db.saveWorkspace] mirrored to chrome.storage.local'); } catch {}
+  } catch (e) { try { console.warn('[db.saveWorkspace] mirror to chrome.storage.local failed', e); } catch {} }
+  // Mirror entire list to host so Electron app sees latest workspaces (non-blocking)
   try {
-    const all = await listWorkspaces();
-    await setHostWorkspaces(all);
+    (async () => {
+      try {
+        const all = await listWorkspaces();
+        await setHostWorkspaces(all);
+        try { console.log('[db.saveWorkspace] mirrored to host, count:', Array.isArray(all) ? all.length : 0); } catch {}
+      } catch (e) { try { console.warn('[db.saveWorkspace] mirror to host failed', e); } catch {} }
+    })();
   } catch {}
   // Notify listeners via BroadcastChannel
   try {
     const bc = new BroadcastChannel('ws_db_changes')
     bc.postMessage({ type: 'workspacesChanged' })
     bc.close()
-  } catch {}
+    try { console.log('[db.saveWorkspace] broadcasted ws_db_changes'); } catch {}
+  } catch (e) { try { console.warn('[db.saveWorkspace] broadcast failed', e); } catch {} }
 }
 
 export function subscribeWorkspaceChanges(callback) {
@@ -194,6 +209,46 @@ export async function saveUIState(value) {
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error)
   })
+}
+
+// Delete a workspace by its id
+export async function deleteWorkspaceById(id) {
+  if (!id) return;
+  const db = await openDB();
+  // Delete from IndexedDB
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction(STORE, 'readwrite');
+      const store = tx.objectStore(STORE);
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+    } catch { resolve(); }
+  });
+  // Remove from chrome.storage.local backup map if present
+  try {
+    const { workspacesBackupById } = await chrome.storage.local.get(['workspacesBackupById']);
+    if (workspacesBackupById && typeof workspacesBackupById === 'object' && workspacesBackupById[id]) {
+      const next = { ...workspacesBackupById };
+      delete next[id];
+      await chrome.storage.local.set({ workspacesBackupById: next });
+    }
+  } catch { /* ignore */ }
+  // Mirror full list to host in background (non-blocking)
+  try {
+    (async () => {
+      try {
+        const list = await listWorkspaces();
+        await setHostWorkspaces(list);
+      } catch { }
+    })();
+  } catch { }
+  // Notify listeners
+  try {
+    const bc = new BroadcastChannel('ws_db_changes');
+    bc.postMessage({ type: 'workspacesChanged' });
+    bc.close();
+  } catch { }
 }
 
 export async function updateItemWorkspace(itemId, workspaceName) {

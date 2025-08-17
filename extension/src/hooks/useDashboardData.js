@@ -42,79 +42,77 @@ const normalize = (dashboardData) => {
 
 export function useDashboardData() {
   const [data, setData] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loadingInitial, setLoadingInitial] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [populating, setPopulating] = useState(false)
 
-  const load = async () => {
+  // Phase 1: Fast path from local storage (if available)
+  const loadFastFromStorage = async () => {
+    const hasStorage = typeof chrome !== 'undefined' && chrome?.storage?.local && typeof chrome.storage.local.get === 'function'
+    let dashboardData = null
+    if (hasStorage) {
+      try {
+        const res = await chrome.storage.local.get(['dashboardData'])
+        dashboardData = res?.dashboardData || null
+      } catch { /* ignore */ }
+    }
+    const arr = normalize(dashboardData)
+    setData(arr)
+    setLoadingInitial(false)
+    // If empty, ask background to populate (no UI block)
+    if (!arr.length && !populating) {
+      setPopulating(true)
+      try {
+        const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage
+        if (hasRuntime) {
+          try { chrome.runtime.sendMessage({ action: 'populateData' }) } catch { }
+        }
+      } finally {
+        setPopulating(false)
+      }
+    }
+  }
+
+  // Phase 2: Background hydrate from host, then mirror back
+  const hydrateFromHost = async () => {
+    setRefreshing(true)
+    let dashboardData = null
     try {
-      const hasStorage = typeof chrome !== 'undefined' && chrome?.storage?.local && typeof chrome.storage.local.get === 'function'
-      let dashboardData = null
-      if (hasStorage) {
-        try {
-          const res = await chrome.storage.local.get(['dashboardData'])
-          dashboardData = res?.dashboardData || null
-        } catch { /* ignore */ }
-      }
-      // Fallback to host (Electron app) if storage missing or empty
-      if (!hasStorage || !dashboardData || (
-        !Array.isArray(dashboardData.history) && !Array.isArray(dashboardData.bookmarks)
+      const host = await getHostDashboard();
+      if (host?.ok && host.dashboard && (
+        Array.isArray(host.dashboard.history) || Array.isArray(host.dashboard.bookmarks)
       )) {
-        try {
-          const host = await getHostDashboard();
-          if (host?.ok && host.dashboard && (
-            Array.isArray(host.dashboard.history) || Array.isArray(host.dashboard.bookmarks)
-          )) {
-            dashboardData = host.dashboard;
-          }
-        } catch { /* ignore */ }
+        dashboardData = host.dashboard;
       }
+    } catch { /* ignore */ }
+
+    if (dashboardData) {
       const arr = normalize(dashboardData)
+      setData(arr)
       // Mirror enriched dashboard to host so Electron renderer can show categories
       try {
-        if (dashboardData && (Array.isArray(dashboardData.history) || Array.isArray(dashboardData.bookmarks))) {
-          await setHostDashboard(dashboardData)
-        }
+        await setHostDashboard(dashboardData)
       } catch { }
       try {
         const histLen = (dashboardData?.history || []).length
         const bmLen = (dashboardData?.bookmarks || []).length
         const groups = Array.from(new Set(arr.map(it => it.workspaceGroup).filter(Boolean)))
         const sampleAI = arr.find(it => (it.category || it.workspaceGroup || it.summary || it.tags) && typeof it.url === 'string')
-        // Key diagnostics to verify data presence from store
-        console.debug('[CoolDesk] Store snapshot:', {
-          historyCount: histLen,
-          bookmarkCount: bmLen,
-          mergedCount: arr.length,
-          uniqueGroups: groups,
-          hasChatGPT: arr.some(it => (it.url || '').includes('chatgpt.com')),
-          sampleAI
-        })
+        console.debug('[CoolDesk] Hydrated snapshot:', { historyCount: histLen, bookmarkCount: bmLen, mergedCount: arr.length, uniqueGroups: groups, sampleAI })
       } catch { }
-      setData(arr)
-      // If empty, ask background to populate
-      if (!arr.length && !populating) {
-        setPopulating(true)
-        try {
-          const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage
-          if (hasRuntime) {
-            await new Promise((resolve) => {
-              try { chrome.runtime.sendMessage({ action: 'populateData' }, () => resolve()) } catch { resolve() }
-            })
-          }
-        } finally {
-          setPopulating(false)
-        }
-      }
-    } finally {
-      setLoading(false)
     }
+    setRefreshing(false)
   }
 
   useEffect(() => {
-    load()
+    // Show something ASAP
+    loadFastFromStorage()
+    // Then hydrate in background
+    hydrateFromHost()
+
     const listener = (req) => {
       if (req?.action === 'updateData' || req?.action === 'aiComplete') {
-        load()
+        hydrateFromHost()
       }
     }
     const canListen = typeof chrome !== 'undefined' && chrome?.runtime && typeof chrome.runtime.onMessage?.addListener === 'function'
@@ -135,5 +133,5 @@ export function useDashboardData() {
     } catch { /* ignore */ }
   }
 
-  return { data, loading, populate }
+  return { data, loading: loadingInitial, refreshing, populate }
 }

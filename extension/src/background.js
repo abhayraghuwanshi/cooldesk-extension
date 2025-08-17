@@ -788,7 +788,11 @@ async function main() {
   // Poller (used only when WS is disconnected)
   let hostPollTimer = null;
   const HOST_POLL_INTERVAL_MS = 500;
+  // Cooldown to avoid hammering when backend is down
+  let hostCooldownUntil = 0; // epoch ms
   async function pollOnceForAction() {
+    // Respect cooldown window
+    if (Date.now() < hostCooldownUntil) return;
     try {
       const res = await fetch('http://127.0.0.1:4000/actions/next');
       if (!res.ok) return;
@@ -799,10 +803,15 @@ async function main() {
         try { await openOrFocusApp(); } catch { }
         await openOrFocusUrlInChrome(action.url);
       }
-    } catch { /* ignore transient errors */ }
+    } catch (e) {
+      // If backend is unreachable, enter cooldown and stop polling temporarily
+      hostCooldownUntil = Date.now() + 30000; // 30s cooldown
+      try { ensureHostPolling(false); } catch { }
+    }
   }
   function ensureHostPolling(active) {
     if (active) {
+      if (Date.now() < hostCooldownUntil) return; // don't start during cooldown
       if (!hostPollTimer) hostPollTimer = setInterval(() => { pollOnceForAction().catch(() => {}) }, HOST_POLL_INTERVAL_MS);
     } else {
       if (hostPollTimer) { clearInterval(hostPollTimer); hostPollTimer = null; }
@@ -814,6 +823,8 @@ async function main() {
   let hostWs = null;
   let hostWsConnected = false;
   let hostWsReconnectTimer = null;
+  let hostWsReconnectDelay = 1500; // starts at 1.5s, doubles up to max
+  const HOST_WS_RECONNECT_MAX = 60000; // 60s
 
   async function drainQueuedActionsOnConnect(maxLoops = 10) {
     // Drain any queued actions that were enqueued while WS was disconnected
@@ -830,10 +841,15 @@ async function main() {
   function startHostActionWS() {
     try {
       if (hostWs && (hostWs.readyState === WebSocket.OPEN || hostWs.readyState === WebSocket.CONNECTING)) return;
+      // Skip attempting WS during cooldown
+      if (Date.now() < hostCooldownUntil) return;
       hostWs = new WebSocket('ws://127.0.0.1:4000');
       hostWs.onopen = () => {
         hostWsConnected = true;
         if (hostWsReconnectTimer) { clearTimeout(hostWsReconnectTimer); hostWsReconnectTimer = null; }
+        // Reset backoff on successful connect
+        hostWsReconnectDelay = 1500;
+        hostCooldownUntil = 0;
         // Stop HTTP polling when WS is healthy
         ensureHostPolling(false);
         // Drain any actions queued while offline
@@ -859,10 +875,15 @@ async function main() {
       const scheduleReconnect = () => {
         hostWsConnected = false;
         if (hostWsReconnectTimer) return; // already scheduled
+        // Backoff and also set a cooldown to pause polling during retry window
+        const delay = Math.min(hostWsReconnectDelay, HOST_WS_RECONNECT_MAX);
+        hostCooldownUntil = Date.now() + delay;
         hostWsReconnectTimer = setTimeout(() => {
           hostWsReconnectTimer = null;
           startHostActionWS();
-        }, 1500);
+        }, delay);
+        // Exponential backoff for next attempt
+        hostWsReconnectDelay = Math.min(hostWsReconnectDelay * 2, HOST_WS_RECONNECT_MAX);
         // While disconnected, keep a lightweight HTTP poller running to avoid missed opens
         ensureHostPolling(true);
       };
@@ -871,13 +892,14 @@ async function main() {
     } catch {
       // If construction fails, retry later
       if (!hostWsReconnectTimer) {
+        const delay = Math.min(hostWsReconnectDelay, HOST_WS_RECONNECT_MAX);
+        hostCooldownUntil = Date.now() + delay;
         hostWsReconnectTimer = setTimeout(() => {
           hostWsReconnectTimer = null;
           startHostActionWS();
-        }, 2000);
+        }, delay);
+        hostWsReconnectDelay = Math.min(hostWsReconnectDelay * 2, HOST_WS_RECONNECT_MAX);
       }
-      // Fall back to polling if WS cannot be created
-      ensureHostPolling(true);
     }
   }
 

@@ -1,4 +1,5 @@
-import { faEye, faEyeSlash, faPenToSquare, faPlus, faRotateRight, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
+import { faEye, faEyeSlash, faPenToSquare, faPlus, faRotateRight, faWandMagicSparkles, faTrash } from '@fortawesome/free-solid-svg-icons';
+
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
@@ -14,7 +15,7 @@ import { WorkspaceFilters } from './components/WorkspaceFilters';
 
 import ActivityPanel from './components/ActivityPanel';
 import { AddLinkFlow } from './components/AddLinkFlow';
-import { getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
+import { getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, deleteWorkspaceById } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
@@ -50,7 +51,7 @@ class ErrorBoundary extends React.Component {
 
 // Main App Component
 export default function App() {
-  const { data, loading, populate } = useDashboardData()
+  const { data, loading, refreshing, populate } = useDashboardData()
   const [workspace, setWorkspace] = useState('All')
   const [search, setSearch] = useState('')
   const [showSettings, setShowSettings] = useState(false)
@@ -436,7 +437,9 @@ export default function App() {
   // Save an arbitrary URL (not from history/bookmarks) into a workspace by name
   const handleAddSavedUrlToWorkspace = async (newUrl, workspaceName) => {
     try {
+      try { console.log('[App] handleAddSavedUrlToWorkspace: start', { newUrl, workspaceName }); } catch { }
       const workspaces = await listWorkspaces();
+      try { console.log('[App] handleAddSavedUrlToWorkspace: existing workspaces', { count: Array.isArray(workspaces) ? workspaces.length : 0 }); } catch { }
       const norm = (s) => (s || '').trim().toLowerCase();
       let ws = workspaces.find(w => norm(w.name) === norm(workspaceName));
       if (!ws) {
@@ -448,10 +451,14 @@ export default function App() {
           urls: [],
           context: {},
         };
+        try { console.log('[App] handleAddSavedUrlToWorkspace: creating new workspace', { id: ws.id, name: ws.name }); } catch { }
+      } else {
+        try { console.log('[App] handleAddSavedUrlToWorkspace: found workspace', { id: ws.id, name: ws.name, urls: (ws.urls || []).length }); } catch { }
       }
       // Prevent duplicate URL entries
       if (!Array.isArray(ws.urls)) ws.urls = [];
       if (ws.urls.some(u => u.url === newUrl)) {
+        try { console.warn('[App] handleAddSavedUrlToWorkspace: duplicate URL, skipping'); } catch { }
         setAddingToWorkspace(null);
         return;
       }
@@ -462,11 +469,18 @@ export default function App() {
           { url: newUrl, title: newUrl, addedAt: Date.now(), favicon: getFaviconUrl(newUrl) },
         ],
       };
+      try { console.log('[App] handleAddSavedUrlToWorkspace: saving workspace', { id: updated.id, name: updated.name, urls: updated.urls.length }); } catch { }
       await saveWorkspace(updated);
+      try { console.log('[App] handleAddSavedUrlToWorkspace: save complete, reloading list'); } catch { }
       const refreshed = await listWorkspaces();
+      try {
+        console.log('[App] handleAddSavedUrlToWorkspace: refreshed workspaces', { count: Array.isArray(refreshed) ? refreshed.length : 0 });
+      } catch { }
       setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+      try { alert('Link added to workspace'); } catch { }
     } catch (e) {
       console.error('Failed to add URL to workspace:', e);
+      try { alert('Failed to add link. See console for details.'); } catch { }
     } finally {
       setAddingToWorkspace(null);
     }
@@ -527,6 +541,8 @@ export default function App() {
 
   const handleAddItemToWorkspace = async (item, workspaceName) => {
     try {
+      try { console.log('[App] handleAddItemToWorkspace: start', { itemId: item?.id, url: item?.url, workspaceName }); } catch {}
+      // 1) Tag the history/bookmark item
       await updateItemWorkspace(item.id, workspaceName);
       // Optimistically patch storage.dashboardData so UI updates immediately
       try {
@@ -542,7 +558,45 @@ export default function App() {
           // Notify listeners to reload data
           await sendMessage({ action: 'updateData' });
         }
-      } catch { }
+      } catch (e) { try { console.warn('[App] handleAddItemToWorkspace: storage patch failed', e); } catch {} }
+
+      // 2) Also persist URL into saved Workspaces (so workspace view shows it)
+      const workspaces = await listWorkspaces();
+      const norm = (s) => (s || '').trim().toLowerCase();
+      let ws = workspaces.find(w => norm(w.name) === norm(workspaceName));
+      if (!ws) {
+        ws = {
+          id: Date.now().toString(),
+          name: workspaceName,
+          description: '',
+          createdAt: Date.now(),
+          urls: [],
+          context: {},
+        };
+        try { console.log('[App] handleAddItemToWorkspace: creating new workspace', { id: ws.id, name: ws.name }); } catch {}
+      }
+      const url = item?.url;
+      if (url) {
+        if (!Array.isArray(ws.urls)) ws.urls = [];
+        const already = ws.urls.some(u => u.url === url);
+        if (!already) {
+          ws = {
+            ...ws,
+            urls: [
+              ...ws.urls,
+              { url, title: item.title || url, addedAt: Date.now(), favicon: getFaviconUrl(url) },
+            ],
+          };
+          try { console.log('[App] handleAddItemToWorkspace: saving workspace with new URL', { id: ws.id, name: ws.name, urls: ws.urls.length }); } catch {}
+          await saveWorkspace(ws);
+          const refreshed = await listWorkspaces();
+          setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+        } else {
+          try { console.log('[App] handleAddItemToWorkspace: URL already saved, skipping save'); } catch {}
+        }
+      }
+    } catch (e) {
+      console.error('Failed to add item to workspace:', e);
     } finally {
       setAddingToWorkspace(null);
     }
@@ -587,23 +641,78 @@ export default function App() {
     }
   }
 
-  const handleOpenAddLinkModal = (ws) => {
-    // Accept either a workspace object or a workspace name
-    let resolved = ws;
-    if (ws && typeof ws === 'string') {
-      const norm = (s) => (s || '').trim().toLowerCase();
-      resolved = savedWorkspaces.find(w => norm(w.name) === norm(ws));
-      if (!resolved) {
-        // Create a temporary workspace object (by name) to allow adding links
-        resolved = { id: `name:${ws}`, name: ws, description: '', urls: [] };
+  // Delete the currently selected workspace entirely
+  const handleDeleteWorkspace = async () => {
+    try {
+      const name = (workspace || '').trim();
+      if (!name || name.toLowerCase() === 'all') {
+        try { alert('Please select a specific workspace to delete.'); } catch {}
+        return;
       }
+      const confirmMsg = `Delete workspace "${name}"? This cannot be undone.`;
+      const confirmed = (() => { try { return window.confirm(confirmMsg); } catch { return true; } })();
+      if (!confirmed) return;
+
+      const norm = (s) => (s || '').trim().toLowerCase();
+      const wsObj = savedWorkspaces.find(w => norm(w.name) === norm(name));
+      if (!wsObj) {
+        try { alert('Workspace not found.'); } catch {}
+        return;
+      }
+
+      // Recategorize underlying items tagged to this workspace to 'Unknown' (best-effort)
+      try {
+        const candidates = Array.isArray(data) ? data.filter(it => norm(it.workspaceGroup) === norm(name)) : [];
+        const valid = candidates.filter(it => typeof it?.id === 'string' && it.id);
+        await Promise.all(valid.map(it => updateItemWorkspace(it.id, 'Unknown')));
+        // Patch local storage/dashboard data optimistically
+        try {
+          const { dashboardData } = await storageGet(['dashboardData']);
+          if (dashboardData) {
+            const patch = (arr) => (Array.isArray(arr) ? arr.map(it => norm(it.workspaceGroup) === norm(name) ? { ...it, workspaceGroup: 'Unknown' } : it) : arr);
+            await storageSet({ dashboardData: { ...dashboardData, history: patch(dashboardData.history), bookmarks: patch(dashboardData.bookmarks) } });
+            await sendMessage({ action: 'updateData' });
+          }
+        } catch {}
+      } catch {}
+
+      // Delete workspace from IndexedDB/backup and broadcast
+      await deleteWorkspaceById(wsObj.id);
+
+      // Refresh list and switch to All
+      const refreshed = await listWorkspaces();
+      setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+      setWorkspace('All');
+    } catch (e) {
+      console.error('Failed to delete workspace:', e);
+      try { alert('Failed to delete workspace. See console for details.'); } catch {}
     }
-    if (!resolved) {
-      console.warn('Workspace not found for AddToWorkspaceModal:', ws);
-      return;
+  };
+
+  const handleOpenAddLinkModal = (ws) => {
+    try {
+      // Accept either a workspace object or a workspace name
+      let resolved = ws;
+      if (ws && typeof ws === 'string') {
+        const norm = (s) => (s || '').trim().toLowerCase();
+        resolved = savedWorkspaces.find(w => norm(w.name) === norm(ws));
+        if (!resolved) {
+          console.warn('Workspace not found for AddToWorkspaceModal:', ws);
+          return;
+        }
+      }
+      // Prevent adding links to the reserved "All" view
+      const nameLower = (resolved?.name || '').trim().toLowerCase();
+      if (nameLower === 'all') {
+        try { alert('Please select a specific workspace before adding links.'); } catch { }
+        return;
+      }
+      // Open the in-page AddLinkFlow so the user can search history/bookmarks to add
+      setAddingToWorkspace(resolved.name);
+      try { console.log('[App] handleOpenAddLinkModal: modal opened', { addingTo: resolved.name }); } catch { }
+    } catch (e) {
+      console.error('Failed to open add link modal:', e);
     }
-    // Open the in-page AddLinkFlow so the user can search history/bookmarks to add
-    setAddingToWorkspace(resolved.name);
   };
 
   const handleCloseAddLinkModal = () => {
@@ -766,6 +875,9 @@ export default function App() {
         return exists ? prev : [...prev, workspace]
       })
 
+      // Switch current filter to the newly created workspace so subsequent actions apply to it
+      setWorkspace(workspaceName)
+
       // Close modal and refresh data
       setShowCreateWorkspace(false)
       // populate() reloads history/bookmarks, not needed for saved workspaces
@@ -884,7 +996,7 @@ export default function App() {
                             width={16}
                             height={16}
                             style={{ borderRadius: 3, objectFit: 'cover' }}
-                            onError={(e) => { try { e.currentTarget.style.display = 'none'; } catch {} }}
+                            onError={(e) => { try { e.currentTarget.style.display = 'none'; } catch { } }}
                           />
                         )}
                         <div style={{ fontWeight: 600, fontSize: 13 }}>
@@ -916,25 +1028,19 @@ export default function App() {
             </section>
           )}
 
-          {loading ? (
-            <div className="empty">Loading...</div>
-          ) : (
-            <>
-              {/* <ItemGrid items={allItemsCombined} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} /> */}
-              <ErrorBoundary>
-                <ActivityPanel />
-              </ErrorBoundary>
-            </>
-          )}
+          {/* Always render content; hydration refreshes in background */}
+          <>
+            {/* <ItemGrid items={allItemsCombined} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} /> */}
+            <ErrorBoundary>
+              <ActivityPanel />
+            </ErrorBoundary>
+          </>
         </>
       )}
 
       {/* Workspace section (only when a specific workspace is selected) */}
       {workspace !== 'All' && (
-        loading ? (
-          <div className="empty">Loading...</div>
-        ) : (
-          <>
+        <>
             {showSystemPrompt && (
               <div
                 className="modal-overlay"
@@ -970,6 +1076,9 @@ export default function App() {
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
               <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({mergedWorkspaceItems.length})</span>
+              {refreshing && (
+                <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
+              )}
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
                   onClick={() => setShowSystemPrompt(v => !v)}
@@ -999,6 +1108,16 @@ export default function App() {
                   <FontAwesomeIcon icon={faPlus} />
                 </button>
                 <button
+                  onClick={handleDeleteWorkspace}
+                  className="add-link-btn ai-button"
+                  aria-label="Delete workspace (irreversible)"
+                  title="Delete workspace (irreversible)"
+                  style={{ padding: '4px 8px' }}
+                  disabled={!workspace || workspace.toLowerCase() === 'all'}
+                >
+                  <FontAwesomeIcon icon={faTrash} />
+                </button>
+                <button
                   onClick={startEnrichment}
                   className="add-link-btn ai-button"
                   aria-label="Organize using AI"
@@ -1011,12 +1130,17 @@ export default function App() {
             </div>
             {showCurrentWorkspace && (
               <>
-                <ItemGrid items={mergedWorkspaceItems} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={() => handleOpenAddLinkModal(workspace)} onDelete={handleDeleteFromWorkspace} />
+                <ItemGrid
+                  items={workspace === 'All' ? allItemsCombined : workspaceSavedItems}
+                  workspaces={savedWorkspaces}
+                  onAddRelated={handleAddRelated}
+                  onAddLink={() => handleOpenAddLinkModal(workspace)}
+                  onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+                />
                 <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
               </>
             )}
           </>
-        )
       )}
 
       {addingToWorkspace && (
