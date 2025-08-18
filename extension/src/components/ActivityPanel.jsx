@@ -1,7 +1,7 @@
 import { faArrowUpRightFromSquare, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { enqueueOpenInChrome, getHostDashboard, getHostTabs } from '../services/extensionApi';
+import { enqueueOpenInChrome, getHostDashboard, getHostTabs, getHostActivity } from '../services/extensionApi';
 import { getFaviconUrl } from '../utils';
 // No favicon or extra UI; render URLs only
 
@@ -18,7 +18,23 @@ export default function ActivityPanel() {
       setLoading(true);
       setError('');
       if (!hasRuntime) {
-        // Electron host fallback: use mirrored dashboard history if available
+        // Electron host mode: fetch true activity from host first
+        const act = await getHostActivity(0);
+        if (!mounted) return;
+        if (act?.ok && Array.isArray(act.rows) && act.rows.length) {
+          const norm = act.rows.map(r => ({
+            url: r.url,
+            time: Number(r.time) || 0,
+            scroll: Number(r.scroll) || 0,
+            clicks: Number(r.clicks) || 0,
+            forms: Number(r.forms) || 0,
+          })).sort((a, b) => b.time - a.time);
+          setRows(norm);
+          setError('');
+          return;
+        }
+
+        // Fallback: use mirrored dashboard history if available
         const host = await getHostDashboard();
         if (!mounted) return;
         if (host.ok && host.dashboard && Array.isArray(host.dashboard.history)) {

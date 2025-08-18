@@ -7,6 +7,7 @@
 let _ws = null;
 let _wsConnected = false;
 let _wsListeners = [];
+let _wsPersistent = [];
 
 function ensureWS() {
   if (_ws && (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN)) return;
@@ -39,6 +40,14 @@ function ensureWS() {
       }
     }
     _wsListeners = remaining;
+    // notify persistent subscribers
+    if (Array.isArray(_wsPersistent) && _wsPersistent.length) {
+      for (const sub of _wsPersistent) {
+        try {
+          if (sub.type === '*' || sub.type === type) sub.handler(type, msg.payload);
+        } catch { /* ignore */ }
+      }
+    }
   };
 }
 
@@ -135,6 +144,61 @@ export async function setHostWorkspaces(list) {
     return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
   } catch (e) {
     return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// --- Host URLs helpers ---
+export async function setHostUrls(list) {
+  try {
+    // Accept either an array of URL docs or { urls: [...] }
+    const payload = Array.isArray(list) ? list : (Array.isArray(list?.urls) ? list.urls : []);
+    const res = await fetch('http://127.0.0.1:4000/urls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+export async function getHostUrls() {
+  try {
+    const res = await fetch('http://127.0.0.1:4000/urls');
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => []);
+    return { ok: true, urls: Array.isArray(data) ? data : [] };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e), urls: [] };
+  }
+}
+
+// --- Host Activity helpers ---
+export async function setHostActivity(rows) {
+  try {
+    const payload = Array.isArray(rows) ? rows : (Array.isArray(rows?.rows) ? rows.rows : (rows && rows.url ? [rows] : []));
+    if (!Array.isArray(payload)) return { ok: false, error: 'Invalid payload' };
+    const res = await fetch('http://127.0.0.1:4000/activity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+export async function getHostActivity(sinceMs) {
+  try {
+    const q = Number.isFinite(Number(sinceMs)) ? `?since=${Number(sinceMs)}` : '';
+    const res = await fetch(`http://127.0.0.1:4000/activity${q}`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, rows: [] };
+    const data = await res.json().catch(() => []);
+    return { ok: true, rows: Array.isArray(data) ? data : [] };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e), rows: [] };
   }
 }
 
@@ -286,23 +350,32 @@ export const onMessage = {
 
 // Safe sendMessage with timeout + lastError handling
 export function sendMessage(msg, { timeoutMs = 5000 } = {}) {
-  return new Promise((resolve) => {
-    // If runtime is missing, resolve to a standard error shape but never throw here
-    if (!hasRuntime()) return resolve({ ok: false, error: 'Chrome runtime not available' });
-
-    const timer = setTimeout(() => resolve({ ok: false, error: 'Timed out waiting for background response' }), timeoutMs);
-    try {
-      chrome.runtime.sendMessage(msg, (res) => {
+  function once() {
+    return new Promise((resolve) => {
+      if (!hasRuntime()) return resolve({ ok: false, error: 'Chrome runtime not available' });
+      const timer = setTimeout(() => resolve({ ok: false, error: 'Timed out waiting for background response' }), timeoutMs);
+      try {
+        chrome.runtime.sendMessage(msg, (res) => {
+          clearTimeout(timer);
+          const lastErr = chrome.runtime?.lastError;
+          if (lastErr) return resolve({ ok: false, error: lastErr.message || 'Service worker unavailable' });
+          resolve(res ?? { ok: false, error: 'No response' });
+        });
+      } catch (e) {
         clearTimeout(timer);
-        const lastErr = chrome.runtime?.lastError;
-        if (lastErr) return resolve({ ok: false, error: lastErr.message || 'Service worker unavailable' });
-        // Normalize to an object to avoid undefined surprises
-        resolve(res ?? { ok: false, error: 'No response' });
-      });
-    } catch (e) {
-      clearTimeout(timer);
-      resolve({ ok: false, error: String(e?.message || e) });
+        resolve({ ok: false, error: String(e?.message || e) });
+      }
+    });
+  }
+
+  return once().then(async (res) => {
+    // Retry once if receiving end is missing (service worker cold start / reload)
+    const msgText = String(res?.error || '').toLowerCase();
+    if (msgText.includes('receiving end does not exist') || msgText.includes('could not establish connection')) {
+      await new Promise((r) => setTimeout(r, 400));
+      return once();
     }
+    return res;
   });
 }
 

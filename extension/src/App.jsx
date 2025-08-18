@@ -1,4 +1,4 @@
-import { faEye, faEyeSlash, faPenToSquare, faPlus, faRotateRight, faTrash, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
+import { faEye, faEyeSlash, faPenToSquare, faPlus, faRotateRight, faTrash, faWandMagicSparkles, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -64,7 +64,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState('All')
   const [search, setSearch] = useState('')
   const [showSettings, setShowSettings] = useState(false)
-  const [settings, setSettings] = useState({ geminiApiKey: '', serverUrl: '', visitCountThreshold: '', historyMaxResults: '' })
+  const [settings, setSettings] = useState({ geminiApiKey: '', serverUrl: '', visitCountThreshold: '', historyMaxResults: '', categories: [] })
   const [progress, setProgress] = useState({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
   const [relatedProducts, setRelatedProducts] = useState([])
   const [loadingRelated, setLoadingRelated] = useState(false)
@@ -82,6 +82,9 @@ export default function App() {
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [processes, setProcesses] = useState([])
+
+  // UI state: dismissible settings warning
+  const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)
 
 
   // Side panel visibility control via runtime messages
@@ -116,7 +119,8 @@ export default function App() {
             geminiApiKey: s.geminiApiKey || '',
             serverUrl: (s.serverUrl || '').replace(/\/$/, ''),
             visitCountThreshold: Number.isFinite(s.visitCountThreshold) ? String(s.visitCountThreshold) : '',
-            historyMaxResults: Number.isFinite(s.historyMaxResults) ? String(s.historyMaxResults) : ''
+            historyMaxResults: Number.isFinite(s.historyMaxResults) ? String(s.historyMaxResults) : '',
+            categories: Array.isArray(s.categories) ? s.categories : []
           });
           try {
             await saveSettingsDB(s);
@@ -246,12 +250,13 @@ export default function App() {
     // Load settings initially from IndexedDB
     (async () => {
       const s = await getSettingsDB()
-      const { geminiApiKey, serverUrl, visitCountThreshold, historyMaxResults } = s || {}
+      const { geminiApiKey, serverUrl, visitCountThreshold, historyMaxResults, categories } = s || {}
       setSettings({
         geminiApiKey: geminiApiKey || '',
         serverUrl: serverUrl || '',
         visitCountThreshold: Number.isFinite(visitCountThreshold) ? String(visitCountThreshold) : '',
-        historyMaxResults: Number.isFinite(historyMaxResults) ? String(historyMaxResults) : ''
+        historyMaxResults: Number.isFinite(historyMaxResults) ? String(historyMaxResults) : '',
+        categories: Array.isArray(categories) ? categories : []
       })
     })()
 
@@ -427,6 +432,7 @@ export default function App() {
       if (newSettings.serverUrl?.trim()) payload.serverUrl = newSettings.serverUrl.trim().replace(/\/$/, '');
       if (newSettings.visitCountThreshold !== '') payload.visitCountThreshold = Number(newSettings.visitCountThreshold) || 0;
       if (newSettings.historyMaxResults !== '') payload.historyMaxResults = Number(newSettings.historyMaxResults) || 1000;
+      if (Array.isArray(newSettings.categories)) payload.categories = newSettings.categories;
 
       // Save to IndexedDB
       await saveSettingsDB(payload);
@@ -919,6 +925,56 @@ export default function App() {
         setShowCreateWorkspace={setShowCreateWorkspace}
         openInTab={openInTab}
       />
+
+      {/* Warning: Require either Gemini API key or custom server URL for AI features */}
+      {(() => {
+        const missingApi = !(settings?.geminiApiKey || '').trim();
+        const missingServer = !(settings?.serverUrl || '').trim();
+        const shouldShow = missingApi && missingServer && !dismissedSettingsWarning;
+        if (!shouldShow) return null;
+        return (
+          <div
+            role="alert"
+            style={{
+              margin: '8px 0 4px',
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: 'rgba(255, 193, 7, 0.12)',
+              border: '1px solid rgba(255, 193, 7, 0.35)',
+              color: 'rgb(255, 213, 0)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FontAwesomeIcon icon={faTriangleExclamation} />
+              <div style={{ fontSize: 13, lineHeight: 1.3, color: '#ffd500' }}>
+                Add a Gemini API key or set a custom Server URL in Settings to enable AI features.
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                className="add-link-btn"
+                style={{ padding: '4px 8px' }}
+                onClick={() => setShowSettings(true)}
+              >
+                Open Settings
+              </button>
+              <button
+                className="icon-btn"
+                aria-label="Dismiss"
+                title="Dismiss"
+                onClick={() => setDismissedSettingsWarning(true)}
+                style={{ padding: '4px 8px' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Filters */}
       <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }}>

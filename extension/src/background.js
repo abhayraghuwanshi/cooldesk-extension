@@ -1,7 +1,8 @@
 // MV3 background service worker (type: module)
-import { addUrlToWorkspace, getAllActivity, getAllTimeRows, getSettings, listWorkspaces, putActivityRow, putTimeRow, saveWorkspace, upsertUrl } from './db.js';
-import { buildEnrichmentPrompt, buildEnrichmentPromptForWorkspace } from './prompts.js';
-import { getRedirectDecision } from './services/extensionApi.js';
+import { addUrlToWorkspace, getAllActivity, getAllTimeRows, getSettings, listAllUrls, listWorkspaces, putActivityRow, putTimeRow, saveWorkspace, upsertUrl } from './db.js';
+import { buildCategoryListPrompt, buildEnrichmentPrompt, buildEnrichmentPromptForWorkspace } from './prompts.js';
+import { getRedirectDecision, setHostActivity, setHostUrls, setHostWorkspaces } from './services/extensionApi.js';
+import { getUrlParts } from './utils.js';
 
 // Global variable to track last populate time
 let globalLastPopulateTime = 0;
@@ -310,24 +311,53 @@ async function main() {
             : (Number.isFinite(fromLocal) && fromLocal > 0 ? fromLocal : rawHistory.length)
           console.log('[AI][enrich] Using historyMaxResults limit:', { fromSettings: settings?.historyMaxResults, fromLocal: historyMaxResults, chosen: limit })
           const history = rawHistory.slice(0, limit)
-          const total = history.length
+          // Only enrich items that are not categorized yet (empty or 'Unknown')
+          const needsEnrichment = history.filter((it) => {
+            const g = (it?.workspaceGroup || '').trim().toLowerCase()
+            return !g || g === 'unknown'
+          })
+          // Dedupe: process only the first item per hostname in this run
+          const buckets = new Map()
+          for (const it of needsEnrichment) {
+            let host = 'unknown'
+            try { host = new URL(it.url).hostname || 'unknown' } catch { }
+            if (!buckets.has(host)) buckets.set(host, [])
+            buckets.get(host).push(it)
+          }
+          const diversified = []
+          for (const [_, arr] of buckets) {
+            if (arr.length) diversified.push(arr[0])
+          }
+          const total = diversified.length
           if (!total) {
-            chrome.runtime.sendMessage({ action: 'aiError', error: 'No History items to enrich. Try Refresh Data first.' })
-            console.warn('[AI][enrich] Aborting: no history items to enrich')
+            chrome.runtime.sendMessage({ action: 'aiError', error: 'No uncategorized items to enrich.' })
+            console.warn('[AI][enrich] Aborting: no uncategorized items to enrich')
             return
           }
 
           let processed = 0
           let apiHits = 0
-          const enrichedHistory = []
+          const enrichedHistory = [...history]
+          // Build index by URL for quick replacement
+          const indexByUrl = new Map()
+          for (let i = 0; i < history.length; i++) {
+            const u = history[i]?.url
+            if (u) indexByUrl.set(u, i)
+          }
           // Emit initial progress so UI shows total count immediately
           chrome.runtime.sendMessage({ action: 'aiProgress', processed, total, currentItem: 'Starting…', apiHits })
           console.log(`[AI][enrich] Starting enrichment loop. total=${total}`)
-          for (const it of history) {
+          console.log('[AI][enrich] One-per-host dedupe:', { hosts: Array.from(buckets.keys()).length, total })
+          for (const it of diversified) {
             const ai = await getAiEnrichment(it.url, geminiApiKey)
             if (ai && ai.__apiHit) apiHits += 1
-            const { __apiHit, ...aiClean } = ai || {}
-            enrichedHistory.push({ ...it, ...aiClean, cleanUrl: cleanUrl(it.url) })
+            // Do not overwrite workspaceGroup in UI/history; only persist AI in urls.extra.ai
+            const { __apiHit, workspaceGroup: _ignoredWG, ...aiClean } = ai || {}
+            const merged = { ...it, ...aiClean, cleanUrl: cleanUrl(it.url) }
+            const idx = indexByUrl.get(it.url)
+            if (typeof idx === 'number') {
+              enrichedHistory[idx] = merged
+            }
             // Note: we no longer mutate workspace membership during enrichment.
             // AI details are persisted by getAiEnrichment() into urls.extra.ai only.
             processed += 1
@@ -368,6 +398,133 @@ async function main() {
           const first = list?.[0];
           const suggestedUrl = first?.url || cleanUrl(urls[0]);
           sendResponse({ ok: true, suggestedUrl, suggestion: first?.suggestion || null, suggestions: JSON.stringify({ suggestions: list || [] }) });
+        } catch (e) {
+          sendResponse({ ok: false, error: String(e) });
+        }
+      })();
+
+      // One-time backfill: mirror workspaces to host so Electron app sees them after host restart
+      ; (async () => {
+        try {
+          const { workspacesMirroredOnce } = await chrome.storage.local.get(['workspacesMirroredOnce']);
+          if (!workspacesMirroredOnce) {
+            const all = await listWorkspaces();
+            if (Array.isArray(all) && all.length) {
+              try { await setHostWorkspaces(all); } catch { }
+              await chrome.storage.local.set({ workspacesMirroredOnce: true });
+              try { console.log('[Background] Backfilled workspaces to host:', all.length); } catch { }
+            }
+          }
+        } catch (e) {
+          try { console.warn('[Background] Workspaces backfill failed', e); } catch { }
+        }
+      })();
+
+      // One-time backfill: mirror canonical URL index to host (titles, favicons, memberships)
+      ; (async () => {
+        try {
+          const { urlsMirroredOnce } = await chrome.storage.local.get(['urlsMirroredOnce']);
+          if (!urlsMirroredOnce) {
+            const urls = await listAllUrls();
+            if (Array.isArray(urls) && urls.length) {
+              // Send in modest chunks to avoid large payloads
+              const CHUNK = 100;
+              for (let i = 0; i < urls.length; i += CHUNK) {
+                const slice = urls.slice(i, i + CHUNK);
+                try { await setHostUrls(slice); } catch { }
+              }
+              await chrome.storage.local.set({ urlsMirroredOnce: true });
+              try { console.log('[Background] Backfilled URLs to host:', urls.length); } catch { }
+            }
+          }
+        } catch (e) {
+          try { console.warn('[Background] URLs backfill failed', e); } catch { }
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.action === 'suggestCategories') {
+      ; (async () => {
+        try {
+          const { geminiApiKey, serverUrl } = await chrome.storage.local.get(['geminiApiKey', 'serverUrl']);
+          // If a custom serverUrl is provided, use it without requiring an API key.
+          // Otherwise, require a Gemini API key for the default API.
+          if (!(typeof serverUrl === 'string' && serverUrl.trim()) && !geminiApiKey) {
+            sendResponse({ ok: false, error: 'Provide either a Server URL or a Gemini API key in Settings.' });
+            return;
+          }
+          const urlsRaw = Array.isArray(msg.urls) ? msg.urls.filter(Boolean).slice(0, 150) : [];
+          const cleanedUrls = urlsRaw
+            .map((u) => cleanUrl(u))
+            .filter(Boolean);
+          // Dedupe while preserving order
+          const seen = new Set();
+          const urls = cleanedUrls.filter((u) => (seen.has(u) ? false : (seen.add(u), true)));
+          if (!urls.length) {
+            sendResponse({ ok: false, error: 'No URLs provided' });
+            return;
+          }
+          const prompt = buildCategoryListPrompt(urls, { max: 12 });
+          const hasServer = (typeof serverUrl === 'string' && serverUrl.trim());
+          const defaultApi = hasServer ? '' : `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+          let apiUrl = hasServer ? serverUrl.trim() : defaultApi;
+          if (hasServer) {
+            try {
+              const u = new URL(apiUrl);
+              const isGoogle = u.hostname.includes('generativelanguage.googleapis.com');
+              const hasKeyParam = u.searchParams.has('key');
+              if (isGoogle && !hasKeyParam) {
+                if (geminiApiKey) {
+                  u.searchParams.set('key', geminiApiKey);
+                  apiUrl = u.toString();
+                } else {
+                  sendResponse({ ok: false, error: 'Google API URL provided without API key. Add a Gemini API key in Settings or use a proxy server URL.' });
+                  return;
+                }
+              }
+            } catch { /* ignore URL parse errors and use raw apiUrl */ }
+          }
+          const controller = new AbortController();
+          const timeoutMs = 20000;
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const resp = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+              signal: controller.signal,
+            });
+            if (!resp.ok) {
+              const t = await resp.text().catch(() => '');
+              clearTimeout(timeoutId);
+              sendResponse({ ok: false, error: `API error ${resp.status}`, details: t?.slice?.(0, 200) || '' });
+              return;
+            }
+            const data = await resp.json();
+            clearTimeout(timeoutId);
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            const rawJson = text.replace(/```json|```/g, '').trim();
+            let obj = {};
+            try { obj = JSON.parse(rawJson); } catch { }
+            let categories = [];
+            if (Array.isArray(obj?.categories)) {
+              categories = obj.categories
+                .map((c) => {
+                  if (typeof c === 'string' && c.trim()) return { name: c.trim(), description: '' };
+                  const name = typeof c?.name === 'string' ? c.name.trim() : '';
+                  const description = typeof c?.description === 'string' ? c.description.trim() : '';
+                  return name ? { name, description } : null;
+                })
+                .filter(Boolean)
+                .slice(0, 20);
+            }
+            sendResponse({ ok: true, categories });
+          } catch (e) {
+            clearTimeout(timeoutId);
+            const reason = e?.name === 'AbortError' ? `timeout ${timeoutMs}ms` : (e?.message || String(e));
+            sendResponse({ ok: false, error: reason });
+          }
         } catch (e) {
           sendResponse({ ok: false, error: String(e) });
         }
@@ -490,19 +647,31 @@ async function main() {
   let timeSpent = {};
   let activityData = {}; // { [cleanedUrl]: { time, scroll, clicks, forms } }
   const activityDirty = new Set();
+  const MAX_ACTIVITY_POST = 50; // limit rows per flush
 
   async function flushActivityBatch() {
     if (activityDirty.size === 0) return;
     const urls = Array.from(activityDirty);
     activityDirty.clear();
+    const batch = [];
     for (const url of urls) {
       try {
         const payload = { url, time: timeSpent[url] || 0, updatedAt: Date.now(), ...activityData[url] };
         await putActivityRow(payload);
+        batch.push({ url: payload.url, time: payload.time || 0, scroll: Number(payload.scroll) || 0, clicks: Number(payload.clicks) || 0, forms: Number(payload.forms) || 0, updatedAt: payload.updatedAt });
       } catch (e) {
         // If write fails, keep it dirty for next round
         activityDirty.add(url);
       }
+    }
+    // Fire-and-forget POST to Electron host (safe no-op if unavailable)
+    if (batch.length) {
+      // sort by time desc and cap to top 50
+      const top = batch
+        .slice()
+        .sort((a, b) => (Number(b.time || 0) - Number(a.time || 0)))
+        .slice(0, MAX_ACTIVITY_POST);
+      try { await setHostActivity(top); } catch { /* ignore */ }
     }
   }
 
@@ -521,15 +690,42 @@ async function main() {
     }
   })();
 
+  // One-time backfill: mirror existing local activity to host so Electron can display historical data
+  (async () => {
+    try {
+      const { activityMirroredOnce } = await chrome.storage.local.get(['activityMirroredOnce']);
+      if (activityMirroredOnce) return;
+      const rows = await getAllActivity();
+      const list = (Array.isArray(rows) ? rows : [])
+        .map(r => ({
+          url: String(r?.url || ''),
+          time: Number(r?.time) || 0,
+          scroll: Number(r?.scroll) || 0,
+          clicks: Number(r?.clicks) || 0,
+          forms: Number(r?.forms) || 0,
+          updatedAt: Number(r?.updatedAt) || Date.now(),
+        }))
+        .filter(r => r.url)
+        .sort((a, b) => (b.time || 0) - (a.time || 0));
+      if (!list.length) return;
+      // Send in chunks of MAX_ACTIVITY_POST
+      for (let i = 0; i < list.length; i += MAX_ACTIVITY_POST) {
+        const chunk = list.slice(i, i + MAX_ACTIVITY_POST);
+        try { await setHostActivity(chunk); } catch { /* ignore per-chunk */ }
+      }
+      await chrome.storage.local.set({ activityMirroredOnce: true });
+      console.log(`[Background] Backfilled ${list.length} activity rows to host`);
+    } catch (e) {
+      console.warn('[Background] Activity backfill skipped/failed', e);
+    }
+  })();
+
   function cleanUrl(url) {
     try {
-      const u = new URL(url)
-      // Reduce to scheme + eTLD+1 like https://example.com
-      const parts = u.hostname.split('.')
-      const domain = parts.length >= 2 ? parts.slice(-2).join('.') : u.hostname
-      return `${u.protocol}//${domain}`
+      const parts = getUrlParts(url);
+      return parts?.key || null; // scheme + eTLD+1
     } catch {
-      return null
+      return null;
     }
   }
 
@@ -646,59 +842,195 @@ async function main() {
     console.debug(`[AI] Enrichment: calling Gemini API for ${cleaned}`)
     const ms = timeSpent[cleaned] || 0
     const minutesSpent = Math.round(ms / 60000)
-    const prompt = buildEnrichmentPrompt(minutesSpent, cleaned)
-      ;
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
-    const controller = new AbortController()
-    const timeoutMs = 15000
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-    console.time(`[AI][api] ${cleaned}`)
+    // Build workspace list and descriptions to guide classification
+    let opts = {};
+    // 1) Prefer user Settings categories (name + description)
     try {
-      const resp = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-        signal: controller.signal,
-      })
-      if (!resp.ok) {
-        const t = await resp.text().catch(() => '')
-        console.timeEnd(`[AI][api] ${cleaned}`)
-        console.warn(`[AI][api] Non-OK ${resp.status} for ${cleaned}`)
-        return { summary: `API error ${resp.status}`, category: { name: 'Error', icon: '❌' }, tags: [] }
+      const settings = await getSettings();
+      const cats = Array.isArray(settings?.categories) ? settings.categories : [];
+      const catRows = cats
+        .map((c) => (typeof c === 'string' ? { name: String(c).trim(), description: '' } : (c || {})))
+        .filter((r) => r && typeof r.name === 'string' && r.name.trim());
+      if (catRows.length) {
+        const names = catRows.map((r) => r.name.trim());
+        const descMap = catRows.reduce((acc, r) => { acc[r.name.trim()] = String(r.description || '').trim(); return acc; }, {});
+        opts.workspaceList = names;
+        opts.workspaceDescriptions = descMap;
+        try { console.debug('[AI][enrich] Using Settings categories', { count: names.length }); } catch { }
       }
-      const data = await resp.json()
-      console.timeEnd(`[AI][api] ${cleaned}`)
-      clearTimeout(timeoutId)
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-      const rawJson = text.replace(/```json|```/g, '').trim()
-      let aiData = {}
-      try { aiData = JSON.parse(rawJson) } catch { }
-
-      const adapted = {
-        summary: aiData.justification || 'No summary available.',
-        category: { name: aiData.primary_category || 'Uncategorized', icon: '✨' },
-        tags: Array.isArray(aiData.suggested_tags) ? aiData.suggested_tags : [],
-        toolName: aiData.tool_name || null,
-        secondaryCategories: Array.isArray(aiData.secondary_categories) ? aiData.secondary_categories : [],
-        suggestion: typeof aiData.suggestion === 'string' ? aiData.suggestion : null,
-        timestamp: Date.now(),
-      }
-
-      // Upsert enrichment into canonical URLs store as extra.ai (no workspace coupling)
+    } catch { /* ignore */ }
+    // 2) Else, fall back to chrome.storage.local mirror (if present)
+    if (!opts.workspaceList) {
       try {
-        await upsertUrl({ url: cleaned, extra: { ai: adapted } })
-      } catch (e) {
-        console.warn('[Background] upsertUrl(extra.ai) failed', e)
-      }
-      console.debug(`[AI] Enrichment saved to urls.extra.ai for ${cleaned}`)
-      return { ...adapted, __apiHit: true }
-    } catch (e) {
-      console.timeEnd(`[AI][api] ${cleaned}`)
-      clearTimeout(timeoutId)
-      const reason = e?.name === 'AbortError' ? `timeout ${timeoutMs}ms` : (e?.message || String(e))
-      console.warn(`[AI][api] Failed for ${cleaned}: ${reason}`)
-      return { summary: `Error: ${reason}`, category: { name: 'Error', icon: '❌' }, tags: [] }
+        const { categories } = await chrome.storage.local.get(['categories']);
+        const catRows = Array.isArray(categories) ? categories.map((c) => (typeof c === 'string' ? { name: String(c).trim(), description: '' } : (c || {}))) : [];
+        const rows = catRows.filter((r) => r && typeof r.name === 'string' && r.name.trim());
+        if (rows.length) {
+          const names = rows.map((r) => r.name.trim());
+          const descMap = rows.reduce((acc, r) => { acc[r.name.trim()] = String(r.description || '').trim(); return acc; }, {});
+          opts.workspaceList = names;
+          opts.workspaceDescriptions = descMap;
+          try { console.debug('[AI][enrich] Using storage.local categories', { count: names.length }); } catch { }
+        }
+      } catch { /* ignore */ }
     }
+    // 3) Else, fall back to DB workspaces
+    if (!opts.workspaceList) {
+      try {
+        const ws = await listWorkspaces();
+        const names = (Array.isArray(ws) ? ws : []).map(w => String(w?.name || '').trim()).filter(Boolean);
+        const descMap = (Array.isArray(ws) ? ws : []).reduce((acc, w) => {
+          const n = String(w?.name || '').trim();
+          if (n) acc[n] = String(w?.description || '').trim();
+          return acc;
+        }, {});
+        if (names.length) {
+          opts.workspaceList = names;
+          opts.workspaceDescriptions = descMap;
+          try { console.debug('[AI][enrich] Using DB workspaces', { count: names.length }); } catch { }
+        }
+      } catch { /* ignore */ }
+    }
+    // 4) If still nothing, buildEnrichmentPrompt will fall back to defaults
+    // Build a privacy-safe URL for the prompt: strip query/hash and redact ID-like path segments
+    function maskUrlSensitiveParts(raw) {
+      try {
+        const u = new URL(raw);
+        u.search = '';
+        u.hash = '';
+        const redact = (seg) => {
+          const s = (seg || '').trim();
+          if (!s) return s;
+          if (/^[0-9a-fA-F-]{24,}$/.test(s)) return '{id}'; // hex/uuid-like
+          if (/^[0-9]{9,}$/.test(s)) return '{n}'; // long numeric IDs
+          if (s.length > 32) return '{id}'; // overly long tokens
+          if (/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(s)) return '{email}';
+          if (/^(token|session|auth|key|apikey)$/i.test(s)) return '{redacted}';
+          return s;
+        };
+        const parts = u.pathname.split('/').map(redact);
+        u.pathname = parts.join('/');
+        return u.toString();
+      } catch {
+        return cleaned; // fallback to cleaned origin/path
+      }
+    }
+    const maskedForPrompt = maskUrlSensitiveParts(url);
+    const prompt = buildEnrichmentPrompt(minutesSpent, maskedForPrompt, opts)
+      ; try { console.debug('[AI][enrich] Prompt workspace list size', { size: Array.isArray(opts.workspaceList) ? opts.workspaceList.length : 0 }); } catch { }
+    ;
+    const { serverUrl } = await chrome.storage.local.get(['serverUrl']);
+    const defaultApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+    let apiUrl = (typeof serverUrl === 'string' && serverUrl.trim()) ? serverUrl.trim() : defaultApi
+    if (typeof serverUrl === 'string' && serverUrl.trim()) {
+      try {
+        const u = new URL(apiUrl)
+        const isGoogle = u.hostname.includes('generativelanguage.googleapis.com')
+        const hasKey = u.searchParams.has('key')
+        if (isGoogle && !hasKey) {
+          if (apiKey) {
+            u.searchParams.set('key', apiKey)
+            apiUrl = u.toString()
+          } else {
+            console.warn('[AI] Google API URL provided without API key in getAiEnrichment')
+            return { summary: 'API key required for Google endpoint', category: { name: 'Error', icon: '❌' }, tags: [] }
+          }
+        }
+      } catch { /* ignore URL parse errors */ }
+    }
+    console.time(`[AI][api] ${cleaned}`)
+    const timeoutMs = 15000
+    const maxRetries = 2
+    let lastError = null
+    let data = null
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const resp = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+          signal: controller.signal,
+        })
+        clearTimeout(timeoutId)
+        if (resp.ok) {
+          data = await resp.json()
+          break
+        }
+        // Retry on 429 and 5xx
+        if (resp.status === 429 || (resp.status >= 500 && resp.status <= 599)) {
+          const delay = 500 * Math.pow(2, attempt) // 500ms, 1000ms, 2000ms
+          await new Promise((r) => setTimeout(r, delay))
+          continue
+        }
+        // Non-retryable
+        const t = await resp.text().catch(() => '')
+        console.warn(`[AI][api] Non-OK ${resp.status} for ${cleaned}`, t?.slice?.(0, 200) || '')
+        console.timeEnd(`[AI][api] ${cleaned}`)
+        return { summary: `API error ${resp.status}`, category: { name: 'Error', icon: '❌' }, tags: [] }
+      } catch (e) {
+        clearTimeout(timeoutId)
+        lastError = e
+        // If aborted due to timeout, allow retry with backoff
+        if (e?.name === 'AbortError' && attempt < maxRetries) {
+          const delay = 500 * Math.pow(2, attempt)
+          await new Promise((r) => setTimeout(r, delay))
+          continue
+        }
+        break
+      }
+    }
+    if (!data) {
+      console.timeEnd(`[AI][api] ${cleaned}`)
+      const reason = lastError?.name === 'AbortError' ? `timeout ${timeoutMs}ms` : (lastError?.message || 'Rate limited / server error')
+      return { summary: `API error: ${reason}`, category: { name: 'Error', icon: '❌' }, tags: [] }
+    }
+    console.timeEnd(`[AI][api] ${cleaned}`)
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    const rawJson = text.replace(/```json|```/g, '').trim()
+    let aiData = {}
+    try { aiData = JSON.parse(rawJson) } catch { }
+
+    const workspaceGroup = Array.isArray(aiData.workspace_group) ? aiData.workspace_group.filter(x => typeof x === 'string' && x.trim()).map(x => x.trim()) : [];
+    const adapted = {
+      summary: typeof aiData.justification === 'string' && aiData.justification ? aiData.justification : 'No summary available.',
+      workspaceGroup,
+      timestamp: Date.now(),
+    }
+
+    // Upsert enrichment into canonical URLs store as extra.ai (no workspace coupling)
+    try {
+      await upsertUrl({ url: cleaned, extra: { ai: adapted } })
+    } catch (e) {
+      console.warn('[Background] upsertUrl(extra.ai) failed', e)
+    }
+    // Persist workspace membership based on AI response: create workspaces if missing and add URL
+    try {
+      if (Array.isArray(workspaceGroup) && workspaceGroup.length) {
+        const norm = (s) => (s || '').trim().toLowerCase();
+        const existing = await listWorkspaces();
+        const byName = new Map();
+        for (const w of (Array.isArray(existing) ? existing : [])) {
+          if (w && typeof w.name === 'string') byName.set(norm(w.name), w);
+        }
+        for (const name of workspaceGroup) {
+          const key = norm(name);
+          if (!key) continue;
+          let ws = byName.get(key) || null;
+          if (!ws) {
+            ws = { id: Date.now().toString(), name, description: '', createdAt: Date.now(), urls: [], context: {} };
+            try { await saveWorkspace(ws); } catch (e) { console.warn('[AI][enrich] saveWorkspace failed', e); }
+            byName.set(key, ws);
+          }
+          try { await addUrlToWorkspace(cleaned, ws.id, { addedAt: Date.now() }); } catch (e) { console.warn('[AI][enrich] addUrlToWorkspace failed', e); }
+        }
+      }
+    } catch (e) {
+      console.warn('[AI][enrich] Persisting AI workspace membership failed', e);
+    }
+    console.debug(`[AI] Enrichment saved to urls.extra.ai for ${cleaned}`)
+    return { ...adapted, __apiHit: true }
   }
 
   // Open popup UI as a full tab by default when clicking the icon

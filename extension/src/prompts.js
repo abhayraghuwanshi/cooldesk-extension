@@ -5,10 +5,21 @@
  * Build the enrichment/classification prompt for a given URL.
  * @param {number} minutesSpent - Whole minutes the user spent on the site (context).
  * @param {string} cleaned - Normalized URL (scheme + eTLD+1).
+ * @param {object} [opts]
+ * @param {string[]} [opts.categoryList] - Optional override for Category List.
+ * @param {string[]} [opts.workspaceList] - Optional override for Workspace List.
  * @returns {string}
  */
-export function buildEnrichmentPrompt(minutesSpent, cleaned) {
-    return `ROLE:\nYou are an expert assistant for developer productivity tools.\n\nTASK:\nClassify the URL and propose a helpful next action. Use the site time context: ${minutesSpent} minutes.\n\nCONSTRAINTS:\n- Return ONLY a single JSON object. No prose, no markdown, no code fences.\n- Keys and values must be valid JSON. No trailing commas.\n- "primary_category" must be one item from Category List.\n- "secondary_categories" may be empty or multiple items from Category List.\n- "workspace_group" must be one item from Workspace List.\n- "suggested_tags" must be 3-5 lowercase keywords.\n- "suggestion" must be <= 140 chars, imperative, and user-centric.\n\nCATEGORY LIST:\nSource Control & Versioning | Cloud & Infrastructure | Code Assistance & AI Coding | Documentation & Knowledge Search | Testing & QA Automation | Project Management & Collaboration | Data Analysis & Visualization | DevOps & CI/CD | UI/UX & Design | APIs & Integrations | Learning & Upskilling | AI & Machine Learning | Security & Compliance | Monitoring & Observability | Local Development & Environments | Package Management | Database Management | Communication\n\nWORKSPACE LIST:\nCode & Versioning | Cloud & Infrastructure | AI & ML | DevOps & Automation | Testing & Quality | Data & Analytics | Design & UX | Project & Team\n\nOUTPUT SCHEMA (JSON):\n{\n  "tool_name": string,\n  "primary_category": string,\n  "secondary_categories": string[],\n  "workspace_group": string,\n  "justification": string,\n  "suggested_tags": string[],\n  "suggestion": string\n}\n\nINPUT URL:\n${cleaned}`;
+export function buildEnrichmentPrompt(minutesSpent, cleaned, opts = {}) {
+    const defaultWorkspaces = ['Code & Versioning', 'Cloud & Infrastructure', 'AI & ML', 'DevOps & Automation', 'Testing & Quality', 'Data & Analytics', 'Design & UX', 'Project & Team'];
+    const wsList = Array.isArray(opts.workspaceList) && opts.workspaceList.length ? opts.workspaceList : defaultWorkspaces;
+    const wsDescriptions = (opts && typeof opts.workspaceDescriptions === 'object' && opts.workspaceDescriptions) || {};
+    const listWithDesc = wsList.map((w) => {
+        const desc = typeof wsDescriptions[w] === 'string' && wsDescriptions[w].trim() ? wsDescriptions[w].trim() : '';
+        return desc ? `- ${w}: ${desc}` : `- ${w}`;
+    }).join('\n');
+
+    return `ROLE:\nYou help decide which workspaces a URL belongs to.\n\nTASK:\nGiven the input URL (normalized) and the list of available workspaces (with optional descriptions), decide which workspaces this URL should be added to. You may select zero, one, or multiple workspaces.\n\nCONSTRAINTS:\n- Return ONLY a single JSON object. No prose, no markdown, no code fences.\n- Keys and values must be valid JSON. No trailing commas.\n- "workspace_group" must be an array of zero or more items from the workspace list (exact names).\n- "justification" must be a concise one-liner explaining the choice.\n\nWORKSPACE LIST (name: optional description):\n${listWithDesc}\n\nOUTPUT SCHEMA (JSON):\n{\n  "workspace_group": string[],\n  "justification": string\n}\n\nINPUT URL:\n${cleaned}`;
 }
 
 export function buildEnrichmentPromptForWorkspace(workspace, urls) {
@@ -42,6 +53,15 @@ export function buildEnrichmentPromptForWorkspace(workspace, urls) {
     `;
     return prompt;
 
+}
+
+/**
+ * Build a prompt to suggest a concise list of category/workspace names from a set of URLs.
+ * Returns JSON strictly as: { "categories": string[] }
+ */
+export function buildCategoryListPrompt(urls, { max = 12 } = {}) {
+    const capped = (Array.isArray(urls) ? urls : []).slice(0, 150);
+    return `You are helping organize browser URLs into a small set of practical categories (which also double as workspaces).\n\nRequirements:\n- Propose between 6 and ${Math.max(6, max)} short, distinct category names.\n- Provide a concise description (<= 12 words) for each category that explains what URLs fit.\n- Names should be reusable buckets like "Cloud & Infrastructure", "AI & ML", etc.\n- Output strictly valid JSON only, no prose, no markdown.\n- DO NOT include any examples except the JSON payload.\n\nSchema:\n{\n  "categories": { "name": string, "description": string }[]\n}\n\nInput URLs:\n${capped.join('\n')}`;
 }
 
 

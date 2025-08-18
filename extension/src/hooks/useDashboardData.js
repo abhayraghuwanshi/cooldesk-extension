@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getHostDashboard, setHostDashboard } from '../services/extensionApi';
+import { getHostDashboard, setHostDashboard, setHostUrls } from '../services/extensionApi';
 import { listWorkspaces, listAllUrls } from '../db';
 
 const normalize = (dashboardData) => {
@@ -52,6 +52,8 @@ const synthesizeFromWorkspaces = async () => {
     console.log('[synthesizeFromWorkspaces] loaded workspaces:', wss?.length || 0, wss);
 
     let urlDocs = await listAllUrls();
+    // Mirror canonical URL docs to the Electron host (non-blocking)
+    try { await setHostUrls(urlDocs); } catch { /* ignore */ }
     console.log('[synthesizeFromWorkspaces] url docs:', Array.isArray(urlDocs) ? urlDocs.length : 0);
 
     const bookmarks = [];
