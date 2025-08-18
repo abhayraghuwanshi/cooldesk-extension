@@ -1,10 +1,20 @@
 import React, { useState } from 'react';
 import { getFaviconUrl } from '../utils';
 
-export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onCancel }) {
+export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd, onAddSaved, onCancel }) {
   const [search, setSearch] = useState('');
   // Debounce the search input to avoid filtering on every keystroke
   const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  React.useEffect(() => {
+    try {
+      console.log('[AddLinkFlow] mount', {
+        allItems: Array.isArray(allItems) ? allItems.length : 0,
+        savedItems: Array.isArray(savedItems) ? savedItems.length : 0,
+        workspace: currentWorkspace,
+      });
+    } catch {}
+  }, [allItems, savedItems, currentWorkspace]);
 
   React.useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 200);
@@ -29,7 +39,21 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onC
 
   const filteredItems = React.useMemo(() => {
     const q = debouncedSearch;
-    const items = allItems.filter(item => !item.workspaceGroup);
+    // Build source list: history/bookmarks items not yet categorized + all saved items from DB
+    const baseItems = allItems.filter(item => !item.workspaceGroup);
+    // Insert saved first so they are retained on dedupe and appear first when no query
+    const merged = [...savedItems, ...baseItems];
+
+    // Dedupe by URL, prefer saved item for metadata if present
+    const byUrl = new Map();
+    for (const it of merged) {
+      const url = it?.url;
+      if (!url) continue;
+      // Because saved are inserted first, keep first occurrence.
+      if (!byUrl.has(url)) byUrl.set(url, it);
+    }
+    const items = Array.from(byUrl.values());
+
     if (!q) return items.slice(0, 200);
 
     const tokens = q.split(/\s+/).filter(Boolean);
@@ -51,6 +75,8 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onC
       const domain = safeDomain(url);
 
       let score = 0;
+      // Boost saved workspace items so they rank higher
+      if (it.workspaceGroup) score += 35;
       // Primary includes
       if (title.includes(q)) score += 60;
       if (url.includes(q)) score += 45;
@@ -95,7 +121,7 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onC
       .sort((a, b) => b.score - a.score)
       .slice(0, 200)
       .map(x => x.it);
-  }, [allItems, debouncedSearch]);
+  }, [allItems, savedItems, debouncedSearch]);
 
   return (
     <div className="add-link-flow">
@@ -116,6 +142,11 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onC
           marginBottom: 8,
         }}
       />
+      {filteredItems.length === 0 && (
+        <div style={{ color: '#9aa4b2', fontSize: 12, marginBottom: 8 }}>
+          No matches. Saved URLs available: {Array.isArray(savedItems) ? savedItems.length : 0}
+        </div>
+      )}
       {looksLikeUrl && (
         <div style={{ marginBottom: 8 }}>
           <button
@@ -147,6 +178,18 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onC
                     <span className="url-key">
                       {base.length > 40 ? base.slice(0, 37) + '…' : base}
                     </span>
+                    {item.workspaceGroup && (
+                      <span style={{
+                        marginLeft: 8,
+                        padding: '2px 6px',
+                        borderRadius: 8,
+                        background: '#21314a',
+                        color: '#9ec1ff',
+                        fontSize: 11,
+                      }} title={`From workspace DB: ${item.workspaceGroup}`}>
+                        Saved
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="item-actions">
@@ -154,8 +197,14 @@ export function AddLinkFlow({ allItems, currentWorkspace, onAdd, onAddSaved, onC
                     className="details-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      try { console.log('[AddLinkFlow] onAdd item click', { itemId: item.id, url: item.url, workspace: currentWorkspace }); } catch { }
-                      handleAddItem(item);
+                      try { console.log('[AddLinkFlow] onAdd item click', { itemId: item.id, url: item.url, workspace: currentWorkspace, isSaved: !!item.workspaceGroup }); } catch { }
+                      if (item.workspaceGroup) {
+                        // Saved workspace URL: add by URL string
+                        onAddSaved && onAddSaved(item.url, currentWorkspace);
+                      } else {
+                        // History/bookmark item: add via item object
+                        handleAddItem(item);
+                      }
                     }}
                     title="Add this link to the workspace"
                   >

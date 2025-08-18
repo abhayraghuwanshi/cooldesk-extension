@@ -1,5 +1,5 @@
 // MV3 background service worker (type: module)
-import { getSettings } from './db.js';
+import { getSettings, upsertUrl, getUIState, listWorkspaces, saveWorkspace, addUrlToWorkspace, putActivityRow, putTimeRow, getAllActivity, getAllTimeRows } from './db.js';
 import { buildEnrichmentPrompt, buildEnrichmentPromptForWorkspace } from './prompts.js';
 import { getRedirectDecision } from './services/extensionApi.js';
 
@@ -17,14 +17,11 @@ async function main() {
     if (cleanedUrls.length === 0) return [];
 
     const primaryUrl = cleanedUrls[0];
-    const ms = timeSpent[primaryUrl] || 0;
-    const minutesSpent = Math.round(ms / 60000);
     const current = currentActive?.url ? cleanUrl(currentActive.url) : null;
 
     const context = {
       workspace_urls: cleanedUrls,
       current_screen_url: current,
-      minutes_spent_on_primary_url: minutesSpent,
     };
 
     const prompt = `You are assisting a developer inside a Chrome extension. Given the context JSON below, which contains a list of URLs from the user's current workspace, propose up to 5 helpful https URLs to open next. Your suggestions should be highly relevant to the collection of URLs provided. Format strictly as JSON: { "suggestions": [ { "url": string, "label": string, "suggestion": string } ] } where label is a short name and suggestion is a one-line reason. Do not include markdown fences.\n\nCONTEXT:\n${JSON.stringify(context, null, 2)}`;
@@ -62,6 +59,72 @@ async function main() {
       console.warn('[AI][suggest*] Failed', reason)
       return [{ url: primaryUrl, label: 'Home', suggestion: 'Open base site' }]
     }
+  }
+
+  // ---- One-time migration to final schema ----
+  async function migrateToFinalSchema() {
+    console.time('[Schema] migrateToFinalSchema');
+    try {
+      const norm = (s) => (s || '').trim().toLowerCase();
+      const { dashboardData } = await chrome.storage.local.get(['dashboardData']);
+      const bookmarks = Array.isArray(dashboardData?.bookmarks) ? dashboardData.bookmarks : [];
+      const history = Array.isArray(dashboardData?.history) ? dashboardData.history : [];
+      const items = [...bookmarks, ...history];
+      const workspaces = await listWorkspaces();
+      const wsByName = new Map();
+      for (const w of (Array.isArray(workspaces) ? workspaces : [])) wsByName.set(norm(w.name), w);
+
+      for (const it of items) {
+        const rawUrl = it?.url;
+        const cleaned = cleanUrl(rawUrl);
+        if (!cleaned) continue;
+        const wsName = typeof it?.workspaceGroup === 'string' ? it.workspaceGroup : null;
+        let wsObj = null;
+        if (wsName && wsName !== 'All' && wsName !== 'Unknown') {
+          wsObj = wsByName.get(norm(wsName)) || null;
+          if (!wsObj) {
+            wsObj = { id: Date.now().toString(), name: wsName, description: '', createdAt: Date.now(), context: {}, systemPrompt: '' };
+            await saveWorkspace(wsObj);
+            wsByName.set(norm(wsName), wsObj);
+          }
+        }
+
+        const title = it.title || cleaned;
+        const domain = (() => { try { return new URL(cleaned).hostname; } catch { return null; } })();
+        const favicon = domain ? `https://www.google.com/s2/favicons?sz=64&domain=${domain}` : undefined;
+        const addedAt = typeof it.addedAt === 'number' ? it.addedAt : (typeof it.lastVisitTime === 'number' ? it.lastVisitTime : Date.now());
+
+        // Ensure URL exists with membership and metadata
+        if (wsObj?.id) {
+          await addUrlToWorkspace(cleaned, wsObj.id, { title, favicon, addedAt, extra: { tags: [], category: [] } });
+          // Also ensure canonical doc records the membership and AI data
+          const aiClean = extractAiFromItem(it);
+          await upsertUrl({ url: cleaned, workspaceIds: [String(wsObj.id)], title, favicon, addedAt, extra: { ai: aiClean } });
+        } else {
+          // No workspace: still upsert metadata and AI
+          const aiClean = extractAiFromItem(it);
+          await upsertUrl({ url: cleaned, title, favicon, addedAt, extra: { ai: aiClean } });
+        }
+      }
+      console.timeEnd('[Schema] migrateToFinalSchema');
+    } catch (e) {
+      console.warn('[Schema] migration failed', e);
+      console.timeEnd('[Schema] migrateToFinalSchema');
+      throw e;
+    }
+  }
+
+  function extractAiFromItem(it) {
+    if (!it) return undefined;
+    const ai = {};
+    if (typeof it.summary === 'string') ai.summary = it.summary;
+    if (it.category && typeof it.category?.name === 'string') ai.category = it.category;
+    if (Array.isArray(it.tags)) ai.tags = it.tags;
+    if (typeof it.toolName === 'string') ai.toolName = it.toolName;
+    if (Array.isArray(it.secondaryCategories)) ai.secondaryCategories = it.secondaryCategories;
+    if (typeof it.suggestion === 'string') ai.suggestion = it.suggestion;
+    if (typeof it.timestamp === 'number') ai.timestamp = it.timestamp;
+    return Object.keys(ai).length ? ai : undefined;
   }
 
   async function collectBookmarks() {
@@ -162,6 +225,14 @@ async function main() {
       if (!dashboardData || (!dashboardData.bookmarks?.length && !dashboardData.history?.length)) {
         await populateAndStore()
       }
+      // Run schema migration once if not done
+      try {
+        const { schemaMigrated } = await chrome.storage.local.get(['schemaMigrated']);
+        if (!schemaMigrated) {
+          await migrateToFinalSchema();
+          await chrome.storage.local.set({ schemaMigrated: true });
+        }
+      } catch { /* ignore */ }
     } catch (e) {
       console.error('[Background] Error during onStartup:', e)
     }
@@ -227,6 +298,10 @@ async function main() {
             console.warn('[AI][enrich] Aborting: missing API key')
             return
           }
+          // Do not change workspace memberships during enrichment
+          // We intentionally avoid resolving/creating any target workspace here.
+          const targetWorkspace = null;
+
           const rawHistory = dashboardData?.history || []
           const fromSettings = Number(settings?.historyMaxResults)
           const fromLocal = Number(historyMaxResults)
@@ -253,6 +328,8 @@ async function main() {
             if (ai && ai.__apiHit) apiHits += 1
             const { __apiHit, ...aiClean } = ai || {}
             enrichedHistory.push({ ...it, ...aiClean, cleanUrl: cleanUrl(it.url) })
+            // Note: we no longer mutate workspace membership during enrichment.
+            // AI details are persisted by getAiEnrichment() into urls.extra.ai only.
             processed += 1
             chrome.runtime.sendMessage({ action: 'aiProgress', processed, total, currentItem: it.title || it.url, apiHits })
             if (processed % 10 === 0 || processed === total) {
@@ -370,14 +447,7 @@ async function main() {
           const days = Number.isFinite(Number(activityDays)) && Number(activityDays) > 0 ? Number(activityDays) : 90;
           const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
 
-          const db = await openAiDb();
-          const tx = db.transaction('activity', 'readonly');
-          const store = tx.objectStore('activity');
-          const rows = await new Promise((resolve, reject) => {
-            const req = store.getAll();
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => reject(req.error);
-          });
+          const rows = await getAllActivity();
 
           // Filter to recent activity; if updatedAt is missing (older records), keep them only if we have non-zero time
           const recent = (Array.isArray(rows) ? rows : [])
@@ -390,6 +460,18 @@ async function main() {
             .sort((a, b) => (Number(b?.time) || 0) - (Number(a?.time) || 0));
 
           sendResponse({ ok: true, rows: recent });
+        } catch (e) {
+          sendResponse({ ok: false, error: String(e) });
+        }
+      })();
+      return true;
+    }
+    if (msg?.action === 'migrateFinalSchema') {
+      (async () => {
+        try {
+          await migrateToFinalSchema();
+          await chrome.storage.local.set({ schemaMigrated: true });
+          sendResponse({ ok: true });
         } catch (e) {
           sendResponse({ ok: false, error: String(e) });
         }
@@ -416,7 +498,7 @@ async function main() {
     for (const url of urls) {
       try {
         const payload = { url, time: timeSpent[url] || 0, updatedAt: Date.now(), ...activityData[url] };
-        await putActivityToDb(payload);
+        await putActivityRow(payload);
       } catch (e) {
         // If write fails, keep it dirty for next round
         activityDirty.add(url);
@@ -427,19 +509,16 @@ async function main() {
   // Periodic flush every 5s
   setInterval(() => { flushActivityBatch().catch(() => { }) }, 5000);
   (async () => {
-    const db = await openAiDb();
-    const tx = db.transaction('timeTracking', 'readonly');
-    const store = tx.objectStore('timeTracking');
-    const allRecords = await new Promise((resolve, reject) => {
-      const req = store.getAll();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    timeSpent = allRecords.reduce((acc, record) => {
-      acc[record.url] = record.time;
-      return acc;
-    }, {});
-    console.log('[Background] Time tracking data loaded from IndexedDB');
+    try {
+      const allRecords = await getAllTimeRows();
+      timeSpent = (Array.isArray(allRecords) ? allRecords : []).reduce((acc, record) => {
+        if (record && record.url) acc[record.url] = Number(record.time) || 0;
+        return acc;
+      }, {});
+      console.log('[Background] Time tracking data loaded from cooldesk-db');
+    } catch {
+      timeSpent = {};
+    }
   })();
 
   function cleanUrl(url) {
@@ -461,7 +540,7 @@ async function main() {
     const delta = Math.max(0, now - currentActive.since);
     const newTime = (timeSpent[cleaned] || 0) + delta;
     timeSpent[cleaned] = newTime;
-    await putTimeToDb({ url: cleaned, time: newTime });
+    await putTimeRow({ url: cleaned, time: newTime });
     // Mirror into activity aggregation and mark dirty
     if (!activityData[cleaned]) activityData[cleaned] = { time: newTime, scroll: 0, clicks: 0, forms: 0 };
     else activityData[cleaned].time = newTime;
@@ -556,102 +635,15 @@ async function main() {
     }
   })
 
-  // ---- IndexedDB persistent cache for AI enrichment ----
-  function openAiDb() {
-    return new Promise((resolve, reject) => {
-      // Bump version to 2 to ensure new stores (e.g., 'activity') are created for existing users
-      const request = indexedDB.open('devlink-ai', 2)
-      request.onupgradeneeded = (event) => {
-        const db = event.target.result
-        if (!db.objectStoreNames.contains('enrichments')) {
-          const store = db.createObjectStore('enrichments', { keyPath: 'url' })
-          store.createIndex('timestamp', 'timestamp')
-        }
-        if (!db.objectStoreNames.contains('timeTracking')) {
-          db.createObjectStore('timeTracking', { keyPath: 'url' })
-        }
-        if (!db.objectStoreNames.contains('activity')) {
-          db.createObjectStore('activity', { keyPath: 'url' })
-        }
-      }
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () => reject(request.error)
-    })
-  }
+  // (Legacy devlink-ai migration code removed after successful migration)
 
-  async function getEnrichmentFromDb(cleanedUrl) {
-    const db = await openAiDb()
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('enrichments', 'readonly')
-      const store = tx.objectStore('enrichments')
-      const req = store.get(cleanedUrl)
-      req.onsuccess = () => resolve(req.result || null)
-      req.onerror = () => reject(req.error)
-    })
-  }
 
-  async function putEnrichmentToDb(record) {
-    const db = await openAiDb()
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('enrichments', 'readwrite')
-      const store = tx.objectStore('enrichments')
-      const req = store.put(record)
-      req.onsuccess = () => resolve(true)
-      req.onerror = () => reject(req.error)
-    })
-  }
-
-  async function getTimeFromDb(url) {
-    const db = await openAiDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('timeTracking', 'readonly');
-      const store = tx.objectStore('timeTracking');
-      const req = store.get(url);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  async function putTimeToDb(record) {
-    const db = await openAiDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('timeTracking', 'readwrite');
-      const store = tx.objectStore('timeTracking');
-      const req = store.put(record);
-      req.onsuccess = () => resolve(true);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  async function putActivityToDb(record) {
-    const db = await openAiDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('activity', 'readwrite');
-      const store = tx.objectStore('activity');
-      const req = store.put(record);
-      req.onsuccess = () => resolve(true);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  const ENRICHMENT_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
   async function getAiEnrichment(url, apiKey) {
     const cleaned = cleanUrl(url)
     if (!cleaned) return { summary: 'Invalid URL', category: { name: 'Error', icon: '❌' }, tags: [] }
-
-    try {
-      const cached = await getEnrichmentFromDb(cleaned)
-      if (cached && Date.now() - (cached.timestamp || 0) < ENRICHMENT_TTL_MS) {
-        const { url: _u, ...rest } = cached
-        console.debug(`[AI][cache] HIT ${cleaned}`)
-        return rest
-      }
-    } catch (e) {
-      console.warn('[Background] IndexedDB read failed', e)
-    }
-
-    console.debug(`[AI][cache] MISS ${cleaned} — calling Gemini API`)
+    // Skip legacy enrichment cache; rely on urls.extra.ai
+    console.debug(`[AI] Enrichment: calling Gemini API for ${cleaned}`)
     const ms = timeSpent[cleaned] || 0
     const minutesSpent = Math.round(ms / 60000)
     const prompt = buildEnrichmentPrompt(minutesSpent, cleaned)
@@ -688,13 +680,17 @@ async function main() {
         tags: Array.isArray(aiData.suggested_tags) ? aiData.suggested_tags : [],
         toolName: aiData.tool_name || null,
         secondaryCategories: Array.isArray(aiData.secondary_categories) ? aiData.secondary_categories : [],
-        workspaceGroup: aiData.workspace_group || null,
         suggestion: typeof aiData.suggestion === 'string' ? aiData.suggestion : null,
         timestamp: Date.now(),
       }
 
-      try { await putEnrichmentToDb({ url: cleaned, ...adapted }) } catch (e) { console.warn('[Background] IndexedDB write failed', e) }
-      console.debug(`[AI][cache] WRITE ${cleaned}`)
+      // Upsert enrichment into canonical URLs store as extra.ai (no workspace coupling)
+      try {
+        await upsertUrl({ url: cleaned, extra: { ai: adapted } })
+      } catch (e) {
+        console.warn('[Background] upsertUrl(extra.ai) failed', e)
+      }
+      console.debug(`[AI] Enrichment saved to urls.extra.ai for ${cleaned}`)
       return { ...adapted, __apiHit: true }
     } catch (e) {
       console.timeEnd(`[AI][api] ${cleaned}`)
@@ -910,9 +906,7 @@ async function main() {
   async function getAiSuggestion(url, apiKey) {
     const cleaned = cleanUrl(url)
     if (!cleaned) return { suggestedUrl: null, suggestion: null }
-    const ms = timeSpent[cleaned] || 0
-    const minutesSpent = Math.round(ms / 60000)
-    const prompt = `You are assisting a developer. Given a base URL, propose a single https URL on the same site that would be the most helpful next page (e.g., docs, dashboard, search, relevant deep link). Return strictly JSON with fields: { "suggested_url": string, "suggestion": string }. Consider user time on site: ${minutesSpent} minutes.\n\nURL: ${cleaned}`
+    const prompt = `You are assisting a developer. Given a base URL, propose a single https URL on the same site that would be the most helpful next page (e.g., docs, dashboard, search, relevant deep link). Return strictly JSON with fields: { "suggested_url": string, "suggestion": string }.\n\nURL: ${cleaned}`
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
     const controller = new AbortController()
     const timeoutMs = 12000

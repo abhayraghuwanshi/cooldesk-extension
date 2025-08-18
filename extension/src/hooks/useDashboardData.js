@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getHostDashboard, setHostDashboard } from '../services/extensionApi';
+import { listWorkspaces } from '../db';
 
 const normalize = (dashboardData) => {
   const bookmarks = (dashboardData?.bookmarks || []).map((b) => ({ ...b, type: 'Bookmark' }))
@@ -40,6 +41,34 @@ const normalize = (dashboardData) => {
   return Array.from(map.values()).sort((a, b) => (b.lastVisitTime || b.dateAdded || 0) - (a.lastVisitTime || a.dateAdded || 0))
 }
 
+// Build a minimal dashboard snapshot from local workspaces to show something in UI
+const synthesizeFromWorkspaces = async () => {
+  try {
+    const wss = await listWorkspaces();
+    const bookmarks = [];
+    const seen = new Set();
+    for (const w of (Array.isArray(wss) ? wss : [])) {
+      const wsName = w?.name || undefined;
+      const urls = Array.isArray(w?.urls) ? w.urls : [];
+      for (const u of urls) {
+        const url = String(u?.url || '').trim();
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        bookmarks.push({
+          type: 'Bookmark',
+          url,
+          title: (u?.title && String(u.title).trim()) ? u.title : url,
+          dateAdded: typeof u?.addedAt === 'number' ? u.addedAt : Date.now(),
+          workspaceGroup: wsName,
+        });
+      }
+    }
+    return { history: [], bookmarks };
+  } catch {
+    return { history: [], bookmarks: [] };
+  }
+}
+
 export function useDashboardData() {
   const [data, setData] = useState([])
   const [loadingInitial, setLoadingInitial] = useState(true)
@@ -56,9 +85,22 @@ export function useDashboardData() {
         dashboardData = res?.dashboardData || null
       } catch { /* ignore */ }
     }
-    const arr = normalize(dashboardData)
+    let arr = normalize(dashboardData)
+    // If nothing in local storage, try to synthesize from local workspaces
+    if (!arr.length) {
+      const synthesized = await synthesizeFromWorkspaces();
+      const arrSynth = normalize(synthesized);
+      if (arrSynth.length) {
+        arr = arrSynth;
+        try { await setHostDashboard(synthesized) } catch { }
+      }
+    }
     setData(arr)
     setLoadingInitial(false)
+    // If we already have data locally (items/history/bookmarks), mirror it to the host
+    if (arr.length && dashboardData) {
+      try { await setHostDashboard(dashboardData) } catch { /* ignore */ }
+    }
     // If empty, ask background to populate (no UI block)
     if (!arr.length && !populating) {
       setPopulating(true)
@@ -86,7 +128,7 @@ export function useDashboardData() {
       }
     } catch { /* ignore */ }
 
-    if (dashboardData) {
+    if (dashboardData && ((dashboardData.history && dashboardData.history.length) || (dashboardData.bookmarks && dashboardData.bookmarks.length))) {
       const arr = normalize(dashboardData)
       setData(arr)
       // Mirror enriched dashboard to host so Electron renderer can show categories
@@ -99,6 +141,16 @@ export function useDashboardData() {
         const groups = Array.from(new Set(arr.map(it => it.workspaceGroup).filter(Boolean)))
         const sampleAI = arr.find(it => (it.category || it.workspaceGroup || it.summary || it.tags) && typeof it.url === 'string')
         console.debug('[CoolDesk] Hydrated snapshot:', { historyCount: histLen, bookmarkCount: bmLen, mergedCount: arr.length, uniqueGroups: groups, sampleAI })
+      } catch { }
+    } else {
+      // Host empty as well — last-resort synthesis from local workspaces
+      try {
+        const synthesized = await synthesizeFromWorkspaces();
+        const arr = normalize(synthesized);
+        if (arr.length) {
+          setData(arr);
+          try { await setHostDashboard(synthesized) } catch { }
+        }
       } catch { }
     }
     setRefreshing(false)

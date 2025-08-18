@@ -82,8 +82,7 @@ export default function App() {
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [processes, setProcesses] = useState([])
-  // When viewing a specific workspace, toggle between saved-only vs merged (system+saved)
-  const [showOnlySaved, setShowOnlySaved] = useState(false)
+
 
   // Side panel visibility control via runtime messages
   const [showPanel, setShowPanel] = useState(false)
@@ -370,14 +369,19 @@ export default function App() {
     return Array.from(set)
   }, [data])
 
-  // Items to build the unified workspace filter options
+  // Items to build the workspace filter options: only saved workspaces + 'All'
   const filterItems = useMemo(() => {
-    // merge history/data workspaces with saved workspace names
-    const extras = savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }));
-    // Ensure 'All' is available as a selectable option
     const all = [{ workspaceGroup: 'All' }];
-    return [...all, ...data, ...extras];
-  }, [data, savedWorkspaces])
+    const extras = savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }));
+    return [...all, ...extras];
+  }, [savedWorkspaces])
+
+  // Guard: if current workspace isn't a saved workspace (and not 'All'), reset to 'All'
+  useEffect(() => {
+    if (workspace === 'All') return;
+    const exists = savedWorkspaces.some(ws => (ws?.name || '').trim().toLowerCase() === (workspace || '').trim().toLowerCase());
+    if (!exists) setWorkspace('All');
+  }, [savedWorkspaces])
 
   // Keyboard shortcuts for tab navigation
   useEffect(() => {
@@ -404,10 +408,12 @@ export default function App() {
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase()
+    const norm = (v) => (v || '').trim().toLowerCase()
+    const active = norm(workspace)
     return data.filter((it) => {
       // Only use explicit workspaceGroup; do not fallback to category.name
-      const itemWorkspace = it.workspaceGroup
-      const inWs = workspace === 'All' || itemWorkspace === workspace
+      const itemWorkspace = norm(it.workspaceGroup)
+      const inWs = active === 'all' || itemWorkspace === active
       const inSearch = !s || it.title?.toLowerCase().includes(s) || it.summary?.toLowerCase().includes(s) || it.url?.toLowerCase().includes(s)
       return inWs && inSearch
     })
@@ -793,9 +799,11 @@ export default function App() {
 
   // Flatten saved workspaces' URLs into items suitable for ItemGrid
   const savedUrlsFlat = useMemo(() => {
-    const sourceWorkspaces = workspace === 'All'
+    const norm = (v) => (v || '').trim().toLowerCase()
+    const active = norm(workspace)
+    const sourceWorkspaces = active === 'all'
       ? savedWorkspaces
-      : savedWorkspaces.filter(ws => ws.name === workspace);
+      : savedWorkspaces.filter(ws => norm(ws.name) === active);
 
     return sourceWorkspaces.flatMap(ws =>
       (ws.urls || []).map(u => ({
@@ -1028,7 +1036,7 @@ export default function App() {
                     </div>
                     {p.path && (
                       <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.path}>
-                        {p.path}
+                        {p.path?.split(/[\\/]/).pop()}
                       </div>
                     )}
                   </div>
@@ -1083,7 +1091,7 @@ export default function App() {
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
-            <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({showOnlySaved ? workspaceSavedItems.length : mergedWorkspaceItems.length})</span>
+            <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({mergedWorkspaceItems.length})</span>
             {refreshing && (
               <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
             )}
@@ -1106,15 +1114,7 @@ export default function App() {
               >
                 <FontAwesomeIcon icon={showCurrentWorkspace ? faEyeSlash : faEye} />
               </button>
-              <button
-                onClick={() => setShowOnlySaved(v => !v)}
-                className="add-link-btn ai-button"
-                aria-label={showOnlySaved ? 'Show all (saved + system)' : 'Show saved only'}
-                title={showOnlySaved ? 'Show all (saved + system)' : 'Show saved only'}
-                style={{ padding: '4px 8px' }}
-              >
-                {showOnlySaved ? 'All' : 'Saved'}
-              </button>
+
               <button
                 onClick={() => handleOpenAddLinkModal(workspace)}
                 className="add-link-btn ai-button"
@@ -1148,7 +1148,7 @@ export default function App() {
           {showCurrentWorkspace && (
             <>
               <ItemGrid
-                items={workspace === 'All' ? allItemsCombined : (showOnlySaved ? workspaceSavedItems : mergedWorkspaceItems)}
+                items={workspace === 'All' ? allItemsCombined : mergedWorkspaceItems}
                 workspaces={savedWorkspaces}
                 onAddRelated={handleAddRelated}
                 onAddLink={() => handleOpenAddLinkModal(workspace)}
@@ -1186,6 +1186,11 @@ export default function App() {
             </div>
             <AddLinkFlow
               allItems={data}
+              savedItems={savedWorkspaces.flatMap(ws => (ws.urls || []).map(u => ({
+                ...u,
+                workspaceGroup: ws.name,
+                id: `${ws.id}-${u.url}`,
+              })))}
               currentWorkspace={addingToWorkspace}
               onAdd={handleAddItemToWorkspace}
               onAddSaved={handleAddSavedUrlToWorkspace}
