@@ -1,5 +1,5 @@
 // MV3 background service worker (type: module)
-import { getSettings, upsertUrl, getUIState, listWorkspaces, saveWorkspace, addUrlToWorkspace, putActivityRow, putTimeRow, getAllActivity, getAllTimeRows } from './db.js';
+import { addUrlToWorkspace, getAllActivity, getAllTimeRows, getSettings, listWorkspaces, putActivityRow, putTimeRow, saveWorkspace, upsertUrl } from './db.js';
 import { buildEnrichmentPrompt, buildEnrichmentPromptForWorkspace } from './prompts.js';
 import { getRedirectDecision } from './services/extensionApi.js';
 
@@ -808,7 +808,7 @@ async function main() {
   function ensureHostPolling(active) {
     if (active) {
       if (Date.now() < hostCooldownUntil) return; // don't start during cooldown
-      if (!hostPollTimer) hostPollTimer = setInterval(() => { pollOnceForAction().catch(() => {}) }, HOST_POLL_INTERVAL_MS);
+      if (!hostPollTimer) hostPollTimer = setInterval(() => { pollOnceForAction().catch(() => { }) }, HOST_POLL_INTERVAL_MS);
     } else {
       if (hostPollTimer) { clearInterval(hostPollTimer); hostPollTimer = null; }
     }
@@ -849,7 +849,7 @@ async function main() {
         // Stop HTTP polling when WS is healthy
         ensureHostPolling(false);
         // Drain any actions queued while offline
-        drainQueuedActionsOnConnect().catch(() => {});
+        drainQueuedActionsOnConnect().catch(() => { });
       };
       hostWs.onmessage = async (ev) => {
         try {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getHostDashboard, setHostDashboard } from '../services/extensionApi';
-import { listWorkspaces } from '../db';
+import { listWorkspaces, listAllUrls } from '../db';
 
 const normalize = (dashboardData) => {
   const bookmarks = (dashboardData?.bookmarks || []).map((b) => ({ ...b, type: 'Bookmark' }))
@@ -41,30 +41,61 @@ const normalize = (dashboardData) => {
   return Array.from(map.values()).sort((a, b) => (b.lastVisitTime || b.dateAdded || 0) - (a.lastVisitTime || a.dateAdded || 0))
 }
 
-// Build a minimal dashboard snapshot from local workspaces to show something in UI
+// Build a minimal dashboard snapshot from local URL index + workspaces
 const synthesizeFromWorkspaces = async () => {
   try {
     const wss = await listWorkspaces();
-    const bookmarks = [];
-    const seen = new Set();
+    const wsById = new Map();
     for (const w of (Array.isArray(wss) ? wss : [])) {
-      const wsName = w?.name || undefined;
-      const urls = Array.isArray(w?.urls) ? w.urls : [];
-      for (const u of urls) {
-        const url = String(u?.url || '').trim();
-        if (!url || seen.has(url)) continue;
-        seen.add(url);
-        bookmarks.push({
-          type: 'Bookmark',
-          url,
-          title: (u?.title && String(u.title).trim()) ? u.title : url,
-          dateAdded: typeof u?.addedAt === 'number' ? u.addedAt : Date.now(),
-          workspaceGroup: wsName,
-        });
+      if (w && (w.id || w._id)) wsById.set(String(w.id ?? w._id), w.name || undefined);
+    }
+    console.log('[synthesizeFromWorkspaces] loaded workspaces:', wss?.length || 0, wss);
+
+    let urlDocs = await listAllUrls();
+    console.log('[synthesizeFromWorkspaces] url docs:', Array.isArray(urlDocs) ? urlDocs.length : 0);
+
+    const bookmarks = [];
+    const seen = new Set(); // de-dupe by URL
+    for (const doc of (Array.isArray(urlDocs) ? urlDocs : [])) {
+      const url = String(doc?.url || '').trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      const wsIds = Array.isArray(doc?.workspaceIds) ? doc.workspaceIds : [];
+      const firstWsName = wsIds.length ? wsById.get(String(wsIds[0])) : undefined;
+      bookmarks.push({
+        type: 'Bookmark',
+        url,
+        title: (doc?.title && String(doc.title).trim()) ? doc.title : url,
+        dateAdded: typeof doc?.addedAt === 'number' ? doc.addedAt : Date.now(),
+        workspaceGroup: firstWsName,
+      });
+    }
+
+    // Fallback: legacy per-workspace URLs if URL index is empty
+    if (bookmarks.length === 0) {
+      for (const w of (Array.isArray(wss) ? wss : [])) {
+        const wsName = w?.name || undefined;
+        const urls = Array.isArray(w?.urls) ? w.urls : [];
+        console.log('[synthesizeFromWorkspaces][fallback] workspace:', wsName, 'urls:', urls.length);
+        for (const u of urls) {
+          const url = String(u?.url || '').trim();
+          if (!url || seen.has(url)) continue;
+          seen.add(url);
+          bookmarks.push({
+            type: 'Bookmark',
+            url,
+            title: (u?.title && String(u.title).trim()) ? u.title : url,
+            dateAdded: typeof u?.addedAt === 'number' ? u.addedAt : Date.now(),
+            workspaceGroup: wsName,
+          });
+        }
       }
     }
+
+    console.log('[synthesizeFromWorkspaces] generated bookmarks:', bookmarks.length, bookmarks);
     return { history: [], bookmarks };
-  } catch {
+  } catch (e) {
+    console.error('[synthesizeFromWorkspaces] error:', e);
     return { history: [], bookmarks: [] };
   }
 }
