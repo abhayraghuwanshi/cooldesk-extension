@@ -9,7 +9,7 @@ export default function ActivityPanel() {
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
-  const [sortBy, setSortBy] = React.useState('time'); // 'time' | 'clicks' | 'scroll' | 'forms'
+  const [sortBy, setSortBy] = React.useState('all'); // 'all' | 'time' | 'clicks' | 'scroll' | 'forms'
 
   const loadActivity = React.useCallback(async () => {
     let mounted = true;
@@ -110,12 +110,17 @@ export default function ActivityPanel() {
     return `${h}h ${rm}m`;
   };
 
-  // Weighted ranking algorithm to produce suggestions from activity
-  const WEIGHTS = React.useMemo(() => ({ time: 0.5, clicks: 0.25, forms: 0.2, scroll: 0.05 }), []);
+  // Enhanced weighted ranking algorithm for comprehensive activity scoring
+  const WEIGHTS = React.useMemo(() => ({ 
+    time: 0.4,    // Time spent is most important indicator
+    clicks: 0.3,   // Click interactions show engagement
+    forms: 0.25,   // Form submissions indicate task completion
+    scroll: 0.05   // Scroll depth shows content consumption
+  }), []);
   const NORMALIZERS = React.useMemo(() => ({
-    timeMs: 20 * 60 * 1000, // 20 minutes caps at 1.0
-    clicks: 20,             // 20 clicks caps at 1.0
-    forms: 5,               // 5 form interactions caps at 1.0
+    timeMs: 30 * 60 * 1000, // 30 minutes caps at 1.0 (increased for better distribution)
+    clicks: 25,             // 25 clicks caps at 1.0 (increased threshold)
+    forms: 3,               // 3 form interactions caps at 1.0 (lowered - forms are rare but valuable)
     scrollPct: 100,         // 100% scroll caps at 1.0
   }), []);
 
@@ -220,11 +225,19 @@ export default function ActivityPanel() {
       const score = scoreRow(r);
       return { ...r, score, category: categorize(score) };
     });
-    // Allow switching primary sorting metric if desired
-    if (sortBy === 'time') enriched.sort((a, b) => b.score - a.score);
-    else if (sortBy === 'clicks') enriched.sort((a, b) => (b.clicks || 0) - (a.clicks || 0));
-    else if (sortBy === 'scroll') enriched.sort((a, b) => (b.scroll || 0) - (a.scroll || 0));
-    else if (sortBy === 'forms') enriched.sort((a, b) => (b.forms || 0) - (a.forms || 0));
+    // Sort by selected metric
+    if (sortBy === 'all') {
+      // Use weighted score combining all metrics
+      enriched.sort((a, b) => b.score - a.score);
+    } else if (sortBy === 'time') {
+      enriched.sort((a, b) => (b.time || 0) - (a.time || 0));
+    } else if (sortBy === 'clicks') {
+      enriched.sort((a, b) => (b.clicks || 0) - (a.clicks || 0));
+    } else if (sortBy === 'scroll') {
+      enriched.sort((a, b) => (b.scroll || 0) - (a.scroll || 0));
+    } else if (sortBy === 'forms') {
+      enriched.sort((a, b) => (b.forms || 0) - (a.forms || 0));
+    }
 
     const filtered = enriched.filter(x => x.category !== 'low');
     if (filtered.length > 0) return { suggestions: filtered.slice(0, 50), fallbackUsed: false };
@@ -328,6 +341,7 @@ export default function ActivityPanel() {
               background: '#1b2331', color: '#e5e7eb', fontSize: 12,
             }}
           >
+            <option value="all">All</option>
             <option value="time">Time</option>
             <option value="clicks">Clicks</option>
             <option value="scroll">Scroll</option>

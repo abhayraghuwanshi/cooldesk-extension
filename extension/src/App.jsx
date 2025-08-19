@@ -1,4 +1,4 @@
-import { faEye, faEyeSlash, faPenToSquare, faPlus, faRotateRight, faTrash, faWandMagicSparkles, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
+import { faEye, faEyeSlash, faPlus, faRotateRight, faTrash, faTriangleExclamation, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -558,6 +558,22 @@ export default function App() {
         setTimeout(() => setProgress((p) => ({ ...p, error: '' })), 4000)
       } else {
         console.error('Error starting enrichment:', err)
+      }
+    }
+  }
+
+  const startCategoryEnrichment = async (category) => {
+    setProgress({ running: true, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
+    try {
+      const res = await sendMessage({ action: 'enrichWithAICategory', category })
+      if (!res?.ok) throw new Error(res?.error || 'Failed to start category enrichment')
+    } catch (err) {
+      if (err.message.includes('Receiving end does not exist')) {
+        const error = 'Could not connect to the background service.'
+        setProgress({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error })
+        setTimeout(() => setProgress((p) => ({ ...p, error: '' })), 4000)
+      } else {
+        console.error('Error starting category enrichment:', err)
       }
     }
   }
@@ -1152,7 +1168,7 @@ export default function App() {
               <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
             )}
             <div style={{ display: 'flex', gap: 6 }}>
-              <button
+              {/* <button
                 onClick={() => setShowSystemPrompt(v => !v)}
                 className="add-link-btn ai-button"
                 aria-label={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
@@ -1160,7 +1176,7 @@ export default function App() {
                 style={{ padding: '4px 8px' }}
               >
                 <FontAwesomeIcon icon={faPenToSquare} />
-              </button>
+              </button> */}
               <button
                 onClick={() => setShowCurrentWorkspace(v => !v)}
                 className="add-link-btn ai-button"
@@ -1191,10 +1207,10 @@ export default function App() {
                 <FontAwesomeIcon icon={faTrash} />
               </button>
               <button
-                onClick={startEnrichment}
+                onClick={() => startCategoryEnrichment(workspace)}
                 className="add-link-btn ai-button"
-                aria-label="Organize using AI"
-                title="Organize using AI"
+                aria-label={`Add recent links to ${workspace}`}
+                title={`Add recent links to ${workspace}`}
                 style={{ padding: '4px 8px' }}
               >
                 <FontAwesomeIcon icon={faWandMagicSparkles} />
