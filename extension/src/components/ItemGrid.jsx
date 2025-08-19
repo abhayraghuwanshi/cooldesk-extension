@@ -74,9 +74,16 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
       })
     let grouped = Array.from(map.entries()).map(([key, set]) => {
       const firstItem = set.values().next().value;
+      const arr = Array.from(set)
+        .sort((a, b) => {
+          const at = (typeof a?.lastVisitTime === 'number' ? a.lastVisitTime : 0) || (typeof a?.dateAdded === 'number' ? a.dateAdded : 0);
+          const bt = (typeof b?.lastVisitTime === 'number' ? b.lastVisitTime : 0) || (typeof b?.dateAdded === 'number' ? b.dateAdded : 0);
+          return bt - at;
+        });
+      try { console.debug('[ItemGrid] group built', { key, count: arr.length, sample: arr.slice(0, 2).map(it => it.url) }); } catch {}
       return {
         key,
-        values: Array.from(set).sort(),
+        values: arr,
         workspace: firstItem?.workspaceId ? workspaces.find(w => w.id === firstItem.workspaceId) : null,
       };
     });

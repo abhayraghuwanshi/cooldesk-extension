@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faFloppyDisk, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { deleteWorkspaceById, listWorkspaces, saveWorkspace, subscribeWorkspaceChanges } from '../db';
 import { sendMessage, storageGet } from '../services/extensionApi';
 import { CreateWorkspaceModal } from './CreateWorkspaceModal';
@@ -20,51 +22,7 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
     let unsub = null;
     (async () => {
       try {
-        let list = await listWorkspaces();
-
-        // Always attempt to merge AI categories into workspaces (idempotent by name)
-        try {
-          const norm = (s) => (s || '').trim().toLowerCase();
-          const existing = Array.isArray(list) ? list : [];
-          const names = new Set(existing.map(w => norm(w?.name)));
-
-          // Prefer categories from localSettings, fallback to chrome.storage.local
-          let cats = Array.isArray(localSettings?.categories) ? localSettings.categories : [];
-          if (!cats.length) {
-            try {
-              const legacy = await chrome.storage.local.get(['categories']);
-              cats = Array.isArray(legacy?.categories) ? legacy.categories : [];
-            } catch { /* ignore */ }
-          }
-          const rows = cats.map((c) => (typeof c === 'string' ? { name: c, description: '' } : (c || {}))).filter(Boolean);
-          let createdAny = false;
-          for (const row of rows) {
-            const nm = norm(row?.name);
-            if (!nm) continue;
-            const found = existing.find(w => norm(w?.name) === nm);
-            if (found) {
-              // Backfill/align description from categories if present and different
-              const catDesc = (row?.description || '').trim();
-              const wsDesc = (found?.description || '').trim();
-              if (catDesc && catDesc !== wsDesc) {
-                try { await saveWorkspace({ ...found, description: catDesc }); createdAny = true; } catch { }
-              }
-              continue;
-            }
-            // Create missing workspace from category
-            const ws = {
-              id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 8),
-              name: row.name,
-              description: row.description || '',
-              createdAt: Date.now(),
-              urls: [],
-              context: {},
-            };
-            try { await saveWorkspace(ws); names.add(nm); createdAny = true; } catch { }
-          }
-          if (createdAny) list = await listWorkspaces();
-        } catch { /* ignore merge errors */ }
-
+        const list = await listWorkspaces();
         setWorkspaces(Array.isArray(list) ? list : []);
       } catch { setWorkspaces([]); }
     })();
@@ -78,13 +36,9 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
   }, [show]);
 
   const handleSave = () => {
-    // Derive categories from current workspaces so descriptions stay in sync
-    const categoriesFromWs = (Array.isArray(workspaces) ? workspaces : []).map(w => ({
-      name: (w?.name || '').trim(),
-      description: (w?.description || '').trim(),
-    })).filter(row => row.name);
-    const nextSettings = { ...localSettings, categories: categoriesFromWs };
-    onSave(nextSettings)
+    // Do not mirror workspaces into settings; workspaces are the source of truth
+    const { categories, ...rest } = (localSettings || {});
+    onSave(rest);
   }
 
   // Derived rows for inline editing of workspaces
@@ -247,8 +201,22 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                   value={row.description}
                   onChange={(e) => handleUpdateWorkspaceField(row.id, 'description', e.target.value)}
                 />
-                <button className="filter-btn" onClick={() => handleSaveWorkspaceRow(row.id)} title="Save">Save</button>
-                <button className="filter-btn" onClick={() => handleDeleteWorkspace(row.id)} title="Delete">✕</button>
+                <button
+                  className="filter-btn"
+                  onClick={() => handleSaveWorkspaceRow(row.id)}
+                  title="Save"
+                  aria-label="Save workspace"
+                >
+                  <FontAwesomeIcon icon={faFloppyDisk} />
+                </button>
+                <button
+                  className="filter-btn"
+                  onClick={() => handleDeleteWorkspace(row.id)}
+                  title="Delete"
+                  aria-label="Delete workspace"
+                >
+                  <FontAwesomeIcon icon={faTrash} />
+                </button>
               </div>
             ))}
             <div style={{ display: 'flex', gap: 8 }}>

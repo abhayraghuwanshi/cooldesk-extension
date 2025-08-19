@@ -1,4 +1,4 @@
-import { faEye, faEyeSlash, faPlus, faRotateRight, faTrash, faTriangleExclamation, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faRotateRight, faTrash, faTriangleExclamation, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -64,7 +64,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState('All')
   const [search, setSearch] = useState('')
   const [showSettings, setShowSettings] = useState(false)
-  const [settings, setSettings] = useState({ geminiApiKey: '', serverUrl: '', visitCountThreshold: '', historyMaxResults: '', categories: [] })
+  const [settings, setSettings] = useState({ geminiApiKey: '', serverUrl: '', visitCountThreshold: '', historyMaxResults: '' })
   const [progress, setProgress] = useState({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
   const [relatedProducts, setRelatedProducts] = useState([])
   const [loadingRelated, setLoadingRelated] = useState(false)
@@ -119,12 +119,17 @@ export default function App() {
             geminiApiKey: s.geminiApiKey || '',
             serverUrl: (s.serverUrl || '').replace(/\/$/, ''),
             visitCountThreshold: Number.isFinite(s.visitCountThreshold) ? String(s.visitCountThreshold) : '',
-            historyMaxResults: Number.isFinite(s.historyMaxResults) ? String(s.historyMaxResults) : '',
-            categories: Array.isArray(s.categories) ? s.categories : []
+            historyMaxResults: Number.isFinite(s.historyMaxResults) ? String(s.historyMaxResults) : ''
           });
           try {
-            await saveSettingsDB(s);
-            await storageSet(s);
+            const payload = {
+              ...(s.geminiApiKey ? { geminiApiKey: s.geminiApiKey } : {}),
+              ...(s.serverUrl ? { serverUrl: String(s.serverUrl).replace(/\/$/, '') } : {}),
+              ...(Number.isFinite(s.visitCountThreshold) ? { visitCountThreshold: s.visitCountThreshold } : {}),
+              ...(Number.isFinite(s.historyMaxResults) ? { historyMaxResults: s.historyMaxResults } : {}),
+            };
+            await saveSettingsDB(payload);
+            await storageSet(payload);
           } catch { }
         }
       } catch { }
@@ -250,13 +255,12 @@ export default function App() {
     // Load settings initially from IndexedDB
     (async () => {
       const s = await getSettingsDB()
-      const { geminiApiKey, serverUrl, visitCountThreshold, historyMaxResults, categories } = s || {}
+      const { geminiApiKey, serverUrl, visitCountThreshold, historyMaxResults } = s || {}
       setSettings({
         geminiApiKey: geminiApiKey || '',
         serverUrl: serverUrl || '',
         visitCountThreshold: Number.isFinite(visitCountThreshold) ? String(visitCountThreshold) : '',
-        historyMaxResults: Number.isFinite(historyMaxResults) ? String(historyMaxResults) : '',
-        categories: Array.isArray(categories) ? categories : []
+        historyMaxResults: Number.isFinite(historyMaxResults) ? String(historyMaxResults) : ''
       })
     })()
 
@@ -432,7 +436,6 @@ export default function App() {
       if (newSettings.serverUrl?.trim()) payload.serverUrl = newSettings.serverUrl.trim().replace(/\/$/, '');
       if (newSettings.visitCountThreshold !== '') payload.visitCountThreshold = Number(newSettings.visitCountThreshold) || 0;
       if (newSettings.historyMaxResults !== '') payload.historyMaxResults = Number(newSettings.historyMaxResults) || 1000;
-      if (Array.isArray(newSettings.categories)) payload.categories = newSettings.categories;
 
       // Save to IndexedDB
       await saveSettingsDB(payload);
@@ -1177,7 +1180,7 @@ export default function App() {
               >
                 <FontAwesomeIcon icon={faPenToSquare} />
               </button> */}
-              <button
+              {/* <button
                 onClick={() => setShowCurrentWorkspace(v => !v)}
                 className="add-link-btn ai-button"
                 aria-label={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
@@ -1185,6 +1188,15 @@ export default function App() {
                 style={{ padding: '4px 8px' }}
               >
                 <FontAwesomeIcon icon={showCurrentWorkspace ? faEyeSlash : faEye} />
+              </button> */}
+              <button
+                onClick={() => startCategoryEnrichment(workspace)}
+                className="add-link-btn ai-button"
+                aria-label={`Add recent links to ${workspace}`}
+                title={`Add recent links to ${workspace}`}
+                style={{ padding: '4px 8px' }}
+              >
+                <FontAwesomeIcon icon={faWandMagicSparkles} />
               </button>
 
               <button
@@ -1205,15 +1217,6 @@ export default function App() {
                 disabled={!workspace || workspace.toLowerCase() === 'all'}
               >
                 <FontAwesomeIcon icon={faTrash} />
-              </button>
-              <button
-                onClick={() => startCategoryEnrichment(workspace)}
-                className="add-link-btn ai-button"
-                aria-label={`Add recent links to ${workspace}`}
-                title={`Add recent links to ${workspace}`}
-                style={{ padding: '4px 8px' }}
-              >
-                <FontAwesomeIcon icon={faWandMagicSparkles} />
               </button>
             </div>
           </div>
