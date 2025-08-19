@@ -272,7 +272,7 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
         <div
           className="search-suggestions"
           style={{
-            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20,
+            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10000,
             background: '#121826', border: '1px solid #273043', borderTop: 'none',
             borderRadius: '0 0 8px 8px', maxHeight: 240, overflowY: 'auto'
           }}
