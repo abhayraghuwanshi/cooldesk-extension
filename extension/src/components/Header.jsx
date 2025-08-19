@@ -1,13 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
+  faArrowUpRightFromSquare,
+  faCircleQuestion,
+  faGear,
+  faPlus,
   faRobot,
   faSpinner,
-  faPlus,
-  faGear,
-  faCircleQuestion,
-  faArrowUpRightFromSquare,
 } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getUIState, saveUIState } from '../db';
 
 export function Header({
@@ -94,9 +95,26 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
   const [recent, setRecent] = useState([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [contentMatches, setContentMatches] = useState([]);
+  const [portalPos, setPortalPos] = useState({ left: 0, top: 0, width: 0 });
   const wrapRef = useRef(null);
   const inputRef = useRef(null);
   const dataRef = useRef({ list: [] });
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const update = () => {
+      const r = wrapRef.current ? wrapRef.current.getBoundingClientRect() : null;
+      if (r) setPortalPos({ left: r.left, top: r.bottom, width: r.width });
+    };
+    update();
+    const opts = { passive: true };
+    window.addEventListener('resize', update, opts);
+    window.addEventListener('scroll', update, opts);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update);
+    };
+  }, [open]);
 
   const engines = [
     {
@@ -258,7 +276,7 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
   }, [search]);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
+    <div ref={wrapRef} style={{ position: 'relative', zIndex: 10000 }}>
       <input
         ref={inputRef}
         value={search}
@@ -268,15 +286,21 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
         placeholder="Search Google..."
         className="search ai-input"
       />
-      {showList && (
-        <div
-          className="search-suggestions"
-          style={{
-            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10000,
-            background: '#121826', border: '1px solid #273043', borderTop: 'none',
-            borderRadius: '0 0 8px 8px', maxHeight: 240, overflowY: 'auto'
-          }}
-        >
+      {showList && (() => {
+        const dropdown = (
+          <div
+            className="search-suggestions"
+            style={{
+              position: 'fixed',
+              left: `${portalPos.left}px`,
+              top: `${portalPos.top}px`,
+              width: `${portalPos.width}px`,
+              zIndex: 2147483647,
+              background: '#121826', border: '1px solid #273043', borderTop: 'none',
+              borderRadius: '0 0 8px 8px', maxHeight: 240, overflowY: 'auto',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+            }}
+          >
           {recent.length === 0 && !search && (
             <div style={{ padding: 8, opacity: 0.7, fontSize: 12 }}>No recent searches</div>
           )}
@@ -342,8 +366,10 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
               ))}
             </div>
           )}
-        </div>
-      )}
+          </div>
+        );
+        return createPortal(dropdown, document.body);
+      })()}
     </div>
   );
 }
