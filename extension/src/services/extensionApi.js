@@ -389,6 +389,35 @@ export async function storageGet(keys) {
   }
 }
 
+// Cache TTL helpers
+export async function storageGetWithTTL(key, ttlMs = 30 * 60 * 1000) { // 30 min default
+  if (!hasStorage()) return { data: null, expired: true };
+  try {
+    const result = await chrome.storage.local.get([key, `${key}_timestamp`]);
+    const data = result[key];
+    const timestamp = result[`${key}_timestamp`];
+    const now = Date.now();
+    const expired = !timestamp || (now - timestamp) > ttlMs;
+    return { data: expired ? null : data, expired };
+  } catch {
+    return { data: null, expired: true };
+  }
+}
+
+export async function storageSetWithTTL(key, data) {
+  if (!hasStorage()) return false;
+  try {
+    const timestamp = Date.now();
+    await chrome.storage.local.set({ 
+      [key]: data, 
+      [`${key}_timestamp`]: timestamp 
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function storageSet(obj) {
   if (!hasStorage()) return false;
   try {

@@ -1,24 +1,102 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { deleteWorkspaceById, listWorkspaces, saveWorkspace, subscribeWorkspaceChanges } from '../db';
 import { sendMessage, storageGet } from '../services/extensionApi';
+import { CreateWorkspaceModal } from './CreateWorkspaceModal';
 
 export function SettingsModal({ show, onClose, settings, onSave }) {
   const [localSettings, setLocalSettings] = useState(settings)
   const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState('')
+  const [workspaces, setWorkspaces] = useState([])
+  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
 
   useEffect(() => {
     setLocalSettings(settings)
   }, [settings])
 
+  // Load workspaces from IndexedDB and subscribe to changes
+  useEffect(() => {
+    if (!show) return;
+    let unsub = null;
+    (async () => {
+      try {
+        let list = await listWorkspaces();
+
+        // Always attempt to merge AI categories into workspaces (idempotent by name)
+        try {
+          const norm = (s) => (s || '').trim().toLowerCase();
+          const existing = Array.isArray(list) ? list : [];
+          const names = new Set(existing.map(w => norm(w?.name)));
+
+          // Prefer categories from localSettings, fallback to chrome.storage.local
+          let cats = Array.isArray(localSettings?.categories) ? localSettings.categories : [];
+          if (!cats.length) {
+            try {
+              const legacy = await chrome.storage.local.get(['categories']);
+              cats = Array.isArray(legacy?.categories) ? legacy.categories : [];
+            } catch { /* ignore */ }
+          }
+          const rows = cats.map((c) => (typeof c === 'string' ? { name: c, description: '' } : (c || {}))).filter(Boolean);
+          let createdAny = false;
+          for (const row of rows) {
+            const nm = norm(row?.name);
+            if (!nm) continue;
+            const found = existing.find(w => norm(w?.name) === nm);
+            if (found) {
+              // Backfill/align description from categories if present and different
+              const catDesc = (row?.description || '').trim();
+              const wsDesc = (found?.description || '').trim();
+              if (catDesc && catDesc !== wsDesc) {
+                try { await saveWorkspace({ ...found, description: catDesc }); createdAny = true; } catch { }
+              }
+              continue;
+            }
+            // Create missing workspace from category
+            const ws = {
+              id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 8),
+              name: row.name,
+              description: row.description || '',
+              createdAt: Date.now(),
+              urls: [],
+              context: {},
+            };
+            try { await saveWorkspace(ws); names.add(nm); createdAny = true; } catch { }
+          }
+          if (createdAny) list = await listWorkspaces();
+        } catch { /* ignore merge errors */ }
+
+        setWorkspaces(Array.isArray(list) ? list : []);
+      } catch { setWorkspaces([]); }
+    })();
+    unsub = subscribeWorkspaceChanges(async () => {
+      try {
+        const list = await listWorkspaces();
+        setWorkspaces(Array.isArray(list) ? list : []);
+      } catch { }
+    });
+    return () => { try { unsub && unsub(); } catch { } };
+  }, [show]);
+
   const handleSave = () => {
-    onSave(localSettings)
+    // Derive categories from current workspaces so descriptions stay in sync
+    const categoriesFromWs = (Array.isArray(workspaces) ? workspaces : []).map(w => ({
+      name: (w?.name || '').trim(),
+      description: (w?.description || '').trim(),
+    })).filter(row => row.name);
+    const nextSettings = { ...localSettings, categories: categoriesFromWs };
+    onSave(nextSettings)
   }
 
-  if (!show) return null
+  // Derived rows for inline editing of workspaces
+  const editableWorkspaces = useMemo(() => {
+    return (Array.isArray(workspaces) ? workspaces : []).map(w => ({
+      id: w.id,
+      name: w.name || '',
+      description: w.description || '',
+    }));
+  }, [workspaces]);
 
-  const categoriesRows = Array.isArray(localSettings?.categories)
-    ? localSettings.categories.map((c) => (typeof c === 'string' ? { name: c, description: '' } : (c || {})))
-    : []
+  if (!show) return null
 
   const handleSuggestCategories = async () => {
     setSuggesting(true)
@@ -47,7 +125,21 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
           return name ? { name, description } : null
         })
         .filter(Boolean)
-      setLocalSettings((s) => ({ ...s, categories: rows }))
+      // Instead of storing in settings, create/update workspaces directly
+      const existing = Array.isArray(workspaces) ? workspaces : []
+      const norm = (s) => (s || '').trim().toLowerCase()
+      for (const row of rows) {
+        const found = existing.find(w => norm(w.name) === norm(row.name))
+        const ws = found ? { ...found, description: row.description || found.description || '' } : {
+          id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 8),
+          name: row.name,
+          description: row.description || '',
+          createdAt: Date.now(),
+          urls: [],
+          context: {},
+        }
+        try { await saveWorkspace(ws) } catch { }
+      }
     } catch (e) {
       setError(String(e?.message || e))
     } finally {
@@ -55,21 +147,45 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
     }
   }
 
-  const handleAddCategoryRow = () => {
-    const next = [...categoriesRows, { name: '', description: '' }]
-    setLocalSettings({ ...localSettings, categories: next })
+  const handleUpdateWorkspaceField = (id, field, value) => {
+    setWorkspaces(ws => ws.map(w => w.id === id ? { ...w, [field]: value } : w))
   }
 
-  const handleChangeRow = (idx, field, value) => {
-    const next = categoriesRows.slice()
-    next[idx] = { ...next[idx], [field]: value }
-    setLocalSettings({ ...localSettings, categories: next })
+  const handleSaveWorkspaceRow = async (id) => {
+    try {
+      const w = workspaces.find(x => x.id === id)
+      if (!w) return
+      const payload = {
+        id: w.id,
+        name: (w.name || '').trim() || 'Workspace',
+        description: (w.description || '').trim(),
+        createdAt: w.createdAt || Date.now(),
+        urls: Array.isArray(w.urls) ? w.urls : [],
+        context: typeof w.context === 'object' && w.context ? w.context : {},
+      }
+      await saveWorkspace(payload)
+    } catch (e) { /* ignore */ }
   }
 
-  const handleRemoveRow = (idx) => {
-    const next = categoriesRows.slice()
-    next.splice(idx, 1)
-    setLocalSettings({ ...localSettings, categories: next })
+  const handleDeleteWorkspace = async (id) => {
+    try {
+      await deleteWorkspaceById(id)
+    } catch { }
+  }
+
+  const handleOpenCreateWorkspace = () => setShowCreateWorkspace(true)
+  const handleCloseCreateWorkspace = () => setShowCreateWorkspace(false)
+  const handleCreateWorkspace = async (name, description) => {
+    const ws = {
+      id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 8),
+      name,
+      description,
+      createdAt: Date.now(),
+      urls: [],
+      context: {},
+    }
+    await saveWorkspace(ws)
+    setShowCreateWorkspace(false)
   }
 
   return (
@@ -115,28 +231,29 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
           />
         </label>
         <label>
-          <span>Categories (name: description)</span>
+          <span>Workspaces</span>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {categoriesRows.map((row, idx) => (
-              <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {editableWorkspaces.map((row) => (
+              <div key={row.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input
                   style={{ flex: 1 }}
-                  placeholder="Category name (e.g. AI & ML)"
-                  value={row.name || ''}
-                  onChange={(e) => handleChangeRow(idx, 'name', e.target.value)}
+                  placeholder="Workspace name"
+                  value={row.name}
+                  onChange={(e) => handleUpdateWorkspaceField(row.id, 'name', e.target.value)}
                 />
                 <input
                   style={{ flex: 2 }}
-                  placeholder="Description (e.g. Tools with AI models, LLMs, etc.)"
-                  value={row.description || ''}
-                  onChange={(e) => handleChangeRow(idx, 'description', e.target.value)}
+                  placeholder="Description"
+                  value={row.description}
+                  onChange={(e) => handleUpdateWorkspaceField(row.id, 'description', e.target.value)}
                 />
-                <button className="filter-btn" onClick={() => handleRemoveRow(idx)} title="Remove">✕</button>
+                <button className="filter-btn" onClick={() => handleSaveWorkspaceRow(row.id)} title="Save">Save</button>
+                <button className="filter-btn" onClick={() => handleDeleteWorkspace(row.id)} title="Delete">✕</button>
               </div>
             ))}
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="add-link-btn" onClick={handleAddCategoryRow} title="Add category row">+ Add</button>
-              <button className="add-link-btn" onClick={handleSuggestCategories} disabled={suggesting} title="Suggest categories from your URLs">
+              <button className="add-link-btn" onClick={handleOpenCreateWorkspace} title="Create workspace">+ Add Workspace</button>
+              <button className="add-link-btn" onClick={handleSuggestCategories} disabled={suggesting} title="AI-suggest workspaces from your URLs">
                 {suggesting ? 'Suggesting…' : 'AI Suggest'}
               </button>
             </div>
@@ -168,6 +285,13 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
           <button className="filter-btn" onClick={onClose}>Cancel</button>
           <button className="filter-btn" onClick={handleSave}>Save</button>
         </div>
+
+        <CreateWorkspaceModal
+          show={showCreateWorkspace}
+          onClose={handleCloseCreateWorkspace}
+          onCreate={handleCreateWorkspace}
+          currentTab={null}
+        />
       </div>
     </div>
   )

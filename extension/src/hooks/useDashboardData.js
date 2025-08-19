@@ -108,15 +108,28 @@ export function useDashboardData() {
   const [refreshing, setRefreshing] = useState(false)
   const [populating, setPopulating] = useState(false)
 
-  // Phase 1: Fast path from local storage (if available)
+  // Phase 1: Fast path from local storage with TTL check (if available)
   const loadFastFromStorage = async () => {
     const hasStorage = typeof chrome !== 'undefined' && chrome?.storage?.local && typeof chrome.storage.local.get === 'function'
     let dashboardData = null
+    let cacheExpired = false
     if (hasStorage) {
       try {
-        const res = await chrome.storage.local.get(['dashboardData'])
-        dashboardData = res?.dashboardData || null
-      } catch { /* ignore */ }
+        // Import TTL helper dynamically
+        const { storageGetWithTTL } = await import('../services/extensionApi.js');
+        const { data, expired } = await storageGetWithTTL('dashboardData', 30 * 60 * 1000); // 30 min TTL
+        dashboardData = data;
+        cacheExpired = expired;
+        if (expired && data) {
+          console.log('[useDashboardData] Cache expired, will refresh in background');
+        }
+      } catch { 
+        // Fallback to regular storage if TTL helper fails
+        try {
+          const res = await chrome.storage.local.get(['dashboardData'])
+          dashboardData = res?.dashboardData || null
+        } catch { /* ignore */ }
+      }
     }
     let arr = normalize(dashboardData)
     // If nothing in local storage, try to synthesize from local workspaces
