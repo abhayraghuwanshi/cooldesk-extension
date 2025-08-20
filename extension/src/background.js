@@ -130,9 +130,11 @@ async function main() {
       console.time('[AI][populate] populateAndStore')
       const [bookmarks, history] = await Promise.all([collectBookmarks(), collectHistory()])
       const dashboardData = { bookmarks, history };
-      // Use TTL cache (30 minutes)
-      await storageSetWithTTL('dashboardData', dashboardData);
-      chrome.runtime.sendMessage({ action: 'updateData' })
+      // Persist in background (non-blocking) and notify UI immediately with fresh data
+      // Use TTL cache (30 minutes). Fire-and-forget to avoid blocking UI.
+      storageSetWithTTL('dashboardData', dashboardData).catch(() => { /* ignore */ });
+      // Send data inline so UI can render without waiting for storage write
+      chrome.runtime.sendMessage({ action: 'updateData', dashboardData })
       const res = { ok: true, counts: { bookmarks: bookmarks.length, history: history.length } }
       console.log('[AI][populate] Stored counts:', res.counts)
       console.timeEnd('[AI][populate] populateAndStore')

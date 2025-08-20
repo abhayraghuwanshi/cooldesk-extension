@@ -9,6 +9,7 @@ import { Header } from './components/Header';
 import { ItemGrid } from './components/ItemGrid';
 import { RelatedProductsSection } from './components/RelatedProductsSection';
 import { SettingsModal } from './components/SettingsModal';
+import { SyncControlsModal } from './components/SyncControlsModal';
 import { SystemPrompt } from './components/SystemPrompt';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 
@@ -82,13 +83,14 @@ export default function App() {
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [processes, setProcesses] = useState([])
+  const [showSyncControls, setShowSyncControls] = useState(false)
 
   // UI state: dismissible settings warning
   const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)
 
 
-  // Side panel visibility control via runtime messages
-  const [showPanel, setShowPanel] = useState(false)
+  // Side panel visibility control via runtime messages (default: open)
+  const [showPanel, setShowPanel] = useState(true)
   useEffect(() => {
     const handler = (req) => {
       switch (req?.action) {
@@ -581,6 +583,18 @@ export default function App() {
     }
   }
 
+  // Handlers for SyncControlsModal (granular pre-control layer)
+  const handleBulkSync = async () => {
+    await startEnrichment();
+  };
+  const handleRecategorize = async () => {
+    // For now, reuse enrichment pipeline; background should respect recategorization flags if any
+    await startEnrichment();
+  };
+  const handleSingleCategorySync = async (category) => {
+    await startCategoryEnrichment(category);
+  };
+
   const handleAddItemToWorkspace = async (item, workspaceName) => {
     try {
       try { console.log('[App] handleAddItemToWorkspace: start', { itemId: item?.id, url: item?.url, workspaceName }); } catch { }
@@ -939,10 +953,20 @@ export default function App() {
         setSearch={setSearch}
         populate={populate}
         setShowSettings={setShowSettings}
-        startEnrichment={startEnrichment}
+        openSyncControls={() => setShowSyncControls(true)}
         progress={progress}
         setShowCreateWorkspace={setShowCreateWorkspace}
         openInTab={openInTab}
+      />
+
+      <SyncControlsModal
+        show={showSyncControls}
+        onClose={() => setShowSyncControls(false)}
+        onBulkSync={handleBulkSync}
+        onRecategorize={handleRecategorize}
+        onSingleCategorySync={handleSingleCategorySync}
+        categories={(Array.isArray(savedWorkspaces) ? savedWorkspaces : []).map(ws => ws.name).filter(Boolean)}
+        progress={progress}
       />
 
       {/* Warning: Require either Gemini API key or custom server URL for AI features */}

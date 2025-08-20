@@ -16,7 +16,7 @@ export function Header({
   setSearch,
   populate,
   setShowSettings,
-  startEnrichment,
+  openSyncControls,
   progress,
   setShowCreateWorkspace,
   openInTab,
@@ -54,7 +54,7 @@ export function Header({
         <div style={{ position: 'relative', flex: 1 }}>
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
         </div>
-        <button className="icon-btn" onClick={startEnrichment} title="Organize using AI">
+        <button className="icon-btn" onClick={openSyncControls} title="Organize using AI">
           <FontAwesomeIcon icon={progress.running ? faSpinner : faRobot} spin={!!progress.running} />
         </button>
         <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">

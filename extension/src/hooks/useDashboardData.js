@@ -209,8 +209,21 @@ export function useDashboardData() {
     hydrateFromHost()
 
     const listener = (req) => {
-      if (req?.action === 'updateData' || req?.action === 'aiComplete') {
-        hydrateFromHost()
+      if (req?.action === 'updateData') {
+        // Fast path: if background sent fresh data inline, render immediately
+        if (req.dashboardData) {
+          try {
+            const arr = normalize(req.dashboardData);
+            setData(arr);
+            // Mirror to host in the background (non-blocking)
+            try { setHostDashboard(req.dashboardData); } catch { /* ignore */ }
+          } catch { /* ignore */ }
+          return; // Skip host hydrate since we already have fresh data
+        }
+        // No payload: fall back to host hydrate
+        hydrateFromHost();
+      } else if (req?.action === 'aiComplete') {
+        hydrateFromHost();
       }
     }
     const canListen = typeof chrome !== 'undefined' && chrome?.runtime && typeof chrome.runtime.onMessage?.addListener === 'function'
