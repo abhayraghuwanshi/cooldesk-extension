@@ -1,10 +1,15 @@
 import {
   faArrowUpRightFromSquare,
-  faCircleQuestion,
+  faChevronDown,
+  faCog,
   faGear,
+  faMagnifyingGlass,
   faPlus,
   faRobot,
   faSpinner,
+  faToggleOn,
+  faToggleOff,
+  faCircleQuestion,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -21,6 +26,25 @@ export function Header({
   setShowCreateWorkspace,
   openInTab,
 }) {
+  const [autoSync, setAutoSync] = useState(true);
+
+  // Load Auto Sync from UI state (default ON if missing)
+  useEffect(() => {
+    (async () => {
+      try {
+        const ui = await getUIState();
+        if (typeof ui?.autoSync === 'boolean') {
+          setAutoSync(ui.autoSync);
+        } else {
+          setAutoSync(true);
+          try { await saveUIState({ ...ui, autoSync: true }); } catch { /* noop */ }
+        }
+      } catch {
+        setAutoSync(true);
+      }
+    })();
+  }, []);
+
   const openInSidePanel = async (overrideQuery) => {
     try {
       const q = (overrideQuery != null ? String(overrideQuery) : search || '').trim();
@@ -44,6 +68,7 @@ export function Header({
       } catch { }
     }
   };
+
   return (
     <header className="header ai-header">
       <div className="logo-placeholder">
@@ -56,6 +81,21 @@ export function Header({
         </div>
         <button className="icon-btn" onClick={openSyncControls} title="Organize using AI">
           <FontAwesomeIcon icon={progress.running ? faSpinner : faRobot} spin={!!progress.running} />
+        </button>
+        <button
+          className={`icon-btn ${autoSync ? 'active' : ''}`}
+          title={autoSync ? 'Auto Sync is ON' : 'Auto Sync is OFF'}
+          aria-pressed={autoSync}
+          onClick={async () => {
+            try {
+              const next = !autoSync;
+              setAutoSync(next);
+              const ui = await getUIState();
+              await saveUIState({ ...ui, autoSync: next });
+            } catch { /* ignore */ }
+          }}
+        >
+          <FontAwesomeIcon icon={autoSync ? faToggleOn : faToggleOff} />
         </button>
         <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">
           <FontAwesomeIcon icon={faPlus} />

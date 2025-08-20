@@ -367,23 +367,28 @@ body {
 .logo-placeholder {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 6px 12px;
   background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid #2563eb;
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
   flex-shrink: 0;
 }
 
+.logo-placeholder:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
 .logo-icon {
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
 }
 
 .logo-text {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: #ffffff;
   white-space: nowrap;
 }
@@ -476,6 +481,13 @@ body {
   color: #3b82f6;
   border-color: #3b82f6;
   transform: translateY(-1px);
+}
+
+.icon-btn.active {
+  background: linear-gradient(135deg, #1f2937, #131a26);
+  color: #93c5fd;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
 .icon-btn:disabled {
@@ -1580,4 +1592,40 @@ body {
   font-size: 10px;
   line-height: 16px;
   height: 16px;
+}
+
+/* Buttons used in inline notices and general actions */
+.add-link-btn {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.add-link-btn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+/* In the yellow settings alert, treat icon-btn as a text button (not a fixed square) */
+[role="alert"] .icon-btn {
+  width: auto !important;
+  height: auto !important;
+  padding: 6px 10px !important;
+  border-radius: 8px;
+  background: #141821;
+  border: 1px solid #273043;
+  color: #e5e7eb;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+[role="alert"] .icon-btn:hover {
+  border-color: #3b82f6;
+  color: #93c5fd;
 }

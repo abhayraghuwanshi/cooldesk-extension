@@ -1,7 +1,7 @@
 import { faPlus, faRotateRight, faTrash, faTriangleExclamation, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { AddToWorkspaceModal } from './components/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/CreateWorkspaceModal';
@@ -85,6 +85,10 @@ export default function App() {
   const [processes, setProcesses] = useState([])
   const [showSyncControls, setShowSyncControls] = useState(false)
 
+  // Keep a live ref of progress.running so interval callbacks see the latest value
+  const progressRunningRef = useRef(false);
+  useEffect(() => { progressRunningRef.current = !!progress.running; }, [progress.running]);
+
   // UI state: dismissible settings warning
   const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)
 
@@ -108,6 +112,35 @@ export default function App() {
       setShowPanel(true);
       return () => { };
     }
+  }, [])
+
+  // Auto Sync: when enabled in UI state, trigger Bulk Sync on load and periodically
+  useEffect(() => {
+    let disposed = false;
+    let intervalId = null;
+    (async () => {
+      try {
+        const ui = await getUIState();
+        const initialOn = ui?.autoSync === true || ui?.autoSync === undefined; // default ON if missing
+        if (initialOn && !disposed && !progressRunningRef.current) {
+          try { await handleBulkSync(); } catch { /* ignore */ }
+        }
+
+        // Schedule periodic bulk runs; check latest UI state each tick
+        const PERIOD_MS = 5 * 60 * 1000; // 5 minutes
+        intervalId = setInterval(async () => {
+          if (disposed) return;
+          try {
+            const latest = await getUIState();
+            const enabled = latest?.autoSync === true || latest?.autoSync === undefined; // default ON if missing
+            if (enabled && !progressRunningRef.current) {
+              handleBulkSync();
+            }
+          } catch { /* ignore */ }
+        }, PERIOD_MS);
+      } catch { /* ignore */ }
+    })();
+    return () => { disposed = true; if (intervalId) clearInterval(intervalId); };
   }, [])
 
   // Populate settings on load from host (Electron app API), then mirror locally
