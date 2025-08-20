@@ -465,13 +465,24 @@ export async function getSettings() {
   if (existing) return existing.value || {}
   // Migration from chrome.storage.local if present
   try {
-    const legacy = await chrome.storage.local.get(['geminiApiKey', 'serverUrl', 'visitCountThreshold', 'historyMaxResults', 'historyDays'])
+    const legacy = await chrome.storage.local.get(['geminiApiKey', 'modelName', 'serverUrl', 'visitCountThreshold', 'historyDays'])
     const value = {
       geminiApiKey: legacy.geminiApiKey || '',
-      serverUrl: legacy.serverUrl || '',
+      modelName: (typeof legacy.modelName === 'string' && legacy.modelName.trim()) ? legacy.modelName.trim() : '',
       visitCountThreshold: typeof legacy.visitCountThreshold === 'number' ? legacy.visitCountThreshold : '',
-      historyMaxResults: typeof legacy.historyMaxResults === 'number' ? legacy.historyMaxResults : '',
       historyDays: typeof legacy.historyDays === 'number' ? legacy.historyDays : ''
+    }
+    // If modelName is empty but legacy serverUrl exists and looks like a Google models endpoint, attempt to infer model name
+    if (!value.modelName && typeof legacy.serverUrl === 'string' && legacy.serverUrl.trim()) {
+      try {
+        const u = new URL(legacy.serverUrl.trim())
+        const parts = u.pathname.split('/')
+        const idx = parts.findIndex((p) => p === 'models')
+        if (idx >= 0 && parts[idx + 1]) {
+          const raw = parts[idx + 1]
+          value.modelName = decodeURIComponent(raw.replace(/:generateContent$/, ''))
+        }
+      } catch { /* ignore */ }
     }
     await saveSettings(value)
     return value

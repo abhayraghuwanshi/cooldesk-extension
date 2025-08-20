@@ -14,7 +14,7 @@
     "newtab": "index.html"
   },
   "background": {
-    "service_worker": "src/background.js",
+    "service_worker": "src/background/background.js",
     "type": "module"
   },
   "permissions": [

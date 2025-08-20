@@ -65,7 +65,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState('All')
   const [search, setSearch] = useState('')
   const [showSettings, setShowSettings] = useState(false)
-  const [settings, setSettings] = useState({ geminiApiKey: '', serverUrl: '', visitCountThreshold: '', historyMaxResults: '' })
+  const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' })
   const [progress, setProgress] = useState({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
   const [relatedProducts, setRelatedProducts] = useState([])
   const [loadingRelated, setLoadingRelated] = useState(false)
@@ -152,16 +152,14 @@ export default function App() {
           const s = res.settings;
           setSettings({
             geminiApiKey: s.geminiApiKey || '',
-            serverUrl: (s.serverUrl || '').replace(/\/$/, ''),
-            visitCountThreshold: Number.isFinite(s.visitCountThreshold) ? String(s.visitCountThreshold) : '',
-            historyMaxResults: Number.isFinite(s.historyMaxResults) ? String(s.historyMaxResults) : ''
+            modelName: s.modelName || '',
+            visitCountThreshold: Number.isFinite(s.visitCountThreshold) ? String(s.visitCountThreshold) : ''
           });
           try {
             const payload = {
               ...(s.geminiApiKey ? { geminiApiKey: s.geminiApiKey } : {}),
-              ...(s.serverUrl ? { serverUrl: String(s.serverUrl).replace(/\/$/, '') } : {}),
+              ...(s.modelName ? { modelName: s.modelName } : {}),
               ...(Number.isFinite(s.visitCountThreshold) ? { visitCountThreshold: s.visitCountThreshold } : {}),
-              ...(Number.isFinite(s.historyMaxResults) ? { historyMaxResults: s.historyMaxResults } : {}),
             };
             await saveSettingsDB(payload);
             await storageSet(payload);
@@ -290,12 +288,12 @@ export default function App() {
     // Load settings initially from IndexedDB
     (async () => {
       const s = await getSettingsDB()
-      const { geminiApiKey, serverUrl, visitCountThreshold, historyMaxResults } = s || {}
+      const { geminiApiKey, modelName, visitCountThreshold, historyDays } = s || {}
       setSettings({
         geminiApiKey: geminiApiKey || '',
-        serverUrl: serverUrl || '',
+        modelName: modelName || '',
         visitCountThreshold: Number.isFinite(visitCountThreshold) ? String(visitCountThreshold) : '',
-        historyMaxResults: Number.isFinite(historyMaxResults) ? String(historyMaxResults) : ''
+        historyDays: Number.isFinite(historyDays) ? String(historyDays) : ''
       })
     })()
 
@@ -468,9 +466,9 @@ export default function App() {
     try {
       const payload = {};
       if (newSettings.geminiApiKey?.trim()) payload.geminiApiKey = newSettings.geminiApiKey.trim();
-      if (newSettings.serverUrl?.trim()) payload.serverUrl = newSettings.serverUrl.trim().replace(/\/$/, '');
+      if (newSettings.modelName?.trim()) payload.modelName = newSettings.modelName.trim();
       if (newSettings.visitCountThreshold !== '') payload.visitCountThreshold = Number(newSettings.visitCountThreshold) || 0;
-      if (newSettings.historyMaxResults !== '') payload.historyMaxResults = Number(newSettings.historyMaxResults) || 1000;
+      if (newSettings.historyDays !== '') payload.historyDays = Number(newSettings.historyDays) || 30;
 
       // Save to IndexedDB
       await saveSettingsDB(payload);
@@ -1002,11 +1000,10 @@ export default function App() {
         progress={progress}
       />
 
-      {/* Warning: Require either Gemini API key or custom server URL for AI features */}
+      {/* Warning: Require Gemini API key for AI features */}
       {(() => {
         const missingApi = !(settings?.geminiApiKey || '').trim();
-        const missingServer = !(settings?.serverUrl || '').trim();
-        const shouldShow = missingApi && missingServer && !dismissedSettingsWarning;
+        const shouldShow = missingApi && !dismissedSettingsWarning;
         if (!shouldShow) return null;
         return (
           <div
@@ -1026,9 +1023,7 @@ export default function App() {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <FontAwesomeIcon icon={faTriangleExclamation} />
-              <div style={{ fontSize: 13, lineHeight: 1.3, color: '#ffd500' }}>
-                Add a Gemini API key or set a custom Server URL in Settings to enable AI features.
-              </div>
+              <div style={{ fontSize: 13, lineHeight: 1.3, color: '#ffd500' }}>Add a Gemini API key in Settings to enable AI features.</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
