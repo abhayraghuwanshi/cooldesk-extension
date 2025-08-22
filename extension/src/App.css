@@ -46,6 +46,8 @@ body {
   backdrop-filter: blur(8px);
 }
 
+/* Bottom search styles have been moved to src/search.css */
+
 /* Ensure header search matches header surface color (avoid odd gradient box) */
 .header.ai-header .search,
 .header.ai-header .ai-input {
@@ -159,9 +161,12 @@ body {
   /* background: radial-gradient(800px circle at 0% 0%, #0b1220 0%, #121720 40%, #0b0f16 100%),
     linear-gradient(135deg, #121720 0%, #151a24 100%); */
   color: #e5e7eb;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Poppins', 'Segoe UI', Roboto, Arial, sans-serif;
+
   font-size: 14px;
   box-sizing: border-box;
+  padding-bottom: 84px;
+  /* keep content clear of bottom search */
 }
 
 /* Add horizontal breathing space on wider canvases (new tab/options) */
@@ -179,6 +184,42 @@ body {
     padding-left: 24px;
     padding-right: 24px;
     padding-top: 24px;
+  }
+}
+
+/* Layout: visually 15% side margins on wider viewports (background stays 100%) */
+@media (min-width: 1000px) {
+  .popup-wrap {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 15vw;
+    /* simulate 15% side margins via padding */
+    padding-right: 15vw;
+  }
+}
+
+/* Medium screens: slightly smaller side padding to keep space */
+@media (min-width: 700px) and (max-width: 999px) {
+  .popup-wrap {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 8vw;
+    /* ~8% side padding */
+    padding-right: 8vw;
+  }
+}
+
+/* Small screens: use full width with internal padding for comfort */
+@media (max-width: 699px) {
+  .popup-wrap {
+    width: 100vw;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 12px;
+    /* retain small, comfortable padding */
+    padding-right: 12px;
   }
 }
 
@@ -395,8 +436,6 @@ body {
 
 .search {
   flex: 1;
-  min-width: 100px;
-  max-width: 200px;
   background: linear-gradient(135deg, #121419, #0e121a);
   border: 1px solid #273043;
   border-radius: 8px;
@@ -839,6 +878,67 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Activity card actions: show duplicate button on hover only */
+.activity-card .dup-btn {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+  margin-left: 6px;
+  transform: translateX(4px);
+}
+
+.activity-card:hover .dup-btn {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+/* Show Go button on hover with the same animation */
+.activity-card .go-btn {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+  transform: translateX(4px);
+}
+
+.activity-card:hover .go-btn {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+/* Show Delete (close) button on hover with the same animation */
+.activity-card .del-btn,
+.activity-card .remove-btn {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+  transform: translateX(4px);
+  margin-left: 6px;
+}
+
+.activity-card:hover .del-btn,
+.activity-card:hover .remove-btn {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+/* Hover/Focus animations for activity rows (Current Tabs & Activity Feed) */
+.activity-card {
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  will-change: transform;
+}
+
+.activity-card:hover,
+.activity-card:focus-within {
+  background-color: #121b2b !important;
+  /* override inline bg */
+  border-color: #334155;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+}
+
 .related-item {
   background: rgba(15, 20, 29, 0.6);
   border: 1px solid #374151;
@@ -1164,9 +1264,17 @@ body {
 }
 
 .favicon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px;
+}
+
+/* Optional: adapt favicon for dark theme contexts */
+.theme-dark .favicon {
+  filter: brightness(0) invert(1);
 }
 
 .domain {

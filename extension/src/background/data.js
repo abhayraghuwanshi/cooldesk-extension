@@ -34,18 +34,10 @@ async function collectBookmarks() {
 async function collectHistory() {
   // Read user-configured inputs from IndexedDB settings store
   const settings = await getSettings();
-  let daysNum = Number(settings?.historyDays);
-  let maxResultsNum = Number(settings?.historyMaxResults);
-  // Fallback to chrome.storage.local if DB settings missing
-  if (!Number.isFinite(daysNum) || daysNum <= 0 || !Number.isFinite(maxResultsNum) || maxResultsNum <= 0) {
-    const legacy = await chrome.storage.local.get(['historyDays', 'historyMaxResults']);
-    if (!Number.isFinite(daysNum) || daysNum <= 0) daysNum = Number(legacy?.historyDays);
-    if (!Number.isFinite(maxResultsNum) || maxResultsNum <= 0) maxResultsNum = Number(legacy?.historyMaxResults);
-    console.log('[AI][collect] Using legacy storage fallback for history params', { legacyDays: legacy?.historyDays, legacyMaxResults: legacy?.historyMaxResults });
-  }
+  const daysNum = Number(settings?.historyDays);
   const days = Number.isFinite(daysNum) && daysNum > 0 ? daysNum : 30;
-  const maxResults = Number.isFinite(maxResultsNum) && maxResultsNum > 0 ? maxResultsNum : 500;
-  console.log(`[AI][collect] Collecting history (last ${days} days, max ${maxResults})...`, { rawDays: settings?.historyDays, rawMaxResults: settings?.historyMaxResults })
+  const maxResults = 1000; // fixed cap to avoid huge payloads
+  console.log(`[AI][collect] Collecting history (last ${days} days, max ${maxResults})...`, { rawDays: settings?.historyDays })
   const startTime = Date.now() - (1000 * 60 * 60 * 24 * days);
   const results = await chrome.history.search({ text: '', startTime, maxResults })
   console.log(`[AI][collect] History collected: ${results.length}`)
@@ -133,6 +125,11 @@ export function initializeDataCollection() {
       return true
     }
   });
+}
+
+// Initialize data collection
+export function initializeData() {
+    initializeDataCollection();
 }
 
 export { collectBookmarks, collectHistory };

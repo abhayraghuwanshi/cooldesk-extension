@@ -459,6 +459,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 });
 
+// Initialize activity tracking
+export function initializeActivity() {
+    initializeActivityTracking();
+}
+
 // Export activity data for other modules
 export { accumulateTime, activityData, currentActive };
 

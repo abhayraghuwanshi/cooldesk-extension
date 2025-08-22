@@ -8,10 +8,12 @@ import { CreateWorkspaceModal } from './components/CreateWorkspaceModal';
 import { Header } from './components/Header';
 import { ItemGrid } from './components/ItemGrid';
 import { RelatedProductsSection } from './components/RelatedProductsSection';
+import { SearchBox } from './components/SearchPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { SyncControlsModal } from './components/SyncControlsModal';
 import { SystemPrompt } from './components/SystemPrompt';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
+import './search.css';
 
 
 import ActivityPanel from './components/ActivityPanel';
@@ -64,6 +66,7 @@ export default function App() {
   const { data, loading, refreshing, populate } = useDashboardData()
   const [workspace, setWorkspace] = useState('All')
   const [search, setSearch] = useState('')
+  const [focusSearchTick, setFocusSearchTick] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' })
   const [progress, setProgress] = useState({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
@@ -341,6 +344,9 @@ export default function App() {
         setTimeout(() => setProgress((p) => ({ ...p, error: '' })), 4000)
       } else if (req?.action === 'updateData') {
         // data reloaded via hook
+      } else if (req?.action === 'focusSearch') {
+        // Trigger focusing the bottom search box
+        setFocusSearchTick((t) => t + 1);
       }
     }
     onMessage.add(onMsg)
@@ -977,6 +983,28 @@ export default function App() {
 
   // (Removed) handleWorkspaceFilterChange: unused effect placeholder
 
+  // Open the extension side panel and pass the current query via storage
+  const openInSidePanel = async (overrideQuery) => {
+    try {
+      const q = (overrideQuery != null ? String(overrideQuery) : search || '').trim();
+      try { await chrome.storage.local.set({ pendingQuery: q }); } catch { }
+      if (chrome?.sidePanel?.setOptions) {
+        await chrome.sidePanel.setOptions({ path: 'index.html', enabled: true });
+      }
+      if (chrome?.windows?.getCurrent && chrome?.sidePanel?.open) {
+        const win = await chrome.windows.getCurrent();
+        await chrome.sidePanel.open({ windowId: win.id });
+      }
+    } catch (err) {
+      console.error('Open side panel failed:', err);
+      try {
+        const q = (overrideQuery != null ? String(overrideQuery) : search || '').trim();
+        try { await chrome.storage.local.set({ pendingQuery: q }); } catch { }
+        if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' });
+      } catch { }
+    }
+  };
+
   return (
     <div className="popup-wrap bg-ai-midnight-nebula">
       <Header
@@ -1075,43 +1103,6 @@ export default function App() {
 
       {progress.error && <div className="error">{progress.error}</div>}
 
-      {/* Saved Workspaces section */}
-      {/* {(savedWorkspaces.length > 0 ? (
-        <section className="saved-workspaces">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>Saved Workspaces</h3>
-            <button
-              onClick={() => setShowSavedWorkspaces(v => !v)}
-              className="add-link-btn"
-              style={{
-                padding: '4px 10px',
-                borderRadius: 999,
-                border: '1px solid #273043',
-                background: '#1b2331',
-                color: '#e5e7eb',
-                fontSize: 12,
-                lineHeight: '16px',
-                cursor: 'pointer'
-              }}
-              title={showSavedWorkspaces ? 'Hide saved workspaces' : 'Show saved workspaces'}
-            >
-              {showSavedWorkspaces ? 'Hide' : 'Show'}
-            </button>
-
-            <button onClick={() => handleOpenAddLinkModal(workspace)} className="add-link-btn">+ Add Link</button>
-            <button onClick={startEnrichment} className="add-link-btn">Organize using AI</button>
-          </div>
-          {showSavedWorkspaces && (
-            <>
-              <ItemGrid key={`saved-${workspace}`} items={savedUrlsFlat} workspaces={savedWorkspaces} onAddRelated={handleAddRelated} onAddLink={handleOpenAddLinkModal} />
-            </>
-          )}
-        </section>
-      ) : (
-        <div className="empty">No saved workspaces</div>
-      ))} */}
-
-      {/* All items view */}
       {workspace === 'All' && (
         <>
           {/* Running Apps (Electron/app mode) - show regardless of dashboard loading */}
@@ -1326,6 +1317,16 @@ export default function App() {
           </div>
         </div>
       )}
+      <div className="bottom-search">
+        <div className="bottom-search-inner">
+          <SearchBox
+            search={search}
+            setSearch={setSearch}
+            openInSidePanel={openInSidePanel}
+            focusSignal={focusSearchTick}
+          />
+        </div>
+      </div>
 
       {loadingRelated && (
         <div className="loading-related">

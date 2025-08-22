@@ -1,0 +1,89 @@
+/* Bottom Search Bar Styles */
+.bottom-search {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    padding: 0 16px 16px;
+    /* horizontal and bottom margins */
+    pointer-events: none;
+    /* allow clicks only on input */
+
+    /* Visual separation: bluish gradient + subtle glass effect */
+    background:
+        /* soft blue glow near the input area */
+        radial-gradient(120% 70% at 50% 100%, rgba(59, 130, 246, 0.18) 0%, rgba(59, 130, 246, 0.00) 60%),
+        /* dark-to-transparent vertical fade so content remains readable */
+        linear-gradient(180deg, rgba(16, 22, 35, 0.00) 0%, rgba(16, 22, 35, 0.55) 45%, rgba(16, 22, 35, 0.85) 100%);
+    backdrop-filter: saturate(140%) blur(10px);
+    -webkit-backdrop-filter: saturate(140%) blur(10px);
+    border-top: 1px solid rgba(39, 48, 67, 0.7);
+    border-radius: 12px;
+}
+
+.bottom-search-inner {
+    width: 100%;
+    max-width: none;
+    /* full container width */
+    margin: 0;
+    /* align with container edges via parent padding */
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    pointer-events: auto;
+}
+
+/* Ensure SearchBox root expands to full width */
+.bottom-search-inner>div {
+    display: block;
+    width: 100%;
+    margin: 20;
+}
+
+/* Input that sits at the very bottom */
+.bottom-search-inner .ai-input,
+.bottom-search-inner input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    /* ensure padding/border don't exceed container */
+    display: block;
+    /* avoid inline spacing quirks */
+    margin: 0;
+    /* reset UA margins */
+    font-size: 18px;
+    /* bigger */
+    padding: 14px 16px;
+    /* taller */
+    border-radius: 12px;
+    /* rounded, not edge-to-edge */
+    border: 1px solid var(--border);
+    background: rgba(16, 22, 35, 0.96);
+    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.35);
+}
+
+/* Optional shared dropdown styling (position still controlled inline) */
+.search-suggestions {
+    background: #121826;
+    border: 1px solid #273043;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+/* When opening above the input */
+.search-suggestions.top {
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    transform: translateY(-8px) translateY(-100%);
+    height: 240px;
+}
+
+/* When opening below the input (default) */
+.search-suggestions.bottom {
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    transform: translateY(8px);
+    height: 600px;
+}

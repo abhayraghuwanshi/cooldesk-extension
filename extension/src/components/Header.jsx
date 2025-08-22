@@ -1,20 +1,19 @@
 import {
   faArrowUpRightFromSquare,
-  faChevronDown,
-  faCog,
+  faCalendarDays,
+  faCircleQuestion,
+  faEnvelope,
   faGear,
-  faMagnifyingGlass,
   faPlus,
   faRobot,
   faSpinner,
-  faToggleOn,
   faToggleOff,
-  faCircleQuestion,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getUIState, saveUIState } from '../db';
+import { triggerAutoCategorize } from '../utils/messaging';
 
 export function Header({
   search,
@@ -27,6 +26,7 @@ export function Header({
   openInTab,
 }) {
   const [autoSync, setAutoSync] = useState(true);
+  const [now, setNow] = useState(new Date());
 
   // Load Auto Sync from UI state (default ON if missing)
   useEffect(() => {
@@ -44,6 +44,21 @@ export function Header({
       }
     })();
   }, []);
+
+  // Live clock for local date/time
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const timeStr = now.toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 
   const openInSidePanel = async (overrideQuery) => {
     try {
@@ -72,19 +87,18 @@ export function Header({
   return (
     <header className="header ai-header">
       <div className="logo-placeholder">
-        <div className="logo-icon">🚀</div>
-        <span className="logo-text">CoolDesk AI</span>
+        <span className="logo-text">Cool-Desk</span>
       </div>
       <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', flex: 1 }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+        {/* <div style={{ position: 'relative', flex: 1 }}>
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
-        </div>
-        <button className="icon-btn" onClick={openSyncControls} title="Organize using AI">
+        </div> */}
+        {/* <button className="icon-btn" onClick={openSyncControls} title="Organize using AI">
           <FontAwesomeIcon icon={progress.running ? faSpinner : faRobot} spin={!!progress.running} />
-        </button>
+        </button> */}
         <button
           className={`icon-btn ${autoSync ? 'active' : ''}`}
-          title={autoSync ? 'Auto Sync is ON' : 'Auto Sync is OFF'}
+          title={autoSync ? 'Auto Categorize is ON - Click to turn OFF' : 'Auto Categorize is OFF - Click to turn ON'}
           aria-pressed={autoSync}
           onClick={async () => {
             try {
@@ -92,16 +106,47 @@ export function Header({
               setAutoSync(next);
               const ui = await getUIState();
               await saveUIState({ ...ui, autoSync: next });
-            } catch { /* ignore */ }
+
+              // Trigger auto-categorize when turning ON
+              if (next) {
+                await triggerAutoCategorize();
+              }
+            } catch (e) {
+              console.warn('Failed to toggle auto-categorize:', e);
+            }
           }}
         >
-          <FontAwesomeIcon icon={autoSync ? faToggleOn : faToggleOff} />
+          <FontAwesomeIcon icon={progress.running ? faSpinner : (autoSync ? faRobot : faToggleOff)} spin={!!progress.running} />
         </button>
         <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">
           <FontAwesomeIcon icon={faPlus} />
         </button>
         <button className="icon-btn" onClick={() => setShowSettings(true)} title="Settings">
           <FontAwesomeIcon icon={faGear} />
+        </button>
+        <button
+          className="icon-btn"
+          onClick={() => {
+            try {
+              const url = 'https://mail.google.com/mail/u/0/#inbox';
+              if (chrome?.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank');
+            } catch { }
+          }}
+          title="Open Gmail"
+        >
+          <FontAwesomeIcon icon={faEnvelope} />
+        </button>
+        <button
+          className="icon-btn"
+          onClick={() => {
+            try {
+              const url = 'https://calendar.google.com/';
+              if (chrome?.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank');
+            } catch { }
+          }}
+          title="Open Google Calendar"
+        >
+          <FontAwesomeIcon icon={faCalendarDays} />
         </button>
         <button
           className="icon-btn"
@@ -125,6 +170,9 @@ export function Header({
         <button className="icon-btn" onClick={openInSidePanel} title="Open in Sidebar">
           <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
         </button>
+        <div style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap' }} title={now.toLocaleString()}>
+          {timeStr}
+        </div>
       </div>
     </header>
   );
@@ -341,71 +389,71 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
               boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
             }}
           >
-          {recent.length === 0 && !search && (
-            <div style={{ padding: 8, opacity: 0.7, fontSize: 12 }}>No recent searches</div>
-          )}
-          {!!search && (
-            <div
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => runSearch(search)}
-              style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: filtered.length ? '1px solid #273043' : 'none' }}
-            >
-              Search Google for "{search}"
-            </div>
-          )}
-          {!!search && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, padding: 8, borderBottom: filtered.length || contentMatches.length ? '1px solid #273043' : 'none' }}>
-              {engines.map((e) => (
-                <div
-                  key={e.id}
-                  onMouseDown={(ev) => ev.preventDefault()}
-                  onClick={() => openWithEngine(e.id, search)}
-                  title={`Search in ${e.name}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer', background: '#0f1522', borderRadius: 6, border: '1px solid #273043' }}
-                >
-                  <div style={{ width: 20, height: 20, borderRadius: 4, background: e.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-                    <span>{e.icon}</span>
+            {recent.length === 0 && !search && (
+              <div style={{ padding: 8, opacity: 0.7, fontSize: 12 }}>No recent searches</div>
+            )}
+            {!!search && (
+              <div
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => runSearch(search)}
+                style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: filtered.length ? '1px solid #273043' : 'none' }}
+              >
+                Search Google for "{search}"
+              </div>
+            )}
+            {!!search && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, padding: 8, borderBottom: filtered.length || contentMatches.length ? '1px solid #273043' : 'none' }}>
+                {engines.map((e) => (
+                  <div
+                    key={e.id}
+                    onMouseDown={(ev) => ev.preventDefault()}
+                    onClick={() => openWithEngine(e.id, search)}
+                    title={`Search in ${e.name}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer', background: '#0f1522', borderRadius: 6, border: '1px solid #273043' }}
+                  >
+                    <div style={{ width: 20, height: 20, borderRadius: 4, background: e.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+                      <span>{e.icon}</span>
+                    </div>
+                    <div style={{ fontSize: 12 }}>Search in {e.name}</div>
                   </div>
-                  <div style={{ fontSize: 12 }}>Search in {e.name}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {filtered.map((item, idx) => (
-            <div
-              key={item}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => runSearch(item)}
-              className="suggestion-item"
-              style={{
-                padding: '8px 10px', cursor: 'pointer',
-                background: idx === activeIndex ? '#1b2331' : 'transparent'
-              }}
-            >
-              {item}
-            </div>
-          ))}
-          {contentMatches.length > 0 && (
-            <div style={{ borderTop: '1px solid #273043' }}>
-              {contentMatches.map((m, i) => (
-                <div
-                  key={`${m.url}-${i}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    try {
-                      if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
-                    } catch { }
-                    setOpen(false);
-                  }}
-                  style={{ padding: '8px 10px', cursor: 'pointer' }}
-                  title={m.url}
-                >
-                  <span style={{ opacity: 0.7, marginRight: 6 }}>{m.type === 'bookmark' ? '🔖' : '🕘'}</span>
-                  <span>{m.title || m.url}</span>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+            {filtered.map((item, idx) => (
+              <div
+                key={item}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => runSearch(item)}
+                className="suggestion-item"
+                style={{
+                  padding: '8px 10px', cursor: 'pointer',
+                  background: idx === activeIndex ? '#1b2331' : 'transparent'
+                }}
+              >
+                {item}
+              </div>
+            ))}
+            {contentMatches.length > 0 && (
+              <div style={{ borderTop: '1px solid #273043' }}>
+                {contentMatches.map((m, i) => (
+                  <div
+                    key={`${m.url}-${i}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      try {
+                        if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
+                      } catch { }
+                      setOpen(false);
+                    }}
+                    style={{ padding: '8px 10px', cursor: 'pointer' }}
+                    title={m.url}
+                  >
+                    <span style={{ opacity: 0.7, marginRight: 6 }}>{m.type === 'bookmark' ? '🔖' : '🕘'}</span>
+                    <span>{m.title || m.url}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
         return createPortal(dropdown, document.body);

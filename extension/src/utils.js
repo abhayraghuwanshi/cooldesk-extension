@@ -72,3 +72,70 @@ export const formatTime = (ms) => {
   if (remMinutes === 0) return `${hours}h`;
   return `${hours}h ${remMinutes}m`;
 };
+
+
+// Simple Circuit Breaker for Gemini calls (module-local)
+export const createCircuitBreaker = ({ failureThreshold = 3, cooldownMs = 60_000, halfOpenMaxRequests = 1 } = {}) => {
+  let state = 'CLOSED'; // CLOSED | OPEN | HALF_OPEN
+  let failures = 0;
+  let nextTryAt = 0;
+  let halfOpenInFlight = 0;
+
+  const canRequest = () => {
+    const now = Date.now();
+    if (state === 'OPEN') {
+      if (now >= nextTryAt) {
+        state = 'HALF_OPEN';
+        failures = 0;
+        halfOpenInFlight = 0;
+        return true;
+      }
+      return false;
+    }
+    if (state === 'HALF_OPEN') {
+      return halfOpenInFlight < halfOpenMaxRequests;
+    }
+    return true;
+  };
+
+  const onSuccess = () => {
+    failures = 0;
+    if (state !== 'CLOSED') state = 'CLOSED';
+  };
+
+  const onFailure = () => {
+    failures += 1;
+    if (state === 'HALF_OPEN' || failures >= failureThreshold) {
+      state = 'OPEN';
+      nextTryAt = Date.now() + cooldownMs;
+    }
+  };
+
+  const exec = async (fn) => {
+    if (!canRequest()) {
+      const err = new Error('CircuitBreaker: OPEN');
+      err.code = 'CIRCUIT_OPEN';
+      throw err;
+    }
+    if (state === 'HALF_OPEN') halfOpenInFlight += 1;
+    try {
+      const res = await fn();
+      onSuccess();
+      return res;
+    } catch (e) {
+      onFailure();
+      throw e;
+    } finally {
+      if (state === 'HALF_OPEN') {
+        halfOpenInFlight = Math.max(halfOpenInFlight - 1, 0);
+      }
+    }
+  };
+
+  return {
+    exec,
+    get state() { return state; },
+    get failures() { return failures; },
+    get nextTryAt() { return nextTryAt; },
+  };
+}
