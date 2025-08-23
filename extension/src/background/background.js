@@ -65,6 +65,39 @@ async function main() {
       sendResponse({ pong: true, time: Date.now() })
       return true
     }
+
+    if (msg?.action === 'fetchPreview' && msg?.url) {
+      (async () => {
+        try {
+          const url = String(msg.url);
+          const res = await fetch(url, { method: 'GET' });
+          const html = await res.text();
+          const find = (prop) => {
+            const re = new RegExp(`<meta[^>]+property=["']${prop}["'][^>]*content=["']([^"]+)['"]`, 'i');
+            const m = html.match(re);
+            if (m && m[1]) return m[1];
+            const re2 = new RegExp(`<meta[^>]+name=["']${prop}["'][^>]*content=["']([^"]+)['"]`, 'i');
+            const m2 = html.match(re2);
+            return (m2 && m2[1]) || '';
+          };
+          const titleTag = (() => {
+            const m = html.match(/<title>([^<]+)<\/title>/i);
+            return (m && m[1]) || '';
+          })();
+          const data = {
+            source: (() => { try { return new URL(url).hostname; } catch { return ''; } })(),
+            title: find('og:title') || find('twitter:title') || titleTag,
+            description: find('og:description') || find('description') || find('twitter:description') || '',
+            image: find('og:image') || find('twitter:image') || '',
+            url
+          };
+          sendResponse({ ok: true, data });
+        } catch (e) {
+          sendResponse({ ok: false, error: e?.message || 'Preview fetch failed' });
+        }
+      })();
+      return true; // keep the message channel open for async response
+    }
   })
 
   // Log storage readiness once

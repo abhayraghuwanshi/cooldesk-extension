@@ -24,6 +24,7 @@ export function Header({
   progress,
   setShowCreateWorkspace,
   openInTab,
+  isFooter = false,
 }) {
   const [autoSync, setAutoSync] = useState(true);
   const [now, setNow] = useState(new Date());
@@ -84,15 +85,19 @@ export function Header({
     }
   };
 
+  const barStyle = isFooter
+    ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2000 }
+    : { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000 };
+
   return (
-    <header className="header ai-header">
+    <header className="header ai-header" style={barStyle}>
       <div className="logo-placeholder">
         <span className="logo-text">Cool-Desk</span>
       </div>
       <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', flex: 1 }}>
-        {/* <div style={{ position: 'relative', flex: 1 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
-        </div> */}
+        </div>
         {/* <button className="icon-btn" onClick={openSyncControls} title="Organize using AI">
           <FontAwesomeIcon icon={progress.running ? faSpinner : faRobot} spin={!!progress.running} />
         </button> */}
@@ -178,7 +183,7 @@ export function Header({
   );
 }
 
-function SearchBox({ search, setSearch, openInSidePanel }) {
+function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState([]);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -187,6 +192,14 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
   const wrapRef = useRef(null);
   const inputRef = useRef(null);
   const dataRef = useRef({ list: [] });
+
+  // Focus the input when focusSignal changes
+  useEffect(() => {
+    if (!focusSignal) return;
+    if (!inputRef.current) return;
+    try { inputRef.current.focus(); inputRef.current.select?.(); } catch { }
+    setOpen(true);
+  }, [focusSignal]);
 
   useLayoutEffect(() => {
     if (!open) return undefined;
@@ -205,38 +218,10 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
   }, [open]);
 
   const engines = [
-    {
-      id: 'google',
-      name: 'Google',
-      color: '#4285F4',
-      icon: 'G',
-      buildUrl: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`,
-      supportsQuery: true,
-    },
-    {
-      id: 'perplexity',
-      name: 'Perplexity',
-      color: '#6B5BFF',
-      icon: '🌀',
-      buildUrl: (q) => `https://www.perplexity.ai/search?q=${encodeURIComponent(q)}`,
-      supportsQuery: true,
-    },
-    {
-      id: 'chatgpt',
-      name: 'ChatGPT',
-      color: '#10A37F',
-      icon: '🤖',
-      buildUrl: (q) => `https://chat.openai.com/?q=${encodeURIComponent(q)}`,
-      supportsQuery: false, // may not auto-fill; user might paste
-    },
-    {
-      id: 'grok',
-      name: 'Grok',
-      color: '#000000',
-      icon: '𝕏',
-      buildUrl: (q) => `https://grok.com/?q=${encodeURIComponent(q)}`,
-      supportsQuery: true,
-    },
+    { id: 'google', name: 'Google', color: '#4285F4', icon: 'G', buildUrl: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`, supportsQuery: true },
+    { id: 'perplexity', name: 'Perplexity', color: '#6B5BFF', icon: '🌀', buildUrl: (q) => `https://www.perplexity.ai/search?q=${encodeURIComponent(q)}`, supportsQuery: true },
+    { id: 'chatgpt', name: 'ChatGPT', color: '#10A37F', icon: '🤖', buildUrl: (q) => `https://chat.openai.com/?q=${encodeURIComponent(q)}`, supportsQuery: false },
+    { id: 'grok', name: 'Grok', color: '#000000', icon: '𝕏', buildUrl: (q) => `https://grok.com/?q=${encodeURIComponent(q)}`, supportsQuery: true },
   ];
 
   useEffect(() => {
@@ -364,29 +349,27 @@ function SearchBox({ search, setSearch, openInSidePanel }) {
   }, [search]);
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', zIndex: 10000 }}>
+    <div ref={wrapRef} style={{ width: '100%' }}>
       <input
         ref={inputRef}
         value={search}
         onChange={(e) => { setSearch(e.target.value); setOpen(true); setActiveIndex(-1); }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        placeholder="Search Google..."
-        className="search ai-input"
+        type="text"
+        placeholder="Search Everything..."
+        className="ai-input"
       />
       {showList && (() => {
         const dropdown = (
           <div
-            className="search-suggestions"
+            className="search-suggestions top"
             style={{
               position: 'fixed',
               left: `${portalPos.left}px`,
-              top: `${portalPos.top}px`,
+              top: `${portalPos.top - 50}px`,
               width: `${portalPos.width}px`,
               zIndex: 2147483647,
-              background: '#121826', border: '1px solid #273043', borderTop: 'none',
-              borderRadius: '0 0 8px 8px', maxHeight: 240, overflowY: 'auto',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
             }}
           >
             {recent.length === 0 && !search && (

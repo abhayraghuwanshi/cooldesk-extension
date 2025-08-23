@@ -1,6 +1,7 @@
 import { faArrowUpRightFromSquare, faClone, faRotateRight, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
+import TabPreviewModal from './TabPreviewModal.jsx';
 import { enqueueOpenInChrome, getHostActivity, getHostDashboard, getHostTabs } from '../services/extensionApi';
 import { getFaviconUrl } from '../utils';
 // No favicon or extra UI; render URLs only
@@ -123,6 +124,126 @@ export default function ActivityPanel() {
     }
   }, []);
 
+  const requestPreview = React.useCallback(async (tab) => {
+    const url = tab?.url;
+    if (!url) return;
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewError('');
+    setPreviewData({ title: 'Loading…' });
+    try {
+      const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage;
+      if (!hasRuntime) {
+        // Fallback: open directly in non-extension environments
+        setPreviewLoading(false);
+        setPreviewError('Preview not available in this environment');
+        return;
+      }
+      const resp = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timed out')), 8000);
+        try {
+          chrome.runtime.sendMessage({ action: 'fetchPreview', url }, (res) => {
+            clearTimeout(timer);
+            const lastErr = chrome.runtime?.lastError;
+            if (lastErr) return reject(new Error(lastErr.message || 'Service worker unavailable'));
+            resolve(res);
+          });
+        } catch (e) {
+          clearTimeout(timer);
+          reject(e);
+        }
+      });
+      let data = resp?.ok ? (resp.data || null) : null;
+      let err = resp?.ok ? '' : (resp?.error || 'Failed to load preview');
+
+      // If response is weak, try to collect from the active tab's DOM via content script
+      const isWeak = (d) => {
+        if (!d) return true;
+        const host = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
+        const t = (d.title || '').trim();
+        const desc = (d.description || d.extract || '').trim();
+        const onlyHostTitle = t === '' || t.toLowerCase() === host.toLowerCase();
+        return onlyHostTitle && desc === '' && !(d.image && d.image.length > 0);
+      };
+
+      const canMessageTab = tab?.id != null && typeof chrome !== 'undefined' && chrome?.tabs?.sendMessage;
+      if ((!data || isWeak(data)) && canMessageTab) {
+        try {
+          const domResp = await new Promise((resolve) => {
+            const timer2 = setTimeout(() => resolve({ ok: false, error: 'Timed out' }), 4000);
+            try {
+              chrome.tabs.sendMessage(tab.id, { action: 'collectPreview' }, (r) => {
+                clearTimeout(timer2);
+                resolve(r);
+              });
+            } catch {
+              clearTimeout(timer2);
+              resolve({ ok: false });
+            }
+          });
+          if (domResp && domResp.ok && domResp.data) {
+            data = domResp.data;
+            err = '';
+          }
+        } catch {}
+      }
+
+      // Last resort: programmatic DOM scrape via chrome.scripting (requires "scripting" permission)
+      const canScript = tab?.id != null && typeof chrome !== 'undefined' && chrome?.scripting?.executeScript;
+      if ((!data || isWeak(data)) && canScript) {
+        try {
+          const [inj] = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              try {
+                const getMeta = (name) => {
+                  const el = document.querySelector(`meta[property="${name}"]`) || document.querySelector(`meta[name="${name}"]`);
+                  return el ? el.getAttribute('content') || '' : '';
+                };
+                const absUrl = (u) => { try { return new URL(u, document.baseURI).toString(); } catch { return u || ''; } };
+                const title = getMeta('og:title') || getMeta('twitter:title') || document.title || '';
+                const description = getMeta('og:description') || getMeta('description') || getMeta('twitter:description') || '';
+                const image = absUrl(getMeta('og:image') || getMeta('twitter:image'));
+                let fallbackDesc = description;
+                if (!fallbackDesc) {
+                  const h1 = document.querySelector('h1');
+                  const p = document.querySelector('main p, article p, p');
+                  fallbackDesc = (h1?.textContent || '').trim();
+                  const ptxt = (p?.textContent || '').trim();
+                  if (ptxt && (!fallbackDesc || ptxt.length > fallbackDesc.length)) fallbackDesc = ptxt;
+                }
+                return {
+                  source: location.hostname,
+                  title,
+                  description: description || fallbackDesc || '',
+                  image: image || '',
+                  url: location.href
+                };
+              } catch (e) {
+                return { source: location.hostname, title: document.title || '', description: '', image: '', url: location.href };
+              }
+            }
+          });
+          if (inj && inj.result) {
+            data = inj.result;
+            err = '';
+          }
+        } catch {}
+      }
+
+      if (data) {
+        setPreviewData(data);
+        setPreviewError('');
+      } else {
+        setPreviewError(err || 'Failed to load preview');
+      }
+    } catch (e) {
+      setPreviewError(String(e?.message || e));
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, []);
+
   React.useEffect(() => {
     let disposed = false;
     (async () => { if (!disposed) await loadActivity(); })();
@@ -171,6 +292,10 @@ export default function ActivityPanel() {
   // Current open tabs
   const [tabs, setTabs] = React.useState([]);
   const [tabsError, setTabsError] = React.useState(null);
+  const [previewOpen, setPreviewOpen] = React.useState(false);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState('');
+  const [previewData, setPreviewData] = React.useState(null);
   const refreshTabs = React.useCallback(() => {
     setTabsError(null);
     try {
@@ -392,6 +517,15 @@ export default function ActivityPanel() {
                   </div>
                 </div>
                 <button
+                  onClick={() => requestPreview(tab)}
+                  className="icon-btn"
+                  aria-label="Preview"
+                  title="Preview"
+                  style={{ width: 28, height: 28 }}
+                >
+                  🛈
+                </button>
+                <button
                   onClick={() => {
                     const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
                     if (hasTabsUpdate) return focusTab(tab);
@@ -509,6 +643,22 @@ export default function ActivityPanel() {
           </ErrorBoundary>
         )
       }
+      <TabPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        data={previewData}
+        loading={previewLoading}
+        error={previewError}
+        onOpenFull={() => {
+          try {
+            const url = previewData?.url || (typeof previewData === 'string' ? previewData : null);
+            if (!url) { setPreviewOpen(false); return; }
+            if (typeof chrome !== 'undefined' && chrome?.tabs?.create) chrome.tabs.create({ url });
+            else window.open(url, '_blank');
+          } catch {}
+          setPreviewOpen(false);
+        }}
+      />
     </section >
   );
 }

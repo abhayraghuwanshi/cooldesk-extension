@@ -214,12 +214,37 @@ body {
 /* Small screens: use full width with internal padding for comfort */
 @media (max-width: 699px) {
   .popup-wrap {
-    width: 100vw;
+    width: 100%;
     margin-left: 0;
     margin-right: 0;
-    padding-left: 12px;
-    /* retain small, comfortable padding */
-    padding-right: 12px;
+    padding-left: 4vw;
+    /* ~4% side padding */
+    padding-right: 4vw;
+  }
+}
+
+/* Align the fixed header/footer side padding with .popup-wrap */
+/* Base (small screens) */
+.header.ai-header {
+  box-sizing: border-box;
+  width: 100%;
+  padding-left: 4vw;
+  padding-right: 4vw;
+}
+
+/* Medium screens */
+@media (min-width: 700px) and (max-width: 999px) {
+  .header.ai-header {
+    padding-left: 8vw;
+    padding-right: 8vw;
+  }
+}
+
+/* Wide screens */
+@media (min-width: 1000px) {
+  .header.ai-header {
+    padding-left: 15vw;
+    padding-right: 15vw;
   }
 }
 
@@ -402,6 +427,24 @@ body {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* Make header actions respect the same right padding as the header */
+.header.ai-header .header-actions {
+  box-sizing: border-box;
+  padding-right: 4vw;
+}
+
+@media (min-width: 700px) and (max-width: 999px) {
+  .header.ai-header .header-actions {
+    padding-right: 8vw;
+  }
+}
+
+@media (min-width: 1000px) {
+  .header.ai-header .header-actions {
+    padding-right: 15vw;
+  }
 }
 
 /* Logo Placeholder */

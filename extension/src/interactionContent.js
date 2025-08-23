@@ -33,3 +33,51 @@ addEventListener('submit', (e) => {
 addEventListener('visibilitychange', () => {
   sendInteraction('visibility', { visible: !document.hidden });
 });
+
+// Collect preview data from the live DOM (for client-rendered pages)
+function collectPreviewFromDom() {
+  try {
+    const getMeta = (name) => {
+      const el = document.querySelector(`meta[property="${name}"]`) || document.querySelector(`meta[name="${name}"]`);
+      return el ? el.getAttribute('content') || '' : '';
+    };
+    const absUrl = (u) => {
+      try { return new URL(u, document.baseURI).toString(); } catch { return u || ''; }
+    };
+    const title = getMeta('og:title') || getMeta('twitter:title') || document.title || '';
+    const description = getMeta('og:description') || getMeta('description') || getMeta('twitter:description') || '';
+    const image = absUrl(getMeta('og:image') || getMeta('twitter:image'));
+    let fallbackDesc = description;
+    if (!fallbackDesc) {
+      const h1 = document.querySelector('h1');
+      const p = document.querySelector('main p, article p, p');
+      fallbackDesc = (h1?.textContent || '').trim();
+      const ptxt = (p?.textContent || '').trim();
+      if (ptxt && (!fallbackDesc || ptxt.length > fallbackDesc.length)) fallbackDesc = ptxt;
+    }
+    return {
+      source: location.hostname,
+      title,
+      description: description || fallbackDesc || '',
+      image: image || '',
+      url: location.href
+    };
+  } catch (e) {
+    return { source: location.hostname, title: document.title || '', description: '', image: '', url: location.href };
+  }
+}
+
+// Listen for preview collection requests from extension UI
+try {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg && msg.action === 'collectPreview') {
+      try {
+        const data = collectPreviewFromDom();
+        sendResponse({ ok: true, data });
+      } catch (e) {
+        sendResponse({ ok: false, error: e?.message || 'Failed to collect preview' });
+      }
+      return true;
+    }
+  });
+} catch {}

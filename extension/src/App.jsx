@@ -8,7 +8,6 @@ import { CreateWorkspaceModal } from './components/CreateWorkspaceModal';
 import { Header } from './components/Header';
 import { ItemGrid } from './components/ItemGrid';
 import { RelatedProductsSection } from './components/RelatedProductsSection';
-import { SearchBox } from './components/SearchPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { SyncControlsModal } from './components/SyncControlsModal';
 import { SystemPrompt } from './components/SystemPrompt';
@@ -1006,18 +1005,7 @@ export default function App() {
   };
 
   return (
-    <div className="popup-wrap bg-ai-midnight-nebula">
-      <Header
-        search={search}
-        setSearch={setSearch}
-        populate={populate}
-        setShowSettings={setShowSettings}
-        openSyncControls={() => setShowSyncControls(true)}
-        progress={progress}
-        setShowCreateWorkspace={setShowCreateWorkspace}
-        openInTab={openInTab}
-      />
-
+    <div className="popup-wrap bg-ai-midnight-nebula" style={{ paddingBottom: 64 }}>
       <SyncControlsModal
         show={showSyncControls}
         onClose={() => setShowSyncControls(false)}
@@ -1317,7 +1305,20 @@ export default function App() {
           </div>
         </div>
       )}
-      <div className="bottom-search">
+
+      <Header
+        search={search}
+        setSearch={setSearch}
+        populate={populate}
+        setShowSettings={setShowSettings}
+        openSyncControls={() => setShowSyncControls(true)}
+        progress={progress}
+        setShowCreateWorkspace={setShowCreateWorkspace}
+        openInTab={openInTab}
+        isFooter={true}
+      />
+
+      {/* <div className="bottom-search">
         <div className="bottom-search-inner">
           <SearchBox
             search={search}
@@ -1326,7 +1327,7 @@ export default function App() {
             focusSignal={focusSearchTick}
           />
         </div>
-      </div>
+      </div> */}
 
       {loadingRelated && (
         <div className="loading-related">

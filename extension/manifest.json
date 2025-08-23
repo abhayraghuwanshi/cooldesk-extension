@@ -25,6 +25,7 @@
     "windows",
     "sidePanel",
     "search",
+    "scripting",
     "idle"
   ],
   "host_permissions": [
