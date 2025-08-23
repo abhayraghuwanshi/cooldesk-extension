@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function TabPreviewModal({ open, onClose, data, loading, error, onOpenFull }) {
+export function TabPreviewModal({ open, onClose, data, loading, error, onOpenFull }) {
   React.useEffect(() => {
     if (open) {
       document.body.classList.add('modal-open');

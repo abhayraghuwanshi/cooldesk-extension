@@ -15,7 +15,7 @@ import { WorkspaceFilters } from './components/WorkspaceFilters';
 import './search.css';
 
 
-import ActivityPanel from './components/ActivityPanel';
+import { ActivityPanel } from './components/ActivityPanel';
 import { AddLinkFlow } from './components/AddLinkFlow';
 import { deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
@@ -1091,75 +1091,6 @@ export default function App() {
 
       {progress.error && <div className="error">{progress.error}</div>}
 
-      {workspace === 'All' && (
-        <>
-          {/* Running Apps (Electron/app mode) - show regardless of dashboard loading */}
-          {Array.isArray(processes) && processes.length > 0 && (
-            <section className="saved-workspaces" style={{ margin: '6px 0 10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <h3 style={{ margin: 0 }}>Running Apps</h3>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-                {processes.map((p, idx) => (
-                  <div
-                    key={p.pid || p.processId || idx}
-                    className="card"
-                    style={{ padding: 10, cursor: 'pointer', border: '1px solid #e5e7eb', borderRadius: 8 }}
-                    title="Click to focus this app"
-                    onClick={async () => {
-                      try { await focusWindow(p.pid ?? p.processId); } catch { }
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {p.iconUrl && (
-                          <img
-                            src={p.iconUrl}
-                            alt=""
-                            width={16}
-                            height={16}
-                            style={{ borderRadius: 3, objectFit: 'cover' }}
-                            onError={(e) => { try { e.currentTarget.style.display = 'none'; } catch { } }}
-                          />
-                        )}
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>
-                          {p.title || p.name || p.processName || 'Unknown App'}
-                        </div>
-                      </div>
-                      <button
-                        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', cursor: 'pointer' }}
-                        title="Focus this app"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try { await focusWindow(p.pid ?? p.processId); } catch { }
-                        }}
-                      >
-                        Go
-                      </button>
-                    </div>
-                    <div style={{ fontSize: 12, opacity: 0.85 }}>
-                      PID: {p.pid ?? p.processId ?? 'n/a'}
-                    </div>
-                    {p.path && (
-                      <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.path}>
-                        {p.path?.split(/[\\/]/).pop()}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Always render content; hydration refreshes in background */}
-          <>
-            <ErrorBoundary>
-              <ActivityPanel />
-            </ErrorBoundary>
-          </>
-        </>
-      )}
-
       {/* Workspace section (only when a specific workspace is selected) */}
       {workspace !== 'All' && (
         <>
@@ -1265,6 +1196,75 @@ export default function App() {
           )}
         </>
       )}
+
+      <>
+        {/* Running Apps (Electron/app mode) - show regardless of dashboard loading */}
+        {Array.isArray(processes) && processes.length > 0 && (
+          <section className="saved-workspaces" style={{ margin: '6px 0 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <h3 style={{ margin: 0 }}>Running Apps</h3>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+              {processes.map((p, idx) => (
+                <div
+                  key={p.pid || p.processId || idx}
+                  className="card"
+                  style={{ padding: 10, cursor: 'pointer', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                  title="Click to focus this app"
+                  onClick={async () => {
+                    try { await focusWindow(p.pid ?? p.processId); } catch { }
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {p.iconUrl && (
+                        <img
+                          src={p.iconUrl}
+                          alt=""
+                          width={16}
+                          height={16}
+                          style={{ borderRadius: 3, objectFit: 'cover' }}
+                          onError={(e) => { try { e.currentTarget.style.display = 'none'; } catch { } }}
+                        />
+                      )}
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>
+                        {p.title || p.name || p.processName || 'Unknown App'}
+                      </div>
+                    </div>
+                    <button
+                      style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', cursor: 'pointer' }}
+                      title="Focus this app"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try { await focusWindow(p.pid ?? p.processId); } catch { }
+                      }}
+                    >
+                      Go
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.85 }}>
+                    PID: {p.pid ?? p.processId ?? 'n/a'}
+                  </div>
+                  {p.path && (
+                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.path}>
+                      {p.path?.split(/[\\/]/).pop()}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Always render content; hydration refreshes in background */}
+        <>
+          <ErrorBoundary>
+            <ActivityPanel />
+          </ErrorBoundary>
+        </>
+      </>
+
+
 
       {addingToWorkspace && (
         <div
