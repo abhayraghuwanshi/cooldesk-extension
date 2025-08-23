@@ -4,7 +4,7 @@ import { getHostWorkspaces, setHostWorkspaces } from './services/extensionApi';
 
 const DB_NAME = 'cooldesk-db'
 // Bump version to run migration for new 'urls' store
-const DB_VERSION = 7
+const DB_VERSION = 8
 const STORE = 'workspaces'
 const URLS_STORE = 'urls'
 const SETTINGS_STORE = 'settings'
@@ -64,6 +64,11 @@ function openDB() {
       if (!db.objectStoreNames.contains('pins')) {
         const pStore = db.createObjectStore('pins', { keyPath: 'url' })
         try { pStore.createIndex('by_createdAt', 'createdAt', { unique: false }) } catch { }
+      }
+      // New store for sticky Notes (id-keyed)
+      if (!db.objectStoreNames.contains('notes')) {
+        const nStore = db.createObjectStore('notes', { keyPath: 'id' })
+        try { nStore.createIndex('by_createdAt', 'createdAt', { unique: false }) } catch { }
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -824,6 +829,72 @@ export async function deletePing(url) {
       const tx = db.transaction('pins', 'readwrite')
       const store = tx.objectStore('pins')
       const req = store.delete(url)
+      req.onsuccess = () => resolve()
+      req.onerror = () => resolve()
+    } catch { resolve() }
+  })
+}
+
+// ===== Notes APIs =====
+
+/** List all notes sorted by createdAt desc */
+export async function listNotes() {
+  const db = await openDB()
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('notes', 'readonly')
+      const store = tx.objectStore('notes')
+      const req = store.getAll()
+      req.onsuccess = () => {
+        const arr = Array.isArray(req.result) ? req.result : []
+        arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        resolve(arr)
+      }
+      req.onerror = () => resolve([])
+    } catch { resolve([]) }
+  })
+}
+
+/** Upsert a note by id; enforce cap of 200 notes (trim oldest) */
+export async function upsertNote(note) {
+  if (!note || !note.id) return
+  const db = await openDB()
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction('notes', 'readwrite')
+      const store = tx.objectStore('notes')
+      const putReq = store.put({ ...note, createdAt: note.createdAt || Date.now(), updatedAt: Date.now() })
+      putReq.onsuccess = () => resolve()
+      putReq.onerror = () => resolve()
+    } catch { resolve() }
+  })
+
+  // Enforce cap of 200 by trimming oldest
+  const all = await listNotes()
+  if (all.length > 200) {
+    const toDelete = all.slice(200) // already sorted desc
+    const db2 = await openDB()
+    await Promise.all(toDelete.map(n => new Promise((resolve) => {
+      try {
+        const tx = db2.transaction('notes', 'readwrite')
+        const store = tx.objectStore('notes')
+        const delReq = store.delete(n.id)
+        delReq.onsuccess = () => resolve()
+        delReq.onerror = () => resolve()
+      } catch { resolve() }
+    })))
+  }
+}
+
+/** Delete a note by id */
+export async function deleteNote(id) {
+  if (!id) return
+  const db = await openDB()
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction('notes', 'readwrite')
+      const store = tx.objectStore('notes')
+      const req = store.delete(id)
       req.onsuccess = () => resolve()
       req.onerror = () => resolve()
     } catch { resolve() }

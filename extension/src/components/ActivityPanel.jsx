@@ -1,7 +1,7 @@
-import { faArrowUpRightFromSquare, faClone, faRotateRight, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faClone, faPen, faPlus, faRotateRight, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { deletePing as dbDeletePing, listPings as dbListPings, upsertPing as dbUpsertPing } from '../db';
+import { deleteNote as dbDeleteNote, deletePing as dbDeletePing, listNotes as dbListNotes, listPings as dbListPings, upsertNote as dbUpsertNote, upsertPing as dbUpsertPing } from '../db';
 import { enqueueOpenInChrome, getHostActivity, getHostDashboard, getHostTabs } from '../services/extensionApi';
 import { getFaviconUrl } from '../utils';
 import TabPreviewModal from './TabPreviewModal.jsx';
@@ -34,6 +34,116 @@ class ErrorBoundary extends React.Component {
     }
     return this.props.children;
   }
+}
+
+function NotesSection() {
+  const [notes, setNotes] = React.useState([]);
+  const [text, setText] = React.useState('');
+  const [editingId, setEditingId] = React.useState(null);
+  const [editText, setEditText] = React.useState('');
+
+  const loadNotes = React.useCallback(async () => {
+    try {
+      const list = await dbListNotes();
+      setNotes(Array.isArray(list) ? list : []);
+    } catch { setNotes([]); }
+  }, []);
+
+  const addNote = React.useCallback(async () => {
+    const t = (text || '').trim();
+    if (!t) return;
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const note = { id, text: t, createdAt: Date.now() };
+    try { await dbUpsertNote(note); } catch { }
+    setText('');
+    // Reload to reflect authoritative DB ordering and cap
+    await loadNotes();
+  }, [text, loadNotes]);
+
+  const removeNote = React.useCallback(async (id) => {
+    try { await dbDeleteNote(id); } catch { }
+    await loadNotes();
+  }, [loadNotes]);
+
+  const startEdit = React.useCallback((n) => {
+    setEditingId(n.id);
+    setEditText(n.text || '');
+  }, []);
+
+  const saveEdit = React.useCallback(async () => {
+    const t = (editText || '').trim();
+    if (!editingId) return setEditingId(null);
+    const existing = notes.find(n => n.id === editingId) || { id: editingId, createdAt: Date.now() };
+    const updated = { ...existing, text: t };
+    try { await dbUpsertNote(updated); } catch { }
+    await loadNotes();
+    setEditingId(null);
+    setEditText('');
+  }, [editText, editingId, notes, loadNotes]);
+
+  const cancelEdit = React.useCallback(() => {
+    setEditingId(null);
+    setEditText('');
+  }, []);
+
+  React.useEffect(() => { loadNotes(); }, [loadNotes]);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') addNote(); }}
+          placeholder="Write a quick note..."
+          style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid #273043', background: '#0f1724', color: '#e5e7eb', fontSize: 13 }}
+        />
+        <button
+          onClick={addNote}
+          className="icon-btn"
+          style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 13 }}
+        >
+          <FontAwesomeIcon icon={faPlus} />
+        </button>
+      </div>
+      <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {notes.length === 0 && (
+          <div className="empty">No notes yet</div>
+        )}
+        {notes.map(n => (
+          <div key={n.id} className="activity-card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}>
+            {editingId === n.id ? (
+              <>
+                <input
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                  autoFocus
+                  style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #273043', background: '#0f1724', color: '#e5e7eb', fontSize: 13 }}
+                />
+                <button onClick={saveEdit} className="icon-btn" style={{ width: 60, height: 28 }}>Save</button>
+                <button onClick={cancelEdit} className="icon-btn" style={{ width: 70, height: 28 }}>Cancel</button>
+              </>
+            ) : (
+              <>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="activity-card__title" style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {n.text}
+                  </div>
+                </div>
+                <button onClick={() => startEdit(n)} className="icon-btn" title="Edit" style={{ width: 28, height: 28 }}>
+                  <FontAwesomeIcon icon={faPen} />
+                </button>
+                <button onClick={() => removeNote(n.id)} className="icon-btn" title="Delete" style={{ width: 28, height: 28 }}>
+                  <FontAwesomeIcon icon={faTrash} />
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function ActivityPanel() {
@@ -508,7 +618,7 @@ export default function ActivityPanel() {
     <section style={{ marginTop: 12 }}>
       {/* Current Tabs Section */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h3 style={{ margin: 0 }}>Hot Tabs <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({tabs.length})</span></h3>
+        <h3 style={{ margin: 0 }}> Hot Tabs <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({tabs.length})</span></h3>
         <button
           onClick={refreshTabs}
           style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}
@@ -667,6 +777,14 @@ export default function ActivityPanel() {
           )}
         </div>
       </ErrorBoundary>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <h3 style={{ marginBottom: '10px' }}>
+          <FontAwesomeIcon icon={faPen} style={{ marginRight: 6 }} />
+          Hot Thoughts
+        </h3>
+      </div>
+      {/* Minimal Notes: chrome.storage.local-backed */}
+      <NotesSection />
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h3 style={{ marginBottom: '10px' }}>Cool Feed <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({rows.length}{fallbackUsed ? ', showing all' : ''})</span></h3>
