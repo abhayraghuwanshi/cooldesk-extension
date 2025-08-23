@@ -66,6 +66,36 @@ async function main() {
       return true
     }
 
+    if (msg?.type === 'openSidePanel') {
+      (async () => {
+        try {
+          if (chrome?.sidePanel?.setOptions) {
+            await chrome.sidePanel.setOptions({ path: 'index.html', enabled: true });
+          }
+          if (chrome?.windows?.getCurrent && chrome?.sidePanel?.open) {
+            const win = await chrome.windows.getCurrent();
+            await chrome.sidePanel.open({ windowId: win.id });
+            sendResponse({ ok: true });
+            return;
+          }
+          // Fallback to opening/activating extension tab
+          const url = chrome.runtime.getURL('index.html');
+          const existing = await chrome.tabs.query({ url });
+          if (existing && existing.length > 0) {
+            const tab = existing[0];
+            try { await chrome.tabs.update(tab.id, { active: true }); } catch { }
+            try { if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true }); } catch { }
+          } else {
+            if (chrome?.tabs?.create) await chrome.tabs.create({ url });
+          }
+          sendResponse({ ok: true, fallback: 'tab' });
+        } catch (e) {
+          sendResponse({ ok: false, error: e?.message || 'Failed to open side panel' });
+        }
+      })();
+      return true;
+    }
+
     if (msg?.action === 'fetchPreview' && msg?.url) {
       (async () => {
         try {
@@ -97,6 +127,75 @@ async function main() {
         }
       })();
       return true; // keep the message channel open for async response
+    }
+
+    // List tabs for current window
+    if (msg?.type === 'getTabs') {
+      (async () => {
+        try {
+          const win = await chrome.windows.getCurrent();
+          const tabs = await chrome.tabs.query({ windowId: win.id });
+          const mapped = tabs.map(t => ({ id: t.id, title: t.title, url: t.url, favIconUrl: t.favIconUrl, active: t.active, index: t.index }));
+          sendResponse({ ok: true, tabs: mapped });
+        } catch (e) {
+          sendResponse({ ok: false, error: e?.message || 'Failed to get tabs' });
+        }
+      })();
+      return true;
+    }
+
+    // Activate a specific tab by id
+    if (msg?.type === 'activateTab' && msg?.id != null) {
+      (async () => {
+        try {
+          const id = Number(msg.id);
+          await chrome.tabs.update(id, { active: true });
+          try {
+            const t = await chrome.tabs.get(id);
+            if (t?.windowId != null) await chrome.windows.update(t.windowId, { focused: true });
+          } catch {}
+          sendResponse({ ok: true });
+        } catch (e) {
+          sendResponse({ ok: false, error: e?.message || 'Failed to activate tab' });
+        }
+      })();
+      return true;
+    }
+
+    // Close a specific tab by id
+    if (msg?.type === 'closeTab' && msg?.id != null) {
+      (async () => {
+        try {
+          const id = Number(msg.id);
+          await chrome.tabs.remove(id);
+          sendResponse({ ok: true });
+        } catch (e) {
+          sendResponse({ ok: false, error: e?.message || 'Failed to close tab' });
+        }
+      })();
+      return true;
+    }
+
+    // Switch relative tab: delta -1 for prev, +1 for next
+    if (msg?.type === 'switchTabRel' && typeof msg.delta === 'number') {
+      (async () => {
+        try {
+          const win = await chrome.windows.getCurrent();
+          const tabs = await chrome.tabs.query({ windowId: win.id });
+          if (!tabs || tabs.length === 0) { sendResponse({ ok: false, error: 'No tabs' }); return; }
+          const activeIdx = tabs.findIndex(t => t.active);
+          const currentIndex = activeIdx >= 0 ? activeIdx : 0;
+          let nextIndex = (currentIndex + (msg.delta > 0 ? 1 : -1)) % tabs.length;
+          if (nextIndex < 0) nextIndex = tabs.length - 1;
+          const target = tabs[nextIndex];
+          await chrome.tabs.update(target.id, { active: true });
+          try { if (target.windowId != null) await chrome.windows.update(target.windowId, { focused: true }); } catch {}
+          sendResponse({ ok: true, activated: target.id });
+        } catch (e) {
+          sendResponse({ ok: false, error: e?.message || 'Failed to switch tab' });
+        }
+      })();
+      return true;
     }
   })
 

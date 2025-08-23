@@ -1,9 +1,10 @@
-import { faArrowUpRightFromSquare, faClone, faRotateRight, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faClone, faRotateRight, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import TabPreviewModal from './TabPreviewModal.jsx';
+import { deletePing as dbDeletePing, listPings as dbListPings, upsertPing as dbUpsertPing } from '../db';
 import { enqueueOpenInChrome, getHostActivity, getHostDashboard, getHostTabs } from '../services/extensionApi';
 import { getFaviconUrl } from '../utils';
+import TabPreviewModal from './TabPreviewModal.jsx';
 // No favicon or extra UI; render URLs only
 
 class ErrorBoundary extends React.Component {
@@ -40,6 +41,44 @@ export default function ActivityPanel() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [sortBy, setSortBy] = React.useState('all'); // 'all' | 'time' | 'clicks' | 'scroll' | 'forms'
+  // Pings state
+  const [pings, setPings] = React.useState([]);
+  const [hoveredTabId, setHoveredTabId] = React.useState(null);
+
+  const loadPings = React.useCallback(async () => {
+    try {
+      const all = await dbListPings();
+      // newest first
+      all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setPings(all);
+    } catch { /* ignore */ }
+  }, []);
+
+  const addPing = React.useCallback(async (tab) => {
+    try {
+      if (!tab?.url) return;
+      const ping = {
+        url: tab.url,
+        title: tab.title || (() => { try { return new URL(tab.url).hostname; } catch { return tab.url; } })(),
+        favicon: (() => {
+          const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
+          const primary = (tab.favIconUrl && safeHttp(tab.favIconUrl)) ? tab.favIconUrl : getFaviconUrl(tab.url, 64);
+          try {
+            const u = new URL(tab.url);
+            const originIco = (u.protocol === 'http:' || u.protocol === 'https:') ? `${u.origin}/favicon.ico` : '';
+            return primary || originIco || '';
+          } catch { return primary || ''; }
+        })(),
+        createdAt: Date.now(),
+      };
+      await dbUpsertPing(ping);
+      await loadPings();
+    } catch { /* ignore */ }
+  }, [loadPings]);
+
+  const removePing = React.useCallback(async (url) => {
+    try { if (!url) return; await dbDeletePing(url); await loadPings(); } catch { }
+  }, [loadPings]);
 
   const loadActivity = React.useCallback(async () => {
     let mounted = true;
@@ -185,7 +224,7 @@ export default function ActivityPanel() {
             data = domResp.data;
             err = '';
           }
-        } catch {}
+        } catch { }
       }
 
       // Last resort: programmatic DOM scrape via chrome.scripting (requires "scripting" permission)
@@ -228,7 +267,7 @@ export default function ActivityPanel() {
             data = inj.result;
             err = '';
           }
-        } catch {}
+        } catch { }
       }
 
       if (data) {
@@ -250,6 +289,10 @@ export default function ActivityPanel() {
     const id = setInterval(() => { if (!disposed) loadActivity(); }, 30000);
     return () => { disposed = true; clearInterval(id); };
   }, [loadActivity]);
+
+  React.useEffect(() => {
+    loadPings();
+  }, [loadPings]);
 
   const fmt = (ms) => {
     const m = Math.round(ms / 60000);
@@ -465,7 +508,7 @@ export default function ActivityPanel() {
     <section style={{ marginTop: 12 }}>
       {/* Current Tabs Section */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h3 style={{ margin: 0 }}>Cool Tabs <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({tabs.length})</span></h3>
+        <h3 style={{ margin: 0 }}>Hot Tabs <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({tabs.length})</span></h3>
         <button
           onClick={refreshTabs}
           style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}
@@ -482,7 +525,13 @@ export default function ActivityPanel() {
         <ErrorBoundary>
           <div className="activity-grid" style={{ marginBottom: 16 }}>
             {sortedTabs.map(tab => (
-              <div key={tab.id} className="activity-card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}>
+              <div
+                key={tab.id}
+                className="activity-card"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}
+                onMouseEnter={() => setHoveredTabId(tab.id)}
+                onMouseLeave={() => setHoveredTabId((id) => (id === tab.id ? null : id))}
+              >
                 {(() => {
                   // Derive favicon in a safe way; avoid file:// or chrome:// origins that yield "null/favicon.ico"
                   const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
@@ -516,7 +565,17 @@ export default function ActivityPanel() {
                     {tab.title || (() => { try { return new URL(tab?.url || '').hostname; } catch { return tab?.url || ''; } })()}
                   </div>
                 </div>
+                {/* Hover-only Pin button */}
                 <button
+                  onClick={() => addPing(tab)}
+                  className="pin-btn icon-btn"
+                  aria-label="Pin"
+                  title="Pin"
+                  style={{ width: 28, height: 28, opacity: hoveredTabId === tab.id ? 1 : 0, transition: 'opacity 120ms ease-in-out' }}
+                >
+                  <FontAwesomeIcon icon={faThumbtack} />
+                </button>
+                {/* <button
                   onClick={() => requestPreview(tab)}
                   className="icon-btn"
                   aria-label="Preview"
@@ -524,7 +583,7 @@ export default function ActivityPanel() {
                   style={{ width: 28, height: 28 }}
                 >
                   🛈
-                </button>
+                </button> */}
                 <button
                   onClick={() => {
                     const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
@@ -565,6 +624,49 @@ export default function ActivityPanel() {
           </div>
         </ErrorBoundary>
       )}
+
+      {/* Pings Section (shows up to 6) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '12px 0 8px' }}>
+        <h3 style={{ margin: 0 }}>Chill Pins <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({Math.min(pings.length, 6)})</span></h3>
+      </div>
+      <ErrorBoundary>
+        <div className="activity-grid" style={{ marginBottom: 16 }}>
+          {pings.slice(0, 6).map(p => (
+            <div key={p.url} className="activity-card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}>
+              {p.favicon ? (
+                <img src={p.favicon} className="favicon" alt="" width={16} height={16} style={{ borderRadius: 3 }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              ) : (
+                <div style={{ width: 16, height: 16 }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="activity-card__title" style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {p.title || (() => { try { return new URL(p.url).hostname; } catch { return p.url; } })()}
+                </div>
+              </div>
+              <button
+                onClick={() => openOrFocusUrl(p.url)}
+                className="go-btn icon-btn"
+                aria-label="Open ping"
+                title="Open ping"
+              >
+                <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+              </button>
+              <button
+                onClick={() => removePing(p.url)}
+                className="remove-btn icon-btn"
+                aria-label="Remove ping"
+                title="Remove ping"
+                style={{ width: 28, height: 28 }}
+              >
+                <FontAwesomeIcon icon={faTrash} />
+              </button>
+            </div>
+          ))}
+          {!pings.length && (
+            <div className="empty">No pings yet. Hover a tab above and click the pin icon to add one.</div>
+          )}
+        </div>
+      </ErrorBoundary>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <h3 style={{ marginBottom: '10px' }}>Cool Feed <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({rows.length}{fallbackUsed ? ', showing all' : ''})</span></h3>
@@ -655,7 +757,7 @@ export default function ActivityPanel() {
             if (!url) { setPreviewOpen(false); return; }
             if (typeof chrome !== 'undefined' && chrome?.tabs?.create) chrome.tabs.create({ url });
             else window.open(url, '_blank');
-          } catch {}
+          } catch { }
           setPreviewOpen(false);
         }}
       />

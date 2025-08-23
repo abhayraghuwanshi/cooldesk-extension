@@ -35,7 +35,9 @@
     {
       "resources": [
         "assets/*",
-        "index.html"
+        "index.html",
+        "src/footerBar.js",
+        "src/contentInteractions.js"
       ],
       "matches": [
         "<all_urls>"

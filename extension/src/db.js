@@ -4,7 +4,7 @@ import { getHostWorkspaces, setHostWorkspaces } from './services/extensionApi';
 
 const DB_NAME = 'cooldesk-db'
 // Bump version to run migration for new 'urls' store
-const DB_VERSION = 6
+const DB_VERSION = 7
 const STORE = 'workspaces'
 const URLS_STORE = 'urls'
 const SETTINGS_STORE = 'settings'
@@ -27,15 +27,15 @@ function openDB() {
         urlsStore = db.createObjectStore(URLS_STORE, { keyPath: 'url' })
         try {
           urlsStore.createIndex('workspaceIds', 'workspaceIds', { multiEntry: true })
-        } catch {}
+        } catch { }
         try {
           urlsStore.createIndex('by_addedAt', 'addedAt', { unique: false })
-        } catch {}
+        } catch { }
       } else {
         urlsStore = req.transaction.objectStore(URLS_STORE)
         // Ensure indexes exist (idempotent across versions)
-        try { if (!urlsStore.indexNames.contains('workspaceIds')) urlsStore.createIndex('workspaceIds', 'workspaceIds', { multiEntry: true }) } catch {}
-        try { if (!urlsStore.indexNames.contains('by_addedAt')) urlsStore.createIndex('by_addedAt', 'addedAt', { unique: false }) } catch {}
+        try { if (!urlsStore.indexNames.contains('workspaceIds')) urlsStore.createIndex('workspaceIds', 'workspaceIds', { multiEntry: true }) } catch { }
+        try { if (!urlsStore.indexNames.contains('by_addedAt')) urlsStore.createIndex('by_addedAt', 'addedAt', { unique: false }) } catch { }
       }
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE, { keyPath: 'id' })
@@ -55,10 +55,15 @@ function openDB() {
           tsStore.createIndex('by_timestamp', 'timestamp', { unique: false })
           tsStore.createIndex('by_sessionId', 'sessionId', { unique: false })
           tsStore.createIndex('by_url_timestamp', ['url', 'timestamp'], { unique: false })
-        } catch {}
+        } catch { }
       }
       if (!db.objectStoreNames.contains('timeTracking')) {
         db.createObjectStore('timeTracking', { keyPath: 'url' })
+      }
+      // New store for pinned URLs (Pings)
+      if (!db.objectStoreNames.contains('pins')) {
+        const pStore = db.createObjectStore('pins', { keyPath: 'url' })
+        try { pStore.createIndex('by_createdAt', 'createdAt', { unique: false }) } catch { }
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -146,17 +151,17 @@ export async function getActivityTimeSeriesByTimeRange(startTime, endTime = Date
 export async function cleanupOldTimeSeriesData(retentionDays = 30) {
   const db = await openDB();
   const cutoffTime = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
-  
+
   return new Promise((resolve) => {
     try {
       const tx = db.transaction('activityTimeSeries', 'readwrite');
       const store = tx.objectStore('activityTimeSeries');
       const index = store.index('by_timestamp');
       const range = IDBKeyRange.upperBound(cutoffTime);
-      
+
       let deletedCount = 0;
       const request = index.openCursor(range);
-      
+
       request.onsuccess = (event) => {
         const cursor = event.target.result;
         if (cursor) {
@@ -168,7 +173,7 @@ export async function cleanupOldTimeSeriesData(retentionDays = 30) {
           resolve(deletedCount);
         }
       };
-      
+
       request.onerror = () => resolve(0);
     } catch {
       resolve(0);
@@ -183,24 +188,24 @@ export async function getTimeSeriesStorageStats() {
       const tx = db.transaction('activityTimeSeries', 'readonly');
       const store = tx.objectStore('activityTimeSeries');
       const countRequest = store.count();
-      
+
       countRequest.onsuccess = () => {
         const totalEvents = countRequest.result;
         const estimatedSizeMB = (totalEvents * 0.5) / 1024; // ~500 bytes per event
-        
+
         // Get oldest and newest timestamps
         const index = store.index('by_timestamp');
         const oldestRequest = index.openCursor();
         const newestRequest = index.openCursor(null, 'prev');
-        
+
         let oldest = null, newest = null;
-        
+
         oldestRequest.onsuccess = (e) => {
           if (e.target.result) oldest = e.target.result.value.timestamp;
-          
+
           newestRequest.onsuccess = (e2) => {
             if (e2.target.result) newest = e2.target.result.value.timestamp;
-            
+
             resolve({
               totalEvents,
               estimatedSizeMB: Math.round(estimatedSizeMB * 100) / 100,
@@ -211,7 +216,7 @@ export async function getTimeSeriesStorageStats() {
           };
         };
       };
-      
+
       countRequest.onerror = () => resolve({ totalEvents: 0, estimatedSizeMB: 0 });
     } catch {
       resolve({ totalEvents: 0, estimatedSizeMB: 0 });
@@ -222,20 +227,20 @@ export async function getTimeSeriesStorageStats() {
 export async function getActivityAnalytics(url = null, days = 7) {
   const endTime = Date.now();
   const startTime = endTime - (days * 24 * 60 * 60 * 1000);
-  
+
   // Limit query size for performance
   const MAX_EVENTS = 10000;
-  let events = url 
+  let events = url
     ? await getActivityTimeSeriesByUrl(url, startTime, endTime)
     : await getActivityTimeSeriesByTimeRange(startTime, endTime);
-    
+
   // Sample data if too large
   if (events.length > MAX_EVENTS) {
     const step = Math.ceil(events.length / MAX_EVENTS);
     events = events.filter((_, i) => i % step === 0);
     console.warn(`[Analytics] Sampled ${events.length} events from ${events.length * step} total`);
   }
-    
+
   // Aggregate analytics
   const analytics = {
     totalTime: 0,
@@ -247,14 +252,14 @@ export async function getActivityAnalytics(url = null, days = 7) {
     hourlyPattern: Array(24).fill(0),
     topUrls: {},
   };
-  
+
   events.forEach(event => {
     const { metrics, sessionId, timestamp } = event;
     analytics.totalTime += metrics.timeSpent || 0;
     analytics.totalClicks += metrics.clicks || 0;
     analytics.totalForms += metrics.forms || 0;
     analytics.sessionsCount.add(sessionId);
-    
+
     // Daily breakdown
     const day = new Date(timestamp).toDateString();
     if (!analytics.dailyBreakdown[day]) {
@@ -264,11 +269,11 @@ export async function getActivityAnalytics(url = null, days = 7) {
     analytics.dailyBreakdown[day].clicks += metrics.clicks || 0;
     analytics.dailyBreakdown[day].forms += metrics.forms || 0;
     analytics.dailyBreakdown[day].sessions.add(sessionId);
-    
+
     // Hourly pattern
     const hour = new Date(timestamp).getHours();
     analytics.hourlyPattern[hour] += metrics.timeSpent || 0;
-    
+
     // Top URLs
     if (!url) {
       if (!analytics.topUrls[event.url]) {
@@ -279,19 +284,19 @@ export async function getActivityAnalytics(url = null, days = 7) {
       analytics.topUrls[event.url].forms += metrics.forms || 0;
     }
   });
-  
+
   // Convert sets to counts
   analytics.sessionsCount = analytics.sessionsCount.size;
   Object.keys(analytics.dailyBreakdown).forEach(day => {
     analytics.dailyBreakdown[day].sessions = analytics.dailyBreakdown[day].sessions.size;
   });
-  
+
   // Calculate average scroll depth
   const scrollEvents = events.filter(e => e.metrics.scrollDepth > 0);
-  analytics.avgScrollDepth = scrollEvents.length > 0 
-    ? scrollEvents.reduce((sum, e) => sum + e.metrics.scrollDepth, 0) / scrollEvents.length 
+  analytics.avgScrollDepth = scrollEvents.length > 0
+    ? scrollEvents.reduce((sum, e) => sum + e.metrics.scrollDepth, 0) / scrollEvents.length
     : 0;
-    
+
   return {
     ...analytics,
     sampledData: events.length < (url ? 1000 : 5000), // Indicate if data was sampled
@@ -352,9 +357,9 @@ export async function listWorkspaces() {
   // Mirror to host in background; do not block UI if host is unavailable
   try {
     if (Array.isArray(items) && items.length) {
-      (async () => { try { await setHostWorkspaces(items); } catch {} })();
+      (async () => { try { await setHostWorkspaces(items); } catch { } })();
     }
-  } catch {}
+  } catch { }
   // If IndexedDB is empty, try to restore from chrome.storage.local backup
   if (!items || items.length === 0) {
     try {
@@ -373,7 +378,7 @@ export async function listWorkspaces() {
         })))
         return values
       }
-    } catch {}
+    } catch { }
     // Fallback to host (Electron app) if available
     try {
       const host = await getHostWorkspaces();
@@ -388,20 +393,20 @@ export async function listWorkspaces() {
         })))
         return list
       }
-    } catch {}
+    } catch { }
   }
   // Mirror to host in background; do not block UI if host is unavailable (secondary path)
   try {
     if (Array.isArray(items) && items.length) {
-      (async () => { try { await setHostWorkspaces(items); } catch {} })();
+      (async () => { try { await setHostWorkspaces(items); } catch { } })();
     }
-  } catch {}
+  } catch { }
   return items
 }
 
 export async function saveWorkspace(workspace) {
   const db = await openDB()
-  try { console.log('[db.saveWorkspace] start', { id: workspace?.id, name: workspace?.name, urls: Array.isArray(workspace?.urls) ? workspace.urls.length : 0 }); } catch {}
+  try { console.log('[db.saveWorkspace] start', { id: workspace?.id, name: workspace?.name, urls: Array.isArray(workspace?.urls) ? workspace.urls.length : 0 }); } catch { }
   await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite')
     const store = tx.objectStore(STORE)
@@ -409,7 +414,7 @@ export async function saveWorkspace(workspace) {
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error)
   })
-  try { console.log('[db.saveWorkspace] wrote to IDB'); } catch {}
+  try { console.log('[db.saveWorkspace] wrote to IDB'); } catch { }
   // Mirror to chrome.storage.local as a lightweight backup to mitigate potential IDB loss
   try {
     const { workspacesBackupById } = await chrome.storage.local.get(['workspacesBackupById'])
@@ -418,25 +423,25 @@ export async function saveWorkspace(workspace) {
       next[workspace.id] = workspace
       await chrome.storage.local.set({ workspacesBackupById: next })
     }
-    try { console.log('[db.saveWorkspace] mirrored to chrome.storage.local'); } catch {}
-  } catch (e) { try { console.warn('[db.saveWorkspace] mirror to chrome.storage.local failed', e); } catch {} }
+    try { console.log('[db.saveWorkspace] mirrored to chrome.storage.local'); } catch { }
+  } catch (e) { try { console.warn('[db.saveWorkspace] mirror to chrome.storage.local failed', e); } catch { } }
   // Mirror entire list to host so Electron app sees latest workspaces (non-blocking)
   try {
     (async () => {
       try {
         const all = await listWorkspaces();
         await setHostWorkspaces(all);
-        try { console.log('[db.saveWorkspace] mirrored to host, count:', Array.isArray(all) ? all.length : 0); } catch {}
-      } catch (e) { try { console.warn('[db.saveWorkspace] mirror to host failed', e); } catch {} }
+        try { console.log('[db.saveWorkspace] mirrored to host, count:', Array.isArray(all) ? all.length : 0); } catch { }
+      } catch (e) { try { console.warn('[db.saveWorkspace] mirror to host failed', e); } catch { } }
     })();
-  } catch {}
+  } catch { }
   // Notify listeners via BroadcastChannel
   try {
     const bc = new BroadcastChannel('ws_db_changes')
     bc.postMessage({ type: 'workspacesChanged' })
     bc.close()
-    try { console.log('[db.saveWorkspace] broadcasted ws_db_changes'); } catch {}
-  } catch (e) { try { console.warn('[db.saveWorkspace] broadcast failed', e); } catch {} }
+    try { console.log('[db.saveWorkspace] broadcasted ws_db_changes'); } catch { }
+  } catch (e) { try { console.warn('[db.saveWorkspace] broadcast failed', e); } catch { } }
 }
 
 export function subscribeWorkspaceChanges(callback) {
@@ -446,9 +451,9 @@ export function subscribeWorkspaceChanges(callback) {
     bc.onmessage = (ev) => {
       if (ev?.data?.type === 'workspacesChanged') callback()
     }
-  } catch {}
+  } catch { }
   return () => {
-    try { bc && bc.close() } catch {}
+    try { bc && bc.close() } catch { }
   }
 }
 
@@ -504,7 +509,7 @@ export async function saveSettings(value) {
     const bc = new BroadcastChannel('settings_db_changes')
     bc.postMessage({ type: 'settingsChanged' })
     bc.close()
-  } catch {}
+  } catch { }
 }
 
 // UI state helpers (persist selected tab/workspace)
@@ -600,8 +605,8 @@ export async function updateItemWorkspace(itemId, workspaceName) {
     }
 
     if (itemUpdated) {
-      await chrome.storage.local.set({ 
-        dashboardData: { ...dashboardData, bookmarks: newBookmarks, history: newHistory } 
+      await chrome.storage.local.set({
+        dashboardData: { ...dashboardData, bookmarks: newBookmarks, history: newHistory }
       });
     }
   } catch (e) {
@@ -616,9 +621,9 @@ export function subscribeSettingsChanges(callback) {
     bc.onmessage = (ev) => {
       if (ev?.data?.type === 'settingsChanged') callback()
     }
-  } catch {}
+  } catch { }
   return () => {
-    try { bc && bc.close() } catch {}
+    try { bc && bc.close() } catch { }
   }
 }
 
@@ -673,7 +678,7 @@ export async function upsertUrl(doc) {
       getReq.onerror = () => resolve()
     } catch { resolve() }
   })
-  try { const bc = new BroadcastChannel('urls_db_changes'); bc.postMessage({ type: 'urlsChanged' }); bc.close() } catch {}
+  try { const bc = new BroadcastChannel('urls_db_changes'); bc.postMessage({ type: 'urlsChanged' }); bc.close() } catch { }
 }
 
 /** Add URL to a workspace (idempotent). Creates doc if missing. */
@@ -697,7 +702,7 @@ export async function addUrlToWorkspace(url, wsId, meta = {}) {
       getReq.onerror = () => resolve()
     } catch { resolve() }
   })
-  try { const bc = new BroadcastChannel('urls_db_changes'); bc.postMessage({ type: 'urlsChanged' }); bc.close() } catch {}
+  try { const bc = new BroadcastChannel('urls_db_changes'); bc.postMessage({ type: 'urlsChanged' }); bc.close() } catch { }
 }
 
 /** Remove URL from a workspace. Optionally delete record if empty. */
@@ -726,7 +731,7 @@ export async function removeUrlFromWorkspace(url, wsId, { deleteIfOrphan = true 
       getReq.onerror = () => resolve()
     } catch { resolve() }
   })
-  try { const bc = new BroadcastChannel('urls_db_changes'); bc.postMessage({ type: 'urlsChanged' }); bc.close() } catch {}
+  try { const bc = new BroadcastChannel('urls_db_changes'); bc.postMessage({ type: 'urlsChanged' }); bc.close() } catch { }
 }
 
 /** List all URL docs in a workspace (via multiEntry index). */
@@ -756,5 +761,71 @@ export async function listAllUrls() {
       req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : [])
       req.onerror = () => resolve([])
     } catch { resolve([]) }
+  })
+}
+
+// ===== Pings APIs =====
+
+/** List all pings sorted by createdAt desc */
+export async function listPings() {
+  const db = await openDB()
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('pins', 'readonly')
+      const store = tx.objectStore('pins')
+      const req = store.getAll()
+      req.onsuccess = () => {
+        const arr = Array.isArray(req.result) ? req.result : []
+        arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        resolve(arr)
+      }
+      req.onerror = () => resolve([])
+    } catch { resolve([]) }
+  })
+}
+
+/** Add or update a ping and enforce a cap of 6 most recent */
+export async function upsertPing(ping) {
+  if (!ping || !ping.url) return
+  const db = await openDB()
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction('pins', 'readwrite')
+      const store = tx.objectStore('pins')
+      const putReq = store.put({ ...ping, createdAt: ping.createdAt || Date.now() })
+      putReq.onsuccess = () => resolve()
+      putReq.onerror = () => resolve()
+    } catch { resolve() }
+  })
+
+  // Enforce cap of 6 by trimming oldest
+  const all = await listPings()
+  if (all.length > 6) {
+    const toDelete = all.slice(6) // already sorted desc
+    const db2 = await openDB()
+    await Promise.all(toDelete.map(p => new Promise((resolve) => {
+      try {
+        const tx = db2.transaction('pins', 'readwrite')
+        const store = tx.objectStore('pins')
+        const delReq = store.delete(p.url)
+        delReq.onsuccess = () => resolve()
+        delReq.onerror = () => resolve()
+      } catch { resolve() }
+    })))
+  }
+}
+
+/** Delete a ping by URL */
+export async function deletePing(url) {
+  if (!url) return
+  const db = await openDB()
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction('pins', 'readwrite')
+      const store = tx.objectStore('pins')
+      const req = store.delete(url)
+      req.onsuccess = () => resolve()
+      req.onerror = () => resolve()
+    } catch { resolve() }
   })
 }
