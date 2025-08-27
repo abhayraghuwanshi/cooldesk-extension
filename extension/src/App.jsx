@@ -84,6 +84,7 @@ export default function App() {
   const [showSavedWorkspaces, setShowSavedWorkspaces] = useState(true)
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
+  const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
   const [processes, setProcesses] = useState([])
   const [showSyncControls, setShowSyncControls] = useState(false)
 
@@ -582,6 +583,14 @@ export default function App() {
       } catch { }
       const refreshed = await listWorkspaces();
       setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+      
+      // Trigger data refresh to update UI
+      try {
+        await sendMessage({ action: 'updateData' });
+        populate(); // Refresh the dashboard data
+      } catch (e) {
+        console.warn('Failed to refresh data after deletion:', e);
+      }
     } catch (e) {
       console.error('Failed to delete from workspace:', e);
     }
@@ -1259,7 +1268,7 @@ export default function App() {
         {/* Always render content; hydration refreshes in background */}
         <>
           <ErrorBoundary>
-            <ActivityPanel />
+            <ActivityPanel activeSection={activeSection} />
           </ErrorBoundary>
         </>
       </>
@@ -1316,6 +1325,10 @@ export default function App() {
         setShowCreateWorkspace={setShowCreateWorkspace}
         openInTab={openInTab}
         isFooter={true}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        activeSection={activeSection}
+        setActiveSection={setActiveSection}
       />
 
       {/* <div className="bottom-search">

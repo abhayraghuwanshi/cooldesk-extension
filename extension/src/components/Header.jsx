@@ -1,6 +1,8 @@
 import {
   faArrowUpRightFromSquare,
   faCalendarDays,
+  faChevronLeft,
+  faChevronRight,
   faCircleQuestion,
   faEnvelope,
   faGear,
@@ -25,6 +27,10 @@ export function Header({
   setShowCreateWorkspace,
   openInTab,
   isFooter = false,
+  activeTab,
+  setActiveTab,
+  activeSection,
+  setActiveSection,
 }) {
   const [autoSync, setAutoSync] = useState(true);
   const [now, setNow] = useState(new Date());
@@ -68,7 +74,8 @@ export function Header({
       try { await chrome.storage.local.set({ pendingQuery: q }); } catch { }
       // Set stable path without query to avoid setOptions throwing
       if (chrome?.sidePanel?.setOptions) {
-        await chrome.sidePanel.setOptions({ path: 'index.html', enabled: true });
+        await chrome.sidePanel.setOptions(
+          { path: 'index.html', enabled: true });
       }
       if (chrome?.windows?.getCurrent && chrome?.sidePanel?.open) {
         const win = await chrome.windows.getCurrent();
@@ -90,7 +97,10 @@ export function Header({
     : { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000 };
 
   return (
-    <header className="header ai-header" style={barStyle}>
+    <header className="header ai-header" style={{
+      ...barStyle,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+    }}>
       <div className="logo-placeholder">
         <span className="logo-text">Cool-Desk</span>
       </div>
@@ -98,6 +108,124 @@ export function Header({
         <div style={{ position: 'relative', flex: 1 }}>
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
         </div>
+        {/* Navigation Arrows */}
+        {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (() => {
+          // Define sections for ActivityPanel navigation - add 'All' as first option
+          const sections = ['All', 'Current Tabs', 'Pings', 'Notes', 'Cool Feed'];
+          const isActivityNavigation = activeSection !== undefined && setActiveSection;
+          
+          const currentLabel = isActivityNavigation 
+            ? sections[activeSection] || 'Section'
+            : (activeTab === 'workspace' ? 'Workspace' : 'Saved');
+          
+          const handlePrevious = () => {
+            if (isActivityNavigation) {
+              setActiveSection((prev) => (prev - 1 + sections.length) % sections.length);
+            } else {
+              setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
+            }
+          };
+          
+          const handleNext = () => {
+            if (isActivityNavigation) {
+              setActiveSection((prev) => (prev + 1) % sections.length);
+            } else {
+              setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
+            }
+          };
+          
+          return (
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '4px',
+              marginRight: '8px'
+            }}>
+              <button
+                className="icon-btn nav-arrow"
+                onClick={handlePrevious}
+                title={isActivityNavigation 
+                  ? `Previous: ${sections[(activeSection - 1 + sections.length) % sections.length]}`
+                  : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
+                }
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(10px)',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '32px',
+                  height: '32px',
+                  fontSize: '12px'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)';
+                  e.target.style.transform = 'scale(1.05)';
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)';
+                  e.target.style.transform = 'scale(1)';
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                }}
+              >
+                <FontAwesomeIcon icon={faChevronLeft} />
+              </button>
+              <div style={{
+                fontSize: '12px',
+                fontWeight: '500',
+                color: 'rgba(255, 255, 255, 0.8)',
+                minWidth: isActivityNavigation ? '80px' : '60px',
+                textAlign: 'center',
+                textTransform: 'capitalize'
+              }}>
+                {currentLabel}
+              </div>
+              <button
+                className="icon-btn nav-arrow"
+                onClick={handleNext}
+                title={isActivityNavigation 
+                  ? `Next: ${sections[(activeSection + 1) % sections.length]}`
+                  : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
+                }
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(10px)',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '32px',
+                  height: '32px',
+                  fontSize: '12px'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)';
+                  e.target.style.transform = 'scale(1.05)';
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)';
+                  e.target.style.transform = 'scale(1)';
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                }}
+              >
+                <FontAwesomeIcon icon={faChevronRight} />
+              </button>
+            </div>
+          );
+        })()}
         {/* <button className="icon-btn" onClick={openSyncControls} title="Organize using AI">
           <FontAwesomeIcon icon={progress.running ? faSpinner : faRobot} spin={!!progress.running} />
         </button> */}
@@ -349,7 +477,10 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
   }, [search]);
 
   return (
-    <div ref={wrapRef} style={{ width: '100%' }}>
+    <div ref={wrapRef} style={{
+      width: '100%',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+    }}>
       <input
         ref={inputRef}
         value={search}
@@ -359,6 +490,9 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
         type="text"
         placeholder="Search Everything..."
         className="ai-input"
+        style={{
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+        }}
       />
       {showList && (() => {
         const dropdown = (
@@ -370,6 +504,7 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
               top: `${portalPos.top - 50}px`,
               width: `${portalPos.width}px`,
               zIndex: 2147483647,
+              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
             }}
           >
             {recent.length === 0 && !search && (

@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signOut, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, signInAnonymously, signOut, onAuthStateChanged, signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDocs, getFirestore, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 
 // Firebase configuration - you'll need to replace with your project's config
@@ -48,19 +48,40 @@ export const initializeFirebase = async () => {
 export const signInWithGoogle = async () => {
   try {
     const provider = new GoogleAuthProvider();
-    // Add scopes if needed
     provider.addScope('profile');
     provider.addScope('email');
     
-    // Check if we're in an extension environment
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id) {
-      // For Chrome extensions, we might need to use redirect instead of popup
-      console.log('Extension environment detected - using Google Sign-In');
+    // Check if we're in an extension environment and use Chrome Identity API if available
+    if (typeof chrome !== 'undefined' && chrome.identity && chrome.identity.getAuthToken) {
+      try {
+        // Use Chrome Identity API for extensions
+        const token = await new Promise((resolve, reject) => {
+          chrome.identity.getAuthToken({ interactive: true }, (token) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+            } else {
+              resolve(token);
+            }
+          });
+        });
+        
+        if (token) {
+          // Sign in to Firebase with the token
+          const credential = GoogleAuthProvider.credential(null, token);
+          const result = await signInWithCredential(auth, credential);
+          currentUser = result.user;
+          return { success: true, user: currentUser };
+        }
+      } catch (identityError) {
+        console.log('Chrome Identity API failed, falling back to popup:', identityError);
+      }
     }
     
+    // Fallback to popup method
     const result = await signInWithPopup(auth, provider);
     currentUser = result.user;
     return { success: true, user: currentUser };
+    
   } catch (error) {
     console.error('Google sign-in error:', error);
     

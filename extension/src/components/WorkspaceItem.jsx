@@ -148,12 +148,16 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         }
       }}
       style={{
-        background: colors.bg,
-        border: `1px solid ${colors.border}`,
-        borderRadius: 8,
-        marginBottom: 8,
-        boxShadow: hovered ? `0 2px 8px ${colors.accent}20` : 'none',
-        transition: 'all 0.2s ease'
+        background: 'rgba(255, 255, 255, 0.05)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: '12px',
+        marginBottom: '12px',
+        backdropFilter: 'blur(10px)',
+        boxShadow: hovered 
+          ? '0 8px 24px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(255, 255, 255, 0.1)' 
+          : '0 2px 8px rgba(0, 0, 0, 0.05)',
+        transition: 'all 0.2s ease',
+        cursor: 'pointer'
       }}
     >
       <div className="item-header" onClick={handleItemClick} style={{ padding: '12px 16px' }}>
@@ -198,9 +202,30 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
               style={{
                 display: hovered ? 'inline-flex' : 'none',
                 marginLeft: 8,
+                background: 'rgba(255, 59, 48, 0.1)',
+                border: '1px solid rgba(255, 59, 48, 0.3)',
+                borderRadius: '6px',
+                padding: '4px 8px',
+                color: '#FF3B30',
+                cursor: 'pointer',
+                fontSize: '12px',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = '#FF3B30';
+                e.target.style.color = 'white';
+                e.target.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'rgba(255, 59, 48, 0.1)';
+                e.target.style.color = '#FF3B30';
+                e.target.style.transform = 'scale(1)';
               }}
             >
-              🗑
+              🗑️
             </button>
           )}
         </div>

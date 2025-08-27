@@ -3,14 +3,11 @@
  * Each persona contains curated workspaces with relevant tools and URLs
  */
 
-/**
- * Persona definitions for workspace creation
- * Each persona contains curated workspaces with relevant tools and URLs
- */
+import { faCode, faPalette, faChartLine, faVideo, faGraduationCap, faGlobe } from '@fortawesome/free-solid-svg-icons';
 
 export const personas = [
   {
-    emoji: '👨‍💻',
+    icon: faCode,
     title: 'Developer',
     description: 'For software developers, programmers, and engineers',
     workspaces: [
@@ -68,7 +65,7 @@ export const personas = [
     ]
   },
   {
-    emoji: '🎨',
+    icon: faPalette,
     title: 'Designer',
     description: 'For UI/UX designers, graphic designers, and creative professionals',
     workspaces: [
@@ -106,7 +103,7 @@ export const personas = [
     ]
   },
   {
-    emoji: '📈',
+    icon: faChartLine,
     title: 'Marketer',
     description: 'For digital marketers, growth hackers, and marketing professionals',
     workspaces: [
@@ -154,7 +151,7 @@ export const personas = [
     ]
   },
   {
-    emoji: '🎥',
+    icon: faVideo,
     title: 'Content Creator',
     description: 'For YouTubers, podcasters, and digital content creators',
     workspaces: [
@@ -194,7 +191,7 @@ export const personas = [
     ]
   },
   {
-    emoji: '🎓',
+    icon: faGraduationCap,
     title: 'Student / Researcher',
     description: 'For students, academics, and researchers',
     workspaces: [
@@ -232,7 +229,7 @@ export const personas = [
     ]
   },
   {
-    emoji: '🌐',
+    icon: faGlobe,
     title: 'General',
     description: 'For everyday users who want a balanced setup',
     workspaces: [
@@ -328,7 +325,7 @@ export function getPersonaUrlCount(persona) {
  */
 export function validatePersona(persona) {
   if (!persona || typeof persona !== 'object') return false;
-  if (!persona.emoji || !persona.title || !persona.description) return false;
+  if (!persona.icon || !persona.title || !persona.description) return false;
   if (!Array.isArray(persona.workspaces)) return false;
 
   return persona.workspaces.every(workspace =>

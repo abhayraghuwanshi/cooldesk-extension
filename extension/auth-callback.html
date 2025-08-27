@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Sign-In - Cool-Desk</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+        }
+        .logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #34C759, #30D158);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 24px;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #34C759;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .status {
+            margin-top: 20px;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        .error {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            padding: 16px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+        .success {
+            color: #34C759;
+            background: rgba(52, 199, 89, 0.1);
+            border: 1px solid rgba(52, 199, 89, 0.3);
+            padding: 16px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🚀</div>
+        <h2>Google Sign-In</h2>
+        <div class="spinner"></div>
+        <div class="status" id="status">Processing authentication...</div>
+        <div id="message"></div>
+    </div>
+
+    <script>
+        async function handleAuthCallback() {
+            const statusEl = document.getElementById('status');
+            const messageEl = document.getElementById('message');
+            
+            try {
+                // Get the authorization code from URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                const error = urlParams.get('error');
+                
+                if (error) {
+                    throw new Error(`Authentication failed: ${error}`);
+                }
+                
+                if (!code) {
+                    throw new Error('No authorization code received');
+                }
+                
+                statusEl.textContent = 'Exchanging authorization code...';
+                
+                // Send the code to the background script for token exchange
+                const response = await new Promise((resolve, reject) => {
+                    chrome.runtime.sendMessage({
+                        action: 'exchangeAuthCode',
+                        code: code
+                    }, (response) => {
+                        if (chrome.runtime.lastError) {
+                            reject(new Error(chrome.runtime.lastError.message));
+                        } else {
+                            resolve(response);
+                        }
+                    });
+                });
+                
+                if (response.success) {
+                    statusEl.textContent = 'Sign-in successful!';
+                    messageEl.innerHTML = '<div class="success">✅ You have been signed in successfully. You can close this tab.</div>';
+                    
+                    // Close the tab after a short delay
+                    setTimeout(() => {
+                        window.close();
+                    }, 2000);
+                } else {
+                    throw new Error(response.error || 'Authentication failed');
+                }
+                
+            } catch (error) {
+                console.error('Auth callback error:', error);
+                statusEl.textContent = 'Authentication failed';
+                messageEl.innerHTML = `<div class="error">❌ ${error.message}</div>`;
+            }
+        }
+        
+        // Start the authentication process when page loads
+        document.addEventListener('DOMContentLoaded', handleAuthCallback);
+    </script>
+</body>
+</html>

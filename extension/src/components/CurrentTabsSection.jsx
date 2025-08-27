@@ -8,6 +8,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const [tabs, setTabs] = React.useState([]);
   const [tabsError, setTabsError] = React.useState(null);
   const [hoveredTabId, setHoveredTabId] = React.useState(null);
+  const [removingTabIds, setRemovingTabIds] = React.useState(new Set());
 
   const refreshTabs = React.useCallback(() => {
     setTabsError(null);
@@ -117,13 +118,15 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     };
   }, []);
 
-  // Sort tabs by hostname (DNS) so similar URLs are grouped
+  // Sort tabs by hostname (DNS) so similar URLs are grouped, filter out removing tabs
   const sortedTabs = React.useMemo(() => {
     const getHost = (t) => {
       try { return new URL(t?.url || '').hostname || ''; } catch { return ''; }
     };
     const arr = Array.isArray(tabs) ? [...tabs] : [];
-    arr.sort((a, b) => {
+    // Filter out tabs that are being removed
+    const filteredArr = arr.filter(tab => !removingTabIds.has(tab.id));
+    filteredArr.sort((a, b) => {
       const ha = getHost(a);
       const hb = getHost(b);
       if (ha !== hb) return ha.localeCompare(hb);
@@ -132,8 +135,8 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
       const ub = b?.url || '';
       return ua.localeCompare(ub);
     });
-    return arr;
-  }, [tabs]);
+    return filteredArr;
+  }, [tabs, removingTabIds]);
 
   const focusTab = React.useCallback((tab) => {
     if (!tab || !tab.id) return;
@@ -152,14 +155,42 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const removeTab = React.useCallback((tab) => {
     try {
       if (!tab) return;
+      
+      // Immediate UI feedback - add to removing set
+      setRemovingTabIds(prev => new Set([...prev, tab.id]));
+      
       const hasRemove = typeof chrome !== 'undefined' && chrome?.tabs?.remove;
       if (hasRemove && tab.id != null) {
-        chrome.tabs.remove(tab.id);
+        chrome.tabs.remove(tab.id, () => {
+          // Remove from removing set after API call completes
+          setRemovingTabIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(tab.id);
+            return newSet;
+          });
+          // Refresh tabs to get updated list
+          setTimeout(refreshTabs, 100);
+        });
+      } else {
+        // If no Chrome API, just remove from removing set
+        setTimeout(() => {
+          setRemovingTabIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(tab.id);
+            return newSet;
+          });
+        }, 500);
       }
     } catch (e) {
       console.warn('Failed to remove tab', e);
+      // Remove from removing set on error
+      setRemovingTabIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tab.id);
+        return newSet;
+      });
     }
-  }, []);
+  }, [refreshTabs]);
 
   const duplicateTab = React.useCallback((tab) => {
     try {

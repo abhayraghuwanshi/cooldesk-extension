@@ -1,4 +1,4 @@
-import { faFloppyDisk, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faFloppyDisk, faTrash, faCog, faFolder, faBullseye, faUser, faRocket, faExclamationTriangle, faCheckCircle, faLightbulb } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { deleteWorkspaceById, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges, initializeFirebase, signInWithGoogle, signOutUser, getCurrentUser, onAuthStateChange } from '../services/firebase';
@@ -303,10 +303,14 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
     setError('');
 
     try {
+      // Use the existing Firebase signInWithGoogle function but in a new tab
       const result = await signInWithGoogle();
 
       if (!result.success) {
         setError(result.error);
+      } else {
+        // Success - close modal
+        onClose();
       }
     } catch (err) {
       setError(err.message || 'Google sign-in failed');
@@ -330,40 +334,103 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
   };
 
   return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal">
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }} style={{
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+      padding: '20px'
+    }}>
+      <div className="modal" style={{
+        background: 'rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: '16px',
+        boxShadow: '0 12px 48px rgba(0, 0, 0, 0.4)',
+        maxWidth: '1200px',
+        width: '95vw',
+        maxHeight: '90vh',
+        overflow: 'auto',
+        margin: '0 auto'
+      }}>
         <div
           className="modal-header"
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 8,
-            paddingBottom: 8,
-            borderBottom: '1px solid #273043',
-            marginBottom: 10,
+            gap: 16,
+            paddingBottom: 20,
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            marginBottom: 24,
           }}
         >
-          <h3 style={{ margin: 0 }}>Settings</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: 'linear-gradient(135deg, #34C759, #30D158)',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px'
+            }}><FontAwesomeIcon icon={faRocket} /></div>
+            <div>
+              <h3 style={{ 
+                margin: 0, 
+                fontSize: '24px',
+                fontWeight: '700',
+                color: '#e5e7eb',
+                lineHeight: '1.2'
+              }}>Welcome to Cool-Desk</h3>
+              <p style={{
+                margin: '4px 0 0 0',
+                fontSize: '14px',
+                color: '#9ca3af',
+                fontWeight: '400'
+              }}>Let's set up your personalized workspace</p>
+            </div>
+          </div>
           <button
             onClick={onClose}
             className="cancel-btn"
             aria-label="Close"
             title="Close"
-            style={{ padding: '4px 8px' }}
+            style={{ 
+              padding: '10px',
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: 'none',
+              color: '#e5e7eb',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '18px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.2)';
+              e.target.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+              e.target.style.transform = 'translateY(0)';
+            }}
           >
             ×
           </button>
         </div>
         {error && (
           <div style={{
-            marginBottom: 10,
+            marginBottom: 24,
             color: '#ff6b6b',
-            fontSize: 12,
-            background: '#241b1b',
-            border: '1px solid #3a2222',
-            padding: '6px 8px',
-            borderRadius: 6,
+            fontSize: '14px',
+            background: 'rgba(255, 107, 107, 0.1)',
+            border: '1px solid rgba(255, 107, 107, 0.2)',
+            padding: '16px 20px',
+            borderRadius: '12px',
+            backdropFilter: 'blur(10px)'
           }}>
             {error}
           </div>
@@ -371,56 +438,113 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
         <Tabs
           activeTab={activeTab}
           onTabChange={handleTabChange}
-          disabledTitles={basicSaved ? [] : ['Workspaces', 'Interest']}
+          disabledTitles={basicSaved ? [] : ['Workspaces', 'Personas']}
         >
-          <TabItem title="Basic">
-            <label>
-              <span>Gemini API Key</span>
-              <input
-                value={localSettings.geminiApiKey}
-                onChange={(e) => { setLocalSettings({ ...localSettings, geminiApiKey: e.target.value }); markEdited(); }}
-                placeholder="sk-..."
-                required
-              />
-            </label>
-            <label>
-              <span>Model Name</span>
-              <input
-                value={localSettings.modelName || ''}
-                onChange={(e) => { setLocalSettings({ ...localSettings, modelName: e.target.value }); markEdited(); }}
-                placeholder="e.g., gemini-1.5-pro"
-              />
-            </label>
-            <label>
-              <span>Visit Count Threshold</span>
-              <input
-                type="number"
-                min="0"
-                value={localSettings.visitCountThreshold}
-                onChange={(e) => { setLocalSettings({ ...localSettings, visitCountThreshold: e.target.value }); markEdited(); }}
-              />
-            </label>
-            <label>
-              <span>History Lookback</span>
-              <select
-                value={typeof localSettings.historyDays === 'number' && localSettings.historyDays > 0 ? localSettings.historyDays : (localSettings.historyDays || 30)}
-                onChange={(e) => { setLocalSettings({ ...localSettings, historyDays: Number(e.target.value) }); markEdited(); }}
-                style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  background: '#0f1522',
-                  border: '1px solid #273043',
-                  color: '#e5e7eb',
-                  borderRadius: 6,
-                  outline: 'none',
-                }}
-              >
-                <option value={7}>Last 7 days</option>
-                <option value={30}>Last 30 days</option>
-                <option value={90}>Last 90 days</option>
-              </select>
-            </label>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+          <TabItem title={<><FontAwesomeIcon icon={faCog} style={{ marginRight: '8px' }} />Setup</>}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>Gemini API Key</span>
+                <input
+                  value={localSettings.geminiApiKey}
+                  onChange={(e) => { setLocalSettings({ ...localSettings, geminiApiKey: e.target.value }); markEdited(); }}
+                  placeholder="Enter your Gemini API key..."
+                  required
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    color: '#e5e7eb',
+                    fontSize: '16px',
+                    outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#34C759';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                  }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>Model Name</span>
+                <input
+                  value={localSettings.modelName || ''}
+                  onChange={(e) => { setLocalSettings({ ...localSettings, modelName: e.target.value }); markEdited(); }}
+                  placeholder="e.g., gemini-1.5-pro"
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    color: '#e5e7eb',
+                    fontSize: '16px',
+                    outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#34C759';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                  }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>Visit Count Threshold</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={localSettings.visitCountThreshold}
+                  onChange={(e) => { setLocalSettings({ ...localSettings, visitCountThreshold: e.target.value }); markEdited(); }}
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    color: '#e5e7eb',
+                    fontSize: '16px',
+                    outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#34C759';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                  }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>History Lookback</span>
+                <select
+                  value={typeof localSettings.historyDays === 'number' && localSettings.historyDays > 0 ? localSettings.historyDays : (localSettings.historyDays || 30)}
+                  onChange={(e) => { setLocalSettings({ ...localSettings, historyDays: Number(e.target.value) }); markEdited(); }}
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    color: '#e5e7eb',
+                    borderRadius: '12px',
+                    fontSize: '16px',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value={7}>Last 7 days</option>
+                  <option value={30}>Last 30 days</option>
+                  <option value={90}>Last 90 days</option>
+                </select>
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 32, alignItems: 'center', justifyContent: 'center' }}>
               <button
                 className="add-link-btn"
                 onClick={async () => {
@@ -452,31 +576,81 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                   }
                 }}
                 title="Save Basic settings and continue to Workspaces"
+                style={{
+                  background: '#34C759',
+                  border: 'none',
+                  borderRadius: '16px',
+                  padding: '16px 32px',
+                  color: 'white',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 16px rgba(52, 199, 89, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.transform = 'translateY(-1px)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 2px 8px rgba(52, 199, 89, 0.3)';
+                }}
               >
                 Save & Continue
               </button>
               {!basicSaved && (
-                <div style={{ fontSize: 12, color: '#ffd500' }}>Not saved yet</div>
+                <div style={{ fontSize: '14px', color: '#ffd500', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FontAwesomeIcon icon={faExclamationTriangle} />Not saved yet
+                </div>
               )}
               {basicSaved && (
-                <div style={{ fontSize: 12, color: '#7bd88f' }}>Saved</div>
+                <div style={{ fontSize: '14px', color: '#34C759', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FontAwesomeIcon icon={faCheckCircle} />Saved
+                </div>
               )}
             </div>
           </TabItem>
-          <TabItem title="Workspaces">
+          <TabItem title={<><FontAwesomeIcon icon={faFolder} style={{ marginRight: '8px' }} />Workspaces</>}>
             <label>
               <span>Workspaces</span>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {editableWorkspaces.map((row) => (
-                  <div key={row.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div key={row.id} style={{ 
+                    display: 'flex', 
+                    gap: 12, 
+                    alignItems: 'center',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    padding: '12px 16px'
+                  }}>
                     <input
-                      style={{ flex: 1 }}
+                      style={{ 
+                        flex: 1,
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        color: '#e5e7eb',
+                        fontSize: '14px',
+                        outline: 'none'
+                      }}
                       placeholder="Workspace name"
                       value={row.name}
                       onChange={(e) => handleUpdateWorkspaceField(row.id, 'name', e.target.value)}
                     />
                     <input
-                      style={{ flex: 2 }}
+                      style={{ 
+                        flex: 2,
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        color: '#e5e7eb',
+                        fontSize: '14px',
+                        outline: 'none'
+                      }}
                       placeholder="Description"
                       value={row.description}
                       onChange={(e) => handleUpdateWorkspaceField(row.id, 'description', e.target.value)}
@@ -486,6 +660,27 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                       onClick={() => handleSaveWorkspaceRow(row.id)}
                       title="Save"
                       aria-label="Save workspace"
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        background: '#34C759',
+                        border: 'none',
+                        color: 'white',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.transform = 'translateY(-1px)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                      }}
                     >
                       <FontAwesomeIcon icon={faFloppyDisk} />
                     </button>
@@ -494,21 +689,96 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                       onClick={() => handleDeleteWorkspace(row.id)}
                       title="Delete"
                       aria-label="Delete workspace"
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        background: 'rgba(255, 59, 48, 0.8)',
+                        border: 'none',
+                        color: 'white',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.transform = 'translateY(-1px)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(255, 59, 48, 0.4)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                      }}
                     >
                       <FontAwesomeIcon icon={faTrash} />
                     </button>
                   </div>
                 ))}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="add-link-btn" onClick={handleOpenCreateWorkspace} title="Create workspace">Add</button>
-                  <button className="add-link-btn" onClick={handleSuggestCategories} disabled={suggesting || !(String(localSettings?.geminiApiKey || '').trim())} title="AI-suggest workspaces from your URLs">
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button 
+                    className="add-link-btn" 
+                    onClick={handleOpenCreateWorkspace} 
+                    title="Create workspace"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '12px',
+                      padding: '10px 16px',
+                      color: '#e5e7eb',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                      e.target.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                      e.target.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    Add
+                  </button>
+                  <button 
+                    className="add-link-btn" 
+                    onClick={handleSuggestCategories} 
+                    disabled={suggesting || !(String(localSettings?.geminiApiKey || '').trim())} 
+                    title="AI-suggest workspaces from your URLs"
+                    style={{
+                      background: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 'rgba(255, 255, 255, 0.05)' : '#34C759',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '10px 16px',
+                      color: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? '#9ca3af' : 'white',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      opacity: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 0.6 : 1
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!suggesting && String(localSettings?.geminiApiKey || '').trim()) {
+                        e.target.style.transform = 'translateY(-1px)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!suggesting && String(localSettings?.geminiApiKey || '').trim()) {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = 'none';
+                      }
+                    }}
+                  >
                     {suggesting ? 'Suggesting…' : 'AI Suggest'}
                   </button>
                 </div>
               </div>
             </label>
           </TabItem>
-          <TabItem title="Interest">
+          <TabItem title={<><FontAwesomeIcon icon={faBullseye} style={{ marginRight: '8px' }} />Personas</>}>
             <div style={{ padding: '16px 0' }}>
               <h4 style={{ 
                 margin: '0 0 12px 0', 
@@ -531,23 +801,28 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                     Choose a persona to automatically create workspaces with relevant URLs and tools.
                   </p>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
                     {personas.map(persona => (
                       <div key={persona.title} style={{
-                        background: '#1a1f2e',
-                        border: '1px solid #374151',
-                        borderRadius: '8px',
-                        padding: '12px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '12px',
+                        padding: '16px',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
+                        backdropFilter: 'blur(10px)'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.closest('div').style.borderColor = '#4a90e2';
-                        e.target.closest('div').style.background = '#1e2432';
+                        e.target.closest('div').style.borderColor = '#34C759';
+                        e.target.closest('div').style.background = 'rgba(255, 255, 255, 0.08)';
+                        e.target.closest('div').style.transform = 'translateY(-2px)';
+                        e.target.closest('div').style.boxShadow = '0 8px 24px rgba(52, 199, 89, 0.2)';
                       }}
                       onMouseLeave={(e) => {
-                        e.target.closest('div').style.borderColor = '#374151';
-                        e.target.closest('div').style.background = '#1a1f2e';
+                        e.target.closest('div').style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                        e.target.closest('div').style.background = 'rgba(255, 255, 255, 0.05)';
+                        e.target.closest('div').style.transform = 'translateY(0)';
+                        e.target.closest('div').style.boxShadow = 'none';
                       }}
                       onClick={() => handlePersonaSelect(persona)}>
                         <div style={{ 
@@ -556,7 +831,7 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                           gap: '8px', 
                           marginBottom: '8px' 
                         }}>
-                          <span style={{ fontSize: '20px' }}>{persona.emoji}</span>
+                          <FontAwesomeIcon icon={persona.icon} style={{ fontSize: '20px', color: '#34C759' }} />
                           <strong style={{ color: '#e5e7eb', fontSize: '14px' }}>{persona.title}</strong>
                         </div>
                         <div style={{ fontSize: '12px', color: '#9ca3af' }}>
@@ -594,12 +869,23 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                       }}
                       style={{
                         marginLeft: 'auto',
-                        padding: '4px 8px',
-                        background: 'transparent',
-                        border: '1px solid #374151',
-                        color: '#9ca3af',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
+                        padding: '8px 12px',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        color: '#e5e7eb',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                        e.target.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                        e.target.style.transform = 'translateY(0)';
                       }}
                     >
                       ← Back
@@ -617,11 +903,12 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                   <div style={{ marginBottom: '20px' }}>
                     {selectedCategories.map(category => (
                       <div key={category.id} style={{
-                        background: '#1a1f2e',
-                        border: '1px solid #374151',
-                        borderRadius: '8px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '12px',
                         padding: '16px',
-                        marginBottom: '12px'
+                        marginBottom: '16px',
+                        backdropFilter: 'blur(10px)'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                           <div style={{ 
@@ -649,15 +936,24 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                               onChange={(e) => handleCategoryRename(category.id, e.target.value)}
                               style={{
                                 width: '100%',
-                                padding: '8px 12px',
-                                background: '#0f1522',
-                                border: '1px solid #273043',
-                                borderRadius: '6px',
+                                padding: '12px 16px',
+                                background: 'rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                borderRadius: '8px',
                                 color: '#e5e7eb',
-                                fontSize: '15px',
-                                fontWeight: '500',
-                                marginBottom: '10px',
-                                outline: 'none'
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                marginBottom: '12px',
+                                outline: 'none',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.borderColor = '#34C759';
+                                e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                              }}
+                              onBlur={(e) => {
+                                e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                                e.target.style.background = 'rgba(255, 255, 255, 0.1)';
                               }}
                             />
                             <div style={{ 
@@ -698,8 +994,28 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                       onClick={createPersonaWorkspaces}
                       disabled={creatingWorkspaces || !selectedCategories.some(c => c.selected)}
                       style={{ 
-                        opacity: creatingWorkspaces || !selectedCategories.some(c => c.selected) ? 0.6 : 1,
-                        cursor: creatingWorkspaces || !selectedCategories.some(c => c.selected) ? 'not-allowed' : 'pointer'
+                        background: creatingWorkspaces || !selectedCategories.some(c => c.selected) ? 'rgba(255, 255, 255, 0.05)' : '#34C759',
+                        border: 'none',
+                        borderRadius: '12px',
+                        padding: '12px 20px',
+                        color: creatingWorkspaces || !selectedCategories.some(c => c.selected) ? '#9ca3af' : 'white',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        cursor: creatingWorkspaces || !selectedCategories.some(c => c.selected) ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease',
+                        opacity: creatingWorkspaces || !selectedCategories.some(c => c.selected) ? 0.6 : 1
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!creatingWorkspaces && selectedCategories.some(c => c.selected)) {
+                          e.target.style.transform = 'translateY(-1px)';
+                          e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!creatingWorkspaces && selectedCategories.some(c => c.selected)) {
+                          e.target.style.transform = 'translateY(0)';
+                          e.target.style.boxShadow = 'none';
+                        }
                       }}
                     >
                       {creatingWorkspaces ? 'Creating...' : 'Create Workspaces'}
@@ -709,19 +1025,20 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
               )}
 
               <div style={{ 
-                padding: '12px', 
-                background: '#0b101a', 
-                border: '1px solid #1f2937',
-                borderRadius: '6px',
-                fontSize: '12px',
-                color: '#6b7280',
-                marginTop: '16px'
+                padding: '16px', 
+                background: 'rgba(52, 199, 89, 0.1)', 
+                border: '1px solid rgba(52, 199, 89, 0.2)',
+                borderRadius: '12px',
+                fontSize: '13px',
+                color: '#9ca3af',
+                marginTop: '20px',
+                backdropFilter: 'blur(10px)'
               }}>
-                💡 <strong>Tip:</strong> Each workspace will be created with curated URLs relevant to your selected persona. You can customize workspace names before creating them.
+                <FontAwesomeIcon icon={faLightbulb} style={{ color: '#34C759', marginRight: '8px' }} /> <strong style={{ color: '#34C759' }}>Tip:</strong> Each workspace will be created with curated URLs relevant to your selected persona. You can customize workspace names before creating them.
               </div>
             </div>
           </TabItem>
-          <TabItem title="Auth">
+          <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>
             <div style={{ padding: '16px 0' }}>
               <h4 style={{ 
                 margin: '0 0 12px 0', 
@@ -736,11 +1053,12 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                 // Signed in view
                 <div>
                   <div style={{
-                    background: '#0b2818',
-                    border: '1px solid #22543d',
-                    borderRadius: '8px',
-                    padding: '16px',
-                    marginBottom: '16px'
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.2)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginBottom: '20px',
+                    backdropFilter: 'blur(10px)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                       <div style={{
@@ -768,8 +1086,28 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                     disabled={authLoading}
                     style={{
                       background: '#dc2626',
-                      borderColor: '#dc2626',
-                      opacity: authLoading ? 0.6 : 1
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '12px 20px',
+                      color: 'white',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: authLoading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      opacity: authLoading ? 0.6 : 1,
+                      boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!authLoading) {
+                        e.target.style.transform = 'translateY(-1px)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!authLoading) {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = '0 2px 8px rgba(220, 38, 38, 0.3)';
+                      }
                     }}
                   >
                     {authLoading ? 'Signing Out...' : 'Sign Out'}
@@ -798,13 +1136,29 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                         justifyContent: 'center',
                         gap: '12px',
                         margin: '0 auto',
-                        padding: '12px 24px',
+                        padding: '14px 28px',
                         background: '#4285f4',
-                        borderColor: '#4285f4',
+                        border: 'none',
+                        borderRadius: '12px',
                         fontSize: '14px',
-                        fontWeight: '500',
+                        fontWeight: '600',
+                        color: 'white',
                         opacity: authLoading ? 0.6 : 1,
-                        cursor: authLoading ? 'not-allowed' : 'pointer'
+                        cursor: authLoading ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 2px 8px rgba(66, 133, 244, 0.3)'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!authLoading) {
+                          e.target.style.transform = 'translateY(-1px)';
+                          e.target.style.boxShadow = '0 4px 12px rgba(66, 133, 244, 0.4)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!authLoading) {
+                          e.target.style.transform = 'translateY(0)';
+                          e.target.style.boxShadow = '0 2px 8px rgba(66, 133, 244, 0.3)';
+                        }
                       }}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -818,15 +1172,16 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                   </div>
 
                   <div style={{ 
-                    padding: '12px', 
-                    background: '#0b101a', 
-                    border: '1px solid #1f2937',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    color: '#6b7280',
-                    textAlign: 'center'
+                    padding: '16px', 
+                    background: 'rgba(66, 133, 244, 0.1)', 
+                    border: '1px solid rgba(66, 133, 244, 0.2)',
+                    borderRadius: '12px',
+                    fontSize: '13px',
+                    color: '#9ca3af',
+                    textAlign: 'center',
+                    backdropFilter: 'blur(10px)'
                   }}>
-                    💡 <strong>Note:</strong> Google sign-in allows you to sync workspaces across devices. Anonymous mode keeps data local to this browser.
+                    💡 <strong style={{ color: '#4285f4' }}>Note:</strong> Google sign-in allows you to sync workspaces across devices. Anonymous mode keeps data local to this browser.
                   </div>
                 </div>
               )}
@@ -854,7 +1209,7 @@ function Tabs({ children, activeTab: controlledActiveTab, onTabChange, disabledT
   const setActiveTab = (typeof onTabChange === 'function') ? onTabChange : setInternalTab;
   return (
     <div>
-      <div className="tab-list" role="tablist" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      <div className="tab-list" role="tablist" style={{ display: 'flex', gap: 16, marginBottom: 32, flexWrap: 'wrap' }}>
         {React.Children.map(children, (child, index) => (
           <button
             key={index}
@@ -869,12 +1224,38 @@ function Tabs({ children, activeTab: controlledActiveTab, onTabChange, disabledT
             disabled={Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)}
             className="filter-btn"
             style={{
-              padding: '6px 10px',
-              background: (Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)) ? '#0b101a' : (activeTab === index ? '#1b2331' : '#0f1522'),
-              border: '1px solid #273043',
-              borderBottomColor: activeTab === index ? '#4a90e2' : '#273043',
-              opacity: (Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)) ? 0.6 : 1,
+              padding: '16px 24px',
+              background: (Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)) 
+                ? 'rgba(255, 255, 255, 0.03)' 
+                : (activeTab === index ? '#34C759' : 'rgba(255, 255, 255, 0.1)'),
+              border: activeTab === index ? 'none' : '1px solid rgba(255, 255, 255, 0.2)',
+              borderRadius: '16px',
+              color: (Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)) 
+                ? '#6b7280' 
+                : (activeTab === index ? 'white' : '#e5e7eb'),
+              fontSize: '16px',
+              fontWeight: activeTab === index ? '600' : '500',
+              opacity: (Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)) ? 0.5 : 1,
               cursor: (Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)) ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: activeTab === index ? '0 4px 16px rgba(52, 199, 89, 0.3)' : 'none',
+              minWidth: '140px'
+            }}
+            onMouseEnter={(e) => {
+              const title = child.props.title;
+              const isDisabled = Array.isArray(disabledTitles) && disabledTitles.includes(title);
+              if (!isDisabled && activeTab !== index) {
+                e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                e.target.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              const title = child.props.title;
+              const isDisabled = Array.isArray(disabledTitles) && disabledTitles.includes(title);
+              if (!isDisabled && activeTab !== index) {
+                e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                e.target.style.transform = 'translateY(0)';
+              }
             }}
           >
             {child.props.title}

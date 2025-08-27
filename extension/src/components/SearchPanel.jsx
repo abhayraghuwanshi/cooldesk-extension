@@ -90,20 +90,34 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
                 const all = [];
                 for (const b of bookmarks) {
                     if (!b) continue;
+                    let faviconUrl = '';
+                    try {
+                        const hostname = new URL(b.url || '').hostname;
+                        faviconUrl = b.favicon || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+                    } catch {
+                        faviconUrl = '/default-favicon.svg';
+                    }
                     all.push({ 
                         type: 'bookmark', 
                         title: b.title || b.name || b.url || '', 
                         url: b.url || '',
-                        favicon: b.favicon || `https://www.google.com/s2/favicons?domain=${new URL(b.url || '').hostname}&sz=16`
+                        favicon: faviconUrl
                     });
                 }
                 for (const h of history) {
                     if (!h) continue;
+                    let faviconUrl = '';
+                    try {
+                        const hostname = new URL(h.url || '').hostname;
+                        faviconUrl = h.favicon || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+                    } catch {
+                        faviconUrl = '/default-favicon.svg';
+                    }
                     all.push({ 
                         type: 'history', 
                         title: h.title || h.url || '', 
                         url: h.url || '',
-                        favicon: h.favicon || `https://www.google.com/s2/favicons?domain=${new URL(h.url || '').hostname}&sz=16`
+                        favicon: faviconUrl
                     });
                 }
                 dataRef.current.list = all;
@@ -419,32 +433,38 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
                                         onMouseEnter={(e) => e.target.style.background = '#f8f9fa'}
                                         onMouseLeave={(e) => e.target.style.background = 'transparent'}
                                     >
-                                        <img 
-                                            src={m.favicon} 
-                                            alt="" 
-                                            style={{ 
-                                                width: 20, 
-                                                height: 20, 
-                                                flexShrink: 0, 
-                                                borderRadius: '2px'
-                                            }}
-                                            onError={(e) => { 
-                                                e.target.style.display = 'none'; 
-                                                e.target.nextSibling.style.display = 'flex';
-                                            }}
-                                        />
-                                        <div style={{ 
-                                            opacity: 0.7, 
-                                            display: 'none', 
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
+                                        <div style={{
                                             width: 20,
                                             height: 20,
-                                            background: '#f1f3f4',
+                                            flexShrink: 0,
                                             borderRadius: '2px',
-                                            fontSize: '12px'
+                                            background: '#f1f3f4',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            overflow: 'hidden'
                                         }}>
-                                            {m.type === 'bookmark' ? '🔖' : '🕘'}
+                                            <img 
+                                                src={m.favicon} 
+                                                alt="" 
+                                                style={{ 
+                                                    width: '100%', 
+                                                    height: '100%', 
+                                                    objectFit: 'cover',
+                                                    borderRadius: '2px'
+                                                }}
+                                                onError={(e) => { 
+                                                    e.target.style.display = 'none';
+                                                    e.target.parentElement.innerHTML = `<span style="font-size: 10px; color: #5f6368;">${m.type === 'bookmark' ? '🔖' : '🕘'}</span>`;
+                                                }}
+                                                onLoad={(e) => {
+                                                    // Ensure favicon loaded successfully
+                                                    if (e.target.naturalWidth === 0 || e.target.naturalHeight === 0) {
+                                                        e.target.style.display = 'none';
+                                                        e.target.parentElement.innerHTML = `<span style="font-size: 10px; color: #5f6368;">${m.type === 'bookmark' ? '🔖' : '🕘'}</span>`;
+                                                    }
+                                                }}
+                                            />
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ 

@@ -171,30 +171,158 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
 
   return (
     <div ref={rootRef} onKeyDown={onKeyDown} role="grid" tabIndex={-1}>
-      <div className="workspace-chips">
+      <div style={{ 
+        display: 'flex', 
+        flexWrap: 'wrap', 
+        gap: '12px', 
+        marginBottom: '24px',
+        padding: '0 4px'
+      }}>
         <button
           key="All"
-          className={`tag-chip workspace-chip ${selectedGroup === 'All' ? 'active' : ''}`}
           onClick={() => setSelectedGroup('All')}
           type="button"
           ref={el => chipRefs.current[0] = el}
           onKeyDown={(e) => onChipKeyDown(e, 0, 'All')}
+          style={{
+            background: selectedGroup === 'All' 
+              ? 'rgba(52, 199, 89, 0.15)' 
+              : 'rgba(255, 255, 255, 0.05)',
+            border: selectedGroup === 'All' 
+              ? '1px solid rgba(52, 199, 89, 0.4)' 
+              : '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '16px',
+            padding: '8px 16px',
+            color: selectedGroup === 'All' ? '#34C759' : '#e5e7eb',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            backdropFilter: 'blur(10px)',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            minWidth: '60px',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+            outline: 'none',
+            boxShadow: selectedGroup === 'All' 
+              ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
+              : 'none'
+          }}
+          onMouseEnter={(e) => {
+            if (selectedGroup !== 'All') {
+              e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.target.style.transform = 'translateY(-1px)';
+              e.target.style.boxShadow = '0 2px 8px rgba(255, 255, 255, 0.1)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (selectedGroup !== 'All') {
+              e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = 'none';
+            }
+          }}
+          onFocus={(e) => {
+            e.target.style.boxShadow = selectedGroup === 'All' 
+              ? '0 4px 16px rgba(52, 199, 89, 0.3), 0 0 0 2px rgba(52, 199, 89, 0.2)' 
+              : '0 0 0 2px rgba(255, 255, 255, 0.2)';
+          }}
+          onBlur={(e) => {
+            e.target.style.boxShadow = selectedGroup === 'All' 
+              ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
+              : 'none';
+          }}
         >
           All
-          <span className="chip-badge">{groups.reduce((sum, g) => sum + g.values.length, 0)}</span>
+          <span style={{
+            background: selectedGroup === 'All' 
+              ? 'rgba(52, 199, 89, 0.2)' 
+              : 'rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            padding: '2px 8px',
+            fontSize: '12px',
+            fontWeight: '600',
+            color: selectedGroup === 'All' ? '#34C759' : '#9ca3af',
+            minWidth: '20px',
+            textAlign: 'center'
+          }}>
+            {groups.reduce((sum, g) => sum + g.values.length, 0)}
+          </span>
         </button>
         {groups.map(({ key, values }, i) => (
           <button
             key={key}
-            className={`tag-chip workspace-chip ${selectedGroup === key ? 'active' : ''}`}
             title={key}
             onClick={() => setSelectedGroup(key)}
             type="button"
             ref={el => chipRefs.current[i + 1] = el}
             onKeyDown={(e) => onChipKeyDown(e, i + 1, key)}
+            style={{
+              background: selectedGroup === key 
+                ? 'rgba(52, 199, 89, 0.15)' 
+                : 'rgba(255, 255, 255, 0.05)',
+              border: selectedGroup === key 
+                ? '1px solid rgba(52, 199, 89, 0.4)' 
+                : '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '16px',
+              padding: '8px 16px',
+              color: selectedGroup === key ? '#34C759' : '#e5e7eb',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              backdropFilter: 'blur(10px)',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              minWidth: '60px',
+              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+              outline: 'none',
+              boxShadow: selectedGroup === key 
+                ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
+                : 'none'
+            }}
+            onMouseEnter={(e) => {
+              if (selectedGroup !== key) {
+                e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                e.target.style.transform = 'translateY(-1px)';
+                e.target.style.boxShadow = '0 2px 8px rgba(255, 255, 255, 0.1)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (selectedGroup !== key) {
+                e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = 'none';
+              }
+            }}
+            onFocus={(e) => {
+              e.target.style.boxShadow = selectedGroup === key 
+                ? '0 4px 16px rgba(52, 199, 89, 0.3), 0 0 0 2px rgba(52, 199, 89, 0.2)' 
+                : '0 0 0 2px rgba(255, 255, 255, 0.2)';
+            }}
+            onBlur={(e) => {
+              e.target.style.boxShadow = selectedGroup === key 
+                ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
+                : 'none';
+            }}
           >
             {getDomainFromUrl(key)}
-            <span className="chip-badge">{values.length}</span>
+            <span style={{
+              background: selectedGroup === key 
+                ? 'rgba(52, 199, 89, 0.2)' 
+                : 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              padding: '2px 8px',
+              fontSize: '12px',
+              fontWeight: '600',
+              color: selectedGroup === key ? '#34C759' : '#9ca3af',
+              minWidth: '20px',
+              textAlign: 'center'
+            }}>
+              {values.length}
+            </span>
           </button>
         ))}
       </div>
