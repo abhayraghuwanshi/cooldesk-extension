@@ -166,7 +166,7 @@ export function injectFooterBar() {
       `;
       notification.textContent = message;
       document.body.appendChild(notification);
-      
+
       setTimeout(() => {
         if (notification.parentNode) {
           notification.parentNode.removeChild(notification);
@@ -177,13 +177,14 @@ export function injectFooterBar() {
     // Helper: open extension side panel
     const openSidePanel = async () => {
       console.log('[CoolDesk Button] Attempting to open side panel...');
-      
+
       // Check if extension context is still valid
       if (!chrome?.runtime?.id) {
         console.warn('[CoolDesk Button] Extension context invalidated, cannot communicate with background');
         // Direct fallback to opening extension page
         try {
           const extensionUrl = `chrome-extension://${chrome.runtime.id || 'unknown'}/index.html`;
+
           window.open(extensionUrl, '_blank');
         } catch (e) {
           console.error('[CoolDesk Button] Failed to open extension directly:', e);
@@ -191,56 +192,56 @@ export function injectFooterBar() {
         }
         return;
       }
-      
+
       try {
         // Send message immediately in the user gesture context
         // This preserves the user gesture for the background script
         console.log('[CoolDesk Button] Sending openSidePanel message with user gesture...');
-        
+
         const response = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ 
+          chrome.runtime.sendMessage({
             type: 'openSidePanel',
             timestamp: Date.now(),
             fromUserGesture: true
           }, resolve);
         });
-        
+
         // Check for context invalidation error specifically
         if (chrome.runtime.lastError) {
           const error = chrome.runtime.lastError.message || chrome.runtime.lastError;
           console.warn('[CoolDesk Button] Runtime error:', error);
-          
+
           if (error.includes('context invalidated') || error.includes('Extension context')) {
             console.log('[CoolDesk Button] Extension context lost, requesting page reload');
             showNotification('Extension disconnected. Please refresh the page to reconnect.', '#ff4444');
             return;
           }
-          
+
           console.log('[CoolDesk Button] Falling back to tab...');
           // Fallback to tab for other errors
-          try { 
-            window.open(chrome.runtime.getURL('index.html'), '_blank'); 
+          try {
+            window.open(chrome.runtime.getURL('index.html'), '_blank');
           } catch (e) {
             console.error('[CoolDesk Button] Failed to open fallback tab:', e);
           }
           return;
         }
-        
+
         console.log('[CoolDesk Button] Background response:', response);
-        
+
         const ok = response && response.ok !== false;
         if (!ok) {
           console.log('[CoolDesk Button] Side panel failed, opening tab instead');
           console.log('[CoolDesk Button] Error was:', response?.error);
-          
+
           // Show helpful message about proper side panel usage
           if (response?.message) {
             showNotification(response.message, '#4A90E2', 8000);
           }
-          
+
           // Fallback to opening the extension UI in a tab
-          try { 
-            window.open(chrome.runtime.getURL('index.html'), '_blank'); 
+          try {
+            window.open(chrome.runtime.getURL('index.html'), '_blank');
           } catch (e) {
             console.error('[CoolDesk Button] Failed to open fallback tab:', e);
           }
@@ -250,8 +251,8 @@ export function injectFooterBar() {
       } catch (e) {
         console.error('[CoolDesk Button] Error in openSidePanel:', e);
         console.log('[CoolDesk Button] Direct fallback to tab...');
-        try { 
-          window.open(chrome.runtime.getURL('index.html'), '_blank'); 
+        try {
+          window.open(chrome.runtime.getURL('index.html'), '_blank');
         } catch (e2) {
           console.error('[CoolDesk Button] Failed to open fallback tab:', e2);
         }
@@ -262,20 +263,20 @@ export function injectFooterBar() {
     toggleBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      
+
       // Visual feedback
       toggleBtn.style.transform = 'translateY(-1px) scale(0.95)';
       setTimeout(() => {
         toggleBtn.style.transform = '';
       }, 150);
-      
+
       openSidePanel();
     });
 
     // Prevent the button from interfering with page interactions
     container.addEventListener('mousedown', (e) => e.stopPropagation());
     container.addEventListener('mouseup', (e) => e.stopPropagation());
-    
+
   } catch (e) {
     console.error('Error injecting CoolDesk floating button:', e);
   }

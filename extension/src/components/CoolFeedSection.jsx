@@ -1,4 +1,4 @@
-import { faArrowUpRightFromSquare, faRotateRight } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faGlobe, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../services/extensionApi';
@@ -262,27 +262,87 @@ export function CoolFeedSection({ tabs, pings }) {
   );
 
   return (
-    <>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h3 style={{ marginBottom: '10px' }}>
-          <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ marginRight: 6 }} />
-          Cool Feed <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({rows.length}{fallbackUsed ? ', showing all' : ''})</span>
-        </h3>
+    <div style={{
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+    }}>
+      {/* Apple-style Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+        padding: '0 4px'
+      }}>
+        <h2 style={{
+          fontSize: 22,
+          fontWeight: 600,
+          margin: 0,
+          color: '#ffffff',
+          letterSpacing: '-0.5px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 18 }} />
+          Activity
+          <span style={{
+            fontSize: 12,
+            color: '#ffffff',
+            background: 'rgba(52, 199, 89, 0.2)',
+            padding: '4px 8px',
+            borderRadius: 12,
+            fontWeight: 500,
+            border: '1px solid rgba(52, 199, 89, 0.3)'
+          }}>
+            {rows.length}{fallbackUsed ? ' all' : ''}
+          </span>
+        </h2>
+
+        {/* Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={loadActivity}
-            style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}
-            className="icon-btn"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              border: 'none',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+              e.target.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+              e.target.style.transform = 'scale(1)';
+            }}
             aria-label="Reload activity"
             title="Reload activity"
           >
-            <FontAwesomeIcon icon={faRotateRight} />
+            <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 14 }} />
           </button>
-          <label style={{ fontSize: 12, opacity: 0.8 }}>Max</label>
+
           <select
             value={maxFeed}
             onChange={(e) => setMaxFeed(parseInt(e.target.value, 10))}
-            style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}
+            style={{
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: 'none',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#ffffff',
+              fontSize: 12,
+              cursor: 'pointer',
+              fontFamily: 'inherit'
+            }}
+            title="Max items"
           >
             <option value={12}>12</option>
             <option value={15}>15</option>
@@ -290,11 +350,21 @@ export function CoolFeedSection({ tabs, pings }) {
             <option value={21}>21</option>
             <option value={24}>24</option>
           </select>
-          <label style={{ fontSize: 12, opacity: 0.8 }}>Sort by</label>
+
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}
+            style={{
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: 'none',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#ffffff',
+              fontSize: 12,
+              cursor: 'pointer',
+              fontFamily: 'inherit'
+            }}
+            title="Sort by"
           >
             <option value="all">All</option>
             <option value="time">Time</option>
@@ -306,13 +376,48 @@ export function CoolFeedSection({ tabs, pings }) {
       </div>
       {
         loading ? (
-          <div className="empty">Loading activity…</div>
+          <div style={{
+            textAlign: 'center',
+            color: 'rgba(255, 255, 255, 0.5)',
+            fontSize: 16,
+            fontWeight: 400,
+            padding: '40px 20px',
+            fontStyle: 'italic',
+            background: 'rgba(255, 255, 255, 0.05)',
+            borderRadius: 12,
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            Loading activity…
+          </div>
         ) : error ? (
-          <div className="error">{error}</div>
+          <div style={{
+            textAlign: 'center',
+            color: '#FF3B30',
+            fontSize: 16,
+            fontWeight: 400,
+            padding: '40px 20px',
+            background: 'rgba(255, 59, 48, 0.1)',
+            borderRadius: 12,
+            border: '1px solid rgba(255, 59, 48, 0.2)'
+          }}>
+            {error}
+          </div>
         ) : !rows.length ? (
-          <div className="empty">No activity recorded yet</div>
+          <div style={{
+            textAlign: 'center',
+            color: 'rgba(255, 255, 255, 0.5)',
+            fontSize: 16,
+            fontWeight: 400,
+            padding: '40px 20px',
+            fontStyle: 'italic',
+            background: 'rgba(255, 255, 255, 0.05)',
+            borderRadius: 12,
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            No activity recorded yet
+          </div>
         ) : (
-          <div className="activity-grid">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {displayedSuggestions.map((r) => {
               let host = r.url;
               let originIco = '';
@@ -325,27 +430,113 @@ export function CoolFeedSection({ tabs, pings }) {
               } catch { }
               const firstSrc = getFaviconUrl(r.url, 64) || originIco || '';
               return (
-                <div key={r.url} className="activity-card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}>
-                  {firstSrc ? (
-                    <img
-                      src={firstSrc}
-                      className="favicon"
-                      alt=""
-                      width={16}
-                      height={16}
-                      style={{ borderRadius: 3 }}
-                      onError={(e) => {
-                        if (originIco && e.currentTarget.src !== originIco) { e.currentTarget.src = originIco; return; }
-                        if (e.currentTarget.src.indexOf('/default-favicon.svg') === -1) { e.currentTarget.src = '/default-favicon.svg'; return; }
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  ) : <div style={{ width: 16, height: 16 }} />}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="activity-card__title" style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{host}</div>
+                <div
+                  key={r.url}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: 12,
+                    padding: 16,
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    backdropFilter: 'blur(10px)',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = `0 4px 16px rgba(52, 199, 89, 0.15)`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  {/* Favicon */}
+                  <div style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    background: 'rgba(52, 199, 89, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    border: '1px solid rgba(52, 199, 89, 0.2)'
+                  }}>
+                    {firstSrc ? (
+                      <img
+                        src={firstSrc}
+                        alt=""
+                        width={18}
+                        height={18}
+                        style={{ borderRadius: 4 }}
+                        onError={(e) => {
+                          if (originIco && e.currentTarget.src !== originIco) { e.currentTarget.src = originIco; return; }
+                          if (e.currentTarget.src.indexOf('/default-favicon.svg') === -1) { e.currentTarget.src = '/default-favicon.svg'; return; }
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <FontAwesomeIcon
+                        icon={faGlobe}
+                        style={{ fontSize: 14, color: '#34C759' }}
+                      />
+                    )}
                   </div>
-                  <button onClick={() => openOrFocusUrl(r.url)} className="go-btn" style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}>
-                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ marginRight: 6 }} />
+
+                  {/* Site Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 16,
+                      color: '#ffffff',
+                      lineHeight: 1.4,
+                      fontWeight: 400,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {host}
+                    </div>
+                    <div style={{
+                      fontSize: 13,
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      marginTop: 2
+                    }}>
+                      Recent activity
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => openOrFocusUrl(r.url)}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      border: 'none',
+                      background: 'rgba(52, 199, 89, 0.1)',
+                      color: '#34C759',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    title="Open site"
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#34C759';
+                      e.target.style.color = 'white';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(52, 199, 89, 0.1)';
+                      e.target.style.color = '#34C759';
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 12 }} />
                   </button>
                 </div>
               );
@@ -353,6 +544,6 @@ export function CoolFeedSection({ tabs, pings }) {
           </div>
         )
       }
-    </>
+    </div>
   );
 }

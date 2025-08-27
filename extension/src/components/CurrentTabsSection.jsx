@@ -188,142 +188,356 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   }, []);
 
   return (
-    <>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <h3 style={{ margin: 0 }}>
-          <FontAwesomeIcon icon={faClone} style={{ marginRight: 6 }} />
-          Hot Tabs <span style={{ fontWeight: 'normal', opacity: 0.7, fontSize: 12 }}>({tabs.length})</span>
-        </h3>
+    <div style={{ 
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+    }}>
+      {/* Apple-style Header */}
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        marginBottom: 16,
+        padding: '0 4px'
+      }}>
+        <h2 style={{ 
+          fontSize: 22,
+          fontWeight: 600,
+          margin: 0,
+          color: '#ffffff',
+          letterSpacing: '-0.5px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          <FontAwesomeIcon icon={faClone} style={{ color: '#007AFF', fontSize: 18 }} />
+          Tabs
+          <span style={{ 
+            fontSize: 12, 
+            color: '#ffffff', 
+            background: 'rgba(0, 122, 255, 0.2)', 
+            padding: '4px 8px', 
+            borderRadius: 12,
+            fontWeight: 500,
+            border: '1px solid rgba(0, 122, 255, 0.3)'
+          }}>
+            {tabs.length}
+          </span>
+        </h2>
         <button
           onClick={refreshTabs}
-          style={{ padding: '4px 8px', borderRadius: 8, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', fontSize: 12 }}
-          className="icon-btn"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            border: 'none',
+            background: 'rgba(255, 255, 255, 0.1)',
+            color: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+            e.target.style.transform = 'scale(1.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+            e.target.style.transform = 'scale(1)';
+          }}
           aria-label="Reload"
-          title="Reload"
+          title="Reload tabs"
         >
-          <FontAwesomeIcon icon={faRotateRight} />
+          <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 14 }} />
         </button>
       </div>
+
       {tabsError ? (
-        <div className="error" style={{ marginBottom: 12 }}>{String(tabsError)}</div>
+        <div style={{ 
+          background: 'rgba(255, 59, 48, 0.1)',
+          border: '1px solid rgba(255, 59, 48, 0.2)',
+          borderRadius: 12,
+          padding: 12,
+          color: '#FF3B30',
+          fontSize: 14,
+          marginBottom: 16
+        }}>
+          {String(tabsError)}
+        </div>
       ) : (
-        <div className="activity-grid" style={{ marginBottom: 16 }}>
-          {sortedTabs.map(tab => {
-            const colors = getDomainColor(tab.url);
-            return (
-              <div
-                key={tab.id}
-                className="activity-card"
-                style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 8, 
-                  padding: '8px 10px', 
-                  border: `1px solid ${colors.border}`, 
-                  borderRadius: 10, 
-                  background: colors.bg,
-                  transition: 'all 0.2s ease',
-                  boxShadow: hoveredTabId === tab.id ? `0 2px 8px ${colors.accent}20` : 'none'
-                }}
-                onMouseEnter={() => setHoveredTabId(tab.id)}
-                onMouseLeave={() => setHoveredTabId((id) => (id === tab.id ? null : id))}
-              >
-              {(() => {
-                // Derive favicon in a safe way; avoid file:// or chrome:// origins that yield "null/favicon.ico"
-                const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
-                const primaryRaw = (tab.favIconUrl && safeHttp(tab.favIconUrl)) ? tab.favIconUrl : getFaviconUrl(tab.url, 64);
-                let originIco = '';
-                try {
-                  const u = new URL(tab.url || '');
-                  if (u.protocol === 'http:' || u.protocol === 'https:') {
-                    originIco = `${u.origin}/favicon.ico`;
-                  }
-                } catch { }
-                const src = primaryRaw || originIco || '';
-                return src ? (
-                  <img
-                    src={src}
-                    className="favicon"
-                    alt=""
-                    width={16}
-                    height={16}
-                    style={{ borderRadius: 3 }}
-                    onError={(e) => {
-                      if (originIco && e.currentTarget.src !== originIco) { e.currentTarget.src = originIco; return; }
-                      if (e.currentTarget.src.indexOf('/default-favicon.svg') === -1) { e.currentTarget.src = '/default-favicon.svg'; return; }
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                ) : <div style={{ width: 16, height: 16 }} />;
-              })()}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="activity-card__title" style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {tab.title || (() => { try { return new URL(tab?.url || '').hostname; } catch { return tab?.url || ''; } })()}
-                </div>
-                {colors.hostname && (
-                  <div style={{ 
-                    fontSize: 10, 
-                    color: colors.accent, 
-                    opacity: 0.8, 
-                    marginTop: 2,
-                    whiteSpace: 'nowrap', 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis' 
-                  }}>
-                    {colors.hostname}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {sortedTabs.length === 0 ? (
+            <div style={{ 
+              textAlign: 'center', 
+              color: 'rgba(255, 255, 255, 0.5)', 
+              fontSize: 16,
+              fontWeight: 400,
+              padding: '40px 20px',
+              fontStyle: 'italic'
+            }}>
+              No tabs found
+            </div>
+          ) : (
+            sortedTabs.map(tab => {
+              const colors = getDomainColor(tab.url);
+              return (
+                <div
+                  key={tab.id}
+                  style={{ 
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: 12,
+                    padding: 16,
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    backdropFilter: 'blur(10px)',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = `0 4px 16px rgba(0, 122, 255, 0.15)`;
+                    setHoveredTabId(tab.id);
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    setHoveredTabId(null);
+                  }}
+                >
+                  {/* Favicon */}
+                  {(() => {
+                    const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
+                    const primaryRaw = (tab.favIconUrl && safeHttp(tab.favIconUrl)) ? tab.favIconUrl : getFaviconUrl(tab.url, 64);
+                    let originIco = '';
+                    try {
+                      const u = new URL(tab.url || '');
+                      if (u.protocol === 'http:' || u.protocol === 'https:') {
+                        originIco = `${u.origin}/favicon.ico`;
+                      }
+                    } catch { }
+                    const src = primaryRaw || originIco || '';
+                    return src ? (
+                      <div style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <img
+                          src={src}
+                          alt=""
+                          width={18}
+                          height={18}
+                          style={{ borderRadius: 4 }}
+                          onError={(e) => {
+                            if (originIco && e.currentTarget.src !== originIco) { 
+                              e.currentTarget.src = originIco; 
+                              return; 
+                            }
+                            if (e.currentTarget.src.indexOf('/default-favicon.svg') === -1) { 
+                              e.currentTarget.src = '/default-favicon.svg'; 
+                              return; 
+                            }
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        flexShrink: 0
+                      }} />
+                    );
+                  })()}
+
+                  {/* Tab Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ 
+                      fontSize: 16, 
+                      color: '#ffffff', 
+                      lineHeight: 1.4,
+                      marginBottom: 4,
+                      fontWeight: 400,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {tab.title || (() => { 
+                        try { 
+                          return new URL(tab?.url || '').hostname; 
+                        } catch { 
+                          return tab?.url || ''; 
+                        } 
+                      })()}
+                    </div>
+                    {colors.hostname && (
+                      <div style={{ 
+                        fontSize: 13, 
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        {colors.hostname}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              {/* Hover-only Pin button */}
-              <button
-                onClick={() => onAddPing(tab)}
-                className="pin-btn icon-btn"
-                aria-label="Pin"
-                title="Pin"
-                style={{ width: 28, height: 28, opacity: hoveredTabId === tab.id ? 1 : 0, transition: 'opacity 120ms ease-in-out' }}
-              >
-                <FontAwesomeIcon icon={faThumbtack} />
-              </button>
-              <button
-                onClick={() => {
-                  const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
-                  if (hasTabsUpdate) return focusTab(tab);
-                  if (tab?.url) {
-                    enqueueOpenInChrome(tab.url).catch(() => { });
-                  }
-                }}
-                className="go-btn icon-btn"
-                aria-label="Open tab"
-                title="Open tab"
-              >
-                <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
-              </button>
-              <button
-                onClick={() => duplicateTab(tab)}
-                className="dup-btn icon-btn"
-                aria-label="Duplicate tab"
-                title="Duplicate tab"
-                style={{ width: 28, height: 28 }}
-              >
-                <FontAwesomeIcon icon={faClone} />
-              </button>
-              <button
-                onClick={() => removeTab(tab)}
-                className="remove-btn icon-btn"
-                aria-label="Remove tab"
-                title="Remove tab"
-                style={{ width: 28, height: 28 }}
-              >
-                <FontAwesomeIcon icon={faTrash} />
-              </button>
-              </div>
-            );
-          })}
-          {!tabs.length && !tabsError && (
-            <div className="empty">No tabs found</div>
+
+                  {/* Action Buttons */}
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {/* Pin Button (hover only) */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddPing(tab);
+                      }}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        border: 'none',
+                        background: 'rgba(255, 149, 0, 0.1)',
+                        color: '#FF9500',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        opacity: hoveredTabId === tab.id ? 1 : 0.3
+                      }}
+                      title="Pin tab"
+                      onMouseEnter={(e) => {
+                        e.target.style.background = '#FF9500';
+                        e.target.style.color = 'white';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(255, 149, 0, 0.1)';
+                        e.target.style.color = '#FF9500';
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faThumbtack} style={{ fontSize: 12 }} />
+                    </button>
+
+                    {/* Focus Tab Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
+                        if (hasTabsUpdate) return focusTab(tab);
+                        if (tab?.url) {
+                          enqueueOpenInChrome(tab.url).catch(() => { });
+                        }
+                      }}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        border: 'none',
+                        background: 'rgba(0, 122, 255, 0.1)',
+                        color: '#007AFF',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      title="Focus tab"
+                      onMouseEnter={(e) => {
+                        e.target.style.background = '#007AFF';
+                        e.target.style.color = 'white';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(0, 122, 255, 0.1)';
+                        e.target.style.color = '#007AFF';
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 12 }} />
+                    </button>
+
+                    {/* Duplicate Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        duplicateTab(tab);
+                      }}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        border: 'none',
+                        background: 'rgba(52, 199, 89, 0.1)',
+                        color: '#34C759',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      title="Duplicate tab"
+                      onMouseEnter={(e) => {
+                        e.target.style.background = '#34C759';
+                        e.target.style.color = 'white';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(52, 199, 89, 0.1)';
+                        e.target.style.color = '#34C759';
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faClone} style={{ fontSize: 12 }} />
+                    </button>
+
+                    {/* Remove Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeTab(tab);
+                      }}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        border: 'none',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        color: '#FF3B30',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        opacity: 0.7
+                      }}
+                      title="Close tab"
+                      onMouseEnter={(e) => {
+                        e.target.style.background = '#FF3B30';
+                        e.target.style.color = 'white';
+                        e.target.style.opacity = '1';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                        e.target.style.color = '#FF3B30';
+                        e.target.style.opacity = '0.7';
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faTrash} style={{ fontSize: 12 }} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }

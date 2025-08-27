@@ -9,6 +9,129 @@ import { initializeData } from './data.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
 
+// Auto-save selected text to daily notes
+async function saveToDailyNotes(selectionData) {
+  try {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const storageKey = `dailyNotes_${today}`;
+    
+    // Get existing daily notes for today
+    const result = await chrome.storage.local.get([storageKey]);
+    const dailyData = result[storageKey] || {
+      date: today,
+      content: '',
+      selections: [],
+      metadata: {
+        created: Date.now(),
+        lastUpdated: Date.now(),
+        selectionCount: 0
+      }
+    };
+    
+    // Skip if text is too short (less than 15 chars) or too long (more than 5000 chars)
+    if (!selectionData.text || selectionData.text.length < 15 || selectionData.text.length > 5000) {
+      return;
+    }
+    
+    // Skip duplicates (check last 5 entries)
+    const recentSelections = dailyData.selections.slice(-5);
+    const isDuplicate = recentSelections.some(selection => 
+      selection.text === selectionData.text || 
+      Math.abs(selection.timestamp - selectionData.timestamp) < 2000 // Within 2 seconds
+    );
+    
+    if (isDuplicate) {
+      console.log('[Background] Skipping duplicate selection');
+      return;
+    }
+    
+    // Create selection entry
+    const selectionEntry = {
+      id: `sel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      text: selectionData.text,
+      source: {
+        url: selectionData.url,
+        title: await getPageTitle(selectionData.url),
+        domain: new URL(selectionData.url).hostname
+      },
+      context: {
+        beforeText: selectionData.beforeText || '',
+        afterText: selectionData.afterText || ''
+      },
+      metadata: {
+        length: selectionData.length,
+        wordCount: selectionData.wordCount,
+        position: selectionData.position
+      },
+      timestamp: selectionData.timestamp,
+      time: new Date(selectionData.timestamp).toLocaleTimeString()
+    };
+    
+    // Add selection to daily data
+    dailyData.selections.push(selectionEntry);
+    
+    // Keep only last 50 selections per day to avoid storage bloat
+    if (dailyData.selections.length > 50) {
+      dailyData.selections = dailyData.selections.slice(-50);
+    }
+    
+    // Auto-append to daily notes content with timestamp and source (with clickable link)
+    const timeStr = new Date(selectionData.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const sourceStr = new URL(selectionData.url).hostname;
+    const noteEntry = `\n[${timeStr}] From [${sourceStr}](${selectionData.url}):\n"${selectionData.text}"\n`;
+    
+    dailyData.content += noteEntry;
+    dailyData.metadata.lastUpdated = Date.now();
+    dailyData.metadata.selectionCount = dailyData.selections.length;
+    
+    // Save to storage
+    await chrome.storage.local.set({
+      [storageKey]: dailyData,
+      dailyNotesLastUpdate: Date.now()
+    });
+    
+    console.log(`[Background] Added to daily notes: ${selectionData.text.substring(0, 30)}...`);
+    
+    // Update daily summary
+    await updateDailyNotesSummary(today, dailyData.metadata.selectionCount);
+    
+  } catch (e) {
+    console.error('[Background] Error saving to daily notes:', e);
+  }
+}
+
+// Get page title from URL (with fallback)
+async function getPageTitle(url) {
+  try {
+    const tabs = await chrome.tabs.query({ url });
+    if (tabs.length > 0) {
+      return tabs[0].title || new URL(url).hostname;
+    }
+    return new URL(url).hostname;
+  } catch (e) {
+    return 'Unknown Page';
+  }
+}
+
+// Update daily notes summary
+async function updateDailyNotesSummary(date, selectionCount) {
+  try {
+    const summaryKey = 'dailyNotesSummary';
+    const result = await chrome.storage.local.get([summaryKey]);
+    const summary = result[summaryKey] || {};
+    
+    summary[date] = {
+      date,
+      selectionCount,
+      lastUpdated: Date.now()
+    };
+    
+    await chrome.storage.local.set({ [summaryKey]: summary });
+  } catch (e) {
+    console.warn('[Background] Failed to update daily notes summary:', e);
+  }
+}
+
 async function main() {
   console.log('[Background] Main function started');
 
@@ -108,6 +231,172 @@ async function main() {
     if (msg?.ping === 'bg') {
       sendResponse({ pong: true, time: Date.now() });
       cleanup();
+      return true;
+    }
+
+    // Handle text selection events (like Sider AI)
+    if (msg?.type === 'textSelected') {
+      console.log('[Background] Text selected:', {
+        text: msg.text?.substring(0, 50) + (msg.text?.length > 50 ? '...' : ''),
+        length: msg.length,
+        wordCount: msg.wordCount,
+        url: msg.url
+      });
+      
+      // Auto-save to daily notes (fire and forget - don't wait for response)
+      (async () => {
+        try {
+          await saveToDailyNotes({
+            text: msg.text,
+            beforeText: msg.beforeText,
+            afterText: msg.afterText,
+            position: msg.position,
+            url: msg.url,
+            timestamp: Date.now(),
+            length: msg.length,
+            wordCount: msg.wordCount
+          });
+        } catch (e) {
+          console.warn('[Background] Failed to save to daily notes:', e);
+        }
+      })();
+      
+      // Store selection data for potential AI processing (synchronous)
+      try {
+        chrome.storage.local.set({
+          lastSelection: {
+            text: msg.text,
+            beforeText: msg.beforeText,
+            afterText: msg.afterText,
+            position: msg.position,
+            url: msg.url,
+            timestamp: Date.now(),
+            length: msg.length,
+            wordCount: msg.wordCount
+          }
+        });
+      } catch (e) {
+        console.warn('[Background] Failed to store selection:', e);
+      }
+      
+      cleanup();
+      // Don't return true since we're not sending a response
+      return false;
+    }
+
+    if (msg?.type === 'textDeselected') {
+      console.log('[Background] Text selection cleared');
+      cleanup();
+      // Don't return true since we're not sending a response
+      return false;
+    }
+
+    // Get daily notes for a specific date or recent dates
+    if (msg?.type === 'getDailyNotes') {
+      console.log('[Background] Getting daily notes:', msg);
+      
+      (async () => {
+        try {
+          const { date, limit = 7 } = msg;
+          
+          if (date) {
+            // Get notes for specific date
+            const storageKey = `dailyNotes_${date}`;
+            const result = await chrome.storage.local.get([storageKey]);
+            const dailyData = result[storageKey] || {
+              date,
+              content: '',
+              selections: [],
+              metadata: { created: 0, lastUpdated: 0, selectionCount: 0 }
+            };
+            sendResponse({ 
+              ok: true, 
+              dailyNotes: dailyData,
+              date 
+            });
+          } else {
+            // Get recent daily notes from last N days
+            const recentNotes = [];
+            const today = new Date();
+            
+            for (let i = 0; i < limit; i++) {
+              const checkDate = new Date(today);
+              checkDate.setDate(today.getDate() - i);
+              const dateStr = checkDate.toISOString().split('T')[0];
+              
+              const storageKey = `dailyNotes_${dateStr}`;
+              const result = await chrome.storage.local.get([storageKey]);
+              const dailyData = result[storageKey];
+              
+              if (dailyData && dailyData.selections.length > 0) {
+                recentNotes.push(dailyData);
+              }
+            }
+            
+            sendResponse({ 
+              ok: true, 
+              recentNotes,
+              count: recentNotes.length 
+            });
+          }
+        } catch (e) {
+          console.error('[Background] Error getting daily notes:', e);
+          sendResponse({ ok: false, error: e?.message || 'Failed to get daily notes' });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Get daily notes summary
+    if (msg?.type === 'getDailyNotesSummary') {
+      (async () => {
+        try {
+          const result = await chrome.storage.local.get(['dailyNotesSummary']);
+          const summary = result.dailyNotesSummary || {};
+          sendResponse({ ok: true, summary });
+        } catch (e) {
+          console.error('[Background] Error getting daily notes summary:', e);
+          sendResponse({ ok: false, error: e?.message || 'Failed to get daily notes summary' });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Update daily notes content (manual editing)
+    if (msg?.type === 'updateDailyNotes') {
+      console.log('[Background] Updating daily notes content:', msg.date);
+      
+      (async () => {
+        try {
+          const { date, content } = msg;
+          if (!date) throw new Error('Date is required');
+          
+          const storageKey = `dailyNotes_${date}`;
+          const result = await chrome.storage.local.get([storageKey]);
+          const dailyData = result[storageKey] || {
+            date,
+            content: '',
+            selections: [],
+            metadata: { created: Date.now(), lastUpdated: Date.now(), selectionCount: 0 }
+          };
+          
+          // Update content and metadata
+          dailyData.content = content || '';
+          dailyData.metadata.lastUpdated = Date.now();
+          
+          await chrome.storage.local.set({ [storageKey]: dailyData });
+          sendResponse({ ok: true, updated: true });
+        } catch (e) {
+          console.error('[Background] Error updating daily notes:', e);
+          sendResponse({ ok: false, error: e?.message || 'Failed to update daily notes' });
+        } finally {
+          cleanup();
+        }
+      })();
       return true;
     }
 

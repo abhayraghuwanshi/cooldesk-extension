@@ -90,7 +90,10 @@ export function ActivityPanel() {
   }, []);
 
   return (
-    <section style={{ marginTop: 12 }}>
+    <section style={{ 
+      marginTop: 12,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+    }}>
       <ErrorBoundary>
         <div style={{ marginTop: 16 }}>
           <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} />
@@ -98,25 +101,25 @@ export function ActivityPanel() {
       </ErrorBoundary>
 
       <ErrorBoundary>
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 32 }}>
           <PingsSection />
         </div>
       </ErrorBoundary>
 
       <ErrorBoundary>
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 32 }}>
           <NotesSection />
         </div>
       </ErrorBoundary>
 
       {/* <ErrorBoundary>
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 32 }}>
           <UrlNotesSection />
         </div>
       </ErrorBoundary> */}
 
       <ErrorBoundary>
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 32 }}>
           <CoolFeedSection />
         </div>
       </ErrorBoundary>
