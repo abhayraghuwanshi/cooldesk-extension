@@ -1,10 +1,10 @@
 import React from 'react';
-import { ErrorBoundary } from './ErrorBoundary';
-import { TabPreviewModal } from './TabPreviewModal';
-import { NotesSection } from './NotesSection';
-import { CurrentTabsSection } from './CurrentTabsSection';
-import { PingsSection } from './PingsSection';
 import { CoolFeedSection } from './CoolFeedSection';
+import { CurrentTabsSection } from './CurrentTabsSection';
+import { ErrorBoundary } from './ErrorBoundary';
+import { NotesSection } from './NotesSection';
+import { PingsSection } from './PingsSection';
+import { TabPreviewModal } from './TabPreviewModal';
 
 export function ActivityPanel() {
   // State for preview modal
@@ -44,12 +44,12 @@ export function ActivityPanel() {
   const requestPreview = React.useCallback(async (tab) => {
     const url = tab?.url;
     if (!url) return;
-    
+
     setPreviewOpen(true);
     setPreviewLoading(true);
     setPreviewError('');
     setPreviewData({ title: 'Loading…' });
-    
+
     try {
       const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage;
       if (!hasRuntime) {
@@ -57,7 +57,7 @@ export function ActivityPanel() {
         setPreviewError('Preview not available in this environment');
         return;
       }
-      
+
       const resp = await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Timed out')), 8000);
         try {
@@ -72,7 +72,7 @@ export function ActivityPanel() {
           reject(e);
         }
       });
-      
+
       const data = resp?.ok ? (resp.data || null) : null;
       const err = resp?.ok ? '' : (resp?.error || 'Failed to load preview');
 
@@ -108,6 +108,12 @@ export function ActivityPanel() {
           <NotesSection />
         </div>
       </ErrorBoundary>
+
+      {/* <ErrorBoundary>
+        <div style={{ marginTop: 24 }}>
+          <UrlNotesSection />
+        </div>
+      </ErrorBoundary> */}
 
       <ErrorBoundary>
         <div style={{ marginTop: 24 }}>

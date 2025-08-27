@@ -3,8 +3,7 @@
   "name": "cooldesk",
   "version": "0.1.0",
   "action": {
-    "default_title": "cooldesk",
-    "default_popup": "index.html"
+    "default_title": "Open CoolDesk Sidebar"
   },
   "side_panel": {
     "default_path": "index.html"
@@ -26,11 +25,19 @@
     "sidePanel",
     "search",
     "scripting",
-    "idle"
+    "idle",
+    "activeTab",
+    "contextMenus"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://accounts.google.com/*",
+    "https://apis.google.com/*",
+    "https://www.googleapis.com/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com https://*.google.com https://identitytoolkit.googleapis.com"
+  },
   "web_accessible_resources": [
     {
       "resources": [
@@ -51,7 +58,8 @@
         "http://*/*"
       ],
       "js": [
-        "src/interactionContent.js"
+        "src/interactionContent.js",
+        "src/content/urlNotesInjector.js"
       ],
       "run_at": "document_idle"
     }

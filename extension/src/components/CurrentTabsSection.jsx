@@ -50,6 +50,73 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     return () => clearInterval(id);
   }, [refreshTabs]);
 
+  // Dynamic gradient generation based on domain
+  const getDomainColor = React.useCallback((url) => {
+    let hostname = '';
+    try {
+      hostname = new URL(url || '').hostname.toLowerCase();
+    } catch {
+      return { 
+        bg: 'linear-gradient(135deg, #0f1724 0%, #1b2331 100%)', 
+        border: '#273043', 
+        accent: '#4a5568' 
+      };
+    }
+    
+    // Accent colors for variety
+    const accentColors = [
+      '#3b82f6', // Blue
+      '#6b7280', // Gray  
+      '#4b5563', // Slate
+      '#22c55e', // Green
+      '#ea580c', // Orange
+      '#a855f7', // Purple
+      '#f43f5e', // Rose
+      '#0891b2', // Cyan
+    ];
+    
+    // Simple hash function for consistent color selection
+    let hash = 0;
+    for (let i = 0; i < hostname.length; i++) {
+      hash = ((hash << 5) - hash) + hostname.charCodeAt(i);
+      hash = hash & hash;
+    }
+    
+    // Select an accent color based on hash
+    const colorIndex = Math.abs(hash) % accentColors.length;
+    const accent = accentColors[colorIndex];
+    
+    // Create gradient variations with the same base but different accent hints
+    const variation = Math.abs(hash >> 8) % 4;
+    let bg, border;
+    
+    switch (variation) {
+      case 0:
+        bg = `linear-gradient(135deg, #0f1724 0%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.1) 100%)`;
+        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.3)`;
+        break;
+      case 1:
+        bg = `linear-gradient(145deg, #0f1724 0%, #1b2331 50%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.05) 100%)`;
+        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.25)`;
+        break;
+      case 2:
+        bg = `linear-gradient(125deg, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.03) 0%, #0f1724 40%, #1b2331 100%)`;
+        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.2)`;
+        break;
+      default:
+        bg = `linear-gradient(155deg, #0f1724 0%, #1b2331 70%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.08) 100%)`;
+        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.3)`;
+        break;
+    }
+    
+    return {
+      bg,
+      border,
+      accent,
+      hostname
+    };
+  }, []);
+
   // Sort tabs by hostname (DNS) so similar URLs are grouped
   const sortedTabs = React.useMemo(() => {
     const getHost = (t) => {
@@ -141,14 +208,26 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
         <div className="error" style={{ marginBottom: 12 }}>{String(tabsError)}</div>
       ) : (
         <div className="activity-grid" style={{ marginBottom: 16 }}>
-          {sortedTabs.map(tab => (
-            <div
-              key={tab.id}
-              className="activity-card"
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: '1px solid #273043', borderRadius: 10, background: '#0f1724' }}
-              onMouseEnter={() => setHoveredTabId(tab.id)}
-              onMouseLeave={() => setHoveredTabId((id) => (id === tab.id ? null : id))}
-            >
+          {sortedTabs.map(tab => {
+            const colors = getDomainColor(tab.url);
+            return (
+              <div
+                key={tab.id}
+                className="activity-card"
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 8, 
+                  padding: '8px 10px', 
+                  border: `1px solid ${colors.border}`, 
+                  borderRadius: 10, 
+                  background: colors.bg,
+                  transition: 'all 0.2s ease',
+                  boxShadow: hoveredTabId === tab.id ? `0 2px 8px ${colors.accent}20` : 'none'
+                }}
+                onMouseEnter={() => setHoveredTabId(tab.id)}
+                onMouseLeave={() => setHoveredTabId((id) => (id === tab.id ? null : id))}
+              >
               {(() => {
                 // Derive favicon in a safe way; avoid file:// or chrome:// origins that yield "null/favicon.ico"
                 const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
@@ -181,6 +260,19 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                 <div className="activity-card__title" style={{ fontSize: 13, color: '#e5e7eb', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {tab.title || (() => { try { return new URL(tab?.url || '').hostname; } catch { return tab?.url || ''; } })()}
                 </div>
+                {colors.hostname && (
+                  <div style={{ 
+                    fontSize: 10, 
+                    color: colors.accent, 
+                    opacity: 0.8, 
+                    marginTop: 2,
+                    whiteSpace: 'nowrap', 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis' 
+                  }}>
+                    {colors.hostname}
+                  </div>
+                )}
               </div>
               {/* Hover-only Pin button */}
               <button
@@ -224,8 +316,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               >
                 <FontAwesomeIcon icon={faTrash} />
               </button>
-            </div>
-          ))}
+              </div>
+            );
+          })}
           {!tabs.length && !tabsError && (
             <div className="empty">No tabs found</div>
           )}

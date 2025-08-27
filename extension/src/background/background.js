@@ -6,6 +6,7 @@ import { populateAndStore } from './data.js';
 import { initializeActivity } from './activity.js';
 import { initializeAI } from './ai.js';
 import { initializeData } from './data.js';
+import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
 
 async function main() {
@@ -27,6 +28,30 @@ async function main() {
     console.log('[Background] Extension installed - populating data')
     try {
       await populateAndStore()
+      
+      // Initialize side panel settings on install
+      if (chrome?.sidePanel?.setOptions) {
+        try {
+          await chrome.sidePanel.setOptions({
+            path: 'index.html',
+            enabled: true
+          });
+          console.log('[Background] Side panel enabled globally on install');
+        } catch (e) {
+          console.warn('[Background] Failed to enable side panel on install:', e);
+        }
+      }
+      
+      if (chrome?.sidePanel?.setPanelBehavior) {
+        try {
+          await chrome.sidePanel.setPanelBehavior({ 
+            openPanelOnActionClick: true 
+          });
+          console.log('[Background] Panel behavior set to open on action click');
+        } catch (e) {
+          console.warn('[Background] Failed to set panel behavior:', e);
+        }
+      }
     } catch (e) {
       console.error('[Background] Error during onInstalled populate:', e)
     }
@@ -61,40 +86,90 @@ async function main() {
   })
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    console.log('[Background Debug] Received message:', msg);
+    console.log('[Background Debug] Message sender:', sender);
+
+    // Keep service worker alive during message processing
+    const keepAlivePort = chrome.runtime.connect({ name: 'keepalive' });
+    const cleanup = () => {
+      try {
+        keepAlivePort.disconnect();
+      } catch {}
+    };
+
+    // Handle URL notes messages first
+    const urlNotesHandled = handleUrlNotesMessages(msg, sender, sendResponse);
+    if (urlNotesHandled) {
+      console.log('[Background Debug] Message handled by URL notes handler');
+      cleanup();
+      return true;
+    }
+
     if (msg?.ping === 'bg') {
-      sendResponse({ pong: true, time: Date.now() })
-      return true
+      sendResponse({ pong: true, time: Date.now() });
+      cleanup();
+      return true;
     }
 
     if (msg?.type === 'openSidePanel') {
+      console.log('[Background] Received openSidePanel request from tab:', sender?.tab?.id);
+      console.log('[Background] Message details:', { fromUserGesture: msg.fromUserGesture, timestamp: msg.timestamp });
+      
       (async () => {
         try {
-          if (chrome?.sidePanel?.setOptions) {
-            await chrome.sidePanel.setOptions({ path: 'index.html', enabled: true });
+          const senderTab = sender?.tab;
+          const windowId = senderTab?.windowId;
+          
+          // First attempt: Try to open side panel directly
+          if (chrome?.sidePanel?.open && windowId) {
+            try {
+              console.log('[Background] Attempting to open side panel for window:', windowId);
+              await chrome.sidePanel.open({ windowId });
+              console.log('[Background] Side panel opened successfully!');
+              sendResponse({ ok: true, method: 'sidePanel' });
+              cleanup();
+              return;
+            } catch (sidePanelError) {
+              console.log('[Background] Side panel open failed:', sidePanelError.message);
+              // Continue to fallback methods below
+            }
+          } else {
+            console.log('[Background] Side panel API not available or no windowId:', { 
+              hasSidePanel: !!chrome?.sidePanel?.open, 
+              windowId 
+            });
           }
-          if (chrome?.windows?.getCurrent && chrome?.sidePanel?.open) {
-            const win = await chrome.windows.getCurrent();
-            await chrome.sidePanel.open({ windowId: win.id });
-            sendResponse({ ok: true });
-            return;
-          }
-          // Fallback to opening/activating extension tab
+          
+          // Fallback: Open in tab
+          console.log('[Background] Falling back to tab...');
           const url = chrome.runtime.getURL('index.html');
           const existing = await chrome.tabs.query({ url });
           if (existing && existing.length > 0) {
-            const tab = existing[0];
-            try { await chrome.tabs.update(tab.id, { active: true }); } catch { }
-            try { if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true }); } catch { }
+            const existingTab = existing[0];
+            console.log('[Background] Activating existing tab:', existingTab.id);
+            await chrome.tabs.update(existingTab.id, { active: true });
+            if (existingTab.windowId) {
+              await chrome.windows.update(existingTab.windowId, { focused: true });
+            }
           } else {
-            if (chrome?.tabs?.create) await chrome.tabs.create({ url });
+            console.log('[Background] Creating new tab');
+            await chrome.tabs.create({ url });
           }
-          sendResponse({ ok: true, fallback: 'tab' });
+          sendResponse({ 
+            ok: true, 
+            fallback: 'tab',
+            message: 'Side panel could not be opened. Opened in tab instead. Use extension icon or Ctrl+Shift+K for side panel.'
+          });
         } catch (e) {
+          console.error('[Background] Error in openSidePanel:', e);
           sendResponse({ ok: false, error: e?.message || 'Failed to open side panel' });
+        } finally {
+          cleanup();
         }
       })();
       return true;
     }
+
 
     if (msg?.action === 'fetchPreview' && msg?.url) {
       (async () => {
@@ -124,6 +199,8 @@ async function main() {
           sendResponse({ ok: true, data });
         } catch (e) {
           sendResponse({ ok: false, error: e?.message || 'Preview fetch failed' });
+        } finally {
+          cleanup();
         }
       })();
       return true; // keep the message channel open for async response
@@ -139,6 +216,8 @@ async function main() {
           sendResponse({ ok: true, tabs: mapped });
         } catch (e) {
           sendResponse({ ok: false, error: e?.message || 'Failed to get tabs' });
+        } finally {
+          cleanup();
         }
       })();
       return true;
@@ -153,10 +232,12 @@ async function main() {
           try {
             const t = await chrome.tabs.get(id);
             if (t?.windowId != null) await chrome.windows.update(t.windowId, { focused: true });
-          } catch {}
+          } catch { }
           sendResponse({ ok: true });
         } catch (e) {
           sendResponse({ ok: false, error: e?.message || 'Failed to activate tab' });
+        } finally {
+          cleanup();
         }
       })();
       return true;
@@ -171,6 +252,8 @@ async function main() {
           sendResponse({ ok: true });
         } catch (e) {
           sendResponse({ ok: false, error: e?.message || 'Failed to close tab' });
+        } finally {
+          cleanup();
         }
       })();
       return true;
@@ -189,34 +272,112 @@ async function main() {
           if (nextIndex < 0) nextIndex = tabs.length - 1;
           const target = tabs[nextIndex];
           await chrome.tabs.update(target.id, { active: true });
-          try { if (target.windowId != null) await chrome.windows.update(target.windowId, { focused: true }); } catch {}
+          try { if (target.windowId != null) await chrome.windows.update(target.windowId, { focused: true }); } catch { }
           sendResponse({ ok: true, activated: target.id });
         } catch (e) {
           sendResponse({ ok: false, error: e?.message || 'Failed to switch tab' });
+        } finally {
+          cleanup();
         }
       })();
       return true;
     }
   })
 
+  // Handle connections from content scripts to keep service worker alive
+  chrome.runtime.onConnect.addListener((port) => {
+    console.log('[Background] Connection established:', port.name);
+    
+    if (port.name === 'keepalive') {
+      // Keep a reference to the port to prevent service worker from sleeping
+      let keepAliveTimer;
+      
+      const resetTimer = () => {
+        if (keepAliveTimer) clearTimeout(keepAliveTimer);
+        keepAliveTimer = setTimeout(() => {
+          try {
+            port.disconnect();
+          } catch {}
+        }, 25000); // Disconnect after 25 seconds of inactivity
+      };
+      
+      port.onMessage.addListener((msg) => {
+        console.log('[Background] Keepalive message:', msg);
+        resetTimer();
+      });
+      
+      port.onDisconnect.addListener(() => {
+        console.log('[Background] Keepalive disconnected');
+        if (keepAliveTimer) clearTimeout(keepAliveTimer);
+      });
+      
+      resetTimer();
+    }
+  });
+
   // Log storage readiness once
   chrome.storage.local.get(null).then(() => {
     console.log('[Background] Storage ready')
   })
 
+  // Handle extension action clicks (toolbar icon) - this preserves user gesture
+  if (chrome?.action?.onClicked) {
+    chrome.action.onClicked.addListener(async (tab) => {
+      console.log('[Background] Extension action clicked, opening side panel...');
+      try {
+        // Use the windowId from the active tab, not getCurrent()
+        const windowId = tab?.windowId;
+        if (chrome?.sidePanel?.open && windowId) {
+          console.log('[Background] Opening side panel for window:', windowId);
+          await chrome.sidePanel.open({ windowId: windowId });
+          console.log('[Background] Side panel opened from action click!');
+        } else {
+          console.log('[Background] Side panel API not available or no windowId, using tab fallback');
+          const url = chrome.runtime.getURL('index.html');
+          await chrome.tabs.create({ url });
+        }
+      } catch (e) {
+        console.error('[Background] Failed to open side panel from action:', e);
+        console.log('[Background] Error details:', e.message);
+        // Fallback to tab
+        try {
+          const url = chrome.runtime.getURL('index.html');
+          await chrome.tabs.create({ url });
+          console.log('[Background] Opened in new tab as fallback');
+        } catch (fallbackError) {
+          console.error('[Background] Fallback to tab also failed:', fallbackError);
+        }
+      }
+    });
+  }
+
   // Keyboard shortcut command to open side panel and focus search
   try {
     if (chrome?.commands?.onCommand?.addListener) {
-      chrome.commands.onCommand.addListener(async (command) => {
+      chrome.commands.onCommand.addListener(async (command, tab) => {
         if (command !== 'open_search') return;
         try {
-          // Ensure side panel is enabled and open for current window
+          console.log('[Background] Keyboard command triggered, opening side panel...');
+          // Use the windowId from the active tab when available
+          const windowId = tab?.windowId;
+          
           if (chrome?.sidePanel?.setOptions) {
             await chrome.sidePanel.setOptions({ path: 'index.html', enabled: true });
           }
-          if (chrome?.windows?.getCurrent && chrome?.sidePanel?.open) {
+          
+          if (chrome?.sidePanel?.open && windowId) {
+            console.log('[Background] Opening side panel for window via command:', windowId);
+            await chrome.sidePanel.open({ windowId: windowId });
+            console.log('[Background] Side panel opened via keyboard shortcut!');
+          } else {
+            console.log('[Background] No windowId available, trying getCurrent()...');
             const win = await chrome.windows.getCurrent();
-            await chrome.sidePanel.open({ windowId: win.id });
+            if (win?.id) {
+              await chrome.sidePanel.open({ windowId: win.id });
+              console.log('[Background] Side panel opened via getCurrent()');
+            } else {
+              throw new Error('No valid window ID available');
+            }
           }
         } catch (e) {
           console.warn('[Background] Failed to open side panel via command:', e);

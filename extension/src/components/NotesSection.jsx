@@ -1,4 +1,4 @@
-import { faPlus, faPen, faTrash, faMicrophone, faStop, faPlay, faPause } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faPen, faTrash, faMicrophone, faStop, faPlay, faPause, faEye } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../db';
@@ -16,6 +16,7 @@ export function NotesSection() {
   const [playingId, setPlayingId] = React.useState(null);
   const recordingTimerRef = React.useRef(null);
   const audioRefs = React.useRef({});
+  const [previewNote, setPreviewNote] = React.useState(null);
 
   const loadNotes = React.useCallback(async () => {
     try {
@@ -162,6 +163,12 @@ export function NotesSection() {
     setEditText('');
   }, []);
 
+  const openPreview = React.useCallback((n) => {
+    setPreviewNote(n);
+  }, []);
+
+  const closePreview = React.useCallback(() => setPreviewNote(null), []);
+
   React.useEffect(() => { loadNotes(); }, [loadNotes]);
 
   return (
@@ -260,6 +267,12 @@ export function NotesSection() {
                 )}
                 
                 {n.type === 'text' && (
+                  <button onClick={() => openPreview(n)} className="icon-btn" title="View" style={{ width: 28, height: 28 }}>
+                    <FontAwesomeIcon icon={faEye} />
+                  </button>
+                )}
+
+                {n.type === 'text' && (
                   <button onClick={() => startEdit(n)} className="icon-btn" title="Edit" style={{ width: 28, height: 28 }}>
                     <FontAwesomeIcon icon={faPen} />
                   </button>
@@ -273,6 +286,38 @@ export function NotesSection() {
           </div>
         ))}
       </div>
+      {previewNote && (
+        <div 
+          onClick={closePreview}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 2147483647
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(640px, 90vw)', maxHeight: '80vh', background: '#0f1724',
+              border: '1px solid #273043', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+              display: 'flex', flexDirection: 'column'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid #273043' }}>
+              <div style={{ fontSize: 14, color: '#e5e7eb' }}>
+                <FontAwesomeIcon icon={faEye} style={{ marginRight: 8, color: '#10b981' }} />
+                {previewNote.type === 'text' ? 'Text Note' : 'Note'}
+              </div>
+              <button onClick={closePreview} className="icon-btn" style={{ width: 70, height: 28 }}>Close</button>
+            </div>
+            <div style={{ padding: 12, overflowY: 'auto', maxHeight: 'calc(80vh - 48px)', color: '#e5e7eb', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
+              {previewNote.type === 'text' ? (previewNote.text || '') : (
+                <div style={{ color: '#9ca3af' }}>Preview available for text notes.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

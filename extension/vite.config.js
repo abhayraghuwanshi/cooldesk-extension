@@ -29,6 +29,10 @@ export default defineConfig(({ mode }) => {
           entry: './src/background.js',
           type: 'module',
         },
+        // Configure CSP for Firebase
+        contentSecurityPolicy: {
+          'extension_pages': "script-src 'self' 'wasm-unsafe-eval' http://localhost:* http://127.0.0.1:*; object-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com https://*.google.com https://identitytoolkit.googleapis.com wss://localhost:* ws://localhost:* ws://127.0.0.1:*"
+        }
       }),
       react(),
     ],

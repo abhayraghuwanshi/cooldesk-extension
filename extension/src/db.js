@@ -3,8 +3,8 @@ import { getHostWorkspaces, setHostWorkspaces } from './services/extensionApi';
 // Object store: 'workspaces' with keyPath 'id'
 
 const DB_NAME = 'cooldesk-db'
-// Bump version to run migration for new 'urls' store
-const DB_VERSION = 8
+// Bump version to run migration for new 'urls' store and urlNotes store
+const DB_VERSION = 9
 const STORE = 'workspaces'
 const URLS_STORE = 'urls'
 const SETTINGS_STORE = 'settings'
@@ -12,11 +12,13 @@ const UI_STORE = 'ui'
 
 let dbPromise = null
 
-function openDB() {
+export function openDB() {
   if (dbPromise) return dbPromise
   dbPromise = new Promise((resolve, reject) => {
+    console.log('[DB Debug] Opening database:', DB_NAME, 'version:', DB_VERSION)
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = (event) => {
+      console.log('[DB Debug] Database upgrade needed, creating stores...')
       const db = req.result
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'id' })
@@ -70,9 +72,28 @@ function openDB() {
         const nStore = db.createObjectStore('notes', { keyPath: 'id' })
         try { nStore.createIndex('by_createdAt', 'createdAt', { unique: false }) } catch { }
       }
+      // New store for URL-based notes with multimedia content
+      if (!db.objectStoreNames.contains('urlNotes')) {
+        console.log('[DB Debug] Creating urlNotes store...')
+        const urlNotesStore = db.createObjectStore('urlNotes', { keyPath: 'id' })
+        try { 
+          urlNotesStore.createIndex('url', 'url', { unique: false })
+          urlNotesStore.createIndex('by_createdAt', 'createdAt', { unique: false })
+          urlNotesStore.createIndex('type', 'type', { unique: false })
+          console.log('[DB Debug] urlNotes store and indexes created successfully')
+        } catch (error) {
+          console.error('[DB Debug] Failed to create urlNotes indexes:', error)
+        }
+      }
     }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
+    req.onsuccess = () => {
+      console.log('[DB Debug] Database opened successfully')
+      resolve(req.result)
+    }
+    req.onerror = (event) => {
+      console.error('[DB Debug] Database open failed:', event.target.error)
+      reject(req.error)
+    }
   })
   return dbPromise
 }
@@ -898,5 +919,118 @@ export async function deleteNote(id) {
       req.onsuccess = () => resolve()
       req.onerror = () => resolve()
     } catch { resolve() }
+  })
+}
+
+// ===== URL Notes APIs =====
+
+/** Get all notes for a specific URL */
+export async function getUrlNotes(url) {
+  if (!url) return []
+  const db = await openDB()
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('urlNotes', 'readonly')
+      const store = tx.objectStore('urlNotes')
+      const index = store.index('url')
+      const req = index.getAll(url)
+      req.onsuccess = () => {
+        const arr = Array.isArray(req.result) ? req.result : []
+        console.log('[DB Debug] Retrieved notes for URL:', url, 'Count:', arr.length)
+        if (arr.length > 0) {
+          console.log('[DB Debug] Sample note:', arr[0])
+        }
+        arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        resolve(arr)
+      }
+      req.onerror = (event) => {
+        console.error('[DB Debug] Failed to get URL notes:', event.target.error)
+        resolve([])
+      }
+    } catch (error) {
+      console.error('[DB Debug] Exception in getUrlNotes:', error)
+      resolve([])
+    }
+  })
+}
+
+/** Save a URL note */
+export async function saveUrlNote(note) {
+  if (!note || !note.url) return
+  const db = await openDB()
+  const withDefaults = { ...note }
+  if (!withDefaults.id) {
+    try { withDefaults.id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `urlnote_${Date.now()}_${Math.random().toString(36).slice(2,8)}` } catch { withDefaults.id = `urlnote_${Date.now()}_${Math.random().toString(36).slice(2,8)}` }
+  }
+  if (!withDefaults.createdAt) withDefaults.createdAt = Date.now()
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction('urlNotes', 'readwrite')
+      const store = tx.objectStore('urlNotes')
+      const req = store.put(withDefaults)
+      req.onsuccess = () => {
+        console.log('[DB Debug] URL note saved successfully:', withDefaults.id)
+        resolve(true)
+      }
+      req.onerror = (event) => {
+        console.error('[DB Debug] Failed to save URL note:', event.target.error)
+        reject(event.target.error)
+      }
+      tx.onerror = (event) => {
+        console.error('[DB Debug] Transaction failed:', event.target.error)
+        reject(event.target.error)
+      }
+    } catch (error) {
+      console.error('[DB Debug] Exception in saveUrlNote:', error)
+      reject(error)
+    }
+  })
+}
+
+/** Update a URL note */
+export async function updateUrlNote(note) {
+  if (!note || !note.id) return
+  const db = await openDB()
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction('urlNotes', 'readwrite')
+      const store = tx.objectStore('urlNotes')
+      const req = store.put({ ...note, updatedAt: Date.now() })
+      req.onsuccess = () => resolve()
+      req.onerror = () => resolve()
+    } catch { resolve() }
+  })
+}
+
+/** Delete a URL note */
+export async function deleteUrlNote(noteId) {
+  if (!noteId) return
+  const db = await openDB()
+  await new Promise((resolve) => {
+    try {
+      const tx = db.transaction('urlNotes', 'readwrite')
+      const store = tx.objectStore('urlNotes')
+      const req = store.delete(noteId)
+      req.onsuccess = () => resolve()
+      req.onerror = () => resolve()
+    } catch { resolve() }
+  })
+}
+
+/** Get all URL notes across all URLs */
+export async function getAllUrlNotes() {
+  const db = await openDB()
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('urlNotes', 'readonly')
+      const store = tx.objectStore('urlNotes')
+      const req = store.getAll()
+      req.onsuccess = () => {
+        const arr = Array.isArray(req.result) ? req.result : []
+        arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        resolve(arr)
+      }
+      req.onerror = () => resolve([])
+    } catch { resolve([]) }
   })
 }

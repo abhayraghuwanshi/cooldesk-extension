@@ -9,6 +9,75 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
   const cleanedBase = getUrlParts(base).key;
   const timeString = formatTime(timeSpentMs || fallbackTimeMs);
 
+  // Dynamic gradient generation based on domain (matching CurrentTabsSection)
+  const getDomainColor = React.useCallback((url) => {
+    let hostname = '';
+    try {
+      hostname = new URL(url || '').hostname.toLowerCase();
+    } catch {
+      return { 
+        bg: 'linear-gradient(135deg, rgba(15, 23, 36, 0.8) 0%, rgba(27, 35, 49, 0.8) 100%)', 
+        border: '#273043', 
+        accent: '#4a5568' 
+      };
+    }
+
+    // Accent colors for variety
+    const accentColors = [
+      '#3b82f6', // Blue
+      '#6b7280', // Gray  
+      '#4b5563', // Slate
+      '#22c55e', // Green
+      '#ea580c', // Orange
+      '#a855f7', // Purple
+      '#f43f5e', // Rose
+      '#0891b2', // Cyan
+    ];
+
+    // Simple hash function for consistent color selection
+    let hash = 0;
+    for (let i = 0; i < hostname.length; i++) {
+      hash = ((hash << 5) - hash) + hostname.charCodeAt(i);
+      hash = hash & hash;
+    }
+
+    // Select an accent color based on hash
+    const colorIndex = Math.abs(hash) % accentColors.length;
+    const accent = accentColors[colorIndex];
+
+    // Create gradient variations with transparency for workspace items
+    const variation = Math.abs(hash >> 8) % 4;
+    let bg, border;
+
+    switch (variation) {
+      case 0:
+        bg = `linear-gradient(135deg, rgba(15, 23, 36, 0.8) 0%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.1) 100%)`;
+        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.3)`;
+        break;
+      case 1:
+        bg = `linear-gradient(145deg, rgba(15, 23, 36, 0.8) 0%, rgba(27, 35, 49, 0.8) 50%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.05) 100%)`;
+        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.25)`;
+        break;
+      case 2:
+        bg = `linear-gradient(125deg, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.03) 0%, rgba(15, 23, 36, 0.8) 40%, rgba(27, 35, 49, 0.8) 100%)`;
+        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.2)`;
+        break;
+      default:
+        bg = `linear-gradient(155deg, rgba(15, 23, 36, 0.8) 0%, rgba(27, 35, 49, 0.8) 70%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.08) 100%)`;
+        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.3)`;
+        break;
+    }
+
+    return {
+      bg,
+      border,
+      accent,
+      hostname
+    };
+  }, []);
+
+  const colors = getDomainColor(base);
+
   useEffect(() => {
     // Defer fetching per-item timeSpent until interaction to reduce initial load
     if (timeSpentMs) return; // parent provided
@@ -78,18 +147,38 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           handleItemClick();
         }
       }}
+      style={{
+        background: colors.bg,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        marginBottom: 8,
+        boxShadow: hovered ? `0 2px 8px ${colors.accent}20` : 'none',
+        transition: 'all 0.2s ease'
+      }}
     >
-      <div className="item-header" onClick={handleItemClick}>
+      <div className="item-header" onClick={handleItemClick} style={{ padding: '12px 16px' }}>
         <div className="item-info">
           {favicon && <img className="favicon" src={favicon} alt="" />}
           <div className="domain-info">
 
-            <span className="url-key" title={base}>{base.length > 40 ? base.slice(0, 37) + '…' : base}</span>
+            <span className="url-key" title={base} style={{ color: '#e5e7eb' }}>
+              {base.length > 40 ? base.slice(0, 37) + '…' : base}
+            </span>
+            {colors.hostname && (
+              <div style={{
+                fontSize: 12,
+                color: colors.accent,
+                opacity: 0.8,
+                marginTop: 2
+              }}>
+                {colors.hostname}
+              </div>
+            )}
           </div>
         </div>
         <div className="item-actions">
           {timeString && <span className="time-spent-badge">{timeString}</span>}
-          {values.length > 0 && (
+          {/* {values.length > 0 && (
             <button
               className="details-btn"
               onClick={toggleDetails}
@@ -97,7 +186,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             >
               {values.length} paths
             </button>
-          )}
+          )} */}
           {onDelete && (
             <button
               className="delete-btn"
@@ -132,7 +221,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           <div className="paths-list">
             {(() => {
               // Build a unique list of meaningful paths (skip bare "/") ordered by recency if available
-              try { console.debug('[WorkspaceItem] details open', { base, count: values.length, sample: values.slice(0, 3).map(v => v.url) }); } catch {}
+              try { console.debug('[WorkspaceItem] details open', { base, count: values.length, sample: values.slice(0, 3).map(v => v.url) }); } catch { }
               const dedup = new Map();
               for (const it of values) {
                 const parts = getUrlParts(it.url);

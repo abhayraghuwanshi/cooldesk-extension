@@ -552,6 +552,30 @@ export function initializeAI() {
                         }
                         // Note: we no longer mutate workspace membership during enrichment.
                         // AI details are persisted by getAiEnrichment() into urls.extra.ai only.
+                        
+                        // Check if there are URL notes for this item and include them in AI context
+                        try {
+                            const { getUrlNotes } = await import('../db')
+                            const urlNotes = await getUrlNotes(it.url)
+                            if (urlNotes && urlNotes.length > 0) {
+                                // Add URL notes context to the enriched data
+                                merged.urlNotesContext = {
+                                    count: urlNotes.length,
+                                    hasVoiceNotes: urlNotes.some(n => n.type === 'voice'),
+                                    hasScreenshots: urlNotes.some(n => n.type === 'screenshot'),
+                                    hasTextNotes: urlNotes.some(n => n.type === 'text'),
+                                    recentNotes: urlNotes.slice(0, 3).map(n => ({
+                                        type: n.type,
+                                        text: n.text || n.description,
+                                        selectedText: n.selectedText,
+                                        createdAt: n.createdAt
+                                    }))
+                                }
+                            }
+                        } catch (e) {
+                            console.warn('[AI][enrich] Failed to load URL notes for context:', e)
+                        }
+                        
                         processed += 1
                         chrome.runtime.sendMessage({ action: 'aiProgress', processed, total, currentItem: it.title || it.url, apiHits })
                         if (processed >= MAX_ITEMS_PER_RUN) {
