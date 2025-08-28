@@ -8,11 +8,7 @@ body,
   padding: 0;
 }
 
-body {
-  /* fallback background behind app */
-  background: radial-gradient(800px circle at 0% 0%, #0b1220 0%, #121720 40%, #0b0f16 100%),
-    linear-gradient(135deg, #121720 0%, #151a24 100%);
-}
+/* Body styles now handled by theme classes */
 
 /* === AI Dark Theme Utilities (no framework) === */
 :root {
@@ -26,14 +22,7 @@ body {
   --border: #273043;
 }
 
-/* Page backgrounds */
-.bg-ai-midnight-nebula {
-  background-image:
-    radial-gradient(60% 80% at 10% 10%, rgba(96, 165, 250, 0.12) 0%, rgba(0, 0, 0, 0) 60%),
-    radial-gradient(50% 60% at 90% 20%, rgba(139, 92, 246, 0.12) 0%, rgba(0, 0, 0, 0) 60%),
-    linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%);
-  color: var(--text);
-}
+/* Default theme moved to theme.css - this prevents conflicts with theme switching */
 
 .bg-ai-quantum {
   background: linear-gradient(135deg, var(--surface-0) 0%, var(--surface-2) 40%, #1b2a4d 100%);
@@ -416,10 +405,32 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 20px;
-  padding: 0 12px;
-  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.music-controls {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 6px;
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.music-btn {
+  font-size: 12px !important;
+  padding: 6px 8px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  transition: all 0.2s ease;
+}
+
+.music-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.05);
 }
 
 .header-actions {

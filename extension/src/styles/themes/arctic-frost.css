@@ -1,0 +1,41 @@
+.bg-arctic-frost {
+  /* Arctic Frost Theme - Cool arctic with ice blue and white accents */
+  --surface-0: #0f1419;
+  --surface-1: #1e2832;
+  --surface-2: #2d3748;
+  --primary: #0ea5e9;
+  --accent: #60a5fa;
+  --text: #f0f9ff;
+  --text-dim: #bae6fd;
+  --border: #0369a1;
+
+  background-image:
+    radial-gradient(40% 50% at 30% 20%, rgba(14, 165, 233, 0.08) 0%, rgba(0, 0, 0, 0) 70%),
+    radial-gradient(60% 40% at 70% 80%, rgba(96, 165, 250, 0.08) 0%, rgba(0, 0, 0, 0) 60%),
+    linear-gradient(155deg, var(--surface-0) 0%, var(--surface-2) 100%);
+  color: var(--text);
+}
+
+.bg-arctic-frost .header {
+  background: rgba(15, 20, 25, 0.8);
+  border-bottom: 1px solid var(--border);
+}
+
+.bg-arctic-frost .workspace-item {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+
+.bg-arctic-frost .workspace-item:hover {
+  background: rgba(14, 165, 233, 0.05);
+  border-color: var(--primary);
+}
+
+.bg-arctic-frost .btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.bg-arctic-frost .btn-primary:hover {
+  background: var(--accent);
+}

@@ -1,0 +1,77 @@
+/* Forest Depths Theme - Deep forest theme with emerald and jade accents */
+.bg-forest-depths {
+  background: radial-gradient(60% 80% at 30% 20%, #059f4620, #0000 60%), 
+              radial-gradient(50% 60% at 70% 80%, #047c3a20, #0000 60%), 
+              linear-gradient(180deg, #0f1419 0%, #1a2332 100%);
+  min-height: 100vh;
+  color: #e5e7eb;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+
+.bg-forest-depths {
+  --primary-color: #059669;
+  --primary-hover: #047857;
+  --secondary-color: #047c3a;
+  --accent-color: #10b981;
+  --text-primary: #e5e7eb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --background-primary: #0f1419;
+  --background-secondary: #1a2332;
+  --background-tertiary: #22543d;
+  --border-color: rgba(5, 150, 105, 0.2);
+  --border-hover: rgba(5, 150, 105, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --shadow-color: rgba(5, 150, 105, 0.3);
+}
+
+/* Button styles */
+.bg-forest-depths .btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  border: none;
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-forest-depths .btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-hover), var(--secondary-color));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--shadow-color);
+}
+
+/* Glass morphism effects */
+.bg-forest-depths .glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+/* Input styles */
+.bg-forest-depths input, 
+.bg-forest-depths select, 
+.bg-forest-depths textarea {
+  background: rgba(5, 150, 105, 0.1);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.bg-forest-depths input:focus, 
+.bg-forest-depths select:focus, 
+.bg-forest-depths textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+}
+
+/* Navigation styles */
+.bg-forest-depths .nav-active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-forest-depths .nav-item:hover {
+  background: rgba(5, 150, 105, 0.1);
+  border-color: var(--border-hover);
+}

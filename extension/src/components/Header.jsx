@@ -1,15 +1,20 @@
 import {
   faArrowUpRightFromSquare,
+  faBackward,
   faCalendarDays,
   faChevronLeft,
   faChevronRight,
   faCircleQuestion,
   faEnvelope,
-  faGear,
+  faForward,
+  faPalette,
+  faPause,
+  faPlay,
   faPlus,
   faRobot,
   faSpinner,
   faToggleOff,
+  faVolumeHigh,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -34,6 +39,8 @@ export function Header({
 }) {
   const [autoSync, setAutoSync] = useState(true);
   const [now, setNow] = useState(new Date());
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTrack, setCurrentTrack] = useState(null);
 
   // Load Auto Sync from UI state (default ON if missing)
   useEffect(() => {
@@ -56,6 +63,45 @@ export function Header({
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  // Music controller functions using native Chrome media session
+  const sendMediaCommand = async (action) => {
+    try {
+      // Use Chrome's native media session commands
+      if (chrome?.runtime?.sendMessage) {
+        await chrome.runtime.sendMessage({
+          type: 'MEDIA_COMMAND',
+          action: action
+        });
+      }
+    } catch (e) {
+      console.warn('Media control failed:', e);
+    }
+  };
+
+  const handlePlayPause = () => {
+    const action = isPlaying ? 'pause' : 'play';
+    sendMediaCommand(action);
+    setIsPlaying(!isPlaying);
+  };
+
+  const handlePrevious = () => sendMediaCommand('previoustrack');
+  const handleNext = () => sendMediaCommand('nexttrack');
+
+  // Listen for media session updates from background script
+  useEffect(() => {
+    const messageListener = (message) => {
+      if (message.type === 'MEDIA_STATE_UPDATE') {
+        setIsPlaying(message.isPlaying);
+        setCurrentTrack(message.track);
+      }
+    };
+
+    if (chrome?.runtime?.onMessage) {
+      chrome.runtime.onMessage.addListener(messageListener);
+      return () => chrome.runtime.onMessage.removeListener(messageListener);
+    }
   }, []);
 
   const timeStr = now.toLocaleString(undefined, {
@@ -251,11 +297,24 @@ export function Header({
         >
           <FontAwesomeIcon icon={progress.running ? faSpinner : (autoSync ? faRobot : faToggleOff)} spin={!!progress.running} />
         </button>
+        {/* Music Controls */}
+        <div className="music-controls" style={{ display: 'flex', gap: '4px', alignItems: 'center', marginRight: '8px' }}>
+          <button className="icon-btn music-btn" onClick={handlePrevious} title="Previous Track">
+            <FontAwesomeIcon icon={faBackward} />
+          </button>
+          <button className="icon-btn music-btn" onClick={handlePlayPause} title={isPlaying ? "Pause" : "Play"}>
+            <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} />
+          </button>
+          <button className="icon-btn music-btn" onClick={handleNext} title="Next Track">
+            <FontAwesomeIcon icon={faForward} />
+          </button>
+        </div>
+
         <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">
           <FontAwesomeIcon icon={faPlus} />
         </button>
-        <button className="icon-btn" onClick={() => setShowSettings(true)} title="Settings">
-          <FontAwesomeIcon icon={faGear} />
+        <button className="icon-btn" onClick={() => setShowSettings(true)} title="Customization">
+          <FontAwesomeIcon icon={faPalette} />
         </button>
         <button
           className="icon-btn"

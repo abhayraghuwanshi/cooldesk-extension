@@ -170,7 +170,15 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
   chipRefs.current = []
 
   return (
-    <div ref={rootRef} onKeyDown={onKeyDown} role="grid" tabIndex={-1}>
+    <div 
+      ref={rootRef} 
+      onKeyDown={onKeyDown} 
+      role="grid" 
+      tabIndex={-1}
+      style={{
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+      }}
+    >
       <div style={{ 
         display: 'flex', 
         flexWrap: 'wrap', 
@@ -187,13 +195,13 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
           style={{
             background: selectedGroup === 'All' 
               ? 'rgba(52, 199, 89, 0.15)' 
-              : 'rgba(255, 255, 255, 0.05)',
+              : 'var(--surface-1)',
             border: selectedGroup === 'All' 
               ? '1px solid rgba(52, 199, 89, 0.4)' 
-              : '1px solid rgba(255, 255, 255, 0.1)',
+              : '1px solid var(--border)',
             borderRadius: '16px',
             padding: '8px 16px',
-            color: selectedGroup === 'All' ? '#34C759' : '#e5e7eb',
+            color: selectedGroup === 'All' ? '#34C759' : 'var(--text)',
             fontSize: '14px',
             fontWeight: '500',
             cursor: 'pointer',
@@ -203,7 +211,6 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
             alignItems: 'center',
             gap: '8px',
             minWidth: '60px',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
             outline: 'none',
             boxShadow: selectedGroup === 'All' 
               ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
@@ -211,14 +218,14 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
           }}
           onMouseEnter={(e) => {
             if (selectedGroup !== 'All') {
-              e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.target.style.background = 'var(--surface-2)';
               e.target.style.transform = 'translateY(-1px)';
-              e.target.style.boxShadow = '0 2px 8px rgba(255, 255, 255, 0.1)';
+              e.target.style.boxShadow = '0 2px 8px var(--border)';
             }
           }}
           onMouseLeave={(e) => {
             if (selectedGroup !== 'All') {
-              e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+              e.target.style.background = 'var(--surface-1)';
               e.target.style.transform = 'translateY(0)';
               e.target.style.boxShadow = 'none';
             }
@@ -238,12 +245,12 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
           <span style={{
             background: selectedGroup === 'All' 
               ? 'rgba(52, 199, 89, 0.2)' 
-              : 'rgba(255, 255, 255, 0.1)',
+              : 'var(--surface-2)',
             borderRadius: '12px',
             padding: '2px 8px',
             fontSize: '12px',
             fontWeight: '600',
-            color: selectedGroup === 'All' ? '#34C759' : '#9ca3af',
+            color: selectedGroup === 'All' ? '#34C759' : 'var(--text-dim)',
             minWidth: '20px',
             textAlign: 'center'
           }}>
@@ -261,13 +268,13 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
             style={{
               background: selectedGroup === key 
                 ? 'rgba(52, 199, 89, 0.15)' 
-                : 'rgba(255, 255, 255, 0.05)',
+                : 'var(--surface-1)',
               border: selectedGroup === key 
                 ? '1px solid rgba(52, 199, 89, 0.4)' 
-                : '1px solid rgba(255, 255, 255, 0.1)',
+                : '1px solid var(--border)',
               borderRadius: '16px',
               padding: '8px 16px',
-              color: selectedGroup === key ? '#34C759' : '#e5e7eb',
+              color: selectedGroup === key ? '#34C759' : 'var(--text)',
               fontSize: '14px',
               fontWeight: '500',
               cursor: 'pointer',
@@ -277,7 +284,6 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
               alignItems: 'center',
               gap: '8px',
               minWidth: '60px',
-              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
               outline: 'none',
               boxShadow: selectedGroup === key 
                 ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
@@ -285,14 +291,14 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
             }}
             onMouseEnter={(e) => {
               if (selectedGroup !== key) {
-                e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                e.target.style.background = 'var(--surface-2)';
                 e.target.style.transform = 'translateY(-1px)';
-                e.target.style.boxShadow = '0 2px 8px rgba(255, 255, 255, 0.1)';
+                e.target.style.boxShadow = '0 2px 8px var(--border)';
               }
             }}
             onMouseLeave={(e) => {
               if (selectedGroup !== key) {
-                e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                e.target.style.background = 'var(--surface-1)';
                 e.target.style.transform = 'translateY(0)';
                 e.target.style.boxShadow = 'none';
               }
@@ -311,13 +317,13 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
             {getDomainFromUrl(key)}
             <span style={{
               background: selectedGroup === key 
-                ? 'rgba(52, 199, 89, 0.2)' 
-                : 'rgba(255, 255, 255, 0.1)',
+              ? 'rgba(52, 199, 89, 0.2)' 
+              : 'var(--surface-2)',
               borderRadius: '12px',
               padding: '2px 8px',
               fontSize: '12px',
               fontWeight: '600',
-              color: selectedGroup === key ? '#34C759' : '#9ca3af',
+              color: selectedGroup === key ? '#34C759' : 'var(--text-dim)',
               minWidth: '20px',
               textAlign: 'center'
             }}>

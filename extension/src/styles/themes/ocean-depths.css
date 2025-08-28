@@ -1,0 +1,41 @@
+.bg-ocean-depths {
+  /* Ocean Depths Theme - Deep ocean with blue and cyan waves */
+  --surface-0: #0c1426;
+  --surface-1: #0f1a2e;
+  --surface-2: #1e293b;
+  --primary: #0ea5e9;
+  --accent: #06b6d4;
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --border: #1e40af;
+
+  background-image:
+    radial-gradient(50% 60% at 20% 30%, rgba(14, 165, 233, 0.12) 0%, rgba(0, 0, 0, 0) 70%),
+    radial-gradient(40% 50% at 80% 20%, rgba(6, 182, 212, 0.12) 0%, rgba(0, 0, 0, 0) 60%),
+    linear-gradient(140deg, var(--surface-0) 0%, var(--surface-2) 100%);
+  color: var(--text);
+}
+
+.bg-ocean-depths .header {
+  background: rgba(12, 20, 38, 0.8);
+  border-bottom: 1px solid var(--border);
+}
+
+.bg-ocean-depths .workspace-item {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+
+.bg-ocean-depths .workspace-item:hover {
+  background: rgba(14, 165, 233, 0.05);
+  border-color: var(--primary);
+}
+
+.bg-ocean-depths .btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.bg-ocean-depths .btn-primary:hover {
+  background: var(--accent);
+}

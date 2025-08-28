@@ -1,4 +1,4 @@
-import { faFloppyDisk, faTrash, faCog, faFolder, faBullseye, faUser, faRocket, faExclamationTriangle, faCheckCircle, faLightbulb } from '@fortawesome/free-solid-svg-icons';
+import { faFloppyDisk, faTrash, faCog, faFolder, faBullseye, faUser, faRocket, faExclamationTriangle, faCheckCircle, faLightbulb, faPalette } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { deleteWorkspaceById, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges, initializeFirebase, signInWithGoogle, signOutUser, getCurrentUser, onAuthStateChange } from '../services/firebase';
@@ -20,7 +20,171 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
   const [firebaseInitialized, setFirebaseInitialized] = useState(false)
   const [currentUser, setCurrentUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(false)
+  const [selectedTheme, setSelectedTheme] = useState('ai-midnight-nebula')
+  const [fontSize, setFontSize] = useState('medium')
+  const [fontFamily, setFontFamily] = useState('system')
 
+  // Font size options
+  const fontSizes = [
+    { id: 'small', name: 'Small', size: '13px', description: 'Compact text for more content' },
+    { id: 'medium', name: 'Medium', size: '14px', description: 'Default comfortable reading' },
+    { id: 'large', name: 'Large', size: '16px', description: 'Easier reading, larger text' },
+    { id: 'extra-large', name: 'Extra Large', size: '18px', description: 'Maximum readability' }
+  ];
+
+  // Font family options
+  const fontFamilies = [
+    { id: 'system', name: 'System Default', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif', description: 'Native system fonts' },
+    { id: 'inter', name: 'Inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Modern geometric sans-serif' },
+    { id: 'roboto', name: 'Roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Google\'s friendly sans-serif' },
+    { id: 'poppins', name: 'Poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Rounded geometric typeface' },
+    { id: 'jetbrains', name: 'JetBrains Mono', family: 'JetBrains Mono, Consolas, Monaco, monospace', description: 'Developer-focused monospace' }
+  ];
+
+  // Theme options
+  const themes = [
+    {
+      id: 'ai-midnight-nebula',
+      name: 'AI Midnight Nebula',
+      description: 'Deep space theme with blue and purple nebula effects',
+      preview: 'radial-gradient(60% 80% at 10% 10%, #60a5fa1f, #0000 60%), radial-gradient(50% 60% at 90% 20%, #8b5cf61f, #0000 60%), linear-gradient(180deg, #0a0a0f 0%, #121218 100%)'
+    },
+    {
+      id: 'cosmic-aurora',
+      name: 'Cosmic Aurora',
+      description: 'Northern lights inspired with green and teal gradients',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), radial-gradient(50% 60% at 80% 10%, #06b6d420, #0000 60%), linear-gradient(180deg, #0f172a 0%, #1e293b 100%)'
+    },
+    {
+      id: 'sunset-horizon',
+      name: 'Sunset Horizon',
+      description: 'Warm sunset colors with orange and pink tones',
+      preview: 'radial-gradient(60% 80% at 10% 70%, #f9731620, #0000 60%), radial-gradient(50% 60% at 90% 30%, #ec489920, #0000 60%), linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)'
+    },
+    {
+      id: 'forest-depths',
+      name: 'Forest Depths',
+      description: 'Deep forest theme with emerald and jade accents',
+      preview: 'radial-gradient(60% 80% at 30% 20%, #059f4620, #0000 60%), radial-gradient(50% 60% at 70% 80%, #047c3a20, #0000 60%), linear-gradient(180deg, #0f1419 0%, #1a2332 100%)'
+    },
+    {
+      id: 'minimal-dark',
+      name: 'Minimal Dark',
+      description: 'Clean minimal dark theme with subtle gradients',
+      preview: 'linear-gradient(135deg, #1f2937 0%, #111827 100%)'
+    },
+    {
+      id: 'ocean-depths',
+      name: 'Ocean Depths',
+      description: 'Deep ocean theme with blue and cyan waves',
+      preview: 'radial-gradient(50% 60% at 20% 30%, #0ea5e920, #0000 70%), radial-gradient(40% 50% at 80% 20%, #06b6d420, #0000 60%), linear-gradient(140deg, #0c1426 0%, #1e293b 100%)'
+    },
+    {
+      id: 'cherry-blossom',
+      name: 'Cherry Blossom',
+      description: 'Soft pink and purple spring theme',
+      preview: 'radial-gradient(60% 70% at 25% 25%, #ec489920, #0000 65%), radial-gradient(50% 60% at 75% 15%, #a855f720, #0000 70%), linear-gradient(130deg, #1f1729 0%, #2d1b3d 100%)'
+    },
+    {
+      id: 'arctic-frost',
+      name: 'Arctic Frost',
+      description: 'Cool arctic theme with ice blue and white accents',
+      preview: 'radial-gradient(40% 50% at 30% 20%, #0ea5e915, #0000 70%), radial-gradient(60% 40% at 70% 80%, #60a5fa15, #0000 60%), linear-gradient(155deg, #0f1419 0%, #1e2832 100%)'
+    },
+    {
+      id: 'volcanic-ember',
+      name: 'Volcanic Ember',
+      description: 'Fiery theme with red and orange volcanic colors',
+      preview: 'radial-gradient(50% 60% at 20% 30%, #dc262620, #0000 70%), radial-gradient(40% 50% at 80% 20%, #f9731620, #0000 60%), linear-gradient(145deg, #1f1917 0%, #2d1b1b 100%)'
+    },
+    {
+      id: 'neon-cyberpunk',
+      name: 'Neon Cyberpunk',
+      description: 'Futuristic cyberpunk with neon pink and cyan',
+      preview: 'radial-gradient(60% 50% at 30% 20%, #ec489925, #0000 65%), radial-gradient(40% 60% at 70% 80%, #06b6d425, #0000 70%), linear-gradient(135deg, #0a0a0f 0%, #1a0a1a 100%)'
+    },
+    {
+      id: 'white-cred',
+      name: 'White CRED',
+      description: 'Clean minimalist white theme inspired by CRED',
+      preview: 'radial-gradient(60% 70% at 25% 25%, #0f172a08, #0000 65%), radial-gradient(50% 60% at 75% 15%, #64748b08, #0000 70%), linear-gradient(130deg, #ffffff 0%, #f1f5f9 100%)'
+    },
+    {
+      id: 'orange-warm',
+      name: 'Orange Warm',
+      description: 'Vibrant orange and amber theme with warm tones',
+      preview: 'radial-gradient(60% 70% at 25% 25%, #f9731620, #0000 65%), radial-gradient(50% 60% at 75% 15%, #fb923c20, #0000 70%), linear-gradient(130deg, #1c1917 0%, #44403c 100%)'
+    },
+    {
+      id: 'brown-earth',
+      name: 'Brown Earth',
+      description: 'Earthy brown and coffee theme with natural tones',
+      preview: 'radial-gradient(60% 70% at 25% 25%, #a1620720, #0000 65%), radial-gradient(50% 60% at 75% 15%, #ca8a0420, #0000 70%), linear-gradient(130deg, #1c1614 0%, #3c322a 100%)'
+    }
+  ];
+
+  const handleThemeChange = (themeId) => {
+    setSelectedTheme(themeId);
+    applyTheme(themeId, fontSize, fontFamily);
+  };
+
+  const handleFontSizeChange = (sizeId) => {
+    setFontSize(sizeId);
+    applyTheme(selectedTheme, sizeId, fontFamily);
+  };
+
+  const handleFontFamilyChange = (familyId) => {
+    setFontFamily(familyId);
+    applyTheme(selectedTheme, fontSize, familyId);
+  };
+
+  const applyTheme = (themeId, fontSizeId, fontFamilyId) => {
+    // Apply theme to body - remove all existing theme classes first
+    const body = document.body;
+    const themeClasses = [
+      'bg-ai-midnight-nebula',
+      'bg-cosmic-aurora', 
+      'bg-sunset-horizon',
+      'bg-forest-depths',
+      'bg-minimal-dark',
+      'bg-ocean-depths',
+      'bg-cherry-blossom',
+      'bg-arctic-frost',
+      'bg-volcanic-ember',
+      'bg-neon-cyberpunk',
+      'bg-white-cred',
+      'bg-orange-warm',
+      'bg-brown-earth'
+    ];
+    
+    // Remove all theme classes
+    themeClasses.forEach(cls => body.classList.remove(cls));
+    
+    // Add the new theme class
+    const newThemeClass = `bg-${themeId}`;
+    body.classList.add(newThemeClass);
+    
+    // Apply typography settings
+    const selectedFontSize = fontSizes.find(f => f.id === fontSizeId);
+    const selectedFontFamily = fontFamilies.find(f => f.id === fontFamilyId);
+    
+    if (selectedFontSize) {
+      body.style.fontSize = selectedFontSize.size;
+    }
+    
+    if (selectedFontFamily) {
+      body.style.fontFamily = selectedFontFamily.family;
+    }
+    
+    // Save preferences
+    try {
+      localStorage.setItem('cooldesk-theme', themeId);
+      localStorage.setItem('cooldesk-font-size', fontSizeId);
+      localStorage.setItem('cooldesk-font-family', fontFamilyId);
+    } catch (e) {
+      console.warn('Failed to save theme preferences:', e);
+    }
+  };
 
   const handlePersonaSelect = (persona) => {
     // Validate persona structure
@@ -110,6 +274,19 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
 
   useEffect(() => {
     setLocalSettings(settings)
+    
+    // Load saved preferences
+    try {
+      const savedTheme = localStorage.getItem('cooldesk-theme');
+      const savedFontSize = localStorage.getItem('cooldesk-font-size');
+      const savedFontFamily = localStorage.getItem('cooldesk-font-family');
+      
+      if (savedTheme) setSelectedTheme(savedTheme);
+      if (savedFontSize) setFontSize(savedFontSize);
+      if (savedFontFamily) setFontFamily(savedFontFamily);
+    } catch (e) {
+      console.warn('Failed to load theme preferences:', e);
+    }
     setBasicSaved(Boolean((settings?.geminiApiKey || '').trim()))
   }, [settings])
 
@@ -1185,6 +1362,262 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                   </div>
                 </div>
               )}
+            </div>
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
+            <div style={{ padding: '16px 0' }}>
+              <h4 style={{ 
+                margin: '0 0 16px 0', 
+                color: '#e5e7eb', 
+                fontSize: '18px',
+                fontWeight: '600' 
+              }}>
+                Choose Your Theme
+              </h4>
+              <p style={{ 
+                margin: '0 0 24px 0', 
+                color: '#9ca3af', 
+                fontSize: '14px', 
+                lineHeight: '1.5' 
+              }}>
+                Select a theme that matches your style. Changes apply instantly.
+              </p>
+
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+                gap: '16px' 
+              }}>
+                {themes.map((theme) => (
+                  <div
+                    key={theme.id}
+                    onClick={() => handleThemeChange(theme.id)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: selectedTheme === theme.id 
+                        ? '2px solid #34C759' 
+                        : '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '16px',
+                      padding: '16px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedTheme !== theme.id) {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedTheme !== theme.id) {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }
+                    }}
+                  >
+                    {/* Theme Preview */}
+                    <div style={{
+                      width: '100%',
+                      height: '80px',
+                      background: theme.preview,
+                      borderRadius: '12px',
+                      marginBottom: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}>
+                      {selectedTheme === theme.id && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          width: '24px',
+                          height: '24px',
+                          background: '#34C759',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontSize: '12px',
+                          fontWeight: '600'
+                        }}>
+                          ✓
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Theme Info */}
+                    <div>
+                      <h5 style={{
+                        margin: '0 0 4px 0',
+                        color: '#e5e7eb',
+                        fontSize: '16px',
+                        fontWeight: '600'
+                      }}>
+                        {theme.name}
+                      </h5>
+                      <p style={{
+                        margin: '0',
+                        color: '#9ca3af',
+                        fontSize: '13px',
+                        lineHeight: '1.4'
+                      }}>
+                        {theme.description}
+                      </p>
+                    </div>
+
+                    {selectedTheme === theme.id && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '0',
+                        left: '0',
+                        right: '0',
+                        bottom: '0',
+                        background: 'rgba(52, 199, 89, 0.1)',
+                        borderRadius: '14px',
+                        pointerEvents: 'none'
+                      }} />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Typography Controls */}
+              <div style={{ marginTop: '32px' }}>
+                <h5 style={{
+                  margin: '0 0 16px 0',
+                  color: '#e5e7eb',
+                  fontSize: '16px',
+                  fontWeight: '600'
+                }}>
+                  Typography Settings
+                </h5>
+
+                {/* Font Size */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#9ca3af',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}>
+                    Font Size
+                  </label>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                    gap: '8px'
+                  }}>
+                    {fontSizes.map((size) => (
+                      <button
+                        key={size.id}
+                        onClick={() => handleFontSizeChange(size.id)}
+                        style={{
+                          background: fontSize === size.id 
+                            ? 'rgba(52, 199, 89, 0.2)' 
+                            : 'rgba(255, 255, 255, 0.05)',
+                          border: fontSize === size.id 
+                            ? '1px solid #34C759' 
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          color: fontSize === size.id ? '#34C759' : '#e5e7eb',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          fontSize: '13px',
+                          fontWeight: '500'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (fontSize !== size.id) {
+                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (fontSize !== size.id) {
+                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                          }
+                        }}
+                      >
+                        {size.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Font Family */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#9ca3af',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}>
+                    Font Family
+                  </label>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    gap: '8px'
+                  }}>
+                    {fontFamilies.map((font) => (
+                      <button
+                        key={font.id}
+                        onClick={() => handleFontFamilyChange(font.id)}
+                        style={{
+                          background: fontFamily === font.id 
+                            ? 'rgba(52, 199, 89, 0.2)' 
+                            : 'rgba(255, 255, 255, 0.05)',
+                          border: fontFamily === font.id 
+                            ? '1px solid #34C759' 
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          color: fontFamily === font.id ? '#34C759' : '#e5e7eb',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          fontFamily: font.family
+                        }}
+                        onMouseEnter={(e) => {
+                          if (fontFamily !== font.id) {
+                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (fontFamily !== font.id) {
+                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                          }
+                        }}
+                      >
+                        {font.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ 
+                marginTop: '24px',
+                padding: '16px', 
+                background: 'rgba(52, 199, 89, 0.1)', 
+                border: '1px solid rgba(52, 199, 89, 0.2)',
+                borderRadius: '12px',
+                fontSize: '13px',
+                color: '#9ca3af',
+                textAlign: 'center',
+                backdropFilter: 'blur(10px)'
+              }}>
+                🎨 <strong style={{ color: '#34C759' }}>Pro Tip:</strong> Your theme and typography preferences are automatically saved and will persist across browser sessions.
+              </div>
             </div>
           </TabItem>
         </Tabs>

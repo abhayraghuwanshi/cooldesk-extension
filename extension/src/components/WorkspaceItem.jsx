@@ -154,31 +154,69 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         marginBottom: '12px',
         backdropFilter: 'blur(10px)',
         boxShadow: hovered 
-          ? '0 8px 24px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(255, 255, 255, 0.1)' 
-          : '0 2px 8px rgba(0, 0, 0, 0.05)',
+          ? '0 4px 16px rgba(0, 122, 255, 0.15)' 
+          : 'none',
         transition: 'all 0.2s ease',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        transform: hovered ? 'translateY(-1px)' : 'translateY(0)'
       }}
     >
-      <div className="item-header" onClick={handleItemClick} style={{ padding: '12px 16px' }}>
-        <div className="item-info">
-          {favicon && <img className="favicon" src={favicon} alt="" />}
-          <div className="domain-info">
-
-            <span className="url-key" title={base} style={{ color: '#e5e7eb' }}>
-              {base.length > 40 ? base.slice(0, 37) + '…' : base}
-            </span>
-            {colors.hostname && (
-              <div style={{
-                fontSize: 12,
-                color: colors.accent,
-                opacity: 0.8,
-                marginTop: 2
-              }}>
-                {colors.hostname}
-              </div>
-            )}
+      <div className="item-header" onClick={handleItemClick} style={{ 
+        padding: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px'
+      }}>
+        {favicon && (
+          <div style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            background: 'rgba(255, 255, 255, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <img 
+              src={favicon} 
+              alt="" 
+              width={18}
+              height={18}
+              style={{ borderRadius: 4 }}
+            />
           </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ 
+            fontSize: 16, 
+            color: '#ffffff', 
+            lineHeight: 1.4,
+            marginBottom: 4,
+            fontWeight: 400,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>
+            {(() => { 
+              try { 
+                return new URL(base).hostname; 
+              } catch { 
+                return base.length > 40 ? base.slice(0, 37) + '…' : base; 
+              } 
+            })()}
+          </div>
+          {colors.hostname && (
+            <div style={{ 
+              fontSize: 13, 
+              color: 'rgba(255, 255, 255, 0.6)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              {colors.hostname}
+            </div>
+          )}
         </div>
         <div className="item-actions">
           {timeString && <span className="time-spent-badge">{timeString}</span>}

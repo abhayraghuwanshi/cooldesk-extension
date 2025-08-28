@@ -1,0 +1,77 @@
+/* Cosmic Aurora Theme - Northern lights inspired with green and teal gradients */
+.bg-cosmic-aurora {
+  background: radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), 
+              radial-gradient(50% 60% at 80% 10%, #06b6d420, #0000 60%), 
+              linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  min-height: 100vh;
+  color: #e5e7eb;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+
+.bg-cosmic-aurora {
+  --primary-color: #10b981;
+  --primary-hover: #059669;
+  --secondary-color: #06b6d4;
+  --accent-color: #34d399;
+  --text-primary: #e5e7eb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --background-primary: #0f172a;
+  --background-secondary: #1e293b;
+  --background-tertiary: #334155;
+  --border-color: rgba(16, 185, 129, 0.2);
+  --border-hover: rgba(16, 185, 129, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --shadow-color: rgba(16, 185, 129, 0.3);
+}
+
+/* Button styles */
+.bg-cosmic-aurora .btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  border: none;
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-cosmic-aurora .btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-hover), var(--secondary-color));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--shadow-color);
+}
+
+/* Glass morphism effects */
+.bg-cosmic-aurora .glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+/* Input styles */
+.bg-cosmic-aurora input, 
+.bg-cosmic-aurora select, 
+.bg-cosmic-aurora textarea {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.bg-cosmic-aurora input:focus, 
+.bg-cosmic-aurora select:focus, 
+.bg-cosmic-aurora textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+/* Navigation styles */
+.bg-cosmic-aurora .nav-active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-cosmic-aurora .nav-item:hover {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--border-hover);
+}

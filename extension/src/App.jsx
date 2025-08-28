@@ -300,6 +300,76 @@ export default function App() {
       })
     })()
 
+      // Initialize theme and typography on app startup
+      ; (async () => {
+        try {
+          const savedTheme = localStorage.getItem('cooldesk-theme');
+          const savedFontSize = localStorage.getItem('cooldesk-font-size');
+          const savedFontFamily = localStorage.getItem('cooldesk-font-family');
+
+          const body = document.body;
+
+          // Apply theme
+          if (savedTheme) {
+            const themeClasses = [
+              'bg-ai-midnight-nebula',
+              'bg-cosmic-aurora',
+              'bg-sunset-horizon',
+              'bg-forest-depths',
+              'bg-minimal-dark',
+              'bg-ocean-depths',
+              'bg-cherry-blossom',
+              'bg-arctic-frost',
+              'bg-volcanic-ember',
+              'bg-neon-cyberpunk',
+              'bg-white-cred',
+              'bg-orange-warm',
+              'bg-brown-earth'
+            ];
+
+            // Remove all theme classes
+            themeClasses.forEach(cls => body.classList.remove(cls));
+
+            // Add the saved theme class
+            const themeClass = `bg-${savedTheme}`;
+            body.classList.add(themeClass);
+          }
+
+          // Apply typography
+          const fontSizes = [
+            { id: 'small', size: '13px' },
+            { id: 'medium', size: '14px' },
+            { id: 'large', size: '16px' },
+            { id: 'extra-large', size: '18px' }
+          ];
+
+          const fontFamilies = [
+            { id: 'system', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' },
+            { id: 'inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' },
+            { id: 'roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif' },
+            { id: 'poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif' },
+            { id: 'jetbrains', family: 'JetBrains Mono, Consolas, Monaco, monospace' }
+          ];
+
+          if (savedFontSize) {
+            const fontSizeObj = fontSizes.find(f => f.id === savedFontSize);
+            if (fontSizeObj) {
+              body.style.fontSize = fontSizeObj.size;
+            }
+          }
+
+          if (savedFontFamily) {
+            const fontFamilyObj = fontFamilies.find(f => f.id === savedFontFamily);
+            if (fontFamilyObj) {
+              body.style.fontFamily = fontFamilyObj.family;
+            }
+          }
+
+        } catch (e) {
+          console.warn('Failed to apply saved preferences:', e);
+        }
+      })()
+
       // Load saved workspaces initially from IndexedDB
       ; (async () => {
         try {
@@ -583,7 +653,7 @@ export default function App() {
       } catch { }
       const refreshed = await listWorkspaces();
       setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
-      
+
       // Trigger data refresh to update UI
       try {
         await sendMessage({ action: 'updateData' });
@@ -1014,7 +1084,7 @@ export default function App() {
   };
 
   return (
-    <div className="popup-wrap bg-ai-midnight-nebula" style={{ paddingBottom: 64 }}>
+    <div className="popup-wrap" style={{ paddingBottom: 64 }}>
       <SyncControlsModal
         show={showSyncControls}
         onClose={() => setShowSyncControls(false)}

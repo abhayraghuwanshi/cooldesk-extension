@@ -1,0 +1,41 @@
+.bg-cherry-blossom {
+  /* Cherry Blossom Theme - Soft pink and purple spring theme */
+  --surface-0: #1f1729;
+  --surface-1: #2d1b3d;
+  --surface-2: #3d2951;
+  --primary: #ec4899;
+  --accent: #a855f7;
+  --text: #f1e8ff;
+  --text-dim: #c4b5fd;
+  --border: #7c3aed;
+
+  background-image:
+    radial-gradient(60% 70% at 25% 25%, rgba(236, 72, 153, 0.12) 0%, rgba(0, 0, 0, 0) 65%),
+    radial-gradient(50% 60% at 75% 15%, rgba(168, 85, 247, 0.12) 0%, rgba(0, 0, 0, 0) 70%),
+    linear-gradient(130deg, var(--surface-0) 0%, var(--surface-2) 100%);
+  color: var(--text);
+}
+
+.bg-cherry-blossom .header {
+  background: rgba(31, 23, 41, 0.8);
+  border-bottom: 1px solid var(--border);
+}
+
+.bg-cherry-blossom .workspace-item {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+
+.bg-cherry-blossom .workspace-item:hover {
+  background: rgba(236, 72, 153, 0.05);
+  border-color: var(--primary);
+}
+
+.bg-cherry-blossom .btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.bg-cherry-blossom .btn-primary:hover {
+  background: var(--accent);
+}

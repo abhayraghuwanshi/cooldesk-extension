@@ -220,6 +220,134 @@ async function main() {
       } catch {}
     };
 
+    // Handle media control commands
+    if (msg?.type === 'MEDIA_COMMAND') {
+      console.log('[Background] Media command received:', msg.action);
+      
+      (async () => {
+        try {
+          // Find music tabs
+          const musicDomains = [
+            'spotify.com',
+            'music.youtube.com',
+            'youtube.com',
+            'soundcloud.com',
+            'music.apple.com',
+            'pandora.com',
+            'deezer.com',
+            'tidal.com'
+          ];
+
+          const tabs = await chrome.tabs.query({});
+          const musicTabs = tabs.filter(tab => 
+            musicDomains.some(domain => tab.url?.includes(domain))
+          );
+
+          if (musicTabs.length === 0) {
+            console.log('[Background] No music tabs found');
+            sendResponse({ ok: false, error: 'No music tabs found' });
+            cleanup();
+            return;
+          }
+
+          // Send command to all music tabs
+          let commandSent = false;
+          for (const tab of musicTabs) {
+            try {
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (action) => {
+                  // Use native media session API first
+                  if ('mediaSession' in navigator && navigator.mediaSession.setActionHandler) {
+                    try {
+                      if (action === 'play') {
+                        navigator.mediaSession.playbackState = 'playing';
+                      } else if (action === 'pause') {
+                        navigator.mediaSession.playbackState = 'paused';
+                      }
+                    } catch (e) {
+                      console.log('Media session API failed:', e);
+                    }
+                  }
+
+                  // Fallback to DOM manipulation for specific services
+                  try {
+                    if (action === 'play' || action === 'pause') {
+                      // YouTube (regular) selectors
+                      let playBtn = document.querySelector('.ytp-play-button');
+                      
+                      // Spotify selectors
+                      if (!playBtn) playBtn = document.querySelector('[data-testid="control-button-playpause"]');
+                      
+                      // YouTube Music selectors
+                      if (!playBtn) playBtn = document.querySelector('#play-pause-button, .play-pause-button');
+                      
+                      // Generic selectors
+                      if (!playBtn) playBtn = document.querySelector('[aria-label*="Play"], [aria-label*="Pause"], .playButton, .pauseButton');
+                      
+                      if (playBtn) {
+                        playBtn.click();
+                        return { success: true, service: 'DOM' };
+                      }
+                    } else if (action === 'nexttrack') {
+                      // YouTube (regular) next video
+                      let nextBtn = document.querySelector('.ytp-next-button');
+                      
+                      // Spotify next track
+                      if (!nextBtn) nextBtn = document.querySelector('[data-testid="control-button-skip-forward"]');
+                      
+                      // Generic selectors
+                      if (!nextBtn) nextBtn = document.querySelector('.next-button, [aria-label*="Next"]');
+                      
+                      if (nextBtn) {
+                        nextBtn.click();
+                        return { success: true, service: 'DOM' };
+                      }
+                    } else if (action === 'previoustrack') {
+                      // YouTube (regular) previous video
+                      let prevBtn = document.querySelector('.ytp-prev-button');
+                      
+                      // Spotify previous track
+                      if (!prevBtn) prevBtn = document.querySelector('[data-testid="control-button-skip-back"]');
+                      
+                      // Generic selectors
+                      if (!prevBtn) prevBtn = document.querySelector('.previous-button, [aria-label*="Previous"]');
+                      
+                      if (prevBtn) {
+                        prevBtn.click();
+                        return { success: true, service: 'DOM' };
+                      }
+                    }
+                  } catch (e) {
+                    console.log('DOM control failed:', e);
+                  }
+                  
+                  return { success: false };
+                },
+                args: [msg.action]
+              });
+              commandSent = true;
+              console.log(`[Background] Media command sent to ${tab.url}`);
+            } catch (e) {
+              console.log(`[Background] Failed to send command to ${tab.url}:`, e);
+            }
+          }
+
+          if (commandSent) {
+            sendResponse({ ok: true, action: msg.action, tabsFound: musicTabs.length });
+          } else {
+            sendResponse({ ok: false, error: 'Failed to execute command on any music tab' });
+          }
+        } catch (e) {
+          console.error('[Background] Media command error:', e);
+          sendResponse({ ok: false, error: e.message });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
     // Handle URL notes messages first
     const urlNotesHandled = handleUrlNotesMessages(msg, sender, sendResponse);
     if (urlNotesHandled) {
