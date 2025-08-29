@@ -1,5 +1,5 @@
 // Simple IndexedDB helper for workspaces and url index
-import { getHostWorkspaces, setHostWorkspaces } from './services/extensionApi';
+import { getHostWorkspaces, setHostWorkspaces } from './services/conditionalSync';
 // Object store: 'workspaces' with keyPath 'id'
 
 const DB_NAME = 'cooldesk-db'

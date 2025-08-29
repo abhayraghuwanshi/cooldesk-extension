@@ -1,12 +1,14 @@
-import { faFloppyDisk, faTrash, faCog, faFolder, faBullseye, faUser, faRocket, faExclamationTriangle, faCheckCircle, faLightbulb, faPalette } from '@fortawesome/free-solid-svg-icons';
+import { faFloppyDisk, faTrash, faCog, faFolder, faBullseye, faUser, faRocket, faExclamationTriangle, faCheckCircle, faLightbulb, faPalette, faSync, faColumns } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { deleteWorkspaceById, listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace, subscribeWorkspaceChanges, initializeFirebase, signInWithGoogle, signOutUser, getCurrentUser, onAuthStateChange } from '../services/firebase';
 import { sendMessage, storageGet, storageSet } from '../services/extensionApi';
+import { loadSyncConfig, saveSyncConfig, getSyncConfig, toggleHostSync } from '../services/syncConfig';
+import { getSyncStatus } from '../services/conditionalSync';
 import { CreateWorkspaceModal } from './CreateWorkspaceModal';
 import { personas, validatePersona, getPersonaUrlCount } from '../data/personas';
 
-export function SettingsModal({ show, onClose, settings, onSave }) {
+export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayout, onLayoutToggle }) {
   const [localSettings, setLocalSettings] = useState(settings)
   const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState('')
@@ -23,6 +25,9 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
   const [selectedTheme, setSelectedTheme] = useState('ai-midnight-nebula')
   const [fontSize, setFontSize] = useState('medium')
   const [fontFamily, setFontFamily] = useState('system')
+  const [syncConfig, setSyncConfig] = useState(null)
+  const [syncStatus, setSyncStatus] = useState(null)
+  const [syncConfigLoading, setSyncConfigLoading] = useState(false)
 
   // Font size options
   const fontSizes = [
@@ -186,6 +191,47 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
     }
   };
 
+  // Sync configuration handlers
+  const handleSyncConfigChange = async (key, value) => {
+    try {
+      setSyncConfigLoading(true);
+      const updatedConfig = { ...syncConfig, [key]: value };
+      await saveSyncConfig(updatedConfig);
+      setSyncConfig(updatedConfig);
+      
+      // Update sync status
+      const status = getSyncStatus();
+      setSyncStatus(status);
+    } catch (error) {
+      console.warn('Failed to save sync config:', error);
+      setError('Failed to save sync configuration. Please try again.');
+    } finally {
+      setSyncConfigLoading(false);
+    }
+  };
+
+  const handleToggleHostSync = async (enabled) => {
+    try {
+      setSyncConfigLoading(true);
+      await toggleHostSync(enabled);
+      const config = await loadSyncConfig();
+      const status = getSyncStatus();
+      setSyncConfig(config);
+      setSyncStatus(status);
+      
+      if (enabled) {
+        console.log('Host sync enabled. Extension will now sync with localhost:4000');
+      } else {
+        console.log('Host sync disabled. Extension running in standalone mode');
+      }
+    } catch (error) {
+      console.warn('Failed to toggle host sync:', error);
+      setError('Failed to toggle sync configuration. Please try again.');
+    } finally {
+      setSyncConfigLoading(false);
+    }
+  };
+
   const handlePersonaSelect = (persona) => {
     // Validate persona structure
     if (!validatePersona(persona)) {
@@ -274,21 +320,49 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
 
   useEffect(() => {
     setLocalSettings(settings)
-    
-    // Load saved preferences
-    try {
-      const savedTheme = localStorage.getItem('cooldesk-theme');
-      const savedFontSize = localStorage.getItem('cooldesk-font-size');
-      const savedFontFamily = localStorage.getItem('cooldesk-font-family');
-      
-      if (savedTheme) setSelectedTheme(savedTheme);
-      if (savedFontSize) setFontSize(savedFontSize);
-      if (savedFontFamily) setFontFamily(savedFontFamily);
-    } catch (e) {
-      console.warn('Failed to load theme preferences:', e);
-    }
     setBasicSaved(Boolean((settings?.geminiApiKey || '').trim()))
   }, [settings])
+
+  // Load and apply saved theme preferences on component mount
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem('cooldesk-theme') || 'ai-midnight-nebula';
+      const savedFontSize = localStorage.getItem('cooldesk-font-size') || 'medium';
+      const savedFontFamily = localStorage.getItem('cooldesk-font-family') || 'system';
+      
+      setSelectedTheme(savedTheme);
+      setFontSize(savedFontSize);
+      setFontFamily(savedFontFamily);
+      
+      // Apply theme immediately for new users
+      applyTheme(savedTheme, savedFontSize, savedFontFamily);
+    } catch (e) {
+      console.warn('Failed to load theme preferences:', e);
+      // Apply default theme if loading fails
+      applyTheme('ai-midnight-nebula', 'medium', 'system');
+    }
+  }, []) // Only run once on mount
+
+  // Load sync configuration when modal shows
+  useEffect(() => {
+    if (!show) return;
+    
+    const loadSync = async () => {
+      try {
+        setSyncConfigLoading(true);
+        const config = await loadSyncConfig();
+        const status = getSyncStatus();
+        setSyncConfig(config);
+        setSyncStatus(status);
+      } catch (error) {
+        console.warn('Failed to load sync config:', error);
+      } finally {
+        setSyncConfigLoading(false);
+      }
+    };
+    
+    loadSync();
+  }, [show]);
 
   // Initialize Firebase and auth state listener when modal shows
   useEffect(() => {
@@ -368,11 +442,7 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
   if (!show) return null
 
   const handleTabChange = async (nextIndex) => {
-    // Guard: require an explicit Save & Continue before accessing Workspaces
-    if (nextIndex !== 0 && !basicSaved) {
-      setError('Please press "Save & Continue" in Basic to proceed to Workspaces')
-      return
-    }
+    // Allow free navigation between all tabs for better onboarding
     setActiveTab(nextIndex)
   }
 
@@ -510,6 +580,7 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
     }
   };
 
+
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }} style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
@@ -615,179 +686,8 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
         <Tabs
           activeTab={activeTab}
           onTabChange={handleTabChange}
-          disabledTitles={basicSaved ? [] : ['Workspaces', 'Personas']}
+          disabledTitles={[]} // Remove restrictions for better onboarding flow
         >
-          <TabItem title={<><FontAwesomeIcon icon={faCog} style={{ marginRight: '8px' }} />Setup</>}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>Gemini API Key</span>
-                <input
-                  value={localSettings.geminiApiKey}
-                  onChange={(e) => { setLocalSettings({ ...localSettings, geminiApiKey: e.target.value }); markEdited(); }}
-                  placeholder="Enter your Gemini API key..."
-                  required
-                  style={{
-                    padding: '16px 20px',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '12px',
-                    color: '#e5e7eb',
-                    fontSize: '16px',
-                    outline: 'none',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#34C759';
-                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                  }}
-                />
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>Model Name</span>
-                <input
-                  value={localSettings.modelName || ''}
-                  onChange={(e) => { setLocalSettings({ ...localSettings, modelName: e.target.value }); markEdited(); }}
-                  placeholder="e.g., gemini-1.5-pro"
-                  style={{
-                    padding: '16px 20px',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '12px',
-                    color: '#e5e7eb',
-                    fontSize: '16px',
-                    outline: 'none',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#34C759';
-                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                  }}
-                />
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>Visit Count Threshold</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={localSettings.visitCountThreshold}
-                  onChange={(e) => { setLocalSettings({ ...localSettings, visitCountThreshold: e.target.value }); markEdited(); }}
-                  style={{
-                    padding: '16px 20px',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '12px',
-                    color: '#e5e7eb',
-                    fontSize: '16px',
-                    outline: 'none',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#34C759';
-                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                  }}
-                />
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>History Lookback</span>
-                <select
-                  value={typeof localSettings.historyDays === 'number' && localSettings.historyDays > 0 ? localSettings.historyDays : (localSettings.historyDays || 30)}
-                  onChange={(e) => { setLocalSettings({ ...localSettings, historyDays: Number(e.target.value) }); markEdited(); }}
-                  style={{
-                    padding: '16px 20px',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    color: '#e5e7eb',
-                    borderRadius: '12px',
-                    fontSize: '16px',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <option value={7}>Last 7 days</option>
-                  <option value={30}>Last 30 days</option>
-                  <option value={90}>Last 90 days</option>
-                </select>
-              </label>
-            </div>
-            <div style={{ display: 'flex', gap: 16, marginTop: 32, alignItems: 'center', justifyContent: 'center' }}>
-              <button
-                className="add-link-btn"
-                onClick={async () => {
-                  setError('')
-                  const key = String(localSettings?.geminiApiKey || '').trim()
-                  if (!key) {
-                    setError('Gemini API Key is required')
-                    return
-                  }
-                  const payload = {
-                    geminiApiKey: key,
-                    modelName: String(localSettings?.modelName || '').trim(),
-                    visitCountThreshold: (localSettings?.visitCountThreshold === '' || localSettings?.visitCountThreshold == null)
-                      ? 0
-                      : Number(localSettings.visitCountThreshold) || 0,
-                    historyDays: (localSettings?.historyDays === '' || localSettings?.historyDays == null)
-                      ? 30
-                      : Number(localSettings.historyDays) || 30,
-                  }
-                  try {
-                    await Promise.all([
-                      saveSettingsDB(payload),
-                      storageSet(payload),
-                    ])
-                    setBasicSaved(true)
-                    setActiveTab(1) // jump to Workspaces
-                  } catch (e) {
-                    setError(String(e?.message || e) || 'Failed to save settings')
-                  }
-                }}
-                title="Save Basic settings and continue to Workspaces"
-                style={{
-                  background: '#34C759',
-                  border: 'none',
-                  borderRadius: '16px',
-                  padding: '16px 32px',
-                  color: 'white',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 16px rgba(52, 199, 89, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-1px)';
-                  e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 2px 8px rgba(52, 199, 89, 0.3)';
-                }}
-              >
-                Save & Continue
-              </button>
-              {!basicSaved && (
-                <div style={{ fontSize: '14px', color: '#ffd500', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <FontAwesomeIcon icon={faExclamationTriangle} />Not saved yet
-                </div>
-              )}
-              {basicSaved && (
-                <div style={{ fontSize: '14px', color: '#34C759', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <FontAwesomeIcon icon={faCheckCircle} />Saved
-                </div>
-              )}
-            </div>
-          </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faFolder} style={{ marginRight: '8px' }} />Workspaces</>}>
             <label>
               <span>Workspaces</span>
@@ -898,62 +798,939 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
                     onClick={handleOpenCreateWorkspace} 
                     title="Create workspace"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      borderRadius: '12px',
-                      padding: '10px 16px',
-                      color: '#e5e7eb',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                      e.target.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                      e.target.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    Add
-                  </button>
-                  <button 
-                    className="add-link-btn" 
-                    onClick={handleSuggestCategories} 
-                    disabled={suggesting || !(String(localSettings?.geminiApiKey || '').trim())} 
-                    title="AI-suggest workspaces from your URLs"
-                    style={{
-                      background: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 'rgba(255, 255, 255, 0.05)' : '#34C759',
+                      background: '#34C759',
                       border: 'none',
                       borderRadius: '12px',
                       padding: '10px 16px',
-                      color: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? '#9ca3af' : 'white',
+                      color: 'white',
                       fontSize: '14px',
-                      fontWeight: '500',
-                      cursor: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 'not-allowed' : 'pointer',
+                      fontWeight: '600',
+                      cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      opacity: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 0.6 : 1
+                      boxShadow: '0 2px 8px rgba(52, 199, 89, 0.3)'
                     }}
                     onMouseEnter={(e) => {
-                      if (!suggesting && String(localSettings?.geminiApiKey || '').trim()) {
-                        e.target.style.transform = 'translateY(-1px)';
-                        e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
-                      }
+                      e.target.style.transform = 'translateY(-1px)';
+                      e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
                     }}
                     onMouseLeave={(e) => {
-                      if (!suggesting && String(localSettings?.geminiApiKey || '').trim()) {
-                        e.target.style.transform = 'translateY(0)';
-                        e.target.style.boxShadow = 'none';
-                      }
+                      e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 2px 8px rgba(52, 199, 89, 0.3)';
                     }}
                   >
-                    {suggesting ? 'Suggesting…' : 'AI Suggest'}
+                    + Add Workspace
                   </button>
                 </div>
               </div>
             </label>
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
+            <div style={{ padding: '16px 0' }}>
+              <h4 style={{ 
+                margin: '0 0 16px 0', 
+                color: '#e5e7eb', 
+                fontSize: '18px',
+                fontWeight: '600' 
+              }}>
+                Choose Your Theme
+              </h4>
+              <p style={{ 
+                margin: '0 0 24px 0', 
+                color: '#9ca3af', 
+                fontSize: '14px', 
+                lineHeight: '1.5' 
+              }}>
+                Select a theme that matches your style. Changes apply instantly.
+              </p>
+
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+                gap: '16px' 
+              }}>
+                {themes.map((theme) => (
+                  <div
+                    key={theme.id}
+                    onClick={() => handleThemeChange(theme.id)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: selectedTheme === theme.id 
+                        ? '2px solid #34C759' 
+                        : '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '16px',
+                      padding: '16px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      backdropFilter: 'blur(10px)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedTheme !== theme.id) {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedTheme !== theme.id) {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }
+                    }}
+                  >
+                    {/* Theme Preview */}
+                    <div style={{
+                      width: '100%',
+                      height: '80px',
+                      background: theme.preview,
+                      borderRadius: '12px',
+                      marginBottom: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}>
+                      {selectedTheme === theme.id && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          width: '24px',
+                          height: '24px',
+                          background: '#34C759',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontSize: '12px',
+                          fontWeight: '600'
+                        }}>
+                          ✓
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Theme Info */}
+                    <div>
+                      <h5 style={{
+                        margin: '0 0 4px 0',
+                        color: '#e5e7eb',
+                        fontSize: '16px',
+                        fontWeight: '600'
+                      }}>
+                        {theme.name}
+                      </h5>
+                      <p style={{
+                        margin: '0',
+                        color: '#9ca3af',
+                        fontSize: '13px',
+                        lineHeight: '1.4'
+                      }}>
+                        {theme.description}
+                      </p>
+                    </div>
+
+                    {selectedTheme === theme.id && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '0',
+                        left: '0',
+                        right: '0',
+                        bottom: '0',
+                        background: 'rgba(52, 199, 89, 0.1)',
+                        borderRadius: '14px',
+                        pointerEvents: 'none'
+                      }} />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Typography Controls */}
+              <div style={{ marginTop: '32px' }}>
+                <h5 style={{
+                  margin: '0 0 16px 0',
+                  color: '#e5e7eb',
+                  fontSize: '16px',
+                  fontWeight: '600'
+                }}>
+                  Typography Settings
+                </h5>
+
+                {/* Font Size */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#9ca3af',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}>
+                    Font Size
+                  </label>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                    gap: '8px'
+                  }}>
+                    {fontSizes.map((size) => (
+                      <button
+                        key={size.id}
+                        onClick={() => handleFontSizeChange(size.id)}
+                        style={{
+                          background: fontSize === size.id 
+                            ? 'rgba(52, 199, 89, 0.2)' 
+                            : 'rgba(255, 255, 255, 0.05)',
+                          border: fontSize === size.id 
+                            ? '1px solid #34C759' 
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          color: fontSize === size.id ? '#34C759' : '#e5e7eb',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          fontSize: '13px',
+                          fontWeight: '500'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (fontSize !== size.id) {
+                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (fontSize !== size.id) {
+                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                          }
+                        }}
+                      >
+                        {size.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Font Family */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: '#9ca3af',
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}>
+                    Font Family
+                  </label>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    gap: '8px'
+                  }}>
+                    {fontFamilies.map((font) => (
+                      <button
+                        key={font.id}
+                        onClick={() => handleFontFamilyChange(font.id)}
+                        style={{
+                          background: fontFamily === font.id 
+                            ? 'rgba(52, 199, 89, 0.2)' 
+                            : 'rgba(255, 255, 255, 0.05)',
+                          border: fontFamily === font.id 
+                            ? '1px solid #34C759' 
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          color: fontFamily === font.id ? '#34C759' : '#e5e7eb',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          fontFamily: font.family
+                        }}
+                        onMouseEnter={(e) => {
+                          if (fontFamily !== font.id) {
+                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (fontFamily !== font.id) {
+                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                          }
+                        }}
+                      >
+                        {font.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ 
+                marginTop: '24px',
+                padding: '16px', 
+                background: 'rgba(52, 199, 89, 0.1)', 
+                border: '1px solid rgba(52, 199, 89, 0.2)',
+                borderRadius: '12px',
+                fontSize: '13px',
+                color: '#9ca3af',
+                textAlign: 'center',
+                backdropFilter: 'blur(10px)'
+              }}>
+                🎨 <strong style={{ color: '#34C759' }}>Pro Tip:</strong> Your theme and typography preferences are automatically saved and will persist across browser sessions.
+              </div>
+            </div>
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faCog} style={{ marginRight: '8px' }} />Setup</>}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>Gemini API Key</span>
+                <input
+                  value={localSettings.geminiApiKey}
+                  onChange={(e) => { setLocalSettings({ ...localSettings, geminiApiKey: e.target.value }); markEdited(); }}
+                  placeholder="Enter your Gemini API key..."
+                  required
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    color: '#e5e7eb',
+                    fontSize: '16px',
+                    outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#34C759';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                  }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>Model Name</span>
+                <input
+                  value={localSettings.modelName || ''}
+                  onChange={(e) => { setLocalSettings({ ...localSettings, modelName: e.target.value }); markEdited(); }}
+                  placeholder="e.g., gemini-1.5-pro"
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    color: '#e5e7eb',
+                    fontSize: '16px',
+                    outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#34C759';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                  }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>Visit Count Threshold</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={localSettings.visitCountThreshold}
+                  onChange={(e) => { setLocalSettings({ ...localSettings, visitCountThreshold: e.target.value }); markEdited(); }}
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    color: '#e5e7eb',
+                    fontSize: '16px',
+                    outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#34C759';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                  }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#e5e7eb' }}>History Lookback</span>
+                <select
+                  value={typeof localSettings.historyDays === 'number' && localSettings.historyDays > 0 ? localSettings.historyDays : (localSettings.historyDays || 30)}
+                  onChange={(e) => { setLocalSettings({ ...localSettings, historyDays: Number(e.target.value) }); markEdited(); }}
+                  style={{
+                    padding: '16px 20px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    color: '#e5e7eb',
+                    borderRadius: '12px',
+                    fontSize: '16px',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value={7}>Last 7 days</option>
+                  <option value={30}>Last 30 days</option>
+                  <option value={90}>Last 90 days</option>
+                </select>
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 32, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="add-link-btn"
+                onClick={async () => {
+                  setError('')
+                  const key = String(localSettings?.geminiApiKey || '').trim()
+                  if (!key) {
+                    setError('Gemini API Key is required')
+                    return
+                  }
+                  const payload = {
+                    geminiApiKey: key,
+                    modelName: String(localSettings?.modelName || '').trim(),
+                    visitCountThreshold: (localSettings?.visitCountThreshold === '' || localSettings?.visitCountThreshold == null)
+                      ? 0
+                      : Number(localSettings.visitCountThreshold) || 0,
+                    historyDays: (localSettings?.historyDays === '' || localSettings?.historyDays == null)
+                      ? 30
+                      : Number(localSettings.historyDays) || 30,
+                  }
+                  try {
+                    await Promise.all([
+                      saveSettingsDB(payload),
+                      storageSet(payload),
+                    ])
+                    setBasicSaved(true)
+                  } catch (e) {
+                    setError(String(e?.message || e) || 'Failed to save settings')
+                  }
+                }}
+                title="Save AI settings"
+                style={{
+                  background: '#34C759',
+                  border: 'none',
+                  borderRadius: '16px',
+                  padding: '16px 32px',
+                  color: 'white',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 16px rgba(52, 199, 89, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.transform = 'translateY(-1px)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 2px 8px rgba(52, 199, 89, 0.3)';
+                }}
+              >
+                Save Settings
+              </button>
+              <button 
+                className="add-link-btn" 
+                onClick={handleSuggestCategories} 
+                disabled={suggesting || !(String(localSettings?.geminiApiKey || '').trim())} 
+                title="AI-suggest workspaces from your URLs"
+                style={{
+                  background: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 'rgba(255, 255, 255, 0.05)' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  border: 'none',
+                  borderRadius: '16px',
+                  padding: '16px 32px',
+                  color: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? '#9ca3af' : 'white',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 0.6 : 1,
+                  boxShadow: suggesting || !(String(localSettings?.geminiApiKey || '').trim()) ? 'none' : '0 4px 16px rgba(102, 126, 234, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  if (!suggesting && String(localSettings?.geminiApiKey || '').trim()) {
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.4)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!suggesting && String(localSettings?.geminiApiKey || '').trim()) {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 4px 16px rgba(102, 126, 234, 0.3)';
+                  }
+                }}
+              >
+                {suggesting ? '✨ Generating...' : '✨ AI Suggest Workspaces'}
+              </button>
+              {!basicSaved && (
+                <div style={{ fontSize: '14px', color: '#ffd500', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FontAwesomeIcon icon={faExclamationTriangle} />Not saved yet
+                </div>
+              )}
+              {basicSaved && (
+                <div style={{ fontSize: '14px', color: '#34C759', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FontAwesomeIcon icon={faCheckCircle} />Saved
+                </div>
+              )}
+            </div>
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faColumns} style={{ marginRight: '8px' }} />Layout</>}>
+            <div style={{ padding: '16px 0' }}>
+              <h4 style={{ 
+                margin: '0 0 12px 0', 
+                fontSize: '16px', 
+                fontWeight: '600',
+                color: 'var(--text-primary)'
+              }}>
+                Interface Layout
+              </h4>
+              <p style={{ 
+                margin: '0 0 20px 0', 
+                fontSize: '14px', 
+                color: 'var(--text-secondary)',
+                lineHeight: '1.5'
+              }}>
+                Choose between horizontal header or vertical sidebar layout for the navigation interface.
+              </p>
+
+              <div style={{ display: 'grid', gap: '16px' }}>
+                {/* Horizontal Layout Option */}
+                <div
+                  onClick={() => {
+                    if (onLayoutToggle) {
+                      onLayoutToggle(false);
+                      // Also save to localStorage as backup
+                      try {
+                        localStorage.setItem('cooldesk-vertical-layout', 'false');
+                      } catch (e) {
+                        console.warn('Failed to save layout preference to localStorage:', e);
+                      }
+                    }
+                  }}
+                  style={{
+                    padding: '16px',
+                    background: !useVerticalLayout 
+                      ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)'
+                      : 'var(--bg-secondary)',
+                    border: !useVerticalLayout 
+                      ? '2px solid rgba(96, 165, 250, 0.6)' 
+                      : '1px solid var(--border-primary)',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    position: 'relative'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      border: '2px solid',
+                      borderColor: !useVerticalLayout ? '#60a5fa' : 'var(--text-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      {!useVerticalLayout && (
+                        <div style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#60a5fa'
+                        }} />
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ 
+                        fontWeight: '600', 
+                        color: 'var(--text-primary)',
+                        fontSize: '14px'
+                      }}>
+                        Horizontal Header
+                      </div>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: 'var(--text-secondary)',
+                        marginTop: '2px'
+                      }}>
+                        Traditional header across the top
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Layout Preview */}
+                  <div style={{
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '6px',
+                    padding: '8px',
+                    background: 'var(--bg-tertiary)',
+                    fontSize: '10px',
+                    color: 'var(--text-secondary)'
+                  }}>
+                    <div style={{
+                      height: '12px',
+                      background: 'var(--border-primary)',
+                      borderRadius: '2px',
+                      marginBottom: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      paddingLeft: '4px'
+                    }}>
+                      Header
+                    </div>
+                    <div style={{ height: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px' }}>
+                      Content Area
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                    ✓ More vertical space for content<br/>
+                    ✓ Familiar traditional layout<br/>
+                    ✓ Better for wide content
+                  </div>
+                </div>
+
+                {/* Vertical Layout Option */}
+                <div
+                  onClick={() => {
+                    if (onLayoutToggle) {
+                      onLayoutToggle(true);
+                      // Also save to localStorage as backup
+                      try {
+                        localStorage.setItem('cooldesk-vertical-layout', 'true');
+                      } catch (e) {
+                        console.warn('Failed to save layout preference to localStorage:', e);
+                      }
+                    }
+                  }}
+                  style={{
+                    padding: '16px',
+                    background: useVerticalLayout 
+                      ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)'
+                      : 'var(--bg-secondary)',
+                    border: useVerticalLayout 
+                      ? '2px solid rgba(96, 165, 250, 0.6)' 
+                      : '1px solid var(--border-primary)',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    position: 'relative'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                    <div style={{
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      border: '2px solid',
+                      borderColor: useVerticalLayout ? '#60a5fa' : 'var(--text-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      {useVerticalLayout && (
+                        <div style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#60a5fa'
+                        }} />
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ 
+                        fontWeight: '600', 
+                        color: 'var(--text-primary)',
+                        fontSize: '14px'
+                      }}>
+                        Vertical Sidebar
+                      </div>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: 'var(--text-secondary)',
+                        marginTop: '2px'
+                      }}>
+                        Modern sidebar on the right
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Layout Preview */}
+                  <div style={{
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '6px',
+                    padding: '8px',
+                    background: 'var(--bg-tertiary)',
+                    fontSize: '10px',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    gap: '4px'
+                  }}>
+                    <div style={{
+                      flex: 1,
+                      height: '36px',
+                      background: 'rgba(255,255,255,0.05)',
+                      borderRadius: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      paddingLeft: '4px'
+                    }}>
+                      Content Area
+                    </div>
+                    <div style={{
+                      width: '20px',
+                      background: 'var(--border-primary)',
+                      borderRadius: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      writingMode: 'vertical-rl',
+                      fontSize: '8px'
+                    }}>
+                      Sidebar
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '8px' }}>
+                    ✓ More horizontal reading space<br/>
+                    ✓ Modern app-style interface<br/>
+                    ✓ Collapsible to icon-only mode
+                  </div>
+                </div>
+              </div>
+
+              <div style={{
+                marginTop: '20px',
+                padding: '12px',
+                background: 'var(--bg-tertiary)',
+                borderRadius: '8px',
+                border: '1px solid var(--border-primary)'
+              }}>
+                <div style={{ 
+                  fontSize: '12px', 
+                  color: 'var(--text-secondary)',
+                  lineHeight: '1.5'
+                }}>
+                  <strong style={{ color: 'var(--text-primary)' }}>💡 Tip:</strong> You can switch between layouts anytime. 
+                  The vertical sidebar is great for content-heavy workflows, while the horizontal header maximizes vertical space.
+                </div>
+              </div>
+            </div>
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faSync} style={{ marginRight: '8px' }} />Sync</>}>
+            <div style={{ padding: '16px 0' }}>
+              <h4 style={{ 
+                margin: '0 0 12px 0', 
+                fontSize: '16px', 
+                fontWeight: '600',
+                color: 'var(--text-primary)'
+              }}>
+                Host Application Sync
+              </h4>
+              <p style={{ 
+                margin: '0 0 20px 0', 
+                fontSize: '14px', 
+                color: 'var(--text-secondary)',
+                lineHeight: '1.5'
+              }}>
+                Configure synchronization with the desktop host application running on localhost:4000. 
+                When enabled, your workspaces, tabs, and activity will sync with the desktop app.
+              </p>
+
+              {syncConfigLoading && (
+                <div style={{ 
+                  padding: '12px', 
+                  background: 'var(--bg-secondary)', 
+                  borderRadius: '8px', 
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <div className="spinner" style={{ width: '16px', height: '16px' }}></div>
+                  <span style={{ color: 'var(--text-secondary)' }}>Loading sync configuration...</span>
+                </div>
+              )}
+
+              {syncConfig && (
+                <>
+                  {/* Master Enable/Disable Switch */}
+                  <div style={{ 
+                    padding: '16px', 
+                    background: 'var(--bg-secondary)', 
+                    borderRadius: '8px', 
+                    marginBottom: '16px',
+                    border: syncConfig.enableHostSync ? '1px solid #34C759' : '1px solid var(--border-primary)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>Enable Host Sync</span>
+                      <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={syncConfig.enableHostSync}
+                          onChange={(e) => handleToggleHostSync(e.target.checked)}
+                          disabled={syncConfigLoading}
+                          style={{ marginRight: '8px' }}
+                        />
+                        <span style={{ color: syncConfig.enableHostSync ? '#34C759' : 'var(--text-secondary)' }}>
+                          {syncConfig.enableHostSync ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </label>
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {syncConfig.enableHostSync 
+                        ? 'Extension will sync data with desktop host application' 
+                        : 'Extension running in standalone mode'
+                      }
+                    </div>
+                  </div>
+
+                  {/* Connection Status */}
+                  {syncStatus && (
+                    <div style={{ 
+                      padding: '12px', 
+                      background: 'var(--bg-tertiary)', 
+                      borderRadius: '6px', 
+                      marginBottom: '16px' 
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <FontAwesomeIcon 
+                          icon={syncStatus.hostSyncEnabled ? faCheckCircle : faExclamationTriangle} 
+                          style={{ color: syncStatus.hostSyncEnabled ? '#34C759' : '#FF9500' }} 
+                        />
+                        <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>
+                          Connection Status: {syncStatus.hostSyncEnabled ? 'Ready' : 'Disabled'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Host URL: {syncStatus.hostUrl} | WebSocket: {syncStatus.websocketUrl}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Individual Sync Features */}
+                  {syncConfig.enableHostSync && (
+                    <div style={{ display: 'grid', gap: '12px' }}>
+                      <h5 style={{ 
+                        margin: '0 0 8px 0', 
+                        fontSize: '14px', 
+                        fontWeight: '600',
+                        color: 'var(--text-primary)'
+                      }}>
+                        Sync Features
+                      </h5>
+
+                      {[
+                        { key: 'syncWorkspaces', label: 'Workspaces', description: 'Sync workspace data and URLs' },
+                        { key: 'syncTabs', label: 'Tabs', description: 'Share current browser tabs with host' },
+                        { key: 'syncActivity', label: 'Activity', description: 'Track browsing activity and time spent' },
+                        { key: 'syncSettings', label: 'Settings', description: 'Synchronize extension settings' },
+                        { key: 'syncDashboard', label: 'Dashboard', description: 'Sync dashboard data and bookmarks' },
+                        { key: 'enableRedirects', label: 'URL Redirects', description: 'Allow host to redirect URLs' },
+                        { key: 'enableHostActions', label: 'Host Actions', description: 'Allow host to open URLs and control browser' }
+                      ].map(feature => (
+                        <div key={feature.key} style={{ 
+                          padding: '12px', 
+                          background: 'var(--bg-tertiary)', 
+                          borderRadius: '6px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between'
+                        }}>
+                          <div>
+                            <div style={{ fontWeight: '500', color: 'var(--text-primary)', marginBottom: '2px' }}>
+                              {feature.label}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              {feature.description}
+                            </div>
+                          </div>
+                          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={syncConfig[feature.key]}
+                              onChange={(e) => handleSyncConfigChange(feature.key, e.target.checked)}
+                              disabled={syncConfigLoading}
+                              style={{ marginRight: '8px' }}
+                            />
+                            <span style={{ 
+                              color: syncConfig[feature.key] ? '#34C759' : 'var(--text-secondary)',
+                              fontSize: '12px'
+                            }}>
+                              {syncConfig[feature.key] ? 'On' : 'Off'}
+                            </span>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Host URL Configuration */}
+                  <div style={{ marginTop: '20px' }}>
+                    <h5 style={{ 
+                      margin: '0 0 8px 0', 
+                      fontSize: '14px', 
+                      fontWeight: '600',
+                      color: 'var(--text-primary)'
+                    }}>
+                      Host Configuration
+                    </h5>
+                    <div style={{ display: 'grid', gap: '8px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                          HTTP URL
+                        </label>
+                        <input
+                          type="text"
+                          value={syncConfig.hostUrl}
+                          onChange={(e) => handleSyncConfigChange('hostUrl', e.target.value)}
+                          disabled={syncConfigLoading}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-primary)',
+                            background: 'var(--bg-tertiary)',
+                            color: 'var(--text-primary)',
+                            fontSize: '13px'
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                          WebSocket URL
+                        </label>
+                        <input
+                          type="text"
+                          value={syncConfig.websocketUrl}
+                          onChange={(e) => handleSyncConfigChange('websocketUrl', e.target.value)}
+                          disabled={syncConfigLoading}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-primary)',
+                            background: 'var(--bg-tertiary)',
+                            color: 'var(--text-primary)',
+                            fontSize: '13px'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faBullseye} style={{ marginRight: '8px' }} />Personas</>}>
             <div style={{ padding: '16px 0' }}>
@@ -1364,272 +2141,219 @@ export function SettingsModal({ show, onClose, settings, onSave }) {
               )}
             </div>
           </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
-            <div style={{ padding: '16px 0' }}>
-              <h4 style={{ 
-                margin: '0 0 16px 0', 
-                color: '#e5e7eb', 
-                fontSize: '18px',
-                fontWeight: '600' 
-              }}>
-                Choose Your Theme
-              </h4>
-              <p style={{ 
-                margin: '0 0 24px 0', 
-                color: '#9ca3af', 
-                fontSize: '14px', 
-                lineHeight: '1.5' 
-              }}>
-                Select a theme that matches your style. Changes apply instantly.
-              </p>
-
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-                gap: '16px' 
-              }}>
-                {themes.map((theme) => (
-                  <div
-                    key={theme.id}
-                    onClick={() => handleThemeChange(theme.id)}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: selectedTheme === theme.id 
-                        ? '2px solid #34C759' 
-                        : '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '16px',
-                      padding: '16px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      backdropFilter: 'blur(10px)',
-                      position: 'relative',
-                      overflow: 'hidden'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (selectedTheme !== theme.id) {
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (selectedTheme !== theme.id) {
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
-                    }}
-                  >
-                    {/* Theme Preview */}
-                    <div style={{
-                      width: '100%',
-                      height: '80px',
-                      background: theme.preview,
-                      borderRadius: '12px',
-                      marginBottom: '12px',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      position: 'relative',
-                      overflow: 'hidden'
-                    }}>
-                      {selectedTheme === theme.id && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '8px',
-                          right: '8px',
-                          width: '24px',
-                          height: '24px',
-                          background: '#34C759',
-                          borderRadius: '50%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'white',
-                          fontSize: '12px',
-                          fontWeight: '600'
-                        }}>
-                          ✓
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Theme Info */}
-                    <div>
-                      <h5 style={{
-                        margin: '0 0 4px 0',
-                        color: '#e5e7eb',
-                        fontSize: '16px',
-                        fontWeight: '600'
-                      }}>
-                        {theme.name}
-                      </h5>
-                      <p style={{
-                        margin: '0',
-                        color: '#9ca3af',
-                        fontSize: '13px',
-                        lineHeight: '1.4'
-                      }}>
-                        {theme.description}
-                      </p>
-                    </div>
-
-                    {selectedTheme === theme.id && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '0',
-                        left: '0',
-                        right: '0',
-                        bottom: '0',
-                        background: 'rgba(52, 199, 89, 0.1)',
-                        borderRadius: '14px',
-                        pointerEvents: 'none'
-                      }} />
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Typography Controls */}
-              <div style={{ marginTop: '32px' }}>
-                <h5 style={{
-                  margin: '0 0 16px 0',
-                  color: '#e5e7eb',
-                  fontSize: '16px',
-                  fontWeight: '600'
-                }}>
-                  Typography Settings
-                </h5>
-
-                {/* Font Size */}
-                <div style={{ marginBottom: '24px' }}>
-                  <label style={{
-                    display: 'block',
-                    marginBottom: '8px',
-                    color: '#9ca3af',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}>
-                    Font Size
-                  </label>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-                    gap: '8px'
-                  }}>
-                    {fontSizes.map((size) => (
-                      <button
-                        key={size.id}
-                        onClick={() => handleFontSizeChange(size.id)}
-                        style={{
-                          background: fontSize === size.id 
-                            ? 'rgba(52, 199, 89, 0.2)' 
-                            : 'rgba(255, 255, 255, 0.05)',
-                          border: fontSize === size.id 
-                            ? '1px solid #34C759' 
-                            : '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '8px',
-                          padding: '8px 12px',
-                          color: fontSize === size.id ? '#34C759' : '#e5e7eb',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          fontSize: '13px',
-                          fontWeight: '500'
-                        }}
-                        onMouseEnter={(e) => {
-                          if (fontSize !== size.id) {
-                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (fontSize !== size.id) {
-                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                          }
-                        }}
-                      >
-                        {size.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Font Family */}
-                <div style={{ marginBottom: '24px' }}>
-                  <label style={{
-                    display: 'block',
-                    marginBottom: '8px',
-                    color: '#9ca3af',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}>
-                    Font Family
-                  </label>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                    gap: '8px'
-                  }}>
-                    {fontFamilies.map((font) => (
-                      <button
-                        key={font.id}
-                        onClick={() => handleFontFamilyChange(font.id)}
-                        style={{
-                          background: fontFamily === font.id 
-                            ? 'rgba(52, 199, 89, 0.2)' 
-                            : 'rgba(255, 255, 255, 0.05)',
-                          border: fontFamily === font.id 
-                            ? '1px solid #34C759' 
-                            : '1px solid rgba(255, 255, 255, 0.1)',
-                          borderRadius: '8px',
-                          padding: '8px 12px',
-                          color: fontFamily === font.id ? '#34C759' : '#e5e7eb',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease',
-                          fontSize: '13px',
-                          fontWeight: '500',
-                          fontFamily: font.family
-                        }}
-                        onMouseEnter={(e) => {
-                          if (fontFamily !== font.id) {
-                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (fontFamily !== font.id) {
-                            e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                          }
-                        }}
-                      >
-                        {font.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ 
-                marginTop: '24px',
-                padding: '16px', 
-                background: 'rgba(52, 199, 89, 0.1)', 
-                border: '1px solid rgba(52, 199, 89, 0.2)',
-                borderRadius: '12px',
-                fontSize: '13px',
-                color: '#9ca3af',
-                textAlign: 'center',
-                backdropFilter: 'blur(10px)'
-              }}>
-                🎨 <strong style={{ color: '#34C759' }}>Pro Tip:</strong> Your theme and typography preferences are automatically saved and will persist across browser sessions.
-              </div>
-            </div>
-          </TabItem>
         </Tabs>
 
         {/* Removed global Save button; use Save & Continue in Basic tab */}
 
-        <CreateWorkspaceModal
-          show={showCreateWorkspace}
-          onClose={handleCloseCreateWorkspace}
-          onCreate={handleCreateWorkspace}
-          currentTab={null}
-        />
+        {showCreateWorkspace && (
+          <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleCloseCreateWorkspace() }} style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+          }}>
+            <div className="modal" style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '16px',
+              boxShadow: '0 12px 48px rgba(0, 0, 0, 0.4)',
+              maxWidth: '500px',
+              width: '90vw',
+              padding: '24px',
+              color: '#e5e7eb'
+            }}>
+              <div
+                className="modal-header"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  paddingBottom: 20,
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                  marginBottom: 24,
+                }}
+              >
+                <h3 style={{ 
+                  margin: 0, 
+                  fontSize: '20px',
+                  fontWeight: '600',
+                  color: '#e5e7eb'
+                }}>Create New Workspace</h3>
+                <button
+                  onClick={handleCloseCreateWorkspace}
+                  className="cancel-btn"
+                  aria-label="Close"
+                  title="Close"
+                  style={{ 
+                    padding: '8px',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    color: '#e5e7eb',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'rgba(255, 255, 255, 0.2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '500', color: '#d1d5db' }}>Workspace Name *</span>
+                  <input
+                    value={workspaces.find(w => w.id === 'new')?.name || ''}
+                    onChange={(e) => {
+                      const newWorkspace = { id: 'new', name: e.target.value, description: workspaces.find(w => w.id === 'new')?.description || '' };
+                      setWorkspaces(prev => {
+                        const filtered = prev.filter(w => w.id !== 'new');
+                        return [...filtered, newWorkspace];
+                      });
+                    }}
+                    placeholder="Enter workspace name..."
+                    autoFocus
+                    style={{
+                      padding: '12px 16px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '8px',
+                      color: '#e5e7eb',
+                      fontSize: '14px',
+                      outline: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#34C759';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                    }}
+                  />
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '500', color: '#d1d5db' }}>Description</span>
+                  <textarea
+                    value={workspaces.find(w => w.id === 'new')?.description || ''}
+                    onChange={(e) => {
+                      const newWorkspace = { id: 'new', name: workspaces.find(w => w.id === 'new')?.name || '', description: e.target.value };
+                      setWorkspaces(prev => {
+                        const filtered = prev.filter(w => w.id !== 'new');
+                        return [...filtered, newWorkspace];
+                      });
+                    }}
+                    placeholder="What are you working on? (optional)"
+                    rows="3"
+                    style={{
+                      padding: '12px 16px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '8px',
+                      color: '#e5e7eb',
+                      fontSize: '14px',
+                      outline: 'none',
+                      resize: 'vertical',
+                      fontFamily: 'inherit',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#34C759';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                    }}
+                  />
+                </label>
+
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', paddingTop: '8px' }}>
+                  <button 
+                    onClick={handleCloseCreateWorkspace}
+                    style={{
+                      padding: '10px 20px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '8px',
+                      color: '#e5e7eb',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const newWorkspace = workspaces.find(w => w.id === 'new');
+                      if (!newWorkspace?.name?.trim()) return;
+                      
+                      await handleCreateWorkspace(newWorkspace.name.trim(), newWorkspace.description?.trim() || '');
+                      setWorkspaces(prev => prev.filter(w => w.id !== 'new'));
+                    }}
+                    disabled={!workspaces.find(w => w.id === 'new')?.name?.trim()}
+                    style={{
+                      padding: '10px 20px',
+                      background: workspaces.find(w => w.id === 'new')?.name?.trim() ? '#34C759' : 'rgba(255, 255, 255, 0.05)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: workspaces.find(w => w.id === 'new')?.name?.trim() ? 'white' : '#6b7280',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: workspaces.find(w => w.id === 'new')?.name?.trim() ? 'pointer' : 'not-allowed',
+                      transition: 'all 0.2s ease',
+                      boxShadow: workspaces.find(w => w.id === 'new')?.name?.trim() ? '0 2px 8px rgba(52, 199, 89, 0.3)' : 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (workspaces.find(w => w.id === 'new')?.name?.trim()) {
+                        e.target.style.transform = 'translateY(-1px)';
+                        e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (workspaces.find(w => w.id === 'new')?.name?.trim()) {
+                        e.target.style.transform = 'translateY(0)';
+                        e.target.style.boxShadow = '0 2px 8px rgba(52, 199, 89, 0.3)';
+                      }
+                    }}
+                  >
+                    Create Workspace
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

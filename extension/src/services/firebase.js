@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signOut, onAuthStateChanged, signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDocs, getFirestore, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, getFirestore, onSnapshot, orderBy, query, updateDoc, connectFirestoreEmulator, enableNetwork, disableNetwork } from 'firebase/firestore';
 
 // Firebase configuration - you'll need to replace with your project's config
 const firebaseConfig = {
@@ -15,6 +15,45 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+
+// Configure Firestore for better extension compatibility
+try {
+  // Suppress WebChannel connection warnings in development
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Firestore: Running in development mode');
+  }
+  
+  // Add connection state monitoring
+  let isConnected = true;
+  
+  // Handle connection errors gracefully
+  const handleConnectionError = (error) => {
+    console.warn('Firestore connection issue (this is usually non-critical):', error.message);
+    isConnected = false;
+    
+    // Try to reconnect after a delay
+    setTimeout(async () => {
+      try {
+        await enableNetwork(db);
+        isConnected = true;
+        console.log('Firestore: Connection restored');
+      } catch (reconnectError) {
+        console.warn('Firestore: Reconnection failed', reconnectError);
+      }
+    }, 5000);
+  };
+  
+  // Global error handler for Firestore
+  window.addEventListener('unhandledrejection', (event) => {
+    if (event.reason && event.reason.message && event.reason.message.includes('WebChannelConnection')) {
+      handleConnectionError(event.reason);
+      event.preventDefault(); // Prevent the error from being logged to console
+    }
+  });
+  
+} catch (error) {
+  console.warn('Failed to configure Firestore connection handling:', error);
+}
 
 // Anonymous authentication for user session
 let currentUser = null;
@@ -145,6 +184,20 @@ export const saveWorkspace = async (workspace) => {
     }
     return workspace;
   } catch (error) {
+    // Handle WebChannel and connection errors gracefully
+    if (error.message && error.message.includes('WebChannelConnection')) {
+      console.warn('Firestore write connection issue (retrying...):', error.message);
+      
+      // Retry the operation once after a short delay
+      try {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return await saveWorkspace(workspace); // Retry once
+      } catch (retryError) {
+        console.error('Retry failed for workspace save:', retryError);
+        throw new Error('Failed to save workspace due to connection issues. Please try again.');
+      }
+    }
+    
     console.error('Error saving workspace:', error);
     throw error;
   }
@@ -184,7 +237,21 @@ export const subscribeWorkspaceChanges = (callback) => {
     return onSnapshot(q, (snapshot) => {
       callback();
     }, (error) => {
-      console.error('Error in workspace subscription:', error);
+      // Handle WebChannel and connection errors gracefully
+      if (error.message && (error.message.includes('WebChannelConnection') || error.message.includes('Failed to get document'))) {
+        console.warn('Firestore subscription connection issue (non-critical):', error.message);
+        
+        // Try to re-establish subscription after a delay
+        setTimeout(() => {
+          try {
+            subscribeWorkspaceChanges(callback);
+          } catch (retryError) {
+            console.warn('Failed to re-establish Firestore subscription:', retryError);
+          }
+        }, 10000);
+      } else {
+        console.error('Error in workspace subscription:', error);
+      }
     });
   } catch (error) {
     console.error('Error subscribing to workspace changes:', error);

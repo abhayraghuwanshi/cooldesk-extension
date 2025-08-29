@@ -6,6 +6,7 @@ import './App.css';
 import { AddToWorkspaceModal } from './components/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/CreateWorkspaceModal';
 import { Header } from './components/Header';
+import { VerticalHeader } from './components/VerticalHeader';
 import { ItemGrid } from './components/ItemGrid';
 import { RelatedProductsSection } from './components/RelatedProductsSection';
 import { SettingsModal } from './components/SettingsModal';
@@ -87,6 +88,7 @@ export default function App() {
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
   const [processes, setProcesses] = useState([])
   const [showSyncControls, setShowSyncControls] = useState(false)
+  const [useVerticalLayout, setUseVerticalLayout] = useState(false)
 
   // Keep a live ref of progress.running so interval callbacks see the latest value
   const progressRunningRef = useRef(false);
@@ -116,6 +118,63 @@ export default function App() {
       return () => { };
     }
   }, [])
+
+  // Load layout preference from UI state
+  useEffect(() => {
+    (async () => {
+      try {
+        const ui = await getUIState();
+        console.log('Loading UI state:', ui);
+        if (typeof ui?.useVerticalLayout === 'boolean') {
+          console.log('Setting vertical layout to:', ui.useVerticalLayout);
+          setUseVerticalLayout(ui.useVerticalLayout);
+        } else {
+          // Fallback to localStorage
+          const savedLayout = localStorage.getItem('cooldesk-vertical-layout');
+          if (savedLayout === 'true') {
+            console.log('Setting vertical layout from localStorage: true');
+            setUseVerticalLayout(true);
+          } else {
+            console.log('No vertical layout preference found, using default (false)');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load layout preference:', e);
+        // Final fallback to localStorage
+        try {
+          const savedLayout = localStorage.getItem('cooldesk-vertical-layout');
+          if (savedLayout === 'true') {
+            setUseVerticalLayout(true);
+          }
+        } catch (localStorageError) {
+          console.error('Failed to load from localStorage as well:', localStorageError);
+        }
+      }
+    })();
+  }, []);
+
+  // Save layout preference to UI state when changed
+  const handleLayoutToggle = async (vertical) => {
+    try {
+      console.log('Toggling layout to vertical:', vertical);
+      setUseVerticalLayout(vertical);
+      const ui = await getUIState();
+      console.log('Current UI state:', ui);
+      await saveUIState({ ...ui, useVerticalLayout: vertical });
+      console.log('Layout preference saved successfully');
+      
+      // Also save to localStorage as backup
+      localStorage.setItem('cooldesk-vertical-layout', vertical.toString());
+    } catch (e) {
+      console.error('Failed to save layout preference:', e);
+      // Try to save to localStorage at least
+      try {
+        localStorage.setItem('cooldesk-vertical-layout', vertical.toString());
+      } catch (localStorageError) {
+        console.error('Failed to save to localStorage as well:', localStorageError);
+      }
+    }
+  };
 
   // Auto Sync: when enabled in UI state, trigger Bulk Sync on load and periodically
   useEffect(() => {
@@ -1084,7 +1143,29 @@ export default function App() {
   };
 
   return (
-    <div className="popup-wrap" style={{ paddingBottom: 64 }}>
+    <div className="popup-wrap" style={{ paddingBottom: useVerticalLayout ? 0 : 64 }}>
+      {/* Vertical Sidebar (when enabled) */}
+      {useVerticalLayout && (
+        <VerticalHeader
+          search={search}
+          setSearch={setSearch}
+          populate={populate}
+          setShowSettings={setShowSettings}
+          openSyncControls={() => setShowSyncControls(true)}
+          progress={progress}
+          setShowCreateWorkspace={setShowCreateWorkspace}
+          openInTab={openInTab}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
+        />
+      )}
+
+      {/* Main Content Area with conditional wrapper */}
+      <div className={useVerticalLayout ? "content-with-vertical-sidebar" : ""} style={{
+        transition: 'margin-right 0.3s ease'
+      }}>
       <SyncControlsModal
         show={showSyncControls}
         onClose={() => setShowSyncControls(false)}
@@ -1385,21 +1466,27 @@ export default function App() {
         </div>
       )}
 
-      <Header
-        search={search}
-        setSearch={setSearch}
-        populate={populate}
-        setShowSettings={setShowSettings}
-        openSyncControls={() => setShowSyncControls(true)}
-        progress={progress}
-        setShowCreateWorkspace={setShowCreateWorkspace}
-        openInTab={openInTab}
-        isFooter={true}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        activeSection={activeSection}
-        setActiveSection={setActiveSection}
-      />
+      {/* Original Header (only when vertical layout is disabled) */}
+      {!useVerticalLayout && (
+        <Header
+          search={search}
+          setSearch={setSearch}
+          populate={populate}
+          setShowSettings={setShowSettings}
+          openSyncControls={() => setShowSyncControls(true)}
+          progress={progress}
+          setShowCreateWorkspace={setShowCreateWorkspace}
+          openInTab={openInTab}
+          isFooter={true}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
+        />
+      )}
+
+      {/* Close content wrapper div */}
+      </div>
 
       {/* <div className="bottom-search">
         <div className="bottom-search-inner">
@@ -1439,6 +1526,8 @@ export default function App() {
         onClose={() => setShowSettings(false)}
         settings={settings}
         onSave={saveSettings}
+        useVerticalLayout={useVerticalLayout}
+        onLayoutToggle={handleLayoutToggle}
       />
 
 

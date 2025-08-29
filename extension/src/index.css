@@ -66,3 +66,90 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Vertical Sidebar Styles */
+.vertical-sidebar {
+  /* Smooth scrollbar for sidebar content */
+}
+
+.vertical-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.vertical-sidebar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.vertical-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.vertical-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.sidebar-btn {
+  border: none !important;
+  outline: none !important;
+}
+
+.sidebar-btn:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%) !important;
+  transform: translateX(-2px) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+.sidebar-btn.active {
+  border-color: rgba(96, 165, 250, 0.6) !important;
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.3) !important;
+}
+
+.sidebar-btn:focus {
+  outline: none !important;
+}
+
+/* Content area adjustment when vertical sidebar is active */
+.content-with-vertical-sidebar {
+  margin-right: 280px; /* Default expanded width */
+  transition: margin-right 0.3s ease;
+}
+
+.content-with-vertical-sidebar.collapsed {
+  margin-right: 60px; /* Collapsed width */
+}
+
+/* Animation for smooth transitions */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.vertical-sidebar {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Responsive behavior */
+@media (max-width: 768px) {
+  .vertical-sidebar {
+    width: 100% !important;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+  }
+  
+  .vertical-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+  
+  .content-with-vertical-sidebar {
+    margin-right: 0;
+  }
+}

@@ -36,10 +36,12 @@
     "https://apis.google.com/*",
     "https://www.googleapis.com/*",
     "https://firestore.googleapis.com/*",
-    "https://identitytoolkit.googleapis.com/*"
+    "https://identitytoolkit.googleapis.com/*",
+    "http://localhost:*",
+    "http://127.0.0.1:*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com https://*.google.com https://identitytoolkit.googleapis.com https://firestore.googleapis.com"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com https://*.google.com https://identitytoolkit.googleapis.com https://firestore.googleapis.com http://localhost:* http://127.0.0.1:*"
   },
   "web_accessible_resources": [
     {
