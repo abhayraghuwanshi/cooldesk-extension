@@ -393,7 +393,7 @@ export function NotesSection() {
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && e.metaKey) addNote(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addNote(); }}
           placeholder="Start typing..."
           style={{ 
             width: '100%',
@@ -423,8 +423,32 @@ export function NotesSection() {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <span>⌘ + Enter to save</span>
-          <span style={{ opacity: 0.7 }}>{text.length} characters</span>
+          <span>Ctrl + Enter to save</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              onClick={addNote}
+              disabled={!text.trim()}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 6,
+                border: 'none',
+                background: text.trim() ? '#007AFF' : 'rgba(255, 255, 255, 0.1)',
+                color: text.trim() ? 'white' : 'rgba(255, 255, 255, 0.5)',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: text.trim() ? 'pointer' : 'not-allowed',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+              title="Save note"
+            >
+              <FontAwesomeIcon icon={faSave} style={{ fontSize: 10 }} />
+              Save
+            </button>
+            <span style={{ opacity: 0.7 }}>{text.length} characters</span>
+          </div>
         </div>
       </div>
 

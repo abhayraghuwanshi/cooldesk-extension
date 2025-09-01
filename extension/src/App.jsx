@@ -6,18 +6,18 @@ import './App.css';
 import { AddToWorkspaceModal } from './components/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/CreateWorkspaceModal';
 import { Header } from './components/Header';
-import { VerticalHeader } from './components/VerticalHeader';
 import { ItemGrid } from './components/ItemGrid';
 import { RelatedProductsSection } from './components/RelatedProductsSection';
 import { SettingsModal } from './components/SettingsModal';
 import { SyncControlsModal } from './components/SyncControlsModal';
 import { SystemPrompt } from './components/SystemPrompt';
+import { VerticalHeader } from './components/VerticalHeader';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 import './search.css';
 
-
 import { ActivityPanel } from './components/ActivityPanel';
 import { AddLinkFlow } from './components/AddLinkFlow';
+import { Chats } from './components/Chats';
 import { deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
@@ -82,7 +82,6 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState(null)
   const [savedWorkspaces, setSavedWorkspaces] = useState([])
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
-  const [showSavedWorkspaces, setShowSavedWorkspaces] = useState(true)
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
@@ -162,7 +161,7 @@ export default function App() {
       console.log('Current UI state:', ui);
       await saveUIState({ ...ui, useVerticalLayout: vertical });
       console.log('Layout preference saved successfully');
-      
+
       // Also save to localStorage as backup
       localStorage.setItem('cooldesk-vertical-layout', vertical.toString());
     } catch (e) {
@@ -546,19 +545,20 @@ export default function App() {
     return Array.from(set)
   }, [data])
 
-  // Items to build the workspace filter options: only saved workspaces + 'All'
+  // Items to build the workspace filter options: only saved workspaces + 'All' + 'Chats' (always show Chats)
   const filterItems = useMemo(() => {
     const all = [{ workspaceGroup: 'All' }];
+    const chats = [{ workspaceGroup: 'Chats' }]; // Always show Chats option
     const extras = savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }));
-    return [...all, ...extras];
+    return [...all, ...chats, ...extras];
   }, [savedWorkspaces])
 
-  // Guard: if current workspace isn't a saved workspace (and not 'All'), reset to 'All'
+  // Guard: if current workspace isn't a saved workspace (and not 'All' or 'Chats'), reset to 'All'
   useEffect(() => {
-    if (workspace === 'All') return;
+    if (workspace === 'All' || workspace === 'Chats') return;
     const exists = savedWorkspaces.some(ws => (ws?.name || '').trim().toLowerCase() === (workspace || '').trim().toLowerCase());
     if (!exists) setWorkspace('All');
-  }, [savedWorkspaces])
+  }, [savedWorkspaces, workspace])
 
   // Keyboard shortcuts for tab navigation
   useEffect(() => {
@@ -587,6 +587,12 @@ export default function App() {
     const s = search.toLowerCase()
     const norm = (v) => (v || '').trim().toLowerCase()
     const active = norm(workspace)
+
+    // If "Chats" workspace is selected, return empty array since Chats component handles its own data
+    if (active === 'chats') {
+      return []
+    }
+
     return data.filter((it) => {
       // Only use explicit workspaceGroup; do not fallback to category.name
       const itemWorkspace = norm(it.workspaceGroup)
@@ -1166,134 +1172,134 @@ export default function App() {
       <div className={useVerticalLayout ? "content-with-vertical-sidebar" : ""} style={{
         transition: 'margin-right 0.3s ease'
       }}>
-      <SyncControlsModal
-        show={showSyncControls}
-        onClose={() => setShowSyncControls(false)}
-        onBulkSync={handleBulkSync}
-        onRecategorize={handleRecategorize}
-        onSingleCategorySync={handleSingleCategorySync}
-        categories={(Array.isArray(savedWorkspaces) ? savedWorkspaces : []).map(ws => ws.name).filter(Boolean)}
-        progress={progress}
-      />
+        <SyncControlsModal
+          show={showSyncControls}
+          onClose={() => setShowSyncControls(false)}
+          onBulkSync={handleBulkSync}
+          onRecategorize={handleRecategorize}
+          onSingleCategorySync={handleSingleCategorySync}
+          categories={(Array.isArray(savedWorkspaces) ? savedWorkspaces : []).map(ws => ws.name).filter(Boolean)}
+          progress={progress}
+        />
 
-      {/* Warning: Require Gemini API key for AI features */}
-      {(() => {
-        const missingApi = !(settings?.geminiApiKey || '').trim();
-        const shouldShow = missingApi && !dismissedSettingsWarning;
-        if (!shouldShow) return null;
-        return (
-          <div
-            role="alert"
-            style={{
-              margin: '8px 0 4px',
-              padding: '8px 12px',
-              borderRadius: 8,
-              background: 'rgba(255, 193, 7, 0.12)',
-              border: '1px solid rgba(255, 193, 7, 0.35)',
-              color: 'rgb(255, 213, 0)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FontAwesomeIcon icon={faTriangleExclamation} />
-              <div style={{ fontSize: 13, lineHeight: 1.3, color: '#ffd500' }}>Add a Gemini API key in Settings to enable AI features.</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                className="add-link-btn"
-                style={{ padding: '4px 8px' }}
-                onClick={() => setShowSettings(true)}
-              >
-                Open Settings
-              </button>
-              <button
-                className="icon-btn"
-                aria-label="Dismiss"
-                title="Dismiss"
-                onClick={() => setDismissedSettingsWarning(true)}
-                style={{ padding: '4px 8px' }}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Filters */}
-      <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span> */}
-          <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} />
-          {/* Reload data */}
-          <button
-            onClick={() => { try { populate(); } catch { } }}
-            className="icon-btn"
-            aria-label="Reload"
-            title="Reload"
-            style={{ padding: '4px 8px' }}
-          >
-            <FontAwesomeIcon icon={faRotateRight} />
-          </button>
-        </div>
-      </div>
-
-
-      {progress.running && (
-        <div className="progress">
-          <div className="progress-bar" style={{ width: `${progress.total ? (progress.processed / progress.total) * 100 : 0}%` }} />
-          <div className="progress-text">{progress.processed}/{progress.total} (API {progress.apiHits}) — {progress.currentItem}</div>
-        </div>
-      )}
-
-      {progress.error && <div className="error">{progress.error}</div>}
-
-      {/* Workspace section (only when a specific workspace is selected) */}
-      {workspace !== 'All' && (
-        <>
-          {showSystemPrompt && (
+        {/* Warning: Require Gemini API key for AI features */}
+        {(() => {
+          const missingApi = !(settings?.geminiApiKey || '').trim();
+          const shouldShow = missingApi && !dismissedSettingsWarning;
+          if (!shouldShow) return null;
+          return (
             <div
-              className="modal-overlay"
-              onClick={(e) => { if (e.target === e.currentTarget) setShowSystemPrompt(false) }}
+              role="alert"
+              style={{
+                margin: '8px 0 4px',
+                padding: '8px 12px',
+                borderRadius: 8,
+                background: 'rgba(255, 193, 7, 0.12)',
+                border: '1px solid rgba(255, 193, 7, 0.35)',
+                color: 'rgb(255, 213, 0)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
             >
-              <div className="modal">
-                <div
-                  className="modal-header"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
-                  }}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FontAwesomeIcon icon={faTriangleExclamation} />
+                <div style={{ fontSize: 13, lineHeight: 1.3, color: '#ffd500' }}>Customize your cool desk.</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  className="add-link-btn"
+                  style={{ padding: '4px 8px' }}
+                  onClick={() => setShowSettings(true)}
                 >
-                  <h3 style={{ margin: 0 }}>Workspace Instructions</h3>
-                  <button
-                    onClick={() => setShowSystemPrompt(false)}
-                    className="cancel-btn"
-                    aria-label="Close"
-                    title="Close"
-                    style={{ padding: '4px 8px' }}
-                  >
-                    ×
-                  </button>
-                </div>
-                <SystemPrompt
-                  workspaceName={workspace}
-                  workspaces={savedWorkspaces}
-                  onSave={handleSaveWorkspacePrompt}
-                  candidateUrls={mergedWorkspaceItems.map(i => i.url).filter(Boolean)}
-                />
+                  Open Customization
+                </button>
+                <button
+                  className="icon-btn"
+                  aria-label="Dismiss"
+                  title="Dismiss"
+                  onClick={() => setDismissedSettingsWarning(true)}
+                  style={{ padding: '4px 8px' }}
+                >
+                  Dismiss
+                </button>
               </div>
             </div>
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
-            <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({mergedWorkspaceItems.length})</span>
-            {refreshing && (
-              <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
+          );
+        })()}
+
+        {/* Filters */}
+        <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span> */}
+            <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} />
+            {/* Reload data */}
+            <button
+              onClick={() => { try { populate(); } catch { } }}
+              className="icon-btn"
+              aria-label="Reload"
+              title="Reload"
+              style={{ padding: '4px 8px' }}
+            >
+              <FontAwesomeIcon icon={faRotateRight} />
+            </button>
+          </div>
+        </div>
+
+
+        {progress.running && (
+          <div className="progress">
+            <div className="progress-bar" style={{ width: `${progress.total ? (progress.processed / progress.total) * 100 : 0}%` }} />
+            <div className="progress-text">{progress.processed}/{progress.total} (API {progress.apiHits}) — {progress.currentItem}</div>
+          </div>
+        )}
+
+        {progress.error && <div className="error">{progress.error}</div>}
+
+        {/* Workspace section (only when a specific workspace is selected) */}
+        {workspace !== 'All' && (
+          <>
+            {showSystemPrompt && (
+              <div
+                className="modal-overlay"
+                onClick={(e) => { if (e.target === e.currentTarget) setShowSystemPrompt(false) }}
+              >
+                <div className="modal">
+                  <div
+                    className="modal-header"
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
+                    }}
+                  >
+                    <h3 style={{ margin: 0 }}>Workspace Instructions</h3>
+                    <button
+                      onClick={() => setShowSystemPrompt(false)}
+                      className="cancel-btn"
+                      aria-label="Close"
+                      title="Close"
+                      style={{ padding: '4px 8px' }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <SystemPrompt
+                    workspaceName={workspace}
+                    workspaces={savedWorkspaces}
+                    onSave={handleSaveWorkspacePrompt}
+                    candidateUrls={mergedWorkspaceItems.map(i => i.url).filter(Boolean)}
+                  />
+                </div>
+              </div>
             )}
-            <div style={{ display: 'flex', gap: 6 }}>
-              {/* <button
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
+              <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({mergedWorkspaceItems.length})</span>
+              {refreshing && (
+                <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                {/* <button
                 onClick={() => setShowSystemPrompt(v => !v)}
                 className="add-link-btn ai-button"
                 aria-label={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
@@ -1302,7 +1308,7 @@ export default function App() {
               >
                 <FontAwesomeIcon icon={faPenToSquare} />
               </button> */}
-              {/* <button
+                {/* <button
                 onClick={() => setShowCurrentWorkspace(v => !v)}
                 className="add-link-btn ai-button"
                 aria-label={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
@@ -1311,181 +1317,187 @@ export default function App() {
               >
                 <FontAwesomeIcon icon={showCurrentWorkspace ? faEyeSlash : faEye} />
               </button> */}
-              <button
-                onClick={() => startCategoryEnrichment(workspace)}
-                className="add-link-btn ai-button"
-                aria-label={`Add recent links to ${workspace}`}
-                title={`Add recent links to ${workspace}`}
-                style={{ padding: '4px 8px' }}
-              >
-                <FontAwesomeIcon icon={faWandMagicSparkles} />
-              </button>
-
-              <button
-                onClick={() => handleOpenAddLinkModal(workspace)}
-                className="add-link-btn ai-button"
-                aria-label="Add link"
-                title="Add link"
-                style={{ padding: '4px 8px' }}
-              >
-                <FontAwesomeIcon icon={faPlus} />
-              </button>
-              <button
-                onClick={handleDeleteWorkspace}
-                className="add-link-btn ai-button"
-                aria-label="Delete workspace (irreversible)"
-                title="Delete workspace (irreversible)"
-                style={{ padding: '4px 8px' }}
-                disabled={!workspace || workspace.toLowerCase() === 'all'}
-              >
-                <FontAwesomeIcon icon={faTrash} />
-              </button>
-            </div>
-          </div>
-          {showCurrentWorkspace && (
-            <>
-              <ItemGrid
-                items={workspace === 'All' ? allItemsCombined : mergedWorkspaceItems}
-                workspaces={savedWorkspaces}
-                onAddRelated={handleAddRelated}
-                onAddLink={() => handleOpenAddLinkModal(workspace)}
-                onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
-              />
-              <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
-            </>
-          )}
-        </>
-      )}
-
-      <>
-        {/* Running Apps (Electron/app mode) - show regardless of dashboard loading */}
-        {Array.isArray(processes) && processes.length > 0 && (
-          <section className="saved-workspaces" style={{ margin: '6px 0 10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <h3 style={{ margin: 0 }}>Running Apps</h3>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-              {processes.map((p, idx) => (
-                <div
-                  key={p.pid || p.processId || idx}
-                  className="card"
-                  style={{ padding: 10, cursor: 'pointer', border: '1px solid #e5e7eb', borderRadius: 8 }}
-                  title="Click to focus this app"
-                  onClick={async () => {
-                    try { await focusWindow(p.pid ?? p.processId); } catch { }
-                  }}
+                <button
+                  onClick={() => startCategoryEnrichment(workspace)}
+                  className="add-link-btn ai-button"
+                  aria-label={`Add recent links to ${workspace}`}
+                  title={`Add recent links to ${workspace}`}
+                  style={{ padding: '4px 8px' }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {p.iconUrl && (
-                        <img
-                          src={p.iconUrl}
-                          alt=""
-                          width={16}
-                          height={16}
-                          style={{ borderRadius: 3, objectFit: 'cover' }}
-                          onError={(e) => { try { e.currentTarget.style.display = 'none'; } catch { } }}
-                        />
-                      )}
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>
-                        {p.title || p.name || p.processName || 'Unknown App'}
-                      </div>
-                    </div>
-                    <button
-                      style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', cursor: 'pointer' }}
-                      title="Focus this app"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        try { await focusWindow(p.pid ?? p.processId); } catch { }
-                      }}
-                    >
-                      Go
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.85 }}>
-                    PID: {p.pid ?? p.processId ?? 'n/a'}
-                  </div>
-                  {p.path && (
-                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.path}>
-                      {p.path?.split(/[\\/]/).pop()}
-                    </div>
-                  )}
-                </div>
-              ))}
+                  <FontAwesomeIcon icon={faWandMagicSparkles} />
+                </button>
+
+                <button
+                  onClick={() => handleOpenAddLinkModal(workspace)}
+                  className="add-link-btn ai-button"
+                  aria-label="Add link"
+                  title="Add link"
+                  style={{ padding: '4px 8px' }}
+                >
+                  <FontAwesomeIcon icon={faPlus} />
+                </button>
+                <button
+                  onClick={handleDeleteWorkspace}
+                  className="add-link-btn ai-button"
+                  aria-label="Delete workspace (irreversible)"
+                  title="Delete workspace (irreversible)"
+                  style={{ padding: '4px 8px' }}
+                  disabled={!workspace || workspace.toLowerCase() === 'all'}
+                >
+                  <FontAwesomeIcon icon={faTrash} />
+                </button>
+              </div>
             </div>
-          </section>
+            {showCurrentWorkspace && (
+              <>
+                {workspace === 'Chats' ? (
+                  <Chats />
+                ) : (
+                  <>
+                    <ItemGrid
+                      items={workspace === 'All' ? allItemsCombined : mergedWorkspaceItems}
+                      workspaces={savedWorkspaces}
+                      onAddRelated={handleAddRelated}
+                      onAddLink={() => handleOpenAddLinkModal(workspace)}
+                      onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+                    />
+                    <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
+                  </>
+                )}
+              </>
+            )}
+          </>
         )}
 
-        {/* Always render content; hydration refreshes in background */}
         <>
-          <ErrorBoundary>
-            <ActivityPanel activeSection={activeSection} />
-          </ErrorBoundary>
+          {/* Running Apps (Electron/app mode) - show regardless of dashboard loading */}
+          {Array.isArray(processes) && processes.length > 0 && (
+            <section className="saved-workspaces" style={{ margin: '6px 0 10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <h3 style={{ margin: 0 }}>Running Apps</h3>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+                {processes.map((p, idx) => (
+                  <div
+                    key={p.pid || p.processId || idx}
+                    className="card"
+                    style={{ padding: 10, cursor: 'pointer', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                    title="Click to focus this app"
+                    onClick={async () => {
+                      try { await focusWindow(p.pid ?? p.processId); } catch { }
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {p.iconUrl && (
+                          <img
+                            src={p.iconUrl}
+                            alt=""
+                            width={16}
+                            height={16}
+                            style={{ borderRadius: 3, objectFit: 'cover' }}
+                            onError={(e) => { try { e.currentTarget.style.display = 'none'; } catch { } }}
+                          />
+                        )}
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          {p.title || p.name || p.processName || 'Unknown App'}
+                        </div>
+                      </div>
+                      <button
+                        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', cursor: 'pointer' }}
+                        title="Focus this app"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try { await focusWindow(p.pid ?? p.processId); } catch { }
+                        }}
+                      >
+                        Go
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>
+                      PID: {p.pid ?? p.processId ?? 'n/a'}
+                    </div>
+                    {p.path && (
+                      <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.path}>
+                        {p.path?.split(/[\\/]/).pop()}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Always render content; hydration refreshes in background */}
+          <>
+            <ErrorBoundary>
+              <ActivityPanel activeSection={activeSection} />
+            </ErrorBoundary>
+          </>
         </>
-      </>
 
 
 
-      {addingToWorkspace && (
-        <div
-          className="modal-overlay"
-          onClick={(e) => { if (e.target === e.currentTarget) setAddingToWorkspace(null) }}
-        >
-          <div className="modal">
-            <div
-              className="modal-header"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
-              }}
-            >
-              <h3 style={{ margin: 0 }}>Add to "{addingToWorkspace}"</h3>
-              <button
-                onClick={() => setAddingToWorkspace(null)}
-                className="cancel-btn"
-                aria-label="Close"
-                title="Close"
-                style={{ padding: '4px 8px' }}
+        {addingToWorkspace && (
+          <div
+            className="modal-overlay"
+            onClick={(e) => { if (e.target === e.currentTarget) setAddingToWorkspace(null) }}
+          >
+            <div className="modal">
+              <div
+                className="modal-header"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
+                }}
               >
-                ×
-              </button>
+                <h3 style={{ margin: 0 }}>Add to "{addingToWorkspace}"</h3>
+                <button
+                  onClick={() => setAddingToWorkspace(null)}
+                  className="cancel-btn"
+                  aria-label="Close"
+                  title="Close"
+                  style={{ padding: '4px 8px' }}
+                >
+                  ×
+                </button>
+              </div>
+              <AddLinkFlow
+                allItems={data}
+                savedItems={savedWorkspaces.flatMap(ws => (ws.urls || []).map(u => ({
+                  ...u,
+                  workspaceGroup: ws.name,
+                  id: `${ws.id}-${u.url}`,
+                })))}
+                currentWorkspace={addingToWorkspace}
+                onAdd={handleAddItemToWorkspace}
+                onAddSaved={handleAddSavedUrlToWorkspace}
+                onCancel={() => setAddingToWorkspace(null)}
+              />
             </div>
-            <AddLinkFlow
-              allItems={data}
-              savedItems={savedWorkspaces.flatMap(ws => (ws.urls || []).map(u => ({
-                ...u,
-                workspaceGroup: ws.name,
-                id: `${ws.id}-${u.url}`,
-              })))}
-              currentWorkspace={addingToWorkspace}
-              onAdd={handleAddItemToWorkspace}
-              onAddSaved={handleAddSavedUrlToWorkspace}
-              onCancel={() => setAddingToWorkspace(null)}
-            />
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Original Header (only when vertical layout is disabled) */}
-      {!useVerticalLayout && (
-        <Header
-          search={search}
-          setSearch={setSearch}
-          populate={populate}
-          setShowSettings={setShowSettings}
-          openSyncControls={() => setShowSyncControls(true)}
-          progress={progress}
-          setShowCreateWorkspace={setShowCreateWorkspace}
-          openInTab={openInTab}
-          isFooter={true}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          activeSection={activeSection}
-          setActiveSection={setActiveSection}
-        />
-      )}
+        {/* Original Header (only when vertical layout is disabled) */}
+        {!useVerticalLayout && (
+          <Header
+            search={search}
+            setSearch={setSearch}
+            populate={populate}
+            setShowSettings={setShowSettings}
+            openSyncControls={() => setShowSyncControls(true)}
+            progress={progress}
+            setShowCreateWorkspace={setShowCreateWorkspace}
+            openInTab={openInTab}
+            isFooter={true}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            activeSection={activeSection}
+            setActiveSection={setActiveSection}
+          />
+        )}
 
-      {/* Close content wrapper div */}
+        {/* Close content wrapper div */}
       </div>
 
       {/* <div className="bottom-search">

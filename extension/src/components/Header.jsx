@@ -7,20 +7,21 @@ import {
   faCircleQuestion,
   faEnvelope,
   faForward,
+  faMicrophone,
   faPalette,
   faPause,
   faPlay,
   faPlus,
   faRobot,
   faSpinner,
-  faToggleOff,
-  faVolumeHigh,
+  faToggleOff
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getUIState, saveUIState } from '../db';
 import { triggerAutoCategorize } from '../utils/messaging';
+import VoiceNavigation from './VoiceNavigation';
 
 export function Header({
   search,
@@ -41,6 +42,7 @@ export function Header({
   const [now, setNow] = useState(new Date());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(null);
+  const [showVoiceNavigation, setShowVoiceNavigation] = useState(false);
 
   // Load Auto Sync from UI state (default ON if missing)
   useEffect(() => {
@@ -147,9 +149,6 @@ export function Header({
       ...barStyle,
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
-      <div className="logo-placeholder">
-        <span className="logo-text">Cool-Desk</span>
-      </div>
       <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', flex: 1 }}>
         <div style={{ position: 'relative', flex: 1 }}>
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
@@ -159,11 +158,11 @@ export function Header({
           // Define sections for ActivityPanel navigation - add 'All' as first option
           const sections = ['All', 'Current Tabs', 'Pings', 'Notes', 'Cool Feed'];
           const isActivityNavigation = activeSection !== undefined && setActiveSection;
-          
-          const currentLabel = isActivityNavigation 
+
+          const currentLabel = isActivityNavigation
             ? sections[activeSection] || 'Section'
             : (activeTab === 'workspace' ? 'Workspace' : 'Saved');
-          
+
           const handlePrevious = () => {
             if (isActivityNavigation) {
               setActiveSection((prev) => (prev - 1 + sections.length) % sections.length);
@@ -171,7 +170,7 @@ export function Header({
               setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
             }
           };
-          
+
           const handleNext = () => {
             if (isActivityNavigation) {
               setActiveSection((prev) => (prev + 1) % sections.length);
@@ -179,18 +178,18 @@ export function Header({
               setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
             }
           };
-          
+
           return (
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
               gap: '4px',
               marginRight: '8px'
             }}>
               <button
                 className="icon-btn nav-arrow"
                 onClick={handlePrevious}
-                title={isActivityNavigation 
+                title={isActivityNavigation
                   ? `Previous: ${sections[(activeSection - 1 + sections.length) % sections.length]}`
                   : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
                 }
@@ -236,7 +235,7 @@ export function Header({
               <button
                 className="icon-btn nav-arrow"
                 onClick={handleNext}
-                title={isActivityNavigation 
+                title={isActivityNavigation
                   ? `Next: ${sections[(activeSection + 1) % sections.length]}`
                   : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
                 }
@@ -310,6 +309,15 @@ export function Header({
           </button>
         </div>
 
+        <button
+          className={`icon-btn ${showVoiceNavigation ? 'active' : ''}`}
+          onClick={() => setShowVoiceNavigation(!showVoiceNavigation)}
+          title={showVoiceNavigation ? "Hide Voice Navigation" : "Show Voice Navigation"}
+          aria-pressed={showVoiceNavigation}
+        >
+          <FontAwesomeIcon icon={faMicrophone} />
+        </button>
+
         <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">
           <FontAwesomeIcon icon={faPlus} />
         </button>
@@ -366,6 +374,20 @@ export function Header({
           {timeStr}
         </div>
       </div>
+      {showVoiceNavigation && (
+        <div style={{
+          position: 'fixed',
+          top: isFooter ? 'auto' : '60px',
+          bottom: isFooter ? '60px' : 'auto',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1999,
+          maxWidth: '600px',
+          width: '90%'
+        }}>
+          <VoiceNavigation />
+        </div>
+      )}
     </header>
   );
 }

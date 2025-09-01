@@ -87,6 +87,9 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
         workspace: firstItem?.workspaceId ? workspaces.find(w => w.id === firstItem.workspaceId) : null,
       };
     });
+
+    // AI Chats are now handled in main workspace filters, no longer needed here
+    
     if (grouped.length === 0 && items.length > 0) {
       grouped = [{ key: 'All URLs', values: items.slice(), workspace: null }];
     }

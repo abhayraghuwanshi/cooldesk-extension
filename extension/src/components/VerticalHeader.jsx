@@ -41,6 +41,7 @@ export function VerticalHeader({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   // Load Auto Sync from UI state (default ON if missing)
   useEffect(() => {
@@ -64,6 +65,20 @@ export function VerticalHeader({
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Window resize handler for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Auto-collapse at smaller screen sizes
+  const shouldAutoCollapse = windowWidth < 1200;
+  const effectiveCollapsed = shouldAutoCollapse || collapsed;
 
   // Music controller functions
   const sendMediaCommand = async (action) => {
@@ -157,19 +172,19 @@ export function VerticalHeader({
     }
   };
 
-  const sidebarWidth = collapsed ? '60px' : '280px';
+  const sidebarWidth = effectiveCollapsed ? '60px' : '280px';
 
   return (
     <div className="vertical-sidebar" style={{
       position: 'fixed',
-      right: 0,
+      left: 0,
       top: 0,
       bottom: 0,
       width: sidebarWidth,
       background: 'linear-gradient(180deg, rgba(15, 21, 34, 0.95) 0%, rgba(27, 35, 49, 0.95) 100%)',
       backdropFilter: 'blur(20px)',
-      borderLeft: '1px solid rgba(255, 255, 255, 0.1)',
-      boxShadow: '-2px 0 20px rgba(0, 0, 0, 0.3)',
+      borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+      boxShadow: '2px 0 20px rgba(0, 0, 0, 0.3)',
       zIndex: 2000,
       transition: 'width 0.3s ease',
       display: 'flex',
@@ -183,9 +198,9 @@ export function VerticalHeader({
         borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: collapsed ? 'center' : 'space-between'
+        justifyContent: effectiveCollapsed ? 'center' : 'space-between'
       }}>
-        {!collapsed && (
+        {!effectiveCollapsed && (
           <div className="logo-text" style={{ 
             fontSize: '16px', 
             fontWeight: '600', 
@@ -197,11 +212,13 @@ export function VerticalHeader({
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
+          title={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          disabled={shouldAutoCollapse}
           style={{
             background: 'none',
             border: 'none',
-            color: 'rgba(255, 255, 255, 0.7)',
-            cursor: 'pointer',
+            color: shouldAutoCollapse ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.7)',
+            cursor: shouldAutoCollapse ? 'not-allowed' : 'pointer',
             padding: '6px',
             borderRadius: '6px',
             display: 'flex',
@@ -209,14 +226,13 @@ export function VerticalHeader({
             justifyContent: 'center',
             transition: 'color 0.2s ease'
           }}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <FontAwesomeIcon icon={collapsed ? faChevronDown : faChevronUp} style={{ transform: 'rotate(90deg)' }} />
+          <FontAwesomeIcon icon={effectiveCollapsed ? faChevronDown : faChevronUp} style={{ transform: 'rotate(90deg)' }} />
         </button>
       </div>
 
       {/* Search Section */}
-      {!collapsed && (
+      {!effectiveCollapsed && (
         <div style={{ padding: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
           <VerticalSearchBox 
             search={search} 
@@ -229,12 +245,12 @@ export function VerticalHeader({
       {/* Navigation Section */}
       {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (
         <div style={{ 
-          padding: collapsed ? '8px' : '16px', 
+          padding: effectiveCollapsed ? '8px' : '16px', 
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
           display: 'flex',
-          flexDirection: collapsed ? 'column' : 'row',
+          flexDirection: effectiveCollapsed ? 'column' : 'row',
           alignItems: 'center',
-          gap: collapsed ? '8px' : '12px'
+          gap: effectiveCollapsed ? '8px' : '12px'
         }}>
           <button
             className="sidebar-btn"
@@ -247,7 +263,7 @@ export function VerticalHeader({
             <FontAwesomeIcon icon={faChevronUp} />
           </button>
           
-          {!collapsed && (
+          {!effectiveCollapsed && (
             <div style={{
               fontSize: '12px',
               fontWeight: '500',
@@ -278,8 +294,8 @@ export function VerticalHeader({
         flex: 1, 
         display: 'flex', 
         flexDirection: 'column', 
-        gap: collapsed ? '4px' : '8px', 
-        padding: collapsed ? '8px 4px' : '16px 12px',
+        gap: effectiveCollapsed ? '4px' : '8px', 
+        padding: effectiveCollapsed ? '8px 4px' : '16px 12px',
         overflowY: 'auto'
       }}>
         
@@ -289,7 +305,7 @@ export function VerticalHeader({
           label="Auto Categorize"
           active={autoSync}
           spinning={progress.running}
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onClick={async () => {
             try {
               const next = !autoSync;
@@ -307,7 +323,7 @@ export function VerticalHeader({
         />
 
         {/* Music Controls */}
-        {!collapsed && (
+        {!effectiveCollapsed && (
           <div style={{
             display: 'flex',
             gap: '4px',
@@ -342,21 +358,21 @@ export function VerticalHeader({
         <SidebarButton
           icon={faPlus}
           label="Create Workspace"
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onClick={() => setShowCreateWorkspace(true)}
         />
 
         <SidebarButton
           icon={faPalette}
           label="Customization"
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onClick={() => setShowSettings(true)}
         />
 
         <SidebarButton
           icon={faEnvelope}
           label="Gmail"
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onClick={() => {
             try {
               const url = 'https://mail.google.com/mail/u/0/#inbox';
@@ -369,7 +385,7 @@ export function VerticalHeader({
         <SidebarButton
           icon={faCalendarDays}
           label="Calendar"
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onClick={() => {
             try {
               const url = 'https://calendar.google.com/';
@@ -382,7 +398,7 @@ export function VerticalHeader({
         <SidebarButton
           icon={faCircleQuestion}
           label="Help"
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onClick={() => {
             const msg = [
               'Navigation Shortcuts',
@@ -401,25 +417,25 @@ export function VerticalHeader({
         <SidebarButton
           icon={faArrowUpRightFromSquare}
           label="Open in Sidebar"
-          collapsed={collapsed}
+          collapsed={effectiveCollapsed}
           onClick={openInSidePanel}
         />
       </div>
 
       {/* Time Display */}
       <div style={{ 
-        padding: collapsed ? '12px 8px' : '16px', 
+        padding: effectiveCollapsed ? '12px 8px' : '16px', 
         borderTop: '1px solid rgba(255, 255, 255, 0.1)',
         textAlign: 'center'
       }}>
         <div style={{ 
-          fontSize: collapsed ? '10px' : '12px', 
+          fontSize: effectiveCollapsed ? '10px' : '12px', 
           opacity: 0.8, 
           color: '#ffffff',
-          transform: collapsed ? 'rotate(-90deg)' : 'none',
+          transform: effectiveCollapsed ? 'rotate(-90deg)' : 'none',
           whiteSpace: 'nowrap'
         }} title={now.toLocaleString()}>
-          {collapsed ? now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : timeStr}
+          {effectiveCollapsed ? now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : timeStr}
         </div>
       </div>
     </div>

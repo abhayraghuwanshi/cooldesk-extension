@@ -63,8 +63,7 @@
         "http://*/*"
       ],
       "js": [
-        "src/interactionContent.js",
-        "src/content/urlNotesInjector.js"
+        "src/interactionContent.js"
       ],
       "run_at": "document_idle"
     }

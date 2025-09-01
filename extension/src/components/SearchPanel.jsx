@@ -1,6 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getUIState, saveUIState } from '../db';
+import { getFaviconUrl } from '../utils';
+import VoiceNavigation from './VoiceNavigation';
 
 export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
     const [open, setOpen] = useState(false);
@@ -90,13 +92,20 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
                 const all = [];
                 for (const b of bookmarks) {
                     if (!b) continue;
-                    let faviconUrl = '';
-                    try {
-                        const hostname = new URL(b.url || '').hostname;
-                        faviconUrl = b.favicon || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
-                    } catch {
-                        faviconUrl = '/default-favicon.svg';
-                    }
+                    const faviconUrl = (() => {
+                        const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
+                        const primary = (b.favicon && safeHttp(b.favicon)) ? b.favicon : getFaviconUrl(b.url, 32);
+                        try {
+                            const u = new URL(b.url || '');
+                            const originIco = (u.protocol === 'http:' || u.protocol === 'https:') ? `${u.origin}/favicon.ico` : '';
+                            const result = primary || originIco || '';
+                            console.log('Bookmark favicon:', { url: b.url, original: b.favicon, primary, originIco, result });
+                            return result;
+                        } catch { 
+                            console.log('Bookmark favicon error:', { url: b.url, primary });
+                            return primary || ''; 
+                        }
+                    })();
                     all.push({ 
                         type: 'bookmark', 
                         title: b.title || b.name || b.url || '', 
@@ -106,13 +115,15 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
                 }
                 for (const h of history) {
                     if (!h) continue;
-                    let faviconUrl = '';
-                    try {
-                        const hostname = new URL(h.url || '').hostname;
-                        faviconUrl = h.favicon || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
-                    } catch {
-                        faviconUrl = '/default-favicon.svg';
-                    }
+                    const faviconUrl = (() => {
+                        const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
+                        const primary = (h.favicon && safeHttp(h.favicon)) ? h.favicon : getFaviconUrl(h.url, 32);
+                        try {
+                            const u = new URL(h.url || '');
+                            const originIco = (u.protocol === 'http:' || u.protocol === 'https:') ? `${u.origin}/favicon.ico` : '';
+                            return primary || originIco || '';
+                        } catch { return primary || ''; }
+                    })();
                     all.push({ 
                         type: 'history', 
                         title: h.title || h.url || '', 
@@ -215,19 +226,20 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
     }, [search]);
 
     return (
-        <div ref={wrapRef} style={{ width: '100%', maxWidth: '584px', margin: '0 auto' }}>
-            <div style={{ 
-                position: 'relative',
-                background: '#fff',
-                border: '1px solid #dfe1e5',
-                borderRadius: '24px',
-                padding: '0',
-                display: 'flex',
-                alignItems: 'center',
-                minHeight: '44px',
-                boxShadow: open ? '0 2px 5px 1px rgba(64,60,67,.16)' : 'none',
-                transition: 'box-shadow 0.2s ease'
-            }}>
+        <div>
+            <div ref={wrapRef} style={{ width: '100%', maxWidth: '584px', margin: '0 auto' }}>
+                <div style={{ 
+                    position: 'relative',
+                    background: '#fff',
+                    border: '1px solid #dfe1e5',
+                    borderRadius: '24px',
+                    padding: '0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    minHeight: '44px',
+                    boxShadow: open ? '0 2px 5px 1px rgba(64,60,67,.16)' : 'none',
+                    transition: 'box-shadow 0.2s ease'
+                }}>
                 <div style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
@@ -304,8 +316,8 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
                         <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                     </svg>
                 </button>
-            </div>
-            {showList && (() => {
+                </div>
+                {showList && (() => {
                 const dropdown = (
                     <div
                         style={{
@@ -433,39 +445,42 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
                                         onMouseEnter={(e) => e.target.style.background = '#f8f9fa'}
                                         onMouseLeave={(e) => e.target.style.background = 'transparent'}
                                     >
-                                        <div style={{
+{m.favicon && (
+                                          <div style={{
                                             width: 20,
                                             height: 20,
-                                            flexShrink: 0,
-                                            borderRadius: '2px',
-                                            background: '#f1f3f4',
+                                            borderRadius: 4,
+                                            background: 'rgba(255, 255, 255, 0.1)',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            overflow: 'hidden'
-                                        }}>
+                                            flexShrink: 0
+                                          }}>
                                             <img 
-                                                src={m.favicon} 
-                                                alt="" 
-                                                style={{ 
-                                                    width: '100%', 
-                                                    height: '100%', 
-                                                    objectFit: 'cover',
-                                                    borderRadius: '2px'
-                                                }}
-                                                onError={(e) => { 
-                                                    e.target.style.display = 'none';
-                                                    e.target.parentElement.innerHTML = `<span style="font-size: 10px; color: #5f6368;">${m.type === 'bookmark' ? '🔖' : '🕘'}</span>`;
-                                                }}
-                                                onLoad={(e) => {
-                                                    // Ensure favicon loaded successfully
-                                                    if (e.target.naturalWidth === 0 || e.target.naturalHeight === 0) {
-                                                        e.target.style.display = 'none';
-                                                        e.target.parentElement.innerHTML = `<span style="font-size: 10px; color: #5f6368;">${m.type === 'bookmark' ? '🔖' : '🕘'}</span>`;
-                                                    }
-                                                }}
+                                              src={m.favicon} 
+                                              alt="" 
+                                              width={16}
+                                              height={16}
+                                              style={{ borderRadius: 2 }}
                                             />
-                                        </div>
+                                          </div>
+                                        )}
+                                        {!m.favicon && (
+                                          <div style={{
+                                            width: 20,
+                                            height: 20,
+                                            borderRadius: 4,
+                                            background: 'rgba(255, 255, 255, 0.1)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            flexShrink: 0,
+                                            fontSize: '10px',
+                                            color: '#5f6368'
+                                          }}>
+                                            {m.type === 'bookmark' ? '🔖' : '🕘'}
+                                          </div>
+                                        )}
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ 
                                                 overflow: 'hidden', 
@@ -495,6 +510,10 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
                 );
                 return createPortal(dropdown, document.body);
             })()}
+            </div>
+            <div style={{ marginTop: '20px', width: '100%', maxWidth: '584px', margin: '20px auto 0' }}>
+                <VoiceNavigation />
+            </div>
         </div>
     );
 }
