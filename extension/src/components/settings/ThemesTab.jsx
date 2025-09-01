@@ -105,8 +105,8 @@ const ThemesTab = ({
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: '16px'
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: '12px'
       }}>
         {themes.map((theme) => (
           <div

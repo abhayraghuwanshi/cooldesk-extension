@@ -85,6 +85,7 @@ export default function App() {
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
+  const activeSectionTimeoutRef = useRef(null)
   const [processes, setProcesses] = useState([])
   const [showSyncControls, setShowSyncControls] = useState(false)
   const [useVerticalLayout, setUseVerticalLayout] = useState(false)
@@ -92,6 +93,26 @@ export default function App() {
   // Keep a live ref of progress.running so interval callbacks see the latest value
   const progressRunningRef = useRef(false);
   useEffect(() => { progressRunningRef.current = !!progress.running; }, [progress.running]);
+
+  // Auto-reset active section after 5 seconds of inactivity
+  useEffect(() => {
+    // Clear existing timeout
+    if (activeSectionTimeoutRef.current) {
+      clearTimeout(activeSectionTimeoutRef.current);
+    }
+
+    // Set new timeout to reset to first section (index 0) after 5 seconds
+    activeSectionTimeoutRef.current = setTimeout(() => {
+      setActiveSection(0);
+    }, 5000);
+
+    // Cleanup on unmount
+    return () => {
+      if (activeSectionTimeoutRef.current) {
+        clearTimeout(activeSectionTimeoutRef.current);
+      }
+    };
+  }, [activeSection]); // Re-run whenever activeSection changes
 
   // UI state: dismissible settings warning
   const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)

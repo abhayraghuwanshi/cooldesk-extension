@@ -11,16 +11,12 @@ import {
   faPalette,
   faPause,
   faPlay,
-  faPlus,
-  faRobot,
-  faSpinner,
-  faToggleOff
+  faPlus
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getUIState, saveUIState } from '../db';
-import { triggerAutoCategorize } from '../utils/messaging';
 import VoiceNavigation from './VoiceNavigation';
 
 export function Header({
@@ -180,101 +176,85 @@ export function Header({
           };
 
           return (
-            <div style={{
+<div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
               marginRight: '8px'
             }}>
-              <button
-                className="icon-btn nav-arrow"
-                onClick={handlePrevious}
-                title={isActivityNavigation
-                  ? `Previous: ${sections[(activeSection - 1 + sections.length) % sections.length]}`
-                  : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
-                }
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  borderRadius: '8px',
-                  padding: '8px',
+              {isActivityNavigation ? (
+                <select
+                  value={activeSection}
+                  onChange={(e) => setActiveSection(parseInt(e.target.value))}
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    color: '#ffffff',
+                    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    minWidth: '130px',
+                    textAlign: 'center',
+                    backdropFilter: 'blur(12px)',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    textTransform: 'capitalize',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.10) 100%)';
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.35)';
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%)';
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                  }}
+                >
+                  {sections.map((section, index) => (
+                    <option 
+                      key={index} 
+                      value={index}
+                      style={{
+                        background: '#1a202c',
+                        color: '#e2e8f0',
+                        padding: '8px 12px',
+                        fontSize: '12px'
+                      }}
+                    >
+                      {section}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div style={{
+                  fontSize: '12px',
+                  fontWeight: '500',
                   color: '#ffffff',
-                  cursor: 'pointer',
-                  backdropFilter: 'blur(10px)',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '32px',
-                  height: '32px',
-                  fontSize: '12px'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)';
-                  e.target.style.transform = 'scale(1.05)';
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)';
-                  e.target.style.transform = 'scale(1)';
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                }}
-              >
-                <FontAwesomeIcon icon={faChevronLeft} />
-              </button>
-              <div style={{
-                fontSize: '12px',
-                fontWeight: '500',
-                color: 'rgba(255, 255, 255, 0.8)',
-                minWidth: isActivityNavigation ? '80px' : '60px',
-                textAlign: 'center',
-                textTransform: 'capitalize'
-              }}>
-                {currentLabel}
-              </div>
-              <button
-                className="icon-btn nav-arrow"
-                onClick={handleNext}
-                title={isActivityNavigation
-                  ? `Next: ${sections[(activeSection + 1) % sections.length]}`
-                  : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
-                }
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.25)',
                   borderRadius: '8px',
-                  padding: '8px',
-                  color: '#ffffff',
-                  cursor: 'pointer',
-                  backdropFilter: 'blur(10px)',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '32px',
-                  height: '32px',
-                  fontSize: '12px'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)';
-                  e.target.style.transform = 'scale(1.05)';
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)';
-                  e.target.style.transform = 'scale(1)';
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                }}
-              >
-                <FontAwesomeIcon icon={faChevronRight} />
-              </button>
+                  padding: '8px 12px',
+                  minWidth: '90px',
+                  textAlign: 'center',
+                  textTransform: 'capitalize',
+                  backdropFilter: 'blur(12px)',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                }}>
+                  {currentLabel}
+                </div>
+              )}
             </div>
           );
         })()}
         {/* <button className="icon-btn" onClick={openSyncControls} title="Organize using AI">
           <FontAwesomeIcon icon={progress.running ? faSpinner : faRobot} spin={!!progress.running} />
         </button> */}
-        <button
+        {/* <button
           className={`icon-btn ${autoSync ? 'active' : ''}`}
           title={autoSync ? 'Auto Categorize is ON - Click to turn OFF' : 'Auto Categorize is OFF - Click to turn ON'}
           aria-pressed={autoSync}
@@ -295,7 +275,7 @@ export function Header({
           }}
         >
           <FontAwesomeIcon icon={progress.running ? faSpinner : (autoSync ? faRobot : faToggleOff)} spin={!!progress.running} />
-        </button>
+        </button> */}
         {/* Music Controls */}
         <div className="music-controls" style={{ display: 'flex', gap: '4px', alignItems: 'center', marginRight: '8px' }}>
           <button className="icon-btn music-btn" onClick={handlePrevious} title="Previous Track">
