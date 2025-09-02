@@ -80,7 +80,7 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
           const bt = (typeof b?.lastVisitTime === 'number' ? b.lastVisitTime : 0) || (typeof b?.dateAdded === 'number' ? b.dateAdded : 0);
           return bt - at;
         });
-      try { console.debug('[ItemGrid] group built', { key, count: arr.length, sample: arr.slice(0, 2).map(it => it.url) }); } catch {}
+      try { console.debug('[ItemGrid] group built', { key, count: arr.length, sample: arr.slice(0, 2).map(it => it.url) }); } catch { }
       return {
         key,
         values: arr,
@@ -89,7 +89,7 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
     });
 
     // AI Chats are now handled in main workspace filters, no longer needed here
-    
+
     if (grouped.length === 0 && items.length > 0) {
       grouped = [{ key: 'All URLs', values: items.slice(), workspace: null }];
     }
@@ -173,19 +173,20 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
   chipRefs.current = []
 
   return (
-    <div 
-      ref={rootRef} 
-      onKeyDown={onKeyDown} 
-      role="grid" 
+    <div
+      ref={rootRef}
+      onKeyDown={onKeyDown}
+      role="grid"
       tabIndex={-1}
       style={{
-        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+        marginTop: '16px'
       }}
     >
-      <div style={{ 
-        display: 'flex', 
-        flexWrap: 'wrap', 
-        gap: '12px', 
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '12px',
         marginBottom: '24px',
         padding: '0 4px'
       }}>
@@ -196,11 +197,11 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
           ref={el => chipRefs.current[0] = el}
           onKeyDown={(e) => onChipKeyDown(e, 0, 'All')}
           style={{
-            background: selectedGroup === 'All' 
-              ? 'rgba(52, 199, 89, 0.15)' 
+            background: selectedGroup === 'All'
+              ? 'rgba(52, 199, 89, 0.15)'
               : 'var(--surface-1)',
-            border: selectedGroup === 'All' 
-              ? '1px solid rgba(52, 199, 89, 0.4)' 
+            border: selectedGroup === 'All'
+              ? '1px solid rgba(52, 199, 89, 0.4)'
               : '1px solid var(--border)',
             borderRadius: '16px',
             padding: '8px 16px',
@@ -215,8 +216,8 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
             gap: '8px',
             minWidth: '60px',
             outline: 'none',
-            boxShadow: selectedGroup === 'All' 
-              ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
+            boxShadow: selectedGroup === 'All'
+              ? '0 4px 16px rgba(52, 199, 89, 0.2)'
               : 'none'
           }}
           onMouseEnter={(e) => {
@@ -234,20 +235,20 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
             }
           }}
           onFocus={(e) => {
-            e.target.style.boxShadow = selectedGroup === 'All' 
-              ? '0 4px 16px rgba(52, 199, 89, 0.3), 0 0 0 2px rgba(52, 199, 89, 0.2)' 
+            e.target.style.boxShadow = selectedGroup === 'All'
+              ? '0 4px 16px rgba(52, 199, 89, 0.3), 0 0 0 2px rgba(52, 199, 89, 0.2)'
               : '0 0 0 2px rgba(255, 255, 255, 0.2)';
           }}
           onBlur={(e) => {
-            e.target.style.boxShadow = selectedGroup === 'All' 
-              ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
+            e.target.style.boxShadow = selectedGroup === 'All'
+              ? '0 4px 16px rgba(52, 199, 89, 0.2)'
               : 'none';
           }}
         >
           All
           <span style={{
-            background: selectedGroup === 'All' 
-              ? 'rgba(52, 199, 89, 0.2)' 
+            background: selectedGroup === 'All'
+              ? 'rgba(52, 199, 89, 0.2)'
               : 'var(--surface-2)',
             borderRadius: '12px',
             padding: '2px 8px',
@@ -269,11 +270,11 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
             ref={el => chipRefs.current[i + 1] = el}
             onKeyDown={(e) => onChipKeyDown(e, i + 1, key)}
             style={{
-              background: selectedGroup === key 
-                ? 'rgba(52, 199, 89, 0.15)' 
+              background: selectedGroup === key
+                ? 'rgba(52, 199, 89, 0.15)'
                 : 'var(--surface-1)',
-              border: selectedGroup === key 
-                ? '1px solid rgba(52, 199, 89, 0.4)' 
+              border: selectedGroup === key
+                ? '1px solid rgba(52, 199, 89, 0.4)'
                 : '1px solid var(--border)',
               borderRadius: '16px',
               padding: '8px 16px',
@@ -288,8 +289,8 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
               gap: '8px',
               minWidth: '60px',
               outline: 'none',
-              boxShadow: selectedGroup === key 
-                ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
+              boxShadow: selectedGroup === key
+                ? '0 4px 16px rgba(52, 199, 89, 0.2)'
                 : 'none'
             }}
             onMouseEnter={(e) => {
@@ -307,21 +308,21 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
               }
             }}
             onFocus={(e) => {
-              e.target.style.boxShadow = selectedGroup === key 
-                ? '0 4px 16px rgba(52, 199, 89, 0.3), 0 0 0 2px rgba(52, 199, 89, 0.2)' 
+              e.target.style.boxShadow = selectedGroup === key
+                ? '0 4px 16px rgba(52, 199, 89, 0.3), 0 0 0 2px rgba(52, 199, 89, 0.2)'
                 : '0 0 0 2px rgba(255, 255, 255, 0.2)';
             }}
             onBlur={(e) => {
-              e.target.style.boxShadow = selectedGroup === key 
-                ? '0 4px 16px rgba(52, 199, 89, 0.2)' 
+              e.target.style.boxShadow = selectedGroup === key
+                ? '0 4px 16px rgba(52, 199, 89, 0.2)'
                 : 'none';
             }}
           >
             {getDomainFromUrl(key)}
             <span style={{
-              background: selectedGroup === key 
-              ? 'rgba(52, 199, 89, 0.2)' 
-              : 'var(--surface-2)',
+              background: selectedGroup === key
+                ? 'rgba(52, 199, 89, 0.2)'
+                : 'var(--surface-2)',
               borderRadius: '12px',
               padding: '2px 8px',
               fontSize: '12px',
@@ -340,16 +341,16 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
           (() => {
             const cleanedKey = getUrlParts(key).key;
             return (
-          <WorkspaceItem
-            key={key}
-            ref={el => itemRefs.current[idx] = el}
-            base={key}
-            values={values}
-            onAddRelated={onAddRelated}
-            timeSpentMs={timeSpent[cleanedKey]}
-            onAddLink={onAddLink && workspace ? () => onAddLink(workspace) : undefined}
-            onDelete={onDelete}
-          />
+              <WorkspaceItem
+                key={key}
+                ref={el => itemRefs.current[idx] = el}
+                base={key}
+                values={values}
+                onAddRelated={onAddRelated}
+                timeSpentMs={timeSpent[cleanedKey]}
+                onAddLink={onAddLink && workspace ? () => onAddLink(workspace) : undefined}
+                onDelete={onDelete}
+              />
             );
           })()
         ))}
@@ -361,6 +362,6 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
       </div> */}
 
 
-    </div>
+    </div >
   )
 }

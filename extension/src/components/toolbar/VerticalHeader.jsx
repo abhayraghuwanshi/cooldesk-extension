@@ -13,14 +13,12 @@ import {
   faPlus,
   faRobot,
   faSpinner,
-  faToggleOff,
-  faVolumeHigh,
+  faToggleOff
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { getUIState, saveUIState } from '../db';
-import { triggerAutoCategorize } from '../utils/messaging';
+import React, { useEffect, useRef, useState } from 'react';
+import { getUIState, saveUIState } from '../../db';
+import { triggerAutoCategorize } from '../../utils/messaging';
 
 export function VerticalHeader({
   search,
@@ -151,11 +149,11 @@ export function VerticalHeader({
   // Navigation logic
   const sections = ['All', 'Current Tabs', 'Pings', 'Notes', 'Cool Feed'];
   const isActivityNavigation = activeSection !== undefined && setActiveSection;
-  
-  const currentLabel = isActivityNavigation 
+
+  const currentLabel = isActivityNavigation
     ? sections[activeSection] || 'Section'
     : (activeTab === 'workspace' ? 'Workspace' : 'Saved');
-  
+
   const handlePreviousNav = () => {
     if (isActivityNavigation) {
       setActiveSection((prev) => (prev - 1 + sections.length) % sections.length);
@@ -163,7 +161,7 @@ export function VerticalHeader({
       setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
     }
   };
-  
+
   const handleNextNav = () => {
     if (isActivityNavigation) {
       setActiveSection((prev) => (prev + 1) % sections.length);
@@ -193,17 +191,17 @@ export function VerticalHeader({
       overflow: 'hidden'
     }}>
       {/* Collapse Toggle */}
-      <div style={{ 
-        padding: '12px', 
+      <div style={{
+        padding: '12px',
         borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: effectiveCollapsed ? 'center' : 'space-between'
       }}>
         {!effectiveCollapsed && (
-          <div className="logo-text" style={{ 
-            fontSize: '16px', 
-            fontWeight: '600', 
+          <div className="logo-text" style={{
+            fontSize: '16px',
+            fontWeight: '600',
             color: '#ffffff',
             letterSpacing: '-0.5px'
           }}>
@@ -234,18 +232,18 @@ export function VerticalHeader({
       {/* Search Section */}
       {!effectiveCollapsed && (
         <div style={{ padding: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-          <VerticalSearchBox 
-            search={search} 
-            setSearch={setSearch} 
-            openInSidePanel={openInSidePanel} 
+          <VerticalSearchBox
+            search={search}
+            setSearch={setSearch}
+            openInSidePanel={openInSidePanel}
           />
         </div>
       )}
 
       {/* Navigation Section */}
       {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (
-        <div style={{ 
-          padding: effectiveCollapsed ? '8px' : '16px', 
+        <div style={{
+          padding: effectiveCollapsed ? '8px' : '16px',
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
           display: 'flex',
           flexDirection: effectiveCollapsed ? 'column' : 'row',
@@ -255,14 +253,14 @@ export function VerticalHeader({
           <button
             className="sidebar-btn"
             onClick={handlePreviousNav}
-            title={isActivityNavigation 
+            title={isActivityNavigation
               ? `Previous: ${sections[(activeSection - 1 + sections.length) % sections.length]}`
               : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
             }
           >
             <FontAwesomeIcon icon={faChevronUp} />
           </button>
-          
+
           {!effectiveCollapsed && (
             <div style={{
               fontSize: '12px',
@@ -275,11 +273,11 @@ export function VerticalHeader({
               {currentLabel}
             </div>
           )}
-          
+
           <button
             className="sidebar-btn"
             onClick={handleNextNav}
-            title={isActivityNavigation 
+            title={isActivityNavigation
               ? `Next: ${sections[(activeSection + 1) % sections.length]}`
               : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
             }
@@ -290,15 +288,15 @@ export function VerticalHeader({
       )}
 
       {/* Controls Section */}
-      <div style={{ 
-        flex: 1, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: effectiveCollapsed ? '4px' : '8px', 
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: effectiveCollapsed ? '4px' : '8px',
         padding: effectiveCollapsed ? '8px 4px' : '16px 12px',
         overflowY: 'auto'
       }}>
-        
+
         {/* Auto Categorize */}
         <SidebarButton
           icon={progress.running ? faSpinner : (autoSync ? faRobot : faToggleOff)}
@@ -376,7 +374,7 @@ export function VerticalHeader({
           onClick={() => {
             try {
               const url = 'https://mail.google.com/mail/u/0/#inbox';
-              if (chrome?.tabs?.create) chrome.tabs.create({ url }); 
+              if (chrome?.tabs?.create) chrome.tabs.create({ url });
               else window.open(url, '_blank');
             } catch { }
           }}
@@ -389,7 +387,7 @@ export function VerticalHeader({
           onClick={() => {
             try {
               const url = 'https://calendar.google.com/';
-              if (chrome?.tabs?.create) chrome.tabs.create({ url }); 
+              if (chrome?.tabs?.create) chrome.tabs.create({ url });
               else window.open(url, '_blank');
             } catch { }
           }}
@@ -423,19 +421,19 @@ export function VerticalHeader({
       </div>
 
       {/* Time Display */}
-      <div style={{ 
-        padding: effectiveCollapsed ? '12px 8px' : '16px', 
+      <div style={{
+        padding: effectiveCollapsed ? '12px 8px' : '16px',
         borderTop: '1px solid rgba(255, 255, 255, 0.1)',
         textAlign: 'center'
       }}>
-        <div style={{ 
-          fontSize: effectiveCollapsed ? '10px' : '12px', 
-          opacity: 0.8, 
+        <div style={{
+          fontSize: effectiveCollapsed ? '10px' : '12px',
+          opacity: 0.8,
           color: '#ffffff',
           transform: effectiveCollapsed ? 'rotate(-90deg)' : 'none',
           whiteSpace: 'nowrap'
         }} title={now.toLocaleString()}>
-          {effectiveCollapsed ? now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : timeStr}
+          {effectiveCollapsed ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : timeStr}
         </div>
       </div>
     </div>
@@ -443,14 +441,14 @@ export function VerticalHeader({
 }
 
 // Reusable Sidebar Button Component
-function SidebarButton({ 
-  icon, 
-  label, 
-  active = false, 
-  spinning = false, 
-  collapsed = false, 
-  onClick, 
-  tooltip 
+function SidebarButton({
+  icon,
+  label,
+  active = false,
+  spinning = false,
+  collapsed = false,
+  onClick,
+  tooltip
 }) {
   return (
     <button
@@ -462,7 +460,7 @@ function SidebarButton({
         alignItems: 'center',
         gap: collapsed ? '0' : '12px',
         padding: collapsed ? '8px' : '12px 16px',
-        background: active 
+        background: active
           ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)'
           : 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
         border: `1px solid ${active ? 'rgba(96, 165, 250, 0.4)' : 'rgba(255, 255, 255, 0.2)'}`,
@@ -478,13 +476,13 @@ function SidebarButton({
         minHeight: '40px'
       }}
     >
-      <FontAwesomeIcon 
-        icon={icon} 
+      <FontAwesomeIcon
+        icon={icon}
         spin={spinning}
-        style={{ 
+        style={{
           fontSize: collapsed ? '16px' : '14px',
           opacity: spinning ? 0.8 : 1
-        }} 
+        }}
       />
       {!collapsed && <span>{label}</span>}
     </button>
@@ -510,7 +508,7 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
   const runSearch = async (q) => {
     const query = (q || '').trim();
     if (!query) return;
-    
+
     try {
       const ui = await getUIState();
       const rs = Array.isArray(ui?.recentSearches) ? ui.recentSearches : [];
@@ -518,7 +516,7 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
       await saveUIState({ ...ui, recentSearches: next });
       setRecent(next.slice(0, 5));
     } catch { }
-    
+
     try {
       await openInSidePanel(query);
     } catch (err) {
@@ -561,7 +559,7 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
           fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
         }}
       />
-      
+
       {open && (recent.length > 0 || search) && (
         <div style={{
           position: 'absolute',
@@ -581,9 +579,9 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
           {search && (
             <div
               onClick={() => runSearch(search)}
-              style={{ 
-                padding: '8px 12px', 
-                cursor: 'pointer', 
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
                 fontSize: '12px',
                 borderBottom: recent.length ? '1px solid rgba(255, 255, 255, 0.1)' : 'none'
               }}

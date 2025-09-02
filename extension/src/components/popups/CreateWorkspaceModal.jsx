@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { getDomainFromUrl, getFaviconUrl } from '../utils';
+import React, { useEffect, useState } from 'react';
+import { getDomainFromUrl, getFaviconUrl } from '../../utils';
 
 export function CreateWorkspaceModal({ show, onClose, onCreate, currentTab }) {
   const [workspaceName, setWorkspaceName] = useState('')

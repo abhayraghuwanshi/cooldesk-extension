@@ -4,7 +4,6 @@ import { CurrentTabsSection } from './CurrentTabsSection';
 import { ErrorBoundary } from './ErrorBoundary';
 import { NotesSection } from './NotesSection';
 import { PingsSection } from './PingsSection';
-import { TabPreviewModal } from './TabPreviewModal';
 
 export function ActivityPanel({ activeSection = 0 }) {
   // State for preview modal
@@ -12,7 +11,7 @@ export function ActivityPanel({ activeSection = 0 }) {
   const [previewLoading, setPreviewLoading] = React.useState(false);
   const [previewError, setPreviewError] = React.useState('');
   const [previewData, setPreviewData] = React.useState(null);
-  
+
   // Refs for section scrolling
   const sectionRefs = React.useRef([]);
   const containerRef = React.useRef(null);
@@ -97,7 +96,7 @@ export function ActivityPanel({ activeSection = 0 }) {
   React.useEffect(() => {
     // Don't auto-scroll when in "All" mode (activeSection === 0)
     if (activeSection === 0) return;
-    
+
     const scrollToSection = () => {
       const element = sectionRefs.current[activeSection - 1]; // Adjust for "All" being index 0
       if (!element) {
@@ -106,7 +105,7 @@ export function ActivityPanel({ activeSection = 0 }) {
       }
 
       console.log('Attempting to scroll to section:', activeSection);
-      
+
       // Try multiple scroll methods for better compatibility
       try {
         // Method 1: scrollIntoView (most reliable)
@@ -115,18 +114,18 @@ export function ActivityPanel({ activeSection = 0 }) {
           block: 'start',
           inline: 'nearest'
         });
-        
+
         console.log('ScrollIntoView executed for section:', activeSection);
       } catch (e) {
         console.log('ScrollIntoView failed, trying window.scrollTo:', e);
-        
+
         // Method 2: window.scrollTo as fallback
         try {
           const headerHeight = 100;
           const elementRect = element.getBoundingClientRect();
           const currentScrollY = window.scrollY;
           const targetScrollY = currentScrollY + elementRect.top - headerHeight;
-          
+
           window.scrollTo({
             top: Math.max(0, targetScrollY),
             behavior: 'smooth'
@@ -141,7 +140,7 @@ export function ActivityPanel({ activeSection = 0 }) {
     const timer = setTimeout(() => {
       requestAnimationFrame(scrollToSection);
     }, 150);
-    
+
     return () => clearTimeout(timer);
   }, [activeSection]);
 
@@ -154,9 +153,9 @@ export function ActivityPanel({ activeSection = 0 }) {
   ];
 
   return (
-    <section 
+    <section
       ref={containerRef}
-      style={{ 
+      style={{
         marginTop: 12,
         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
       }}
@@ -166,12 +165,12 @@ export function ActivityPanel({ activeSection = 0 }) {
         const isAllMode = activeSection === 0;
         const isCurrentSection = index === (activeSection - 1); // Adjust for "All" being index 0
         const isVisible = isAllMode || isCurrentSection;
-        
+
         return (
           <ErrorBoundary key={section.name}>
-            <div 
+            <div
               ref={el => sectionRefs.current[index] = el}
-              style={{ 
+              style={{
                 marginTop: index === 0 ? 16 : 32,
                 opacity: isAllMode ? 1 : (isCurrentSection ? 1 : 0.3),
                 transform: isAllMode ? 'scale(1)' : (isCurrentSection ? 'scale(1)' : 'scale(0.98)'),
@@ -192,9 +191,9 @@ export function ActivityPanel({ activeSection = 0 }) {
                   height: '20px',
                   background: isAllMode
                     ? 'linear-gradient(135deg, #34C759 0%, #30D158 100%)'
-                    : (isCurrentSection 
-                        ? 'linear-gradient(135deg, #34C759 0%, #30D158 100%)'
-                        : 'rgba(255, 255, 255, 0.2)'),
+                    : (isCurrentSection
+                      ? 'linear-gradient(135deg, #34C759 0%, #30D158 100%)'
+                      : 'rgba(255, 255, 255, 0.2)'),
                   borderRadius: '2px',
                   transition: 'all 0.3s ease'
                 }} />
@@ -202,8 +201,8 @@ export function ActivityPanel({ activeSection = 0 }) {
                   margin: 0,
                   fontSize: '16px',
                   fontWeight: '600',
-                  color: isAllMode 
-                    ? '#ffffff' 
+                  color: isAllMode
+                    ? '#ffffff'
                     : (isCurrentSection ? '#ffffff' : 'rgba(255, 255, 255, 0.5)'),
                   transition: 'all 0.3s ease'
                 }}>
@@ -224,23 +223,6 @@ export function ActivityPanel({ activeSection = 0 }) {
           </ErrorBoundary>
         );
       })}
-
-      <TabPreviewModal
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        data={previewData}
-        loading={previewLoading}
-        error={previewError}
-        onOpenFull={() => {
-          try {
-            const url = previewData?.url || (typeof previewData === 'string' ? previewData : null);
-            if (!url) { setPreviewOpen(false); return; }
-            if (typeof chrome !== 'undefined' && chrome?.tabs?.create) chrome.tabs.create({ url });
-            else window.open(url, '_blank');
-          } catch { }
-          setPreviewOpen(false);
-        }}
-      />
     </section>
   );
 }

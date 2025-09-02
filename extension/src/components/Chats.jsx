@@ -526,8 +526,8 @@ export function Chats() {
                                                 cursor: 'pointer',
                                                 transition: 'all 0.2s ease'
                                             }}
-                                            onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.1)'}
-                                            onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.05)'}
+                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
                                         >
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                                 {chat.platform && (

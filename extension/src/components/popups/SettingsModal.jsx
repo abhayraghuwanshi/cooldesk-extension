@@ -1,19 +1,20 @@
 import { faBullseye, faCog, faColumns, faFolder, faPalette, faRocket, faSync, faUser } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
-import { getPersonaUrlCount, personas, validatePersona } from '../data/personas';
-import { getSyncStatus } from '../services/conditionalSync';
-import { sendMessage, storageGet, storageSet } from '../services/extensionApi';
-import { deleteWorkspaceById, getCurrentUser, initializeFirebase, listWorkspaces, onAuthStateChange, saveSettings as saveSettingsDB, saveWorkspace, signInWithGoogle, signOutUser, subscribeWorkspaceChanges } from '../services/firebase';
-import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../services/syncConfig';
-import AccountTab from './settings/AccountTab';
-import LayoutTab from './settings/LayoutTab';
-import PersonasTab from './settings/PersonasTab';
-import SetupTab from './settings/SetupTab';
-import SyncTab from './settings/SyncTab';
-import { TabItem, Tabs } from './settings/TabComponents';
-import ThemesTab from './settings/ThemesTab';
-import WorkspacesTab from './settings/WorkspacesTab';
+import { getPersonaUrlCount, personas, validatePersona } from '../../data/personas';
+import { listWorkspaces, saveWorkspace } from '../../db';
+import { getSyncStatus } from '../../services/conditionalSync';
+import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
+import { deleteWorkspaceById, getCurrentUser, initializeFirebase, listWorkspaces as listWorkspacesFirebase, onAuthStateChange, saveSettings as saveSettingsDB, signInWithGoogle, signOutUser, subscribeWorkspaceChanges } from '../../services/firebase';
+import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../../services/syncConfig';
+import AccountTab from '../settings/AccountTab';
+import LayoutTab from '../settings/LayoutTab';
+import PersonasTab from '../settings/PersonasTab';
+import SetupTab from '../settings/SetupTab';
+import SyncTab from '../settings/SyncTab';
+import { TabItem, Tabs } from '../settings/TabComponents';
+import ThemesTab from '../settings/ThemesTab';
+import WorkspacesTab from '../settings/WorkspacesTab';
 
 export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayout, onLayoutToggle }) {
   const [localSettings, setLocalSettings] = useState(settings)
@@ -205,18 +206,31 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
     try {
       const selectedCats = selectedCategories.filter(cat => cat.selected);
 
+      let successCount = 0;
       for (const category of selectedCats) {
         const workspace = {
           id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 8),
           name: category.editedName,
           description: category.description,
           createdAt: Date.now(),
-          urls: category.urls.map(url => ({
-            url,
-            title: url,
-            addedAt: Date.now(),
-            favicon: `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=16`
-          })),
+          urls: category.urls.map(url => {
+            try {
+              return {
+                url,
+                title: url,
+                addedAt: Date.now(),
+                favicon: `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=16`
+              };
+            } catch (e) {
+              console.warn(`Invalid URL ${url}, using as-is`);
+              return {
+                url,
+                title: url,
+                addedAt: Date.now(),
+                favicon: ''
+              };
+            }
+          }),
           context: {
             persona: selectedPersona.title,
             originalCategory: category.originalName
@@ -225,17 +239,31 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
 
         try {
           await saveWorkspace(workspace);
+          successCount++;
+          console.log(`Created workspace: ${category.editedName}`);
         } catch (e) {
           console.error(`Failed to create workspace ${category.editedName}:`, e);
+          setError(`Failed to create workspace "${category.editedName}": ${e.message}`);
         }
       }
 
-      // Reset selection
-      setSelectedPersona(null);
-      setSelectedCategories([]);
+      if (successCount > 0) {
+        // Refresh the workspaces list
+        try {
+          const list = await listWorkspaces();
+          setWorkspaces(Array.isArray(list) ? list : []);
+        } catch (e) {
+          console.warn('Failed to refresh workspaces list:', e);
+        }
 
-      // Show success message
-      alert(`Successfully created ${selectedCats.length} workspaces!`);
+        // Reset selection
+        setSelectedPersona(null);
+        setSelectedCategories([]);
+
+        // Show success message
+        setError(`Successfully created ${successCount} of ${selectedCats.length} workspaces!`);
+        setTimeout(() => setError(''), 3000);
+      }
 
     } catch (e) {
       setError(`Failed to create workspaces: ${e.message}`);
@@ -327,18 +355,25 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
   }, [show, firebaseInitialized]);
 
   // Load workspaces from Firebase and subscribe to changes
+  // Load local workspaces when modal opens
   useEffect(() => {
-    if (!show || !firebaseInitialized) return;
-    let unsub = null;
+    if (!show) return;
     (async () => {
       try {
         const list = await listWorkspaces();
         setWorkspaces(Array.isArray(list) ? list : []);
       } catch { setWorkspaces([]); }
     })();
+  }, [show]);
+
+  // Subscribe to Firebase workspace changes if initialized
+  useEffect(() => {
+    if (!show || !firebaseInitialized) return;
+    let unsub = null;
     unsub = subscribeWorkspaceChanges(async () => {
       try {
-        const list = await listWorkspaces();
+        const list = await listWorkspacesFirebase();
+        // Merge with local workspaces or handle sync logic here if needed
         setWorkspaces(Array.isArray(list) ? list : []);
       } catch { }
     });

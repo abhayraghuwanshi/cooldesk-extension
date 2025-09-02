@@ -13,6 +13,7 @@ const VoiceNavigation = () => {
   const [markingMode, setMarkingMode] = useState('interactive'); // 'interactive' or 'content'
   const [isCollapsed, setIsCollapsed] = useState(true); // Start collapsed
   const [showHelp, setShowHelp] = useState(false); // Help section toggle
+  const [currentTheme, setCurrentTheme] = useState('ai-midnight-nebula');
   const recognitionRef = useRef(null);
   const feedbackTimeoutRef = useRef(null);
 
@@ -72,6 +73,37 @@ const VoiceNavigation = () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
+    };
+  }, []);
+
+  // Load theme from localStorage
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('cooldesk-theme');
+    if (savedTheme) {
+      setCurrentTheme(savedTheme);
+    }
+  }, []);
+
+  // Listen for theme changes
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'cooldesk-theme') {
+        setCurrentTheme(e.newValue || 'ai-midnight-nebula');
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for custom theme change events
+    const handleThemeChange = (e) => {
+      setCurrentTheme(e.detail || 'ai-midnight-nebula');
+    };
+    
+    window.addEventListener('themeChanged', handleThemeChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('themeChanged', handleThemeChange);
     };
   }, []);
 
@@ -1831,6 +1863,105 @@ const VoiceNavigation = () => {
     }
   };
 
+  // Get theme-based colors
+  const getThemeColors = (theme) => {
+    const themes = {
+      'ai-midnight-nebula': {
+        primaryBg: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+        cardBg: 'rgba(15, 23, 42, 0.95)',
+        buttonBg: 'rgba(255, 255, 255, 0.12)',
+        buttonBgHover: 'rgba(255, 255, 255, 0.18)',
+        buttonBorder: 'rgba(255, 255, 255, 0.25)',
+        textColor: '#ffffff',
+        textSecondary: 'rgba(255, 255, 255, 0.7)',
+        accentColor: '#34C759'
+      },
+      'cosmic-aurora': {
+        primaryBg: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        cardBg: 'rgba(15, 23, 42, 0.95)',
+        buttonBg: 'rgba(16, 185, 129, 0.12)',
+        buttonBgHover: 'rgba(16, 185, 129, 0.18)',
+        buttonBorder: 'rgba(16, 185, 129, 0.25)',
+        textColor: '#ffffff',
+        textSecondary: 'rgba(255, 255, 255, 0.7)',
+        accentColor: '#10b981'
+      },
+      'deep-ocean': {
+        primaryBg: 'linear-gradient(135deg, #164e63 0%, #0891b2 100%)',
+        cardBg: 'rgba(8, 51, 68, 0.95)',
+        buttonBg: 'rgba(255, 255, 255, 0.12)',
+        buttonBgHover: 'rgba(255, 255, 255, 0.18)',
+        buttonBorder: 'rgba(255, 255, 255, 0.25)',
+        textColor: '#ffffff',
+        textSecondary: 'rgba(255, 255, 255, 0.7)',
+        accentColor: '#0891b2'
+      },
+      'sunset-glow': {
+        primaryBg: 'linear-gradient(135deg, #dc2626 0%, #ea580c 100%)',
+        cardBg: 'rgba(124, 45, 18, 0.95)',
+        buttonBg: 'rgba(255, 255, 255, 0.12)',
+        buttonBgHover: 'rgba(255, 255, 255, 0.18)',
+        buttonBorder: 'rgba(255, 255, 255, 0.25)',
+        textColor: '#ffffff',
+        textSecondary: 'rgba(255, 255, 255, 0.7)',
+        accentColor: '#f97316'
+      },
+      'forest-whisper': {
+        primaryBg: 'linear-gradient(135deg, #15803d 0%, #166534 100%)',
+        cardBg: 'rgba(20, 83, 45, 0.95)',
+        buttonBg: 'rgba(255, 255, 255, 0.12)',
+        buttonBgHover: 'rgba(255, 255, 255, 0.18)',
+        buttonBorder: 'rgba(255, 255, 255, 0.25)',
+        textColor: '#ffffff',
+        textSecondary: 'rgba(255, 255, 255, 0.7)',
+        accentColor: '#22c55e'
+      },
+      'royal-purple': {
+        primaryBg: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
+        cardBg: 'rgba(88, 28, 135, 0.95)',
+        buttonBg: 'rgba(255, 255, 255, 0.12)',
+        buttonBgHover: 'rgba(255, 255, 255, 0.18)',
+        buttonBorder: 'rgba(255, 255, 255, 0.25)',
+        textColor: '#ffffff',
+        textSecondary: 'rgba(255, 255, 255, 0.7)',
+        accentColor: '#a855f7'
+      },
+      'electric-blue': {
+        primaryBg: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+        cardBg: 'rgba(30, 58, 138, 0.95)',
+        buttonBg: 'rgba(255, 255, 255, 0.12)',
+        buttonBgHover: 'rgba(255, 255, 255, 0.18)',
+        buttonBorder: 'rgba(255, 255, 255, 0.25)',
+        textColor: '#ffffff',
+        textSecondary: 'rgba(255, 255, 255, 0.7)',
+        accentColor: '#3b82f6'
+      },
+      'warm-amber': {
+        primaryBg: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)',
+        cardBg: 'rgba(146, 64, 14, 0.95)',
+        buttonBg: 'rgba(255, 255, 255, 0.12)',
+        buttonBgHover: 'rgba(255, 255, 255, 0.18)',
+        buttonBorder: 'rgba(255, 255, 255, 0.25)',
+        textColor: '#ffffff',
+        textSecondary: 'rgba(255, 255, 255, 0.7)',
+        accentColor: '#fbbf24'
+      },
+      'rose-gold': {
+        primaryBg: 'linear-gradient(135deg, #e11d48 0%, #f43f5e 100%)',
+        cardBg: 'rgba(159, 18, 57, 0.95)',
+        buttonBg: 'rgba(255, 255, 255, 0.12)',
+        buttonBgHover: 'rgba(255, 255, 255, 0.18)',
+        buttonBorder: 'rgba(255, 255, 255, 0.25)',
+        textColor: '#ffffff',
+        textSecondary: 'rgba(255, 255, 255, 0.7)',
+        accentColor: '#fb7185'
+      }
+    };
+    return themes[theme] || themes['ai-midnight-nebula'];
+  };
+
+  const themeColors = getThemeColors(currentTheme);
+
   return (
     <div className={`voice-navigation ${isCollapsed ? 'collapsed' : 'expanded'}`}>
       {/* Compact Header - Always Visible */}
@@ -2021,10 +2152,10 @@ const VoiceNavigation = () => {
           width: 100%;
           max-width: 500px;
           margin: 8px auto;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: ${themeColors.primaryBg};
           border-radius: 16px;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-          color: white;
+          color: ${themeColors.textColor};
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
           position: relative;
           z-index: 1;
@@ -2044,12 +2175,12 @@ const VoiceNavigation = () => {
         .voice-header {
           cursor: pointer;
           padding: 16px 20px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          border-bottom: 1px solid ${themeColors.buttonBorder};
           transition: background-color 0.2s ease;
         }
 
         .voice-header:hover {
-          background: rgba(255, 255, 255, 0.05);
+          background: ${themeColors.buttonBg};
         }
 
         .header-content {
@@ -2068,7 +2199,7 @@ const VoiceNavigation = () => {
         .collapse-btn {
           background: none;
           border: none;
-          color: white;
+          color: ${themeColors.textColor};
           cursor: pointer;
           padding: 4px;
           border-radius: 4px;
@@ -2076,7 +2207,7 @@ const VoiceNavigation = () => {
         }
 
         .collapse-btn:hover {
-          background: rgba(255, 255, 255, 0.1);
+          background: ${themeColors.buttonBg};
         }
 
         .collapse-icon {
@@ -2099,13 +2230,13 @@ const VoiceNavigation = () => {
           gap: 8px;
           margin-top: 12px;
           padding-top: 12px;
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          border-top: 1px solid ${themeColors.buttonBorder};
         }
 
         .current-mode-compact {
           font-size: 20px;
           padding: 6px;
-          background: rgba(255, 255, 255, 0.1);
+          background: ${themeColors.buttonBg};
           border-radius: 8px;
           margin-left: auto;
         }
@@ -2144,7 +2275,7 @@ const VoiceNavigation = () => {
           align-items: center;
           gap: 8px;
           padding: 8px 16px;
-          background: rgba(255, 255, 255, 0.15);
+          background: ${themeColors.buttonBg};
           border-radius: 20px;
           backdrop-filter: blur(10px);
         }
@@ -2156,7 +2287,7 @@ const VoiceNavigation = () => {
           animation: pulse-dot 2s infinite;
         }
 
-        .status-dot.ready { background: #4CAF50; }
+        .status-dot.ready { background: ${themeColors.accentColor}; }
         .status-dot.listening { background: #ff4444; }
         .status-dot.error { background: #ff9800; }
 
@@ -2184,7 +2315,7 @@ const VoiceNavigation = () => {
           justify-content: space-between;
           align-items: center;
           padding: 20px;
-          background: rgba(255, 255, 255, 0.1);
+          background: ${themeColors.buttonBg};
           border-radius: 12px;
           backdrop-filter: blur(10px);
         }
@@ -2231,8 +2362,8 @@ const VoiceNavigation = () => {
         }
 
         .voice-btn.primary {
-          background: linear-gradient(135deg, #4CAF50, #45a049);
-          color: white;
+          background: linear-gradient(135deg, ${themeColors.accentColor}, ${themeColors.accentColor}dd);
+          color: ${themeColors.textColor};
           min-width: 160px;
           justify-content: center;
           font-size: 14px;
@@ -2246,20 +2377,20 @@ const VoiceNavigation = () => {
 
         .voice-btn.stop {
           background: linear-gradient(135deg, #f44336, #d32f2f);
-          color: white;
+          color: ${themeColors.textColor};
           min-width: 120px;
           justify-content: center;
         }
 
         .voice-btn.marking {
-          background: rgba(255, 255, 255, 0.2);
-          color: white;
-          border: 2px solid rgba(255, 255, 255, 0.3);
+          background: ${themeColors.buttonBg};
+          color: ${themeColors.textColor};
+          border: 2px solid ${themeColors.buttonBorder};
           backdrop-filter: blur(10px);
         }
 
         .voice-btn.marking.active {
-          background: linear-gradient(135deg, #2196F3, #1976d2);
+          background: linear-gradient(135deg, ${themeColors.accentColor}, ${themeColors.accentColor}dd);
           border-color: transparent;
         }
 
@@ -2268,18 +2399,18 @@ const VoiceNavigation = () => {
           align-items: center;
           gap: 8px;
           padding: 10px 16px;
-          border: 2px solid rgba(255, 255, 255, 0.3);
+          border: 2px solid ${themeColors.buttonBorder};
           border-radius: 24px;
-          background: rgba(255, 255, 255, 0.1);
-          color: white;
+          background: ${themeColors.buttonBg};
+          color: ${themeColors.textColor};
           cursor: pointer;
           transition: all 0.3s ease;
           backdrop-filter: blur(10px);
         }
 
         .mode-btn.content {
-          border-color: #2196F3;
-          background: linear-gradient(135deg, #2196F3, #1976d2);
+          border-color: ${themeColors.accentColor};
+          background: linear-gradient(135deg, ${themeColors.accentColor}, ${themeColors.accentColor}dd);
         }
 
         .mode-btn.interactive {
@@ -2311,7 +2442,7 @@ const VoiceNavigation = () => {
         .help-toggle-section {
           margin: 16px 0;
           padding: 16px 0;
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          border-top: 1px solid ${themeColors.buttonBorder};
         }
 
         .help-toggle-btn {
@@ -2320,10 +2451,10 @@ const VoiceNavigation = () => {
           gap: 8px;
           width: 100%;
           padding: 12px 16px;
-          background: rgba(255, 255, 255, 0.1);
+          background: ${themeColors.buttonBg};
           border: none;
           border-radius: 10px;
-          color: white;
+          color: ${themeColors.textColor};
           font-size: 14px;
           font-weight: 500;
           cursor: pointer;
@@ -2332,7 +2463,7 @@ const VoiceNavigation = () => {
         }
 
         .help-toggle-btn:hover {
-          background: rgba(255, 255, 255, 0.15);
+          background: ${themeColors.buttonBgHover};
           transform: translateY(-1px);
         }
 
@@ -2389,7 +2520,7 @@ const VoiceNavigation = () => {
         }
 
         .message.feedback {
-          background: rgba(255, 255, 255, 0.1);
+          background: ${themeColors.buttonBg};
           border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
@@ -2405,7 +2536,7 @@ const VoiceNavigation = () => {
 
         /* Help Section */
         .help-section {
-          background: rgba(255, 255, 255, 0.05);
+          background: ${themeColors.buttonBg};
           border-radius: 12px;
           padding: 16px;
           backdrop-filter: blur(20px);
@@ -2420,7 +2551,7 @@ const VoiceNavigation = () => {
           align-items: center;
           margin-bottom: 16px;
           padding-bottom: 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          border-bottom: 1px solid ${themeColors.buttonBorder};
         }
 
         .help-header h3 {
@@ -2432,7 +2563,7 @@ const VoiceNavigation = () => {
         .current-mode {
           font-size: 12px;
           padding: 4px 8px;
-          background: rgba(255, 255, 255, 0.1);
+          background: ${themeColors.buttonBg};
           border-radius: 12px;
         }
 
@@ -2444,7 +2575,7 @@ const VoiceNavigation = () => {
         }
 
         .command-group {
-          background: rgba(255, 255, 255, 0.05);
+          background: ${themeColors.buttonBg};
           border-radius: 8px;
           padding: 12px;
           border: 1px solid rgba(255, 255, 255, 0.1);
@@ -2454,7 +2585,7 @@ const VoiceNavigation = () => {
           margin: 0 0 8px 0;
           font-size: 14px;
           font-weight: 600;
-          color: white;
+          color: ${themeColors.textColor};
           display: flex;
           align-items: center;
           gap: 6px;

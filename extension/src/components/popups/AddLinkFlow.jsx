@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getFaviconUrl } from '../utils';
+import { getFaviconUrl } from '../../utils';
 
 export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd, onAddSaved, onCancel }) {
   const [search, setSearch] = useState('');
@@ -13,7 +13,7 @@ export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd
         savedItems: Array.isArray(savedItems) ? savedItems.length : 0,
         workspace: currentWorkspace,
       });
-    } catch {}
+    } catch { }
   }, [allItems, savedItems, currentWorkspace]);
 
   React.useEffect(() => {

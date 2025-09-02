@@ -1,5 +1,5 @@
 import React from 'react';
-import { getDomainFromUrl } from '../utils';
+import { getDomainFromUrl } from '../../utils';
 
 export function AddItem({ item, onAdd }) {
   return (

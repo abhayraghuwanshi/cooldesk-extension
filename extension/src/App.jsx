@@ -3,25 +3,27 @@ import { faPlus, faRotateRight, faTrash, faTriangleExclamation, faWandMagicSpark
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import { AddToWorkspaceModal } from './components/AddToWorkspaceModal';
-import { CreateWorkspaceModal } from './components/CreateWorkspaceModal';
-import { Header } from './components/Header';
 import { ItemGrid } from './components/ItemGrid';
-import { RelatedProductsSection } from './components/RelatedProductsSection';
-import { SettingsModal } from './components/SettingsModal';
-import { SyncControlsModal } from './components/SyncControlsModal';
-import { SystemPrompt } from './components/SystemPrompt';
-import { VerticalHeader } from './components/VerticalHeader';
+import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
+import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
+import { SettingsModal } from './components/popups/SettingsModal';
+import { SyncControlsModal } from './components/popups/SyncControlsModal';
+import { Header } from './components/toolbar/Header';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 import './search.css';
 
 import { ActivityPanel } from './components/ActivityPanel';
-import { AddLinkFlow } from './components/AddLinkFlow';
 import { Chats } from './components/Chats';
+import { AddLinkFlow } from './components/popups/AddLinkFlow';
+import { ProjectUrls } from './components/ProjectUrls';
 import { deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
+import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
+import { autoCreateWorkspacesFromUrls } from './utils/workspaceAutoCreator';
+// import './utils/debugUrlIndexing'; // Adds debug functions to window
+import './utils/workspacePopulator'; // Adds workspace population functions
 
 // Simple error boundary to prevent entire app crash due to child errors
 class ErrorBoundary extends React.Component {
@@ -116,6 +118,54 @@ export default function App() {
 
   // UI state: dismissible settings warning
   const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)
+
+  // Auto-create platform-based workspaces from URLs in history/bookmarks
+  useEffect(() => {
+    const autoCreatePlatformWorkspaces = async () => {
+      try {
+        if (!data || data.length === 0) return;
+
+        // Check if auto-creation is enabled (default: true, but user can disable)
+        const ui = await getUIState();
+        const autoCreateEnabled = ui?.autoCreateWorkspaces !== false; // default true
+        if (!autoCreateEnabled) {
+          console.log('⏸️ Auto-workspace creation is disabled');
+          return;
+        }
+
+        // Check if we've already run auto-creation for this data set
+        const dataHash = JSON.stringify(data.map(item => item.url).filter(Boolean).sort()).slice(0, 50);
+        const lastHash = ui?.lastAutoCreateHash;
+        if (lastHash === dataHash) {
+          console.log('⏭️ Auto-workspace creation already ran for this data set');
+          return;
+        }
+
+        const urls = data.map(item => item.url).filter(Boolean);
+        const createdWorkspaces = await autoCreateWorkspacesFromUrls(urls);
+
+        if (createdWorkspaces.length > 0) {
+          console.log(`✅ Auto-created ${createdWorkspaces.length} platform workspaces:`,
+            createdWorkspaces.map(w => w.name));
+
+          // Refresh the saved workspaces list
+          const refreshed = await listWorkspaces();
+          setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+        }
+
+        // Remember that we processed this data set
+        await saveUIState({ ...ui, lastAutoCreateHash: dataHash });
+      } catch (error) {
+        console.warn('Failed to auto-create platform workspaces:', error);
+      }
+    };
+
+    if (data && data.length > 0) {
+      // Debounce the workspace creation to avoid excessive calls
+      const timeoutId = setTimeout(autoCreatePlatformWorkspaces, 3000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [data]);
 
 
   // Side panel visibility control via runtime messages (default: open)
@@ -1171,26 +1221,9 @@ export default function App() {
 
   return (
     <div className="popup-wrap" style={{ paddingBottom: useVerticalLayout ? 0 : 64 }}>
-      {/* Vertical Sidebar (when enabled) */}
-      {useVerticalLayout && (
-        <VerticalHeader
-          search={search}
-          setSearch={setSearch}
-          populate={populate}
-          setShowSettings={setShowSettings}
-          openSyncControls={() => setShowSyncControls(true)}
-          progress={progress}
-          setShowCreateWorkspace={setShowCreateWorkspace}
-          openInTab={openInTab}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          activeSection={activeSection}
-          setActiveSection={setActiveSection}
-        />
-      )}
 
       {/* Main Content Area with conditional wrapper */}
-      <div className={useVerticalLayout ? "content-with-vertical-sidebar" : ""} style={{
+      <div className="content-with-vertical-sidebar" style={{
         transition: 'margin-right 0.3s ease'
       }}>
         <SyncControlsModal
@@ -1281,63 +1314,12 @@ export default function App() {
         {/* Workspace section (only when a specific workspace is selected) */}
         {workspace !== 'All' && (
           <>
-            {showSystemPrompt && (
-              <div
-                className="modal-overlay"
-                onClick={(e) => { if (e.target === e.currentTarget) setShowSystemPrompt(false) }}
-              >
-                <div className="modal">
-                  <div
-                    className="modal-header"
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
-                    }}
-                  >
-                    <h3 style={{ margin: 0 }}>Workspace Instructions</h3>
-                    <button
-                      onClick={() => setShowSystemPrompt(false)}
-                      className="cancel-btn"
-                      aria-label="Close"
-                      title="Close"
-                      style={{ padding: '4px 8px' }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                  <SystemPrompt
-                    workspaceName={workspace}
-                    workspaces={savedWorkspaces}
-                    onSave={handleSaveWorkspacePrompt}
-                    candidateUrls={mergedWorkspaceItems.map(i => i.url).filter(Boolean)}
-                  />
-                </div>
-              </div>
-            )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
               <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({mergedWorkspaceItems.length})</span>
               {refreshing && (
                 <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
               )}
               <div style={{ display: 'flex', gap: 6 }}>
-                {/* <button
-                onClick={() => setShowSystemPrompt(v => !v)}
-                className="add-link-btn ai-button"
-                aria-label={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
-                title={showSystemPrompt ? 'Hide prompt' : 'Show prompt'}
-                style={{ padding: '4px 8px' }}
-              >
-                <FontAwesomeIcon icon={faPenToSquare} />
-              </button> */}
-                {/* <button
-                onClick={() => setShowCurrentWorkspace(v => !v)}
-                className="add-link-btn ai-button"
-                aria-label={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
-                title={showCurrentWorkspace ? 'Hide workspace' : 'Show workspace'}
-                style={{ padding: '4px 8px' }}
-              >
-                <FontAwesomeIcon icon={showCurrentWorkspace ? faEyeSlash : faEye} />
-              </button> */}
                 <button
                   onClick={() => startCategoryEnrichment(workspace)}
                   className="add-link-btn ai-button"
@@ -1346,6 +1328,29 @@ export default function App() {
                   style={{ padding: '4px 8px' }}
                 >
                   <FontAwesomeIcon icon={faWandMagicSparkles} />
+                </button>
+
+                <button
+                  onClick={async () => {
+                    console.log('🔄 Populating workspace with all matching URLs...');
+                    try {
+                      const result = await window.workspacePopulator?.populate?.();
+                      if (result) {
+                        console.log('✅ Population result:', result);
+                        // Refresh workspaces
+                        const refreshed = await listWorkspaces();
+                        setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+                      }
+                    } catch (error) {
+                      console.error('❌ Population failed:', error);
+                    }
+                  }}
+                  className="add-link-btn ai-button"
+                  aria-label="Populate workspace with all matching URLs"
+                  title="Populate workspace with all matching URLs"
+                  style={{ padding: '4px 8px' }}
+                >
+                  🔄
                 </button>
 
                 <button
@@ -1373,6 +1378,30 @@ export default function App() {
               <>
                 {workspace === 'Chats' ? (
                   <Chats />
+                ) : workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
+                  <div>
+                    <ProjectUrls
+                      selectedWorkspace={savedWorkspaces.find(ws => ws.name === workspace)}
+                      onUrlClick={(url) => {
+                        try {
+                          if (chrome?.tabs?.create) {
+                            chrome.tabs.create({ url: url.url });
+                          } else {
+                            window.open(url.url, '_blank');
+                          }
+                        } catch (error) {
+                          console.error('Failed to open URL:', error);
+                        }
+                      }}
+                    />
+                    <ItemGrid
+                      items={mergedWorkspaceItems}
+                      workspaces={savedWorkspaces}
+                      onAddRelated={handleAddRelated}
+                      onAddLink={() => handleOpenAddLinkModal(workspace)}
+                      onDelete={handleDeleteFromWorkspace}
+                    />
+                  </div>
                 ) : (
                   <>
                     <ItemGrid
@@ -1382,7 +1411,6 @@ export default function App() {
                       onAddLink={() => handleOpenAddLinkModal(workspace)}
                       onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
                     />
-                    <RelatedProductsSection relatedItems={relatedProducts} onClear={clearRelatedProducts} />
                   </>
                 )}
               </>
@@ -1500,70 +1528,47 @@ export default function App() {
         )}
 
         {/* Original Header (only when vertical layout is disabled) */}
-        {!useVerticalLayout && (
-          <Header
-            search={search}
-            setSearch={setSearch}
-            populate={populate}
-            setShowSettings={setShowSettings}
-            openSyncControls={() => setShowSyncControls(true)}
-            progress={progress}
-            setShowCreateWorkspace={setShowCreateWorkspace}
-            openInTab={openInTab}
-            isFooter={true}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            activeSection={activeSection}
-            setActiveSection={setActiveSection}
-          />
-        )}
+        <Header
+          search={search}
+          setSearch={setSearch}
+          populate={populate}
+          setShowSettings={setShowSettings}
+          openSyncControls={() => setShowSyncControls(true)}
+          progress={progress}
+          setShowCreateWorkspace={setShowCreateWorkspace}
+          openInTab={openInTab}
+          isFooter={true}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
+        />
 
-        {/* Close content wrapper div */}
+
+        <AddToWorkspaceModal
+          show={showAddLinkModal}
+          workspace={workspaceForLinkAdd}
+          onClose={handleCloseAddLinkModal}
+          onSave={handleSaveLink}
+          suggestions={data.filter(it => !it.workspaceGroup)}
+        />
+
+        <CreateWorkspaceModal
+          show={showCreateWorkspace}
+          onClose={() => setShowCreateWorkspace(false)}
+          onCreate={createWorkspace}
+          currentTab={currentTab}
+        />
+
+        <SettingsModal
+          show={showSettings}
+          onClose={() => setShowSettings(false)}
+          settings={settings}
+          onSave={saveSettings}
+          useVerticalLayout={useVerticalLayout}
+          onLayoutToggle={handleLayoutToggle}
+        />
       </div>
-
-      {/* <div className="bottom-search">
-        <div className="bottom-search-inner">
-          <SearchBox
-            search={search}
-            setSearch={setSearch}
-            openInSidePanel={openInSidePanel}
-            focusSignal={focusSearchTick}
-          />
-        </div>
-      </div> */}
-
-      {loadingRelated && (
-        <div className="loading-related">
-          <div className="loading-spinner"></div>
-          <span>Finding related products...</span>
-        </div>
-      )}
-
-      <AddToWorkspaceModal
-        show={showAddLinkModal}
-        workspace={workspaceForLinkAdd}
-        onClose={handleCloseAddLinkModal}
-        onSave={handleSaveLink}
-        suggestions={data.filter(it => !it.workspaceGroup)}
-      />
-
-      <CreateWorkspaceModal
-        show={showCreateWorkspace}
-        onClose={() => setShowCreateWorkspace(false)}
-        onCreate={createWorkspace}
-        currentTab={currentTab}
-      />
-
-      <SettingsModal
-        show={showSettings}
-        onClose={() => setShowSettings(false)}
-        settings={settings}
-        onSave={saveSettings}
-        useVerticalLayout={useVerticalLayout}
-        onLayoutToggle={handleLayoutToggle}
-      />
-
-
     </div>
   )
 }

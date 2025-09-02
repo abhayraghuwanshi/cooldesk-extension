@@ -4,7 +4,7 @@ export function Tabs({ children, activeTab: controlledActiveTab, onTabChange, di
   const [internalTab, setInternalTab] = useState(0);
   const activeTab = (typeof controlledActiveTab === 'number') ? controlledActiveTab : internalTab;
   const setActiveTab = (typeof onTabChange === 'function') ? onTabChange : setInternalTab;
-  
+
   return (
     <div>
       <div className="tab-list" role="tablist" style={{ display: 'flex', gap: 16, marginBottom: 32, flexWrap: 'wrap' }}>
@@ -23,10 +23,9 @@ export function Tabs({ children, activeTab: controlledActiveTab, onTabChange, di
             className="filter-btn"
             style={{
               fontSize: '14px',
-              fontWeight: '600',
               padding: '12px 20px',
               borderRadius: '12px',
-              border: 'none',
+              border: activeTab === index ? 'none' : '1px solid rgba(255, 255, 255, 0.2)',
               cursor: Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title) ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -35,7 +34,6 @@ export function Tabs({ children, activeTab: controlledActiveTab, onTabChange, di
               background: Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)
                 ? 'rgba(255, 255, 255, 0.03)'
                 : (activeTab === index ? '#34C759' : 'rgba(255, 255, 255, 0.1)'),
-              border: activeTab === index ? 'none' : '1px solid rgba(255, 255, 255, 0.2)',
               color: Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)
                 ? '#6b7280'
                 : (activeTab === index ? 'white' : '#e5e7eb'),
@@ -45,25 +43,49 @@ export function Tabs({ children, activeTab: controlledActiveTab, onTabChange, di
               position: 'relative',
               overflow: 'hidden',
               boxShadow: activeTab === index ? '0 4px 16px rgba(52, 199, 89, 0.3)' : 'none',
+              minWidth: 'fit-content',
+              textAlign: 'center',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTapHighlightColor: 'transparent'
             }}
             onMouseEnter={(e) => {
               if (!(Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title))) {
                 if (activeTab !== index) {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                  e.target.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+                } else {
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(52, 199, 89, 0.4)';
                 }
               }
             }}
             onMouseLeave={(e) => {
               if (!(Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title))) {
                 if (activeTab !== index) {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                  e.target.style.transform = 'translateY(0)';
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                } else {
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(52, 199, 89, 0.3)';
                 }
               }
             }}
           >
-            {child.props.title}
+            <span style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '2px 4px',
+              borderRadius: '8px',
+              transition: 'all 0.2s ease',
+              width: '100%',
+              justifyContent: 'center',
+              position: 'relative',
+              zIndex: 1
+            }}>
+              {child.props.title}
+            </span>
             {activeTab === index && (
               <div style={{
                 position: 'absolute',
