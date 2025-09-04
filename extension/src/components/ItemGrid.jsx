@@ -1,5 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAISuggestions } from '../hooks/useAISuggestions';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getDomainFromUrl, getUrlParts } from '../utils';
 import { WorkspaceItem } from './WorkspaceItem';
 
@@ -11,28 +10,31 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
   const chipRefs = useRef([]);
   const rootRef = useRef(null);
 
-  const onChipKeyDown = useCallback((e, index, keyValue) => {
+  // Keyboard navigation handler
+  const onKeyDown = (e) => {
     if (e.defaultPrevented) return;
-    const isArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown';
-    const isActivate = e.key === 'Enter' || e.key === ' ';
-    if (!(isArrow || isActivate)) return;
+    if (!(e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) return;
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    if (isActivate) {
-      e.preventDefault();
-      setSelectedGroup(keyValue);
-      return;
-    }
-    const flat = chipRefs.current.filter(Boolean);
+
+    const flat = itemRefs.current.filter(Boolean);
+    const activeIndex = flat.findIndex(el => el === document.activeElement);
     const total = flat.length;
     if (total === 0) return;
-    const dir = (e.key === 'ArrowRight' || e.key === 'ArrowDown') ? 1 : -1;
-    const nextIdx = (index + dir + total) % total;
-    const nextEl = flat[nextIdx];
-    if (nextEl && typeof nextEl.focus === 'function') {
-      nextEl.focus();
+
+    const getNextIndex = (idx, key) => {
+      if (key === 'ArrowRight') return Math.min(total - 1, idx + 1);
+      if (key === 'ArrowLeft') return Math.max(0, idx - 1);
+      if (key === 'ArrowDown') return Math.min(total - 1, idx + columns);
+      if (key === 'ArrowUp') return Math.max(0, idx - columns);
+      return idx;
+    };
+
+    const nextIndex = getNextIndex(activeIndex, e.key);
+    if (flat[nextIndex]) {
+      flat[nextIndex].focus();
       e.preventDefault();
     }
-  }, []);
+  };
 
   useEffect(() => {
     const fetchTimeSpent = async () => {
@@ -101,46 +103,22 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
     return groups.filter(g => g.key === selectedGroup)
   }, [groups, selectedGroup])
 
-  const { loading, suggestions, error, getSuggestions, clearSuggestions } = useAISuggestions()
 
-  const handleGetSuggestions = () => {
-    // Use the most frequent domain or a representative URL
-    if ((selectedGroup === 'All' ? groups : displayGroups).length > 0) {
-      // For simplicity, we'll use the first workspace group's base URL.
-      // A more sophisticated approach could find the most common domain.
-      const arr = selectedGroup === 'All' ? groups : displayGroups
-      getSuggestions(arr[0].key)
-    }
-  }
-
-  const onKeyDown = useCallback((e) => {
-    if (e.defaultPrevented) return;
-    if (!(e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) return;
-    // Let Alt/Ctrl combos be handled elsewhere
-    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    const flat = itemRefs.current.filter(Boolean);
-    const activeIndex = flat.findIndex(el => el === document.activeElement);
-    const total = flat.length;
-    if (total === 0) return;
-    const getNextIndex = (idx, key) => {
-      if (key === 'ArrowRight') return Math.min(total - 1, idx + 1);
-      if (key === 'ArrowLeft') return Math.max(0, idx - 1);
-      if (key === 'ArrowDown') return Math.min(total - 1, idx + columns);
-      if (key === 'ArrowUp') return Math.max(0, idx - columns);
-      return idx;
-    };
-    let nextIndex = activeIndex;
-    if (activeIndex === -1) {
-      nextIndex = 0; // focus first
-    } else {
-      nextIndex = getNextIndex(activeIndex, e.key);
-    }
-    const nextEl = flat[nextIndex];
-    if (nextEl && typeof nextEl.focus === 'function') {
-      nextEl.focus();
+  const onChipKeyDown = (e, index, key) => {
+    if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
+      setSelectedCategory(key);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const nextIndex = Math.min(chipRefs.current.length - 1, index + 1);
+      chipRefs.current[nextIndex]?.focus();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const prevIndex = Math.max(0, index - 1);
+      chipRefs.current[prevIndex]?.focus();
     }
-  }, [columns]);
+  };
+
 
   // Default focus: first card, else first chip
   useEffect(() => {
@@ -157,16 +135,6 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
     }
   }, [displayGroups.length])
 
-  // Global key handler to route arrows to grid when not typing
-  useEffect(() => {
-    const handler = (e) => {
-      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : ''
-      if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return
-      onKeyDown(e)
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onKeyDown])
 
   // Reset refs before rendering lists to avoid stale entries
   itemRefs.current = []
@@ -273,9 +241,6 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
               background: selectedGroup === key
                 ? 'rgba(52, 199, 89, 0.15)'
                 : 'var(--surface-1)',
-              border: selectedGroup === key
-                ? '1px solid rgba(52, 199, 89, 0.4)'
-                : '1px solid var(--border)',
               borderRadius: '16px',
               padding: '8px 16px',
               color: selectedGroup === key ? '#34C759' : 'var(--text)',
@@ -355,11 +320,6 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
           })()
         ))}
       </ul>
-      {/* <div className="suggestion-controls">
-        <button onClick={handleGetSuggestions} disabled={loading}>
-          {loading ? 'Getting Suggestions...' : 'Get Workspace Suggestions'}
-        </button>
-      </div> */}
 
 
     </div >

@@ -1,7 +1,8 @@
-// AI-related background handlers and functions
-import { addUrlToWorkspace, getSettings, getUrlRecord, listAllUrls, listWorkspaces, saveWorkspace, upsertUrl } from '../db.js';
-import { buildCategoryListPrompt, buildEnrichmentPromptForWorkspace } from '../prompts.js';
+import { getSettings } from '../db/db.js';
+import { addUrlToWorkspace, getUrlRecord, listAllUrls, upsertUrl } from '../db/workspace-url-db.js';
+import { listWorkspaces, saveWorkspace } from '../db/workspace-db.js';
 import { createCircuitBreaker, getUrlParts } from '../utils.js';
+import { buildCategoryListPrompt, buildEnrichmentPromptForWorkspace } from '../utils/prompts.js';
 import { activityData } from './activity.js';
 
 // Helper function to clean URLs
@@ -552,10 +553,10 @@ export function initializeAI() {
                         }
                         // Note: we no longer mutate workspace membership during enrichment.
                         // AI details are persisted by getAiEnrichment() into urls.extra.ai only.
-                        
+
                         // Check if there are URL notes for this item and include them in AI context
                         try {
-                            const { getUrlNotes } = await import('../db')
+                            const { getUrlNotes } = await import('../db/url-notes-db.js')
                             const urlNotes = await getUrlNotes(it.url)
                             if (urlNotes && urlNotes.length > 0) {
                                 // Add URL notes context to the enriched data
@@ -575,7 +576,7 @@ export function initializeAI() {
                         } catch (e) {
                             console.warn('[AI][enrich] Failed to load URL notes for context:', e)
                         }
-                        
+
                         processed += 1
                         chrome.runtime.sendMessage({ action: 'aiProgress', processed, total, currentItem: it.title || it.url, apiHits })
                         if (processed >= MAX_ITEMS_PER_RUN) {

@@ -1,14 +1,14 @@
-import { faPlus, faPen, faTrash, faMicrophone, faStop, faPlay, faPause, faEye, faCalendarDay, faChevronDown, faChevronRight, faSave, faTimes, faExternalLinkAlt } from '@fortawesome/free-solid-svg-icons';
+import { faCalendarDay, faChevronDown, faChevronRight, faExternalLinkAlt, faEye, faMicrophone, faPause, faPlay, faPlus, faSave, faStop, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../db';
+import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db';
 
 export function NotesSection() {
   const [notes, setNotes] = React.useState([]);
   const [text, setText] = React.useState('');
   const [editingId, setEditingId] = React.useState(null);
   const [editText, setEditText] = React.useState('');
-  
+
   // Voice recording state
   const [isRecording, setIsRecording] = React.useState(false);
   const [mediaRecorder, setMediaRecorder] = React.useState(null);
@@ -60,18 +60,18 @@ export function NotesSection() {
         reader.onloadend = async () => {
           const base64Audio = reader.result.split(',')[1];
           const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          const note = { 
-            id, 
-            type: 'voice', 
+          const note = {
+            id,
+            type: 'voice',
             audioData: base64Audio,
             duration: recordingTime,
-            createdAt: Date.now() 
+            createdAt: Date.now()
           };
           try { await dbUpsertNote(note); } catch { }
           await loadNotes();
         };
         reader.readAsDataURL(blob);
-        
+
         // Stop all tracks
         stream.getTracks().forEach(track => track.stop());
       };
@@ -97,7 +97,7 @@ export function NotesSection() {
       mediaRecorder.stop();
       setIsRecording(false);
       setMediaRecorder(null);
-      
+
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
         recordingTimerRef.current = null;
@@ -124,7 +124,7 @@ export function NotesSection() {
 
     const audio = new Audio(`data:audio/webm;base64,${note.audioData}`);
     audioRefs.current[note.id] = audio;
-    
+
     audio.onended = () => setPlayingId(null);
     audio.onerror = () => {
       console.error('Error playing audio');
@@ -182,7 +182,7 @@ export function NotesSection() {
       const response = await new Promise((resolve) => {
         chrome.runtime.sendMessage({ type: 'getDailyNotes', date }, resolve);
       });
-      
+
       if (response?.ok) {
         setDailyNotes(response.dailyNotes);
         setDailyNotesText(response.dailyNotes.content || '');
@@ -202,16 +202,16 @@ export function NotesSection() {
 
   const saveDailyNotes = React.useCallback(async () => {
     if (!selectedDate) return;
-    
+
     try {
       const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ 
-          type: 'updateDailyNotes', 
+        chrome.runtime.sendMessage({
+          type: 'updateDailyNotes',
           date: selectedDate,
           content: dailyNotesText
         }, resolve);
       });
-      
+
       if (response?.ok) {
         await loadDailyNotes(selectedDate);
         setEditingDailyNotes(false);
@@ -245,7 +245,7 @@ export function NotesSection() {
   // Function to render markdown links as clickable elements
   const renderContentWithLinks = React.useCallback((content) => {
     if (!content) return content;
-    
+
     // Simple markdown link parser: [text](url)
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
     const parts = [];
@@ -257,7 +257,7 @@ export function NotesSection() {
       if (match.index > lastIndex) {
         parts.push(content.substring(lastIndex, match.index));
       }
-      
+
       // Add clickable link
       const linkText = match[1];
       const url = match[2];
@@ -281,40 +281,40 @@ export function NotesSection() {
           title={`Open ${url}`}
         >
           {linkText}
-          <FontAwesomeIcon 
-            icon={faExternalLinkAlt} 
+          <FontAwesomeIcon
+            icon={faExternalLinkAlt}
             style={{ marginLeft: 4, fontSize: '0.8em', opacity: 0.7 }}
           />
         </button>
       );
-      
+
       lastIndex = match.index + match[0].length;
     }
-    
+
     // Add remaining text
     if (lastIndex < content.length) {
       parts.push(content.substring(lastIndex));
     }
-    
+
     return parts.length > 0 ? parts : content;
   }, [openUrl]);
 
   React.useEffect(() => { loadNotes(); }, [loadNotes]);
 
   return (
-    <div style={{ 
-      marginBottom: 16, 
+    <div style={{
+      marginBottom: 16,
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
       {/* Apple Notes Style Header */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: 16,
         padding: '0 4px'
       }}>
-        <h2 style={{ 
+        <h2 style={{
           fontSize: 22,
           fontWeight: 600,
           margin: 0,
@@ -366,8 +366,8 @@ export function NotesSection() {
               justifyContent: 'center',
               gap: 6,
               cursor: 'pointer',
-              boxShadow: isRecording 
-                ? '0 2px 8px rgba(255, 59, 48, 0.3)' 
+              boxShadow: isRecording
+                ? '0 2px 8px rgba(255, 59, 48, 0.3)'
                 : '0 2px 8px rgba(52, 199, 89, 0.3)',
               transition: 'all 0.3s ease',
               fontSize: 12,
@@ -382,7 +382,7 @@ export function NotesSection() {
       </div>
 
       {/* Apple Notes Style Input */}
-      <div style={{ 
+      <div style={{
         background: 'rgba(255, 255, 255, 0.05)',
         borderRadius: 12,
         padding: 16,
@@ -395,7 +395,7 @@ export function NotesSection() {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addNote(); }}
           placeholder="Start typing..."
-          style={{ 
+          style={{
             width: '100%',
             minHeight: 40,
             padding: 0,
@@ -415,9 +415,9 @@ export function NotesSection() {
             e.target.style.height = Math.max(40, e.target.scrollHeight) + 'px';
           }}
         />
-        <div style={{ 
-          fontSize: 12, 
-          color: 'rgba(255, 255, 255, 0.5)', 
+        <div style={{
+          fontSize: 12,
+          color: 'rgba(255, 255, 255, 0.5)',
           marginTop: 8,
           display: 'flex',
           justifyContent: 'space-between',
@@ -455,9 +455,9 @@ export function NotesSection() {
       {/* Apple Notes Style Note List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {notes.length === 0 && (
-          <div style={{ 
-            textAlign: 'center', 
-            color: 'rgba(255, 255, 255, 0.5)', 
+          <div style={{
+            textAlign: 'center',
+            color: 'rgba(255, 255, 255, 0.5)',
             fontSize: 16,
             fontWeight: 400,
             padding: '40px 20px',
@@ -467,9 +467,9 @@ export function NotesSection() {
           </div>
         )}
         {notes.map(n => (
-          <div 
-            key={n.id} 
-            style={{ 
+          <div
+            key={n.id}
+            style={{
               background: 'rgba(255, 255, 255, 0.05)',
               borderRadius: 12,
               padding: 16,
@@ -497,12 +497,12 @@ export function NotesSection() {
                 <textarea
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => { 
-                    if (e.key === 'Enter' && e.metaKey) saveEdit(); 
-                    if (e.key === 'Escape') cancelEdit(); 
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.metaKey) saveEdit();
+                    if (e.key === 'Escape') cancelEdit();
                   }}
                   autoFocus
-                  style={{ 
+                  style={{
                     width: '100%',
                     minHeight: 60,
                     padding: 0,
@@ -521,7 +521,7 @@ export function NotesSection() {
                   }}
                 />
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button 
+                  <button
                     onClick={cancelEdit}
                     style={{
                       padding: '8px 16px',
@@ -537,7 +537,7 @@ export function NotesSection() {
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     onClick={saveEdit}
                     style={{
                       padding: '8px 16px',
@@ -560,9 +560,9 @@ export function NotesSection() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {n.type === 'voice' ? (
                     <>
-                      <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
                         gap: 8,
                         marginBottom: 8
                       }}>
@@ -587,8 +587,8 @@ export function NotesSection() {
                         </div>
                       </div>
                       <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' }}>
-                        {n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-US', { 
-                          month: 'short', 
+                        {n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-US', {
+                          month: 'short',
                           day: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit'
@@ -597,9 +597,9 @@ export function NotesSection() {
                     </>
                   ) : (
                     <>
-                      <div style={{ 
-                        fontSize: 16, 
-                        color: '#ffffff', 
+                      <div style={{
+                        fontSize: 16,
+                        color: '#ffffff',
                         lineHeight: 1.4,
                         marginBottom: 8,
                         fontWeight: 400
@@ -607,8 +607,8 @@ export function NotesSection() {
                         {n.text}
                       </div>
                       <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' }}>
-                        {n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-US', { 
-                          month: 'short', 
+                        {n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-US', {
+                          month: 'short',
                           day: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit'
@@ -617,10 +617,10 @@ export function NotesSection() {
                     </>
                   )}
                 </div>
-                
+
                 <div style={{ display: 'flex', gap: 4 }}>
                   {n.type === 'voice' && (
-                    <button 
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         playVoiceNote(n);
@@ -640,14 +640,14 @@ export function NotesSection() {
                       }}
                       title={playingId === n.id ? "Stop playback" : "Play voice note"}
                     >
-                      <FontAwesomeIcon 
-                        icon={playingId === n.id ? faPause : faPlay} 
+                      <FontAwesomeIcon
+                        icon={playingId === n.id ? faPause : faPlay}
                         style={{ fontSize: 12 }}
                       />
                     </button>
                   )}
-                  
-                  <button 
+
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       removeNote(n.id);
@@ -688,17 +688,17 @@ export function NotesSection() {
       </div>
 
       {/* Daily Notes Section - Apple Style */}
-      <div style={{ 
+      <div style={{
         marginTop: 24,
-        borderTop: '1px solid rgba(255, 255, 255, 0.1)', 
+        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
         paddingTop: 24
       }}>
-        <div 
+        <div
           onClick={toggleDailyNotes}
-          style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             cursor: 'pointer',
             marginBottom: showDailyNotes ? 20 : 0,
             padding: '8px 4px',
@@ -712,10 +712,10 @@ export function NotesSection() {
             e.currentTarget.style.background = 'transparent';
           }}
         >
-          <h2 style={{ 
-            marginBottom: 0, 
-            display: 'flex', 
-            alignItems: 'center', 
+          <h2 style={{
+            marginBottom: 0,
+            display: 'flex',
+            alignItems: 'center',
             gap: 8,
             fontSize: 20,
             fontWeight: 600,
@@ -725,11 +725,11 @@ export function NotesSection() {
             <FontAwesomeIcon icon={faCalendarDay} style={{ color: '#FF9500', fontSize: 18 }} />
             Daily Notes
             {dailyNotes?.metadata?.selectionCount > 0 && (
-              <span style={{ 
-                fontSize: 12, 
-                color: '#ffffff', 
-                background: 'rgba(255, 149, 0, 0.2)', 
-                padding: '4px 8px', 
+              <span style={{
+                fontSize: 12,
+                color: '#ffffff',
+                background: 'rgba(255, 149, 0, 0.2)',
+                padding: '4px 8px',
                 borderRadius: 12,
                 marginLeft: 4,
                 fontWeight: 500,
@@ -749,8 +749,8 @@ export function NotesSection() {
             justifyContent: 'center',
             transition: 'all 0.2s ease'
           }}>
-            <FontAwesomeIcon 
-              icon={showDailyNotes ? faChevronDown : faChevronRight} 
+            <FontAwesomeIcon
+              icon={showDailyNotes ? faChevronDown : faChevronRight}
               style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 10 }}
             />
           </div>
@@ -759,9 +759,9 @@ export function NotesSection() {
         {showDailyNotes && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Date selector - Apple Style */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
               justifyContent: 'space-between',
               background: 'rgba(255, 255, 255, 0.05)',
               borderRadius: 12,
@@ -785,13 +785,13 @@ export function NotesSection() {
                 }}
               />
               {dailyNotes && dailyNotes.metadata.lastUpdated > 0 && (
-                <span style={{ 
-                  fontSize: 12, 
+                <span style={{
+                  fontSize: 12,
                   color: 'rgba(255, 255, 255, 0.5)',
                   fontWeight: 400
                 }}>
-                  Updated {new Date(dailyNotes.metadata.lastUpdated).toLocaleDateString('en-US', { 
-                    month: 'short', 
+                  Updated {new Date(dailyNotes.metadata.lastUpdated).toLocaleDateString('en-US', {
+                    month: 'short',
                     day: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit'
@@ -832,9 +832,9 @@ export function NotesSection() {
                       e.target.style.height = Math.max(120, e.target.scrollHeight) + 'px';
                     }}
                   />
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: 8, 
+                  <div style={{
+                    display: 'flex',
+                    gap: 8,
                     justifyContent: 'flex-end',
                     marginTop: 16,
                     paddingTop: 16,
@@ -907,12 +907,12 @@ export function NotesSection() {
                     e.currentTarget.style.background = 'transparent';
                   }}
                 >
-                  {dailyNotes?.content ? 
+                  {dailyNotes?.content ?
                     renderContentWithLinks(dailyNotes.content) : (
-                    <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', fontSize: 15 }}>
-                      Tap to add your daily notes... Selected text from web pages will appear here automatically.
-                    </span>
-                  )}
+                      <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', fontSize: 15 }}>
+                        Tap to add your daily notes... Selected text from web pages will appear here automatically.
+                      </span>
+                    )}
                 </div>
               )}
             </div>
@@ -926,7 +926,7 @@ export function NotesSection() {
                   gap: 8,
                   marginBottom: 12
                 }}>
-                  <h3 style={{ 
+                  <h3 style={{
                     fontSize: 16,
                     fontWeight: 600,
                     color: 'rgba(255, 255, 255, 0.7)',
@@ -947,8 +947,8 @@ export function NotesSection() {
                     {dailyNotes.selections.length}
                   </span>
                 </div>
-                <div style={{ 
-                  maxHeight: 200, 
+                <div style={{
+                  maxHeight: 200,
                   overflowY: 'auto',
                   display: 'flex',
                   flexDirection: 'column',
@@ -963,16 +963,16 @@ export function NotesSection() {
                       transition: 'all 0.2s ease',
                       cursor: 'pointer'
                     }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(52, 199, 89, 0.08)';
-                      e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.25)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(52, 199, 89, 0.05)';
-                      e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.15)';
-                    }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(52, 199, 89, 0.08)';
+                        e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.25)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(52, 199, 89, 0.05)';
+                        e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.15)';
+                      }}
                     >
-                      <div style={{ 
+                      <div style={{
                         color: '#ffffff',
                         marginBottom: 6,
                         fontSize: 14,
@@ -984,7 +984,7 @@ export function NotesSection() {
                       }}>
                         "{selection.text}"
                       </div>
-                      <div style={{ 
+                      <div style={{
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
@@ -1020,8 +1020,8 @@ export function NotesSection() {
                           }}
                         >
                           {selection.source?.domain || 'Unknown'}
-                          <FontAwesomeIcon 
-                            icon={faExternalLinkAlt} 
+                          <FontAwesomeIcon
+                            icon={faExternalLinkAlt}
                             style={{ fontSize: 9, opacity: 0.8 }}
                           />
                         </button>
@@ -1037,7 +1037,7 @@ export function NotesSection() {
       </div>
 
       {previewNote && (
-        <div 
+        <div
           onClick={closePreview}
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -1045,7 +1045,7 @@ export function NotesSection() {
             zIndex: 2147483647
           }}
         >
-          <div 
+          <div
             onClick={(e) => e.stopPropagation()}
             style={{
               width: 'min(640px, 90vw)', maxHeight: '80vh', background: '#0f1724',

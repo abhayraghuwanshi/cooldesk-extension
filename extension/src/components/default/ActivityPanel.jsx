@@ -1,7 +1,7 @@
 import React from 'react';
+import { ErrorBoundary } from '../ErrorBoundary';
 import { CoolFeedSection } from './CoolFeedSection';
 import { CurrentTabsSection } from './CurrentTabsSection';
-import { ErrorBoundary } from './ErrorBoundary';
 import { NotesSection } from './NotesSection';
 import { PingsSection } from './PingsSection';
 
@@ -20,8 +20,8 @@ export function ActivityPanel({ activeSection = 0 }) {
   const addPing = React.useCallback(async (tab) => {
     try {
       if (!tab?.url) return;
-      const { upsertPing } = await import('../db');
-      const { getFaviconUrl } = await import('../utils');
+      const { upsertPing } = await import('../../db');
+      const { getFaviconUrl } = await import('../../utils');
 
       const ping = {
         url: tab.url,
@@ -147,7 +147,7 @@ export function ActivityPanel({ activeSection = 0 }) {
   // Define sections array matching Header navigation
   const sections = [
     { name: 'Current Tabs', component: <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /> },
-    { name: 'Pings', component: <PingsSection /> },
+    { name: 'Pins', component: <PingsSection /> },
     { name: 'Notes', component: <NotesSection /> },
     { name: 'Cool Feed', component: <CoolFeedSection /> }
   ];

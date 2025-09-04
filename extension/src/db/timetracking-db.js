@@ -1,0 +1,77 @@
+const DB_NAME = 'ActivityTimeSeriesDB'
+const DB_VERSION = 1
+const TIME_TRACKING_STORE = 'timeTracking'
+
+let dbCache = null
+
+/**
+ * Open or create the IndexedDB database
+ */
+async function openDB() {
+    if (dbCache) return dbCache
+
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION)
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result
+            if (!db.objectStoreNames.contains(TIME_TRACKING_STORE)) {
+                const store = db.createObjectStore(TIME_TRACKING_STORE, { keyPath: 'url' })
+                try {
+                    store.createIndex('by_url', 'url', { unique: false })
+                    store.createIndex('by_timestamp', 'timestamp', { unique: false })
+                    store.createIndex('by_sessionId', 'sessionId', { unique: false })
+                    store.createIndex('by_url_timestamp', ['url', 'timestamp'], { unique: false })
+                } catch { }
+            }
+        }
+        request.onsuccess = () => {
+            dbCache = request.result
+            resolve(dbCache)
+        }
+        request.onerror = (event) => {
+            console.error('[DB Debug] Database open failed:', event.target.error)
+            reject(event.target.error)
+        }
+    })
+}
+
+export async function putTimeRow(record) {
+    if (!record || !record.url) return;
+    const db = await openDB();
+    await new Promise((resolve) => {
+        try {
+            const tx = db.transaction(TIME_TRACKING_STORE, 'readwrite');
+            const store = tx.objectStore(TIME_TRACKING_STORE);
+            const req = store.put(record);
+            req.onsuccess = () => resolve();
+            req.onerror = () => resolve();
+        } catch { resolve(); }
+    });
+}
+
+export async function getTimeRow(url) {
+    if (!url) return null;
+    const db = await openDB();
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction(TIME_TRACKING_STORE, 'readonly');
+            const store = tx.objectStore(TIME_TRACKING_STORE);
+            const req = store.get(url);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        } catch { resolve(null); }
+    });
+}
+
+export async function getAllTimeRows() {
+    const db = await openDB();
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction(TIME_TRACKING_STORE, 'readonly');
+            const store = tx.objectStore(TIME_TRACKING_STORE);
+            const req = store.getAll();
+            req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : []);
+            req.onerror = () => resolve([]);
+        } catch { resolve([]); }
+    });
+}

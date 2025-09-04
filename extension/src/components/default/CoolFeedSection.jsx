@@ -1,8 +1,8 @@
 import { faArrowUpRightFromSquare, faGlobe, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../services/extensionApi';
-import { getFaviconUrl } from '../utils';
+import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../../services/extensionApi';
+import { getFaviconUrl } from '../../utils';
 
 export function CoolFeedSection({ tabs, pings }) {
   const [rows, setRows] = React.useState([]);

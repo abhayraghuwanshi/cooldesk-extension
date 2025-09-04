@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import aiPlatformsConfig from '../data/aiPlatforms.json';
 import { getFaviconUrl } from '../utils';
-import aiPlatformsConfig from '../config/aiPlatforms.json';
+import { ItemGrid } from './ItemGrid';
 
 // Helper function to create title extractor from config
 const createTitleExtractor = (config) => {
     return (url) => {
         if (!config) return null;
-        
+
         switch (config.type) {
             case 'chatId': {
                 const match = url.match(new RegExp(config.pattern));
@@ -16,15 +17,15 @@ const createTitleExtractor = (config) => {
                 }
                 return null;
             }
-            
+
             case 'queryParam': {
                 try {
                     const urlObj = new URL(url);
                     const query = urlObj.searchParams.get(config.parameter);
                     if (query) {
                         const decodedQuery = decodeURIComponent(query);
-                        return decodedQuery.length > (config.maxLength || 50) 
-                            ? decodedQuery.substring(0, config.maxLength || 50) + '...' 
+                        return decodedQuery.length > (config.maxLength || 50)
+                            ? decodedQuery.substring(0, config.maxLength || 50) + '...'
                             : decodedQuery;
                     }
                     return config.fallback || null;
@@ -32,7 +33,7 @@ const createTitleExtractor = (config) => {
                     return config.fallback || null;
                 }
             }
-            
+
             case 'multi': {
                 for (const pattern of config.patterns) {
                     const match = url.match(new RegExp(pattern.pattern));
@@ -43,10 +44,10 @@ const createTitleExtractor = (config) => {
                 }
                 return null;
             }
-            
+
             case 'fallback':
                 return config.format;
-                
+
             default:
                 return null;
         }
@@ -56,23 +57,23 @@ const createTitleExtractor = (config) => {
 // Helper function to check if URL matches include patterns but not exclude patterns
 const matchesUrlPattern = (url, patterns) => {
     // Check include patterns
-    const includeMatches = patterns.include.some(pattern => 
+    const includeMatches = patterns.include.some(pattern =>
         new RegExp(pattern).test(url)
     );
-    
+
     if (!includeMatches) return false;
-    
+
     // Check exclude patterns
-    const excludeMatches = patterns.exclude.some(pattern => 
+    const excludeMatches = patterns.exclude.some(pattern =>
         new RegExp(pattern).test(url)
     );
-    
+
     return !excludeMatches;
 };
 
 // Helper function to check global excludes
 const isGloballyExcluded = (url) => {
-    return aiPlatformsConfig.globalExcludes.some(pattern => 
+    return aiPlatformsConfig.globalExcludes.some(pattern =>
         new RegExp(pattern).test(url)
     );
 };
@@ -111,7 +112,7 @@ const generateFallbackTitle = (platform, url, timestamp) => {
 };
 
 export function Chats() {
-    const [chats, setChats] = useState([]);
+    const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedPlatform, setSelectedPlatform] = useState('all');
     const [selectedTimeFilter, setSelectedTimeFilter] = useState('all');
@@ -126,7 +127,7 @@ export function Chats() {
                 // Filter history for AI platform chats
                 const aiChats = history.filter(item => {
                     if (!item.url) return false;
-                    
+
                     // Check global excludes first
                     if (isGloballyExcluded(item.url)) return false;
 
@@ -145,11 +146,11 @@ export function Chats() {
                     let title = item.title;
 
                     // Check if browser title is meaningful (not generic platform names)
-                    const isGenericTitle = !title || 
+                    const isGenericTitle = !title ||
                         title === 'ChatGPT' || title === 'Claude' || title === 'Gemini' ||
                         title === 'Perplexity' || title === 'Copilot' || title === 'Grok' ||
                         title === 'New Chat' || title === 'Untitled' ||
-                        title.toLowerCase().includes('new chat') || 
+                        title.toLowerCase().includes('new chat') ||
                         title.toLowerCase().includes('untitled') ||
                         title.toLowerCase().includes('loading') ||
                         title === platform?.name; // Generic platform name
@@ -181,14 +182,18 @@ export function Chats() {
                     }
 
                     return {
-                        ...item,
+                        url: item.url,
                         title,
+                        lastVisitTime: item.lastVisitTime || Date.now(),
+                        dateAdded: item.lastVisitTime || Date.now(),
+                        favicon: platform?.favicon || getFaviconUrl(item.url, 32),
                         platform: platform || null,
-                        timestamp: item.lastVisitTime || Date.now()
+                        timestamp: item.lastVisitTime || Date.now(),
+                        workspaceId: platform?.id // Use platform ID as workspace ID for grouping
                     };
                 }).sort((a, b) => b.timestamp - a.timestamp); // Sort by most recent
 
-                setChats(aiChats);
+                setItems(aiChats);
             } catch (error) {
                 console.error('Failed to load chats:', error);
             } finally {
@@ -226,62 +231,35 @@ export function Chats() {
         }
     };
 
-    // Group chats by date
-    const groupChatsByDate = (chats) => {
-        const groups = {};
+    // Filter items by platform and time
+    let filteredItems = selectedPlatform === 'all'
+        ? items
+        : items.filter(item => item.platform?.id === selectedPlatform);
 
-        chats.forEach(chat => {
-            const chatDate = new Date(chat.timestamp);
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    filteredItems = getTimeFilteredChats(filteredItems, selectedTimeFilter);
 
-            let groupKey;
-            if (chatDate >= today) {
-                groupKey = 'Today';
-            } else if (chatDate >= yesterday) {
-                groupKey = 'Yesterday';
-            } else if (chatDate >= new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)) {
-                groupKey = chatDate.toLocaleDateString('en-US', { weekday: 'long' });
-            } else if (chatDate >= new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)) {
-                groupKey = chatDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-            } else {
-                groupKey = chatDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-            }
-
-            if (!groups[groupKey]) {
-                groups[groupKey] = [];
-            }
-            groups[groupKey].push(chat);
-        });
-
-        return groups;
-    };
-
-    // Filter chats by selected platform and time
-    let filteredChats = selectedPlatform === 'all'
-        ? chats
-        : chats.filter(chat => chat.platform?.id === selectedPlatform);
-
-    filteredChats = getTimeFilteredChats(filteredChats, selectedTimeFilter);
-
-    // Group filtered chats by date
-    const groupedChats = groupChatsByDate(filteredChats);
+    // Create workspace objects for ItemGrid
+    const workspaces = aiPlatforms.map(platform => ({
+        id: platform.id,
+        name: platform.name,
+        favicon: platform.favicon,
+        color: platform.color
+    }));
 
     // Get platform stats
     const platformStats = aiPlatforms.map(platform => ({
         ...platform,
-        count: chats.filter(chat => chat.platform?.id === platform.id).length
+        count: items.filter(item => item.platform?.id === platform.id).length
     }));
 
     // Time filter options
     const timeFilters = [
-        { id: 'all', name: 'All Time', count: chats.length },
-        { id: 'today', name: 'Today', count: getTimeFilteredChats(chats, 'today').length },
-        { id: 'yesterday', name: 'Yesterday', count: getTimeFilteredChats(chats, 'yesterday').length },
-        { id: 'week', name: 'This Week', count: getTimeFilteredChats(chats, 'week').length },
-        { id: 'month', name: 'This Month', count: getTimeFilteredChats(chats, 'month').length },
-        { id: 'older', name: 'Older', count: getTimeFilteredChats(chats, 'older').length }
+        { id: 'all', name: 'All Time', count: items.length },
+        { id: 'today', name: 'Today', count: getTimeFilteredChats(items, 'today').length },
+        { id: 'yesterday', name: 'Yesterday', count: getTimeFilteredChats(items, 'yesterday').length },
+        { id: 'week', name: 'This Week', count: getTimeFilteredChats(items, 'week').length },
+        { id: 'month', name: 'This Month', count: getTimeFilteredChats(items, 'month').length },
+        { id: 'older', name: 'Older', count: getTimeFilteredChats(items, 'older').length }
     ].filter(filter => filter.count > 0);
 
     const openChat = (url) => {
@@ -332,137 +310,9 @@ export function Chats() {
             color: '#ffffff',
             marginTop: '20px',
         }}>
-            {/* Filters */}
-            <div style={{ marginBottom: '20px' }}>
-                {/* Platform Filter */}
-                <div style={{ marginBottom: '12px' }}>
-                    <div style={{
-                        fontSize: '12px',
-                        color: 'rgba(255, 255, 255, 0.6)',
-                        marginBottom: '8px',
-                        fontWeight: '500'
-                    }}>
-                        AI Platform
-                    </div>
-                    <div style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: '6px'
-                    }}>
-                        <button
-                            onClick={() => setSelectedPlatform('all')}
-                            style={{
-                                padding: '6px 12px',
-                                borderRadius: '20px',
-                                border: 'none',
-                                background: selectedPlatform === 'all'
-                                    ? 'rgba(52, 199, 89, 0.2)'
-                                    : 'rgba(255, 255, 255, 0.1)',
-                                color: selectedPlatform === 'all'
-                                    ? '#34C759'
-                                    : 'rgba(255, 255, 255, 0.7)',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                                fontWeight: '500',
-                                transition: 'all 0.2s ease'
-                            }}
-                        >
-                            All ({chats.length})
-                        </button>
-                        {platformStats.filter(p => p.count > 0).map(platform => (
-                            <button
-                                key={platform.id}
-                                onClick={() => setSelectedPlatform(platform.id)}
-                                style={{
-                                    padding: '6px 12px',
-                                    borderRadius: '20px',
-                                    border: 'none',
-                                    background: selectedPlatform === platform.id
-                                        ? `${platform.color}20`
-                                        : 'rgba(255, 255, 255, 0.1)',
-                                    color: selectedPlatform === platform.id
-                                        ? platform.color
-                                        : 'rgba(255, 255, 255, 0.7)',
-                                    cursor: 'pointer',
-                                    fontSize: '12px',
-                                    fontWeight: '500',
-                                    transition: 'all 0.2s ease',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px'
-                                }}
-                            >
-                                {platform.favicon ? (
-                                    <img 
-                                        src={platform.favicon} 
-                                        alt={platform.name}
-                                        width={16}
-                                        height={16}
-                                        style={{ borderRadius: 3 }}
-                                        onError={(e) => {
-                                            e.target.style.display = 'none';
-                                            e.target.nextSibling.textContent = `${platform.icon} ${platform.name} (${platform.count})`;
-                                        }}
-                                    />
-                                ) : (
-                                    <span>{platform.icon}</span>
-                                )}
-                                <span>{platform.name} ({platform.count})</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
 
-                {/* Time Filter */}
-                <div>
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: '8px'
-                    }}>
-                        <div style={{
-                            fontSize: '12px',
-                            color: 'rgba(255, 255, 255, 0.6)',
-                            fontWeight: '500'
-                        }}>
-                            Time Period
-                        </div>
-                        <select
-                            value={selectedTimeFilter}
-                            onChange={(e) => setSelectedTimeFilter(e.target.value)}
-                            style={{
-                                background: 'rgba(255, 255, 255, 0.1)',
-                                border: '1px solid rgba(255, 255, 255, 0.2)',
-                                borderRadius: '8px',
-                                color: '#ffffff',
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                fontWeight: '500',
-                                cursor: 'pointer',
-                                outline: 'none',
-                                minWidth: '120px'
-                            }}
-                        >
-                            {timeFilters.map(filter => (
-                                <option 
-                                    key={filter.id} 
-                                    value={filter.id}
-                                    style={{
-                                        background: '#1a1a1a',
-                                        color: '#ffffff'
-                                    }}
-                                >
-                                    {filter.name} ({filter.count})
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            {/* Chat List */}
-            {filteredChats.length === 0 ? (
+            {/* Chat Grid */}
+            {filteredItems.length === 0 ? (
                 <div style={{
                     textAlign: 'center',
                     padding: '40px 20px',
@@ -475,131 +325,12 @@ export function Chats() {
                     }
                 </div>
             ) : (
-                <div>
-                    {Object.entries(groupedChats)
-                        .sort(([a], [b]) => {
-                            const order = ['Today', 'Yesterday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-                            const aIndex = order.indexOf(a);
-                            const bIndex = order.indexOf(b);
-                            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-                            if (aIndex !== -1) return -1;
-                            if (bIndex !== -1) return 1;
-                            return b.localeCompare(a);
-                        })
-                        .map(([dateGroup, groupChats]) => (
-                            <div key={dateGroup} style={{ marginBottom: '24px' }}>
-                                <div style={{
-                                    fontSize: '14px',
-                                    fontWeight: '600',
-                                    color: 'rgba(255, 255, 255, 0.8)',
-                                    marginBottom: '12px',
-                                    padding: '0 4px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px'
-                                }}>
-                                    <span>{dateGroup}</span>
-                                    <div style={{
-                                        height: '1px',
-                                        flex: 1,
-                                        background: 'rgba(255, 255, 255, 0.1)'
-                                    }} />
-                                    <span style={{
-                                        fontSize: '12px',
-                                        color: 'rgba(255, 255, 255, 0.5)',
-                                        fontWeight: '400'
-                                    }}>
-                                        {groupChats.length} chat{groupChats.length !== 1 ? 's' : ''}
-                                    </span>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    {groupChats.map((chat, index) => (
-                                        <div
-                                            key={`${chat.url}-${index}`}
-                                            onClick={() => openChat(chat.url)}
-                                            style={{
-                                                padding: '12px',
-                                                borderRadius: '8px',
-                                                background: 'rgba(255, 255, 255, 0.05)',
-                                                border: '1px solid rgba(255, 255, 255, 0.1)',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s ease'
-                                            }}
-                                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
-                                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                {chat.platform && (
-                                                    <div style={{
-                                                        width: 32,
-                                                        height: 32,
-                                                        borderRadius: 8,
-                                                        background: `${chat.platform.color}20`,
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        flexShrink: 0,
-                                                        fontSize: '16px'
-                                                    }}>
-                                                        {chat.platform.favicon ? (
-                                                            <img 
-                                                                src={chat.platform.favicon} 
-                                                                alt="" 
-                                                                width={18}
-                                                                height={18}
-                                                                style={{ borderRadius: 4 }}
-                                                                onError={(e) => {
-                                                                    e.target.style.display = 'none';
-                                                                    e.target.parentElement.innerHTML = chat.platform.icon;
-                                                                }}
-                                                            />
-                                                        ) : (
-                                                            chat.platform.icon
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{
-                                                        fontSize: '14px',
-                                                        fontWeight: '500',
-                                                        color: '#ffffff',
-                                                        marginBottom: '4px',
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap'
-                                                    }}>
-                                                        {chat.title || 'Untitled Chat'}
-                                                    </div>
-
-                                                    <div style={{
-                                                        fontSize: '12px',
-                                                        color: 'rgba(255, 255, 255, 0.6)',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '8px'
-                                                    }}>
-                                                        <span>{chat.platform?.name || 'Unknown Platform'}</span>
-                                                        <span>•</span>
-                                                        <span>{formatTime(chat.timestamp)}</span>
-                                                    </div>
-                                                </div>
-
-                                                <div style={{
-                                                    fontSize: '12px',
-                                                    color: 'rgba(255, 255, 255, 0.4)',
-                                                    flexShrink: 0
-                                                }}>
-                                                    →
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                </div>
+                <ItemGrid
+                    items={filteredItems}
+                    workspaces={workspaces}
+                    onAddRelated={() => { }}
+                    onAddLink={openChat}
+                />
             )}
         </div>
     );

@@ -1,3 +1,4 @@
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatTime, getDomainFromUrl, getFaviconUrl, getUrlParts } from '../utils';
 
@@ -15,10 +16,10 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
     try {
       hostname = new URL(url || '').hostname.toLowerCase();
     } catch {
-      return { 
-        bg: 'linear-gradient(135deg, rgba(15, 23, 36, 0.8) 0%, rgba(27, 35, 49, 0.8) 100%)', 
-        border: '#273043', 
-        accent: '#4a5568' 
+      return {
+        bg: 'linear-gradient(135deg, rgba(15, 23, 36, 0.8) 0%, rgba(27, 35, 49, 0.8) 100%)',
+        border: '#273043',
+        accent: '#4a5568'
       };
     }
 
@@ -153,15 +154,15 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         borderRadius: '12px',
         marginBottom: '12px',
         backdropFilter: 'blur(10px)',
-        boxShadow: hovered 
-          ? '0 4px 16px rgba(0, 122, 255, 0.15)' 
+        boxShadow: hovered
+          ? '0 4px 16px rgba(0, 122, 255, 0.15)'
           : 'none',
         transition: 'all 0.2s ease',
         cursor: 'pointer',
         transform: hovered ? 'translateY(-1px)' : 'translateY(0)'
       }}
     >
-      <div className="item-header" onClick={handleItemClick} style={{ 
+      <div className="item-header" onClick={handleItemClick} style={{
         padding: '16px',
         display: 'flex',
         alignItems: 'center',
@@ -178,9 +179,9 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             justifyContent: 'center',
             flexShrink: 0
           }}>
-            <img 
-              src={favicon} 
-              alt="" 
+            <img
+              src={favicon}
+              alt=""
               width={18}
               height={18}
               style={{ borderRadius: 4 }}
@@ -188,27 +189,45 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ 
-            fontSize: 16, 
-            color: '#ffffff', 
+          {/* Project Title */}
+          {values && values.length > 0 && values[0].extractedData && values[0].extractedData.title && (
+            <div style={{
+              fontSize: 16,
+              color: '#ffffff',
+              lineHeight: 1.4,
+              marginBottom: 2,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              {values[0].extractedData.title}
+            </div>
+          )}
+          
+          {/* Hostname/Domain */}
+          <div style={{
+            fontSize: values && values.length > 0 && values[0].extractedData && values[0].extractedData.title ? 13 : 16,
+            color: values && values.length > 0 && values[0].extractedData && values[0].extractedData.title ? 'rgba(255, 255, 255, 0.7)' : '#ffffff',
             lineHeight: 1.4,
-            marginBottom: 4,
-            fontWeight: 400,
+            marginBottom: values && values.length > 0 && values[0].extractedData && values[0].extractedData.title ? 0 : 4,
+            fontWeight: values && values.length > 0 && values[0].extractedData && values[0].extractedData.title ? 400 : 400,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {(() => { 
-              try { 
-                return new URL(base).hostname; 
-              } catch { 
-                return base.length > 40 ? base.slice(0, 37) + '…' : base; 
-              } 
+            {(() => {
+              try {
+                return new URL(base).hostname;
+              } catch {
+                return base.length > 40 ? base.slice(0, 37) + '…' : base;
+              }
             })()}
           </div>
-          {colors.hostname && (
-            <div style={{ 
-              fontSize: 13, 
+          
+          {colors.hostname && !(values && values.length > 0 && values[0].extractedData && values[0].extractedData.title) && (
+            <div style={{
+              fontSize: 13,
               color: 'rgba(255, 255, 255, 0.6)',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
@@ -220,15 +239,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         </div>
         <div className="item-actions">
           {timeString && <span className="time-spent-badge">{timeString}</span>}
-          {/* {values.length > 0 && (
-            <button
-              className="details-btn"
-              onClick={toggleDetails}
-              title={`${showDetails ? 'Hide' : 'Show'} ${values.length} paths`}
-            >
-              {values.length} paths
-            </button>
-          )} */}
           {onDelete && (
             <button
               className="delete-btn"
@@ -263,56 +273,12 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
                 e.target.style.transform = 'scale(1)';
               }}
             >
-              🗑️
+              <FontAwesomeIcon icon="faTrash" />
             </button>
           )}
         </div>
       </div>
 
-      {/* {tags.length > 0 && (
-        <div className="tags-list">
-          {tags.map(tag => (
-            <span key={tag} className="tag-chip">{tag}</span>
-          ))}
-        </div>
-      )} */}
-
-      {/* History Paths */}
-      {showDetails && values.length > 0 && (
-        <div className="item-details">
-          <div className="details-title">History Paths:</div>
-          <div className="paths-list">
-            {(() => {
-              // Build a unique list of meaningful paths (skip bare "/") ordered by recency if available
-              try { console.debug('[WorkspaceItem] details open', { base, count: values.length, sample: values.slice(0, 3).map(v => v.url) }); } catch { }
-              const dedup = new Map();
-              for (const it of values) {
-                const parts = getUrlParts(it.url);
-                const path = parts.remainder || '/';
-                // Skip pure root paths to emphasize meaningful entries
-                if (path === '/') continue;
-                const key = `${path}`;
-                const ts = (typeof it.lastVisitTime === 'number' ? it.lastVisitTime : 0) || (typeof it.dateAdded === 'number' ? it.dateAdded : 0);
-                const prev = dedup.get(key);
-                if (!prev || ts > prev.ts) dedup.set(key, { url: it.url, path, ts });
-              }
-              const arr = Array.from(dedup.values()).sort((a, b) => b.ts - a.ts || a.path.localeCompare(b.path));
-              // If everything reduced to none (all were "/"), fall back to showing a single Home link
-              const toRender = arr.length ? arr : [{ url: base, path: '/', ts: 0 }];
-              return toRender.map(({ url, path }) => (
-                <button
-                  key={`${url}|${path}`}
-                  className="path-chip"
-                  onClick={(e) => { e.stopPropagation(); window.open(url, '_blank'); }}
-                  title={url}
-                >
-                  {path}
-                </button>
-              ));
-            })()}
-          </div>
-        </div>
-      )}
     </li>
   );
 });

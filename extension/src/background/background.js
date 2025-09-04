@@ -1,5 +1,5 @@
 // MV3 background service worker (type: module)
-import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats } from '../db.js';
+import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats } from '../db/activityTimeSeries-db.js';
 import { storageGetWithTTL } from '../services/extensionApi.js';
 import { populateAndStore } from './data.js';
 // Modular background pieces - these initialize their own message handlers
@@ -14,7 +14,7 @@ async function saveToDailyNotes(selectionData) {
   try {
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const storageKey = `dailyNotes_${today}`;
-    
+
     // Get existing daily notes for today
     const result = await chrome.storage.local.get([storageKey]);
     const dailyData = result[storageKey] || {
@@ -27,24 +27,24 @@ async function saveToDailyNotes(selectionData) {
         selectionCount: 0
       }
     };
-    
+
     // Skip if text is too short (less than 15 chars) or too long (more than 5000 chars)
     if (!selectionData.text || selectionData.text.length < 15 || selectionData.text.length > 5000) {
       return;
     }
-    
+
     // Skip duplicates (check last 5 entries)
     const recentSelections = dailyData.selections.slice(-5);
-    const isDuplicate = recentSelections.some(selection => 
-      selection.text === selectionData.text || 
+    const isDuplicate = recentSelections.some(selection =>
+      selection.text === selectionData.text ||
       Math.abs(selection.timestamp - selectionData.timestamp) < 2000 // Within 2 seconds
     );
-    
+
     if (isDuplicate) {
       console.log('[Background] Skipping duplicate selection');
       return;
     }
-    
+
     // Create selection entry
     const selectionEntry = {
       id: `sel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -66,35 +66,35 @@ async function saveToDailyNotes(selectionData) {
       timestamp: selectionData.timestamp,
       time: new Date(selectionData.timestamp).toLocaleTimeString()
     };
-    
+
     // Add selection to daily data
     dailyData.selections.push(selectionEntry);
-    
+
     // Keep only last 50 selections per day to avoid storage bloat
     if (dailyData.selections.length > 50) {
       dailyData.selections = dailyData.selections.slice(-50);
     }
-    
+
     // Auto-append to daily notes content with timestamp and source (with clickable link)
-    const timeStr = new Date(selectionData.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const timeStr = new Date(selectionData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const sourceStr = new URL(selectionData.url).hostname;
     const noteEntry = `\n[${timeStr}] From [${sourceStr}](${selectionData.url}):\n"${selectionData.text}"\n`;
-    
+
     dailyData.content += noteEntry;
     dailyData.metadata.lastUpdated = Date.now();
     dailyData.metadata.selectionCount = dailyData.selections.length;
-    
+
     // Save to storage
     await chrome.storage.local.set({
       [storageKey]: dailyData,
       dailyNotesLastUpdate: Date.now()
     });
-    
+
     console.log(`[Background] Added to daily notes: ${selectionData.text.substring(0, 30)}...`);
-    
+
     // Update daily summary
     await updateDailyNotesSummary(today, dailyData.metadata.selectionCount);
-    
+
   } catch (e) {
     console.error('[Background] Error saving to daily notes:', e);
   }
@@ -119,13 +119,13 @@ async function updateDailyNotesSummary(date, selectionCount) {
     const summaryKey = 'dailyNotesSummary';
     const result = await chrome.storage.local.get([summaryKey]);
     const summary = result[summaryKey] || {};
-    
+
     summary[date] = {
       date,
       selectionCount,
       lastUpdated: Date.now()
     };
-    
+
     await chrome.storage.local.set({ [summaryKey]: summary });
   } catch (e) {
     console.warn('[Background] Failed to update daily notes summary:', e);
@@ -151,7 +151,7 @@ async function main() {
     console.log('[Background] Extension installed - populating data')
     try {
       await populateAndStore()
-      
+
       // Initialize side panel settings on install
       if (chrome?.sidePanel?.setOptions) {
         try {
@@ -164,11 +164,11 @@ async function main() {
           console.warn('[Background] Failed to enable side panel on install:', e);
         }
       }
-      
+
       if (chrome?.sidePanel?.setPanelBehavior) {
         try {
-          await chrome.sidePanel.setPanelBehavior({ 
-            openPanelOnActionClick: true 
+          await chrome.sidePanel.setPanelBehavior({
+            openPanelOnActionClick: true
           });
           console.log('[Background] Panel behavior set to open on action click');
         } catch (e) {
@@ -217,13 +217,13 @@ async function main() {
     const cleanup = () => {
       try {
         keepAlivePort.disconnect();
-      } catch {}
+      } catch { }
     };
 
     // Handle media control commands
     if (msg?.type === 'MEDIA_COMMAND') {
       console.log('[Background] Media command received:', msg.action);
-      
+
       (async () => {
         try {
           // Find music tabs
@@ -239,7 +239,7 @@ async function main() {
           ];
 
           const tabs = await chrome.tabs.query({});
-          const musicTabs = tabs.filter(tab => 
+          const musicTabs = tabs.filter(tab =>
             musicDomains.some(domain => tab.url?.includes(domain))
           );
 
@@ -275,16 +275,16 @@ async function main() {
                     if (action === 'play' || action === 'pause') {
                       // YouTube (regular) selectors
                       let playBtn = document.querySelector('.ytp-play-button');
-                      
+
                       // Spotify selectors
                       if (!playBtn) playBtn = document.querySelector('[data-testid="control-button-playpause"]');
-                      
+
                       // YouTube Music selectors
                       if (!playBtn) playBtn = document.querySelector('#play-pause-button, .play-pause-button');
-                      
+
                       // Generic selectors
                       if (!playBtn) playBtn = document.querySelector('[aria-label*="Play"], [aria-label*="Pause"], .playButton, .pauseButton');
-                      
+
                       if (playBtn) {
                         playBtn.click();
                         return { success: true, service: 'DOM' };
@@ -292,13 +292,13 @@ async function main() {
                     } else if (action === 'nexttrack') {
                       // YouTube (regular) next video
                       let nextBtn = document.querySelector('.ytp-next-button');
-                      
+
                       // Spotify next track
                       if (!nextBtn) nextBtn = document.querySelector('[data-testid="control-button-skip-forward"]');
-                      
+
                       // Generic selectors
                       if (!nextBtn) nextBtn = document.querySelector('.next-button, [aria-label*="Next"]');
-                      
+
                       if (nextBtn) {
                         nextBtn.click();
                         return { success: true, service: 'DOM' };
@@ -306,13 +306,13 @@ async function main() {
                     } else if (action === 'previoustrack') {
                       // YouTube (regular) previous video
                       let prevBtn = document.querySelector('.ytp-prev-button');
-                      
+
                       // Spotify previous track
                       if (!prevBtn) prevBtn = document.querySelector('[data-testid="control-button-skip-back"]');
-                      
+
                       // Generic selectors
                       if (!prevBtn) prevBtn = document.querySelector('.previous-button, [aria-label*="Previous"]');
-                      
+
                       if (prevBtn) {
                         prevBtn.click();
                         return { success: true, service: 'DOM' };
@@ -321,7 +321,7 @@ async function main() {
                   } catch (e) {
                     console.log('DOM control failed:', e);
                   }
-                  
+
                   return { success: false };
                 },
                 args: [msg.action]
@@ -370,7 +370,7 @@ async function main() {
         wordCount: msg.wordCount,
         url: msg.url
       });
-      
+
       // Auto-save to daily notes (fire and forget - don't wait for response)
       (async () => {
         try {
@@ -388,7 +388,7 @@ async function main() {
           console.warn('[Background] Failed to save to daily notes:', e);
         }
       })();
-      
+
       // Store selection data for potential AI processing (synchronous)
       try {
         chrome.storage.local.set({
@@ -406,7 +406,7 @@ async function main() {
       } catch (e) {
         console.warn('[Background] Failed to store selection:', e);
       }
-      
+
       cleanup();
       // Don't return true since we're not sending a response
       return false;
@@ -422,11 +422,11 @@ async function main() {
     // Get daily notes for a specific date or recent dates
     if (msg?.type === 'getDailyNotes') {
       console.log('[Background] Getting daily notes:', msg);
-      
+
       (async () => {
         try {
           const { date, limit = 7 } = msg;
-          
+
           if (date) {
             // Get notes for specific date
             const storageKey = `dailyNotes_${date}`;
@@ -437,34 +437,34 @@ async function main() {
               selections: [],
               metadata: { created: 0, lastUpdated: 0, selectionCount: 0 }
             };
-            sendResponse({ 
-              ok: true, 
+            sendResponse({
+              ok: true,
               dailyNotes: dailyData,
-              date 
+              date
             });
           } else {
             // Get recent daily notes from last N days
             const recentNotes = [];
             const today = new Date();
-            
+
             for (let i = 0; i < limit; i++) {
               const checkDate = new Date(today);
               checkDate.setDate(today.getDate() - i);
               const dateStr = checkDate.toISOString().split('T')[0];
-              
+
               const storageKey = `dailyNotes_${dateStr}`;
               const result = await chrome.storage.local.get([storageKey]);
               const dailyData = result[storageKey];
-              
+
               if (dailyData && dailyData.selections.length > 0) {
                 recentNotes.push(dailyData);
               }
             }
-            
-            sendResponse({ 
-              ok: true, 
+
+            sendResponse({
+              ok: true,
               recentNotes,
-              count: recentNotes.length 
+              count: recentNotes.length
             });
           }
         } catch (e) {
@@ -497,12 +497,12 @@ async function main() {
     // Update daily notes content (manual editing)
     if (msg?.type === 'updateDailyNotes') {
       console.log('[Background] Updating daily notes content:', msg.date);
-      
+
       (async () => {
         try {
           const { date, content } = msg;
           if (!date) throw new Error('Date is required');
-          
+
           const storageKey = `dailyNotes_${date}`;
           const result = await chrome.storage.local.get([storageKey]);
           const dailyData = result[storageKey] || {
@@ -511,11 +511,11 @@ async function main() {
             selections: [],
             metadata: { created: Date.now(), lastUpdated: Date.now(), selectionCount: 0 }
           };
-          
+
           // Update content and metadata
           dailyData.content = content || '';
           dailyData.metadata.lastUpdated = Date.now();
-          
+
           await chrome.storage.local.set({ [storageKey]: dailyData });
           sendResponse({ ok: true, updated: true });
         } catch (e) {
@@ -531,12 +531,12 @@ async function main() {
     if (msg?.type === 'openSidePanel') {
       console.log('[Background] Received openSidePanel request from tab:', sender?.tab?.id);
       console.log('[Background] Message details:', { fromUserGesture: msg.fromUserGesture, timestamp: msg.timestamp });
-      
+
       (async () => {
         try {
           const senderTab = sender?.tab;
           const windowId = senderTab?.windowId;
-          
+
           // First attempt: Try to open side panel directly
           if (chrome?.sidePanel?.open && windowId) {
             try {
@@ -551,12 +551,12 @@ async function main() {
               // Continue to fallback methods below
             }
           } else {
-            console.log('[Background] Side panel API not available or no windowId:', { 
-              hasSidePanel: !!chrome?.sidePanel?.open, 
-              windowId 
+            console.log('[Background] Side panel API not available or no windowId:', {
+              hasSidePanel: !!chrome?.sidePanel?.open,
+              windowId
             });
           }
-          
+
           // Fallback: Open in tab
           console.log('[Background] Falling back to tab...');
           const url = chrome.runtime.getURL('index.html');
@@ -572,8 +572,8 @@ async function main() {
             console.log('[Background] Creating new tab');
             await chrome.tabs.create({ url });
           }
-          sendResponse({ 
-            ok: true, 
+          sendResponse({
+            ok: true,
             fallback: 'tab',
             message: 'Side panel could not be opened. Opened in tab instead. Use extension icon or Ctrl+Shift+K for side panel.'
           });
@@ -704,30 +704,30 @@ async function main() {
   // Handle connections from content scripts to keep service worker alive
   chrome.runtime.onConnect.addListener((port) => {
     console.log('[Background] Connection established:', port.name);
-    
+
     if (port.name === 'keepalive') {
       // Keep a reference to the port to prevent service worker from sleeping
       let keepAliveTimer;
-      
+
       const resetTimer = () => {
         if (keepAliveTimer) clearTimeout(keepAliveTimer);
         keepAliveTimer = setTimeout(() => {
           try {
             port.disconnect();
-          } catch {}
+          } catch { }
         }, 25000); // Disconnect after 25 seconds of inactivity
       };
-      
+
       port.onMessage.addListener((msg) => {
         console.log('[Background] Keepalive message:', msg);
         resetTimer();
       });
-      
+
       port.onDisconnect.addListener(() => {
         console.log('[Background] Keepalive disconnected');
         if (keepAliveTimer) clearTimeout(keepAliveTimer);
       });
-      
+
       resetTimer();
     }
   });
@@ -777,11 +777,11 @@ async function main() {
           console.log('[Background] Keyboard command triggered, opening side panel...');
           // Use the windowId from the active tab when available
           const windowId = tab?.windowId;
-          
+
           if (chrome?.sidePanel?.setOptions) {
             await chrome.sidePanel.setOptions({ path: 'index.html', enabled: true });
           }
-          
+
           if (chrome?.sidePanel?.open && windowId) {
             console.log('[Background] Opening side panel for window via command:', windowId);
             await chrome.sidePanel.open({ windowId: windowId });

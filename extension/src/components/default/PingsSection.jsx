@@ -1,9 +1,9 @@
 import { faArrowUpRightFromSquare, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { deletePing as dbDeletePing, listPings as dbListPings, upsertPing as dbUpsertPing } from '../db';
-import { enqueueOpenInChrome } from '../services/extensionApi';
-import { getFaviconUrl } from '../utils';
+import { deletePing as dbDeletePing, listPings as dbListPings, upsertPing as dbUpsertPing } from '../../db';
+import { enqueueOpenInChrome } from '../../services/extensionApi';
+import { getFaviconUrl } from '../../utils';
 
 export function PingsSection({ tabs }) {
   const [pings, setPings] = React.useState([]);
@@ -77,18 +77,18 @@ export function PingsSection({ tabs }) {
   }, [loadPings]);
 
   return (
-    <div style={{ 
+    <div style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
       {/* Apple-style Header */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: 16,
         padding: '0 4px'
       }}>
-        <h2 style={{ 
+        <h2 style={{
           fontSize: 22,
           fontWeight: 600,
           margin: 0,
@@ -100,11 +100,11 @@ export function PingsSection({ tabs }) {
         }}>
           <FontAwesomeIcon icon={faThumbtack} style={{ color: '#FF9500', fontSize: 18 }} />
           Pins
-          <span style={{ 
-            fontSize: 12, 
-            color: '#ffffff', 
-            background: 'rgba(255, 149, 0, 0.2)', 
-            padding: '4px 8px', 
+          <span style={{
+            fontSize: 12,
+            color: '#ffffff',
+            background: 'rgba(255, 149, 0, 0.2)',
+            padding: '4px 8px',
             borderRadius: 12,
             fontWeight: 500,
             border: '1px solid rgba(255, 149, 0, 0.3)'
@@ -116,9 +116,9 @@ export function PingsSection({ tabs }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {pings.length === 0 ? (
-          <div style={{ 
-            textAlign: 'center', 
-            color: 'rgba(255, 255, 255, 0.5)', 
+          <div style={{
+            textAlign: 'center',
+            color: 'rgba(255, 255, 255, 0.5)',
             fontSize: 16,
             fontWeight: 400,
             padding: '40px 20px',
@@ -131,9 +131,9 @@ export function PingsSection({ tabs }) {
           </div>
         ) : (
           pings.slice(0, 6).map(p => (
-            <div 
-              key={p.url} 
-              style={{ 
+            <div
+              key={p.url}
+              style={{
                 background: 'rgba(255, 255, 255, 0.05)',
                 borderRadius: 12,
                 padding: 16,
@@ -168,19 +168,19 @@ export function PingsSection({ tabs }) {
                 border: '1px solid rgba(255, 149, 0, 0.2)'
               }}>
                 {p.favicon ? (
-                  <img 
-                    src={p.favicon} 
-                    alt="" 
-                    width={18} 
-                    height={18} 
-                    style={{ borderRadius: 4 }} 
-                    onError={(e) => { 
-                      e.currentTarget.style.display = 'none'; 
-                    }} 
+                  <img
+                    src={p.favicon}
+                    alt=""
+                    width={18}
+                    height={18}
+                    style={{ borderRadius: 4 }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
                   />
                 ) : (
-                  <FontAwesomeIcon 
-                    icon={faThumbtack} 
+                  <FontAwesomeIcon
+                    icon={faThumbtack}
                     style={{ fontSize: 14, color: '#FF9500' }}
                   />
                 )}
@@ -188,37 +188,37 @@ export function PingsSection({ tabs }) {
 
               {/* Ping Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ 
-                  fontSize: 16, 
-                  color: '#ffffff', 
+                <div style={{
+                  fontSize: 16,
+                  color: '#ffffff',
                   lineHeight: 1.4,
                   fontWeight: 400,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
                 }}>
-                  {p.title || (() => { 
-                    try { 
-                      return new URL(p.url).hostname; 
-                    } catch { 
-                      return p.url; 
-                    } 
+                  {p.title || (() => {
+                    try {
+                      return new URL(p.url).hostname;
+                    } catch {
+                      return p.url;
+                    }
                   })()}
                 </div>
-                <div style={{ 
-                  fontSize: 13, 
+                <div style={{
+                  fontSize: 13,
                   color: 'rgba(255, 255, 255, 0.6)',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   marginTop: 2
                 }}>
-                  {(() => { 
-                    try { 
-                      return new URL(p.url).hostname; 
-                    } catch { 
-                      return p.url; 
-                    } 
+                  {(() => {
+                    try {
+                      return new URL(p.url).hostname;
+                    } catch {
+                      return p.url;
+                    }
                   })()}
                 </div>
               </div>

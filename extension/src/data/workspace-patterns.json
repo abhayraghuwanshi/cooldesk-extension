@@ -1,0 +1,505 @@
+{
+  "version": "1.0",
+  "description": "Unified workspace pattern configuration for URL parsing and categorization",
+  "globalExcludes": [
+    "/new$",
+    "/new/",
+    "utm_source=",
+    "utm_medium=",
+    "utm_campaign=",
+    "/login$",
+    "/login/",
+    "/logout$",
+    "/logout/",
+    "/signup$",
+    "/signup/",
+    "/settings$",
+    "/settings/",
+    "/help$",
+    "/help/",
+    "/docs$",
+    "/docs/",
+    "/api$",
+    "/api/"
+  ],
+  "categories": [
+    {
+      "id": "ai-chat",
+      "name": "AI Chat Platforms",
+      "description": "Conversational AI platforms and chatbots",
+      "icon": "🤖",
+      "platforms": [
+        {
+          "id": "chatgpt",
+          "name": "ChatGPT",
+          "domains": ["chat.openai.com", "chatgpt.com"],
+          "color": "#10A37F",
+          "icon": "🤖",
+          "patterns": {
+            "include": [
+              "chat\\.openai\\.com/c/[a-f0-9-]{8,}",
+              "chatgpt\\.com/c/[a-f0-9-]{8,}"
+            ],
+            "exclude": [
+              "chat\\.openai\\.com/?$",
+              "chatgpt\\.com/?$",
+              "/new$",
+              "/share/"
+            ]
+          },
+          "extraction": {
+            "type": "chatId",
+            "pattern": "/c/([a-f0-9-]+)",
+            "titleFormat": "ChatGPT Chat {id}",
+            "projectFormat": "ChatGPT"
+          },
+          "workspace": {
+            "type": "ai-chat",
+            "groupBy": "platform",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        },
+        {
+          "id": "claude",
+          "name": "Claude",
+          "domains": ["claude.ai"],
+          "color": "#D97706",
+          "icon": "🧠",
+          "patterns": {
+            "include": [
+              "claude\\.ai/chat/[a-f0-9-]{8,}"
+            ],
+            "exclude": [
+              "claude\\.ai/?$",
+              "claude\\.ai/new$",
+              "claude\\.ai/chat/?$"
+            ]
+          },
+          "extraction": {
+            "type": "chatId",
+            "pattern": "/chat/([a-f0-9-]+)",
+            "titleFormat": "Claude Chat {id}",
+            "projectFormat": "Claude"
+          },
+          "workspace": {
+            "type": "ai-chat",
+            "groupBy": "platform",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        },
+        {
+          "id": "gemini",
+          "name": "Gemini",
+          "domains": ["gemini.google.com"],
+          "color": "#4285F4",
+          "icon": "✨",
+          "patterns": {
+            "include": [
+              "gemini\\.google\\.com/app/[a-f0-9]{8,}"
+            ],
+            "exclude": [
+              "gemini\\.google\\.com/?$",
+              "gemini\\.google\\.com/app/?$"
+            ]
+          },
+          "extraction": {
+            "type": "chatId",
+            "pattern": "/app/([a-f0-9]+)",
+            "titleFormat": "Gemini Chat {id}",
+            "projectFormat": "Gemini"
+          },
+          "workspace": {
+            "type": "ai-chat",
+            "groupBy": "platform",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        },
+        {
+          "id": "perplexity",
+          "name": "Perplexity",
+          "domains": ["perplexity.ai"],
+          "color": "#6B5BFF",
+          "icon": "🌀",
+          "patterns": {
+            "include": [
+              "perplexity\\.ai/search/[^?]+",
+              "www\\.perplexity\\.ai/search/[^?]+"
+            ],
+            "exclude": [
+              "perplexity\\.ai/?$",
+              "www\\.perplexity\\.ai/?$"
+            ]
+          },
+          "extraction": {
+            "type": "queryParam",
+            "parameter": "q",
+            "maxLength": 50,
+            "titleFormat": "{query}",
+            "projectFormat": "Perplexity",
+            "fallback": "Perplexity Search"
+          },
+          "workspace": {
+            "type": "ai-chat",
+            "groupBy": "platform",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        },
+        {
+          "id": "copilot",
+          "name": "Copilot",
+          "domains": ["copilot.microsoft.com"],
+          "color": "#0078D4",
+          "icon": "💫",
+          "patterns": {
+            "include": [
+              "copilot\\.microsoft\\.com/[^?]+",
+              "copilot\\.microsoft\\.com/.*conversation"
+            ],
+            "exclude": [
+              "copilot\\.microsoft\\.com/?$"
+            ]
+          },
+          "extraction": {
+            "type": "fallback",
+            "titleFormat": "Copilot Chat",
+            "projectFormat": "Copilot"
+          },
+          "workspace": {
+            "type": "ai-chat",
+            "groupBy": "platform",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        }
+      ]
+    },
+    {
+      "id": "development",
+      "name": "Development Platforms",
+      "description": "Code repositories and development tools",
+      "icon": "💻",
+      "platforms": [
+        {
+          "id": "github",
+          "name": "GitHub",
+          "domains": ["github.com"],
+          "color": "#24292e",
+          "icon": "🐙",
+          "patterns": {
+            "include": [
+              "github\\.com/[^/]+/[^/]+.*"
+            ],
+            "exclude": [
+              "github\\.com/?$",
+              "github\\.com/[^/]+/?$",
+              "github\\.com/new",
+              "github\\.com/settings",
+              "github\\.com/notifications"
+            ]
+          },
+          "extraction": {
+            "type": "pathSegments",
+            "segments": [1, 2],
+            "titleFormat": "{owner}/{repo}",
+            "projectFormat": "{owner}/{repo}",
+            "ownerFormat": "{owner}",
+            "repoFormat": "{repo}"
+          },
+          "workspace": {
+            "type": "repository",
+            "groupBy": "platform",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        },
+        {
+          "id": "gitlab",
+          "name": "GitLab",
+          "domains": ["gitlab.com"],
+          "color": "#FC6D26",
+          "icon": "🦊",
+          "patterns": {
+            "include": [
+              "gitlab\\.com/[^/]+/[^/]+.*"
+            ],
+            "exclude": [
+              "gitlab\\.com/?$",
+              "gitlab\\.com/[^/]+/?$"
+            ]
+          },
+          "extraction": {
+            "type": "pathSegments",
+            "segments": [1, 2],
+            "titleFormat": "{owner}/{repo}",
+            "projectFormat": "{owner}/{repo}",
+            "ownerFormat": "{owner}",
+            "repoFormat": "{repo}"
+          },
+          "workspace": {
+            "type": "repository",
+            "groupBy": "project",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        }
+      ]
+    },
+    {
+      "id": "design",
+      "name": "Design Platforms",
+      "description": "Design tools and collaborative platforms",
+      "icon": "🎨",
+      "platforms": [
+        {
+          "id": "figma",
+          "name": "Figma",
+          "domains": ["figma.com", "www.figma.com"],
+          "color": "#F24E1E",
+          "icon": "🔧",
+          "patterns": {
+            "include": [
+              "figma\\.com/file/[^/]+/[^/?]+",
+              "www\\.figma\\.com/file/[^/]+/[^/?]+",
+              "figma\\.com/design/[^/]+/[^/?]+",
+              "www\\.figma\\.com/design/[^/]+/[^/?]+",
+              "figma\\.com/proto/[^/]+",
+              "www\\.figma\\.com/proto/[^/]+"
+            ],
+            "exclude": [
+              "figma\\.com/?$",
+              "www\\.figma\\.com/?$",
+              "figma\\.com/files",
+              "figma\\.com/recent"
+            ]
+          },
+          "extraction": {
+            "type": "figmaFile",
+            "titleFormat": "{fileName}",
+            "projectFormat": "{fileName}",
+            "fileIdFormat": "{fileId}"
+          },
+          "workspace": {
+            "type": "design",
+            "groupBy": "platform",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        }
+      ]
+    },
+    {
+      "id": "project-management",
+      "name": "Project Management",
+      "description": "Task management and project tracking tools",
+      "icon": "📋",
+      "platforms": [
+        {
+          "id": "jira",
+          "name": "Jira",
+          "domains": ["*.atlassian.net"],
+          "color": "#0052CC",
+          "icon": "📊",
+          "patterns": {
+            "include": [
+              "[^.]+\\.atlassian\\.net/browse/[A-Z]+-\\d+",
+              "[^.]+\\.atlassian\\.net/projects/[A-Z]+"
+            ],
+            "exclude": [
+              "\\.atlassian\\.net/?$"
+            ]
+          },
+          "extraction": {
+            "type": "jiraProject",
+            "titleFormat": "{projectKey}",
+            "projectFormat": "{projectKey}",
+            "domainFormat": "{domain}"
+          },
+          "workspace": {
+            "type": "project-management",
+            "groupBy": "project",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        },
+        {
+          "id": "trello",
+          "name": "Trello",
+          "domains": ["trello.com"],
+          "color": "#0079BF",
+          "icon": "📌",
+          "patterns": {
+            "include": [
+              "trello\\.com/b/[^/]+/[^/?]+"
+            ],
+            "exclude": [
+              "trello\\.com/?$",
+              "trello\\.com/boards"
+            ]
+          },
+          "extraction": {
+            "type": "trelloBoard",
+            "titleFormat": "{boardName}",
+            "projectFormat": "{boardName}",
+            "boardIdFormat": "{boardId}"
+          },
+          "workspace": {
+            "type": "project-management",
+            "groupBy": "platform",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        }
+      ]
+    },
+    {
+      "id": "documentation",
+      "name": "Documentation Platforms",
+      "description": "Knowledge management and documentation tools",
+      "icon": "📚",
+      "platforms": [
+        {
+          "id": "notion",
+          "name": "Notion",
+          "domains": ["notion.so", "www.notion.so"],
+          "color": "#000000",
+          "icon": "📝",
+          "patterns": {
+            "include": [
+              "notion\\.so/[^/]+/[^/?]+",
+              "www\\.notion\\.so/[^/]+/[^/?]+",
+              "notion\\.so/[^/?]+",
+              "www\\.notion\\.so/[^/?]+"
+            ],
+            "exclude": [
+              "notion\\.so/?$",
+              "www\\.notion\\.so/?$",
+              "notion\\.so/login",
+              "notion\\.so/signup"
+            ]
+          },
+          "extraction": {
+            "type": "notionPage",
+            "titleFormat": "{pageName}",
+            "projectFormat": "{workspaceName}",
+            "pageIdFormat": "{pageId}"
+          },
+          "workspace": {
+            "type": "documentation",
+            "groupBy": "workspace",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        }
+      ]
+    },
+    {
+      "id": "communication",
+      "name": "Communication Platforms",
+      "description": "Team communication and collaboration tools",
+      "icon": "💬",
+      "platforms": [
+        {
+          "id": "slack",
+          "name": "Slack",
+          "domains": ["*.slack.com"],
+          "color": "#4A154B",
+          "icon": "💼",
+          "patterns": {
+            "include": [
+              "[^.]+\\.slack\\.com/.*"
+            ],
+            "exclude": [
+              "\\.slack\\.com/?$"
+            ]
+          },
+          "extraction": {
+            "type": "slackWorkspace",
+            "titleFormat": "{workspaceName}",
+            "projectFormat": "{workspaceName}"
+          },
+          "workspace": {
+            "type": "communication",
+            "groupBy": "workspace",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        },
+        {
+          "id": "discord",
+          "name": "Discord",
+          "domains": ["discord.com"],
+          "color": "#7289DA",
+          "icon": "🎮",
+          "patterns": {
+            "include": [
+              "discord\\.com/channels/\\d+.*"
+            ],
+            "exclude": [
+              "discord\\.com/?$",
+              "discord\\.com/app/?$"
+            ]
+          },
+          "extraction": {
+            "type": "discordServer",
+            "titleFormat": "Server {serverIdShort}",
+            "projectFormat": "Server {serverIdShort}",
+            "serverIdFormat": "{serverId}"
+          },
+          "workspace": {
+            "type": "communication",
+            "groupBy": "server",
+            "autoCreate": true,
+            "gridType": "ProjectGrid"
+          }
+        }
+      ]
+    }
+  ],
+  "extractors": {
+    "chatId": {
+      "description": "Extract chat ID from URL pattern",
+      "implementation": "regex"
+    },
+    "queryParam": {
+      "description": "Extract value from URL query parameter",
+      "implementation": "urlSearchParams"
+    },
+    "pathSegments": {
+      "description": "Extract specific path segments",
+      "implementation": "pathSplit"
+    },
+    "figmaFile": {
+      "description": "Extract Figma file information",
+      "implementation": "custom"
+    },
+    "jiraProject": {
+      "description": "Extract Jira project information",
+      "implementation": "custom"
+    },
+    "trelloBoard": {
+      "description": "Extract Trello board information",
+      "implementation": "custom"
+    },
+    "notionPage": {
+      "description": "Extract Notion page information",
+      "implementation": "custom"
+    },
+    "slackWorkspace": {
+      "description": "Extract Slack workspace information",
+      "implementation": "custom"
+    },
+    "discordServer": {
+      "description": "Extract Discord server information",
+      "implementation": "custom"
+    },
+    "fallback": {
+      "description": "Use fallback title format",
+      "implementation": "static"
+    }
+  },
+  "fallbackTitleFormat": "{platform} - {time}"
+}

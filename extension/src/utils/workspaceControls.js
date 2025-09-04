@@ -3,7 +3,7 @@
  */
 
 import { autoCreateWorkspacesFromUrls, scanBrowserHistoryAndCreateWorkspaces } from './workspaceAutoCreator.js';
-import { getUIState, saveUIState, listWorkspaces } from '../db.js';
+import { getUIState, saveUIState, listWorkspaces } from '../db';
 
 /**
  * Enable/disable auto workspace creation

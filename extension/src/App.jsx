@@ -1,4 +1,4 @@
-import { faPlus, faRotateRight, faTrash, faTriangleExclamation, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faTriangleExclamation, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -8,22 +8,21 @@ import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
 import { SettingsModal } from './components/popups/SettingsModal';
 import { SyncControlsModal } from './components/popups/SyncControlsModal';
+import { ProjectGrid } from './components/ProjectGrid';
 import { Header } from './components/toolbar/Header';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 import './search.css';
 
-import { ActivityPanel } from './components/ActivityPanel';
 import { Chats } from './components/Chats';
+import { ActivityPanel } from './components/default/ActivityPanel';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
-import { ProjectUrls } from './components/ProjectUrls';
-import { deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db';
+import { deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
-import { autoCreateWorkspacesFromUrls } from './utils/workspaceAutoCreator';
+import { autoCreateWorkspacesFromUrls, autoCreateWorkspacesFromUrlsWithParser } from './utils/workspaceAutoCreator';
 // import './utils/debugUrlIndexing'; // Adds debug functions to window
-import './utils/workspacePopulator'; // Adds workspace population functions
 
 // Simple error boundary to prevent entire app crash due to child errors
 class ErrorBoundary extends React.Component {
@@ -142,7 +141,7 @@ export default function App() {
         }
 
         const urls = data.map(item => item.url).filter(Boolean);
-        const createdWorkspaces = await autoCreateWorkspacesFromUrls(urls);
+        const createdWorkspaces = await autoCreateWorkspacesFromUrlsWithParser(urls);
 
         if (createdWorkspaces.length > 0) {
           console.log(`✅ Auto-created ${createdWorkspaces.length} platform workspaces:`,
@@ -1153,6 +1152,51 @@ export default function App() {
     }
   }
 
+  // Handle grid type changes for a workspace
+  const handleGridTypeChange = async (workspaceId, newGridType) => {
+    try {
+      await updateWorkspaceGridType(workspaceId, newGridType);
+      // Refresh workspaces to get updated grid type
+      const refreshed = await listWorkspaces();
+      setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+      console.log(`[App] Updated grid type to ${newGridType} for workspace ${workspaceId}`);
+    } catch (error) {
+      console.error('Failed to update workspace grid type:', error);
+    }
+  };
+
+  // Render the appropriate grid component based on workspace grid type
+  const renderWorkspaceGrid = (workspaceObj, items) => {
+    const gridType = workspaceObj?.gridType || 'ItemGrid'; // Default to ItemGrid
+
+    console.log(`[App] Rendering grid type: ${gridType} for workspace: ${workspaceObj?.name}`);
+
+    switch (gridType) {
+      case 'ProjectGrid':
+        return (
+          <ProjectGrid
+            items={items}
+            workspaces={savedWorkspaces}
+            onAddRelated={handleAddRelated}
+            onAddLink={() => handleOpenAddLinkModal(workspace)}
+            onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+          />
+        );
+
+      case 'ItemGrid':
+      default:
+        return (
+          <ItemGrid
+            items={items}
+            workspaces={savedWorkspaces}
+            onAddRelated={handleAddRelated}
+            onAddLink={() => handleOpenAddLinkModal(workspace)}
+            onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+          />
+        );
+    }
+  }
+
   const createWorkspace = async (workspaceName, description) => {
     try {
       const tab = await getCurrentTabInfo()
@@ -1223,9 +1267,7 @@ export default function App() {
     <div className="popup-wrap" style={{ paddingBottom: useVerticalLayout ? 0 : 64 }}>
 
       {/* Main Content Area with conditional wrapper */}
-      <div className="content-with-vertical-sidebar" style={{
-        transition: 'margin-right 0.3s ease'
-      }}>
+      <div>
         <SyncControlsModal
           show={showSyncControls}
           onClose={() => setShowSyncControls(false)}
@@ -1288,15 +1330,8 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span> */}
             <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} />
-            {/* Reload data */}
-            <button
-              onClick={() => { try { populate(); } catch { } }}
-              className="icon-btn"
-              aria-label="Reload"
-              title="Reload"
-              style={{ padding: '4px 8px' }}
-            >
-              <FontAwesomeIcon icon={faRotateRight} />
+            <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">
+              <FontAwesomeIcon icon={faPlus} />
             </button>
           </div>
         </div>
@@ -1319,7 +1354,34 @@ export default function App() {
               {refreshing && (
                 <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
               )}
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {/* Grid Type Selector */}
+                {(() => {
+                  const currentWorkspace = savedWorkspaces.find(ws => ws.name === workspace);
+                  if (!currentWorkspace) return null;
+
+                  const currentGridType = currentWorkspace.gridType || 'ItemGrid';
+                  return (
+                    <select
+                      value={currentGridType}
+                      onChange={(e) => handleGridTypeChange(currentWorkspace.id, e.target.value)}
+                      className="add-link-btn"
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface-1)',
+                        color: 'var(--text)',
+                        borderRadius: '4px'
+                      }}
+                      title="Select grid layout type"
+                    >
+                      <option value="ItemGrid">Item Grid</option>
+                      <option value="ProjectGrid">Project Grid</option>
+                    </select>
+                  );
+                })()}
+
                 <button
                   onClick={() => startCategoryEnrichment(workspace)}
                   className="add-link-btn ai-button"
@@ -1330,28 +1392,7 @@ export default function App() {
                   <FontAwesomeIcon icon={faWandMagicSparkles} />
                 </button>
 
-                <button
-                  onClick={async () => {
-                    console.log('🔄 Populating workspace with all matching URLs...');
-                    try {
-                      const result = await window.workspacePopulator?.populate?.();
-                      if (result) {
-                        console.log('✅ Population result:', result);
-                        // Refresh workspaces
-                        const refreshed = await listWorkspaces();
-                        setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
-                      }
-                    } catch (error) {
-                      console.error('❌ Population failed:', error);
-                    }
-                  }}
-                  className="add-link-btn ai-button"
-                  aria-label="Populate workspace with all matching URLs"
-                  title="Populate workspace with all matching URLs"
-                  style={{ padding: '4px 8px' }}
-                >
-                  🔄
-                </button>
+
 
                 <button
                   onClick={() => handleOpenAddLinkModal(workspace)}
@@ -1380,7 +1421,7 @@ export default function App() {
                   <Chats />
                 ) : workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
                   <div>
-                    <ProjectUrls
+                    {/* <ProjectUrls
                       selectedWorkspace={savedWorkspaces.find(ws => ws.name === workspace)}
                       onUrlClick={(url) => {
                         try {
@@ -1393,24 +1434,18 @@ export default function App() {
                           console.error('Failed to open URL:', error);
                         }
                       }}
-                    />
-                    <ItemGrid
-                      items={mergedWorkspaceItems}
-                      workspaces={savedWorkspaces}
-                      onAddRelated={handleAddRelated}
-                      onAddLink={() => handleOpenAddLinkModal(workspace)}
-                      onDelete={handleDeleteFromWorkspace}
-                    />
+                    /> */}
+                    {renderWorkspaceGrid(
+                      savedWorkspaces.find(ws => ws.name === workspace),
+                      mergedWorkspaceItems
+                    )}
                   </div>
                 ) : (
                   <>
-                    <ItemGrid
-                      items={workspace === 'All' ? allItemsCombined : mergedWorkspaceItems}
-                      workspaces={savedWorkspaces}
-                      onAddRelated={handleAddRelated}
-                      onAddLink={() => handleOpenAddLinkModal(workspace)}
-                      onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
-                    />
+                    {renderWorkspaceGrid(
+                      workspace === 'All' ? { name: 'All', gridType: 'ItemGrid' } : savedWorkspaces.find(ws => ws.name === workspace),
+                      workspace === 'All' ? allItemsCombined : mergedWorkspaceItems
+                    )}
                   </>
                 )}
               </>

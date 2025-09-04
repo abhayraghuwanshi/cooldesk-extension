@@ -1,8 +1,8 @@
 import { faArrowUpRightFromSquare, faClone, faRotateRight, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { enqueueOpenInChrome, getHostTabs } from '../services/extensionApi';
-import { getFaviconUrl } from '../utils';
+import { enqueueOpenInChrome, getHostTabs } from '../../services/extensionApi';
+import { getFaviconUrl } from '../../utils';
 
 export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const [tabs, setTabs] = React.useState([]);
@@ -57,13 +57,13 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     try {
       hostname = new URL(url || '').hostname.toLowerCase();
     } catch {
-      return { 
-        bg: 'linear-gradient(135deg, #0f1724 0%, #1b2331 100%)', 
-        border: '#273043', 
-        accent: '#4a5568' 
+      return {
+        bg: 'linear-gradient(135deg, #0f1724 0%, #1b2331 100%)',
+        border: '#273043',
+        accent: '#4a5568'
       };
     }
-    
+
     // Accent colors for variety
     const accentColors = [
       '#3b82f6', // Blue
@@ -75,22 +75,22 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
       '#f43f5e', // Rose
       '#0891b2', // Cyan
     ];
-    
+
     // Simple hash function for consistent color selection
     let hash = 0;
     for (let i = 0; i < hostname.length; i++) {
       hash = ((hash << 5) - hash) + hostname.charCodeAt(i);
       hash = hash & hash;
     }
-    
+
     // Select an accent color based on hash
     const colorIndex = Math.abs(hash) % accentColors.length;
     const accent = accentColors[colorIndex];
-    
+
     // Create gradient variations with the same base but different accent hints
     const variation = Math.abs(hash >> 8) % 4;
     let bg, border;
-    
+
     switch (variation) {
       case 0:
         bg = `linear-gradient(135deg, #0f1724 0%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.1) 100%)`;
@@ -109,7 +109,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
         border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.3)`;
         break;
     }
-    
+
     return {
       bg,
       border,
@@ -155,10 +155,10 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const removeTab = React.useCallback((tab) => {
     try {
       if (!tab) return;
-      
+
       // Immediate UI feedback - add to removing set
       setRemovingTabIds(prev => new Set([...prev, tab.id]));
-      
+
       const hasRemove = typeof chrome !== 'undefined' && chrome?.tabs?.remove;
       if (hasRemove && tab.id != null) {
         chrome.tabs.remove(tab.id, () => {
@@ -219,18 +219,18 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   }, []);
 
   return (
-    <div style={{ 
+    <div style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
       {/* Apple-style Header */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: 16,
         padding: '0 4px'
       }}>
-        <h2 style={{ 
+        <h2 style={{
           fontSize: 22,
           fontWeight: 600,
           margin: 0,
@@ -242,11 +242,11 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
         }}>
           <FontAwesomeIcon icon={faClone} style={{ color: '#007AFF', fontSize: 18 }} />
           Tabs
-          <span style={{ 
-            fontSize: 12, 
-            color: '#ffffff', 
-            background: 'rgba(0, 122, 255, 0.2)', 
-            padding: '4px 8px', 
+          <span style={{
+            fontSize: 12,
+            color: '#ffffff',
+            background: 'rgba(0, 122, 255, 0.2)',
+            padding: '4px 8px',
             borderRadius: 12,
             fontWeight: 500,
             border: '1px solid rgba(0, 122, 255, 0.3)'
@@ -285,7 +285,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
       </div>
 
       {tabsError ? (
-        <div style={{ 
+        <div style={{
           background: 'rgba(255, 59, 48, 0.1)',
           border: '1px solid rgba(255, 59, 48, 0.2)',
           borderRadius: 12,
@@ -299,9 +299,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {sortedTabs.length === 0 ? (
-            <div style={{ 
-              textAlign: 'center', 
-              color: 'rgba(255, 255, 255, 0.5)', 
+            <div style={{
+              textAlign: 'center',
+              color: 'rgba(255, 255, 255, 0.5)',
               fontSize: 16,
               fontWeight: 400,
               padding: '40px 20px',
@@ -315,7 +315,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               return (
                 <div
                   key={tab.id}
-                  style={{ 
+                  style={{
                     background: 'rgba(255, 255, 255, 0.05)',
                     borderRadius: 12,
                     padding: 16,
@@ -369,13 +369,13 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           height={18}
                           style={{ borderRadius: 4 }}
                           onError={(e) => {
-                            if (originIco && e.currentTarget.src !== originIco) { 
-                              e.currentTarget.src = originIco; 
-                              return; 
+                            if (originIco && e.currentTarget.src !== originIco) {
+                              e.currentTarget.src = originIco;
+                              return;
                             }
-                            if (e.currentTarget.src.indexOf('/default-favicon.svg') === -1) { 
-                              e.currentTarget.src = '/default-favicon.svg'; 
-                              return; 
+                            if (e.currentTarget.src.indexOf('/default-favicon.svg') === -1) {
+                              e.currentTarget.src = '/default-favicon.svg';
+                              return;
                             }
                             e.currentTarget.style.display = 'none';
                           }}
@@ -394,9 +394,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
 
                   {/* Tab Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ 
-                      fontSize: 16, 
-                      color: '#ffffff', 
+                    <div style={{
+                      fontSize: 16,
+                      color: '#ffffff',
                       lineHeight: 1.4,
                       marginBottom: 4,
                       fontWeight: 400,
@@ -404,17 +404,17 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       overflow: 'hidden',
                       textOverflow: 'ellipsis'
                     }}>
-                      {tab.title || (() => { 
-                        try { 
-                          return new URL(tab?.url || '').hostname; 
-                        } catch { 
-                          return tab?.url || ''; 
-                        } 
+                      {tab.title || (() => {
+                        try {
+                          return new URL(tab?.url || '').hostname;
+                        } catch {
+                          return tab?.url || '';
+                        }
                       })()}
                     </div>
                     {colors.hostname && (
-                      <div style={{ 
-                        fontSize: 13, 
+                      <div style={{
+                        fontSize: 13,
                         color: 'rgba(255, 255, 255, 0.6)',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',

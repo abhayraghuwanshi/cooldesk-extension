@@ -1,5 +1,5 @@
 // Background script handler for URL notes functionality
-import { getUrlNotes, saveUrlNote, deleteUrlNote, getAllUrlNotes } from '../db.js';
+import { deleteUrlNote, getUrlNotes, saveUrlNote } from '../db/url-notes-db.js';
 
 // Handle URL notes related messages
 export function handleUrlNotesMessages(message, sender, sendResponse) {
@@ -36,7 +36,7 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
                   color: #e5e7eb;
                   font-family: system-ui, -apple-system, sans-serif;
                 `;
-                
+
                 panel.innerHTML = `
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h3 style="margin: 0; color: #10b981;">📝 URL Notes</h3>
@@ -51,14 +51,14 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
                     <small>This feature integrates with your Cool-Desk extension</small>
                   </div>
                 `;
-                
+
                 document.body.appendChild(panel);
-                
+
                 // Close button functionality
                 document.getElementById('close-url-notes').addEventListener('click', () => {
                   panel.remove();
                 });
-                
+
                 // Close on escape key
                 const escapeHandler = (e) => {
                   if (e.key === 'Escape') {
@@ -99,8 +99,8 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
           quality: 90
         });
 
-        sendResponse({ 
-          success: true, 
+        sendResponse({
+          success: true,
           screenshot: screenshot,
           url: message.url,
           title: message.title
@@ -118,8 +118,8 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
     (async () => {
       try {
         const urlNotes = await getUrlNotes(message.url);
-        sendResponse({ 
-          success: true, 
+        sendResponse({
+          success: true,
           notes: urlNotes || []
         });
       } catch (error) {
@@ -155,7 +155,7 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
                 display: flex; flex-direction: column;
                 font-family: system-ui, -apple-system, sans-serif;
               `;
-              
+
               panel.innerHTML = `
                 <div style="padding: 20px; border-bottom: 1px solid #333; background: #2a2a2a; display: flex; justify-content: space-between; align-items: center;">
                   <h2 style="margin: 0; color: #10b981; font-size: 18px;">📝 URL Notes - ${new URL(url).hostname}</h2>
@@ -170,14 +170,14 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
                   </div>
                 </div>
               `;
-              
+
               document.body.appendChild(panel);
-              
+
               // Close functionality
               panel.querySelector('#close-full-notes').addEventListener('click', () => {
                 panel.remove();
               });
-              
+
               // Close on escape
               const escapeHandler = (e) => {
                 if (e.key === 'Escape') {
@@ -277,12 +277,12 @@ async function handleSaveUrlNote(message, sendResponse) {
     console.log('[Background Debug] Saving URL note:', message.note);
     const result = await saveUrlNote(message.note);
     console.log('[Background Debug] Save result:', result);
-    
+
     // Notify content script to refresh notes count
     if (message.tabId) {
       chrome.tabs.sendMessage(message.tabId, { action: 'refreshNotesCount' });
     }
-    
+
     sendResponse({ success: true });
   } catch (error) {
     console.error('[Background Debug] Failed to save URL note:', error);
@@ -305,12 +305,12 @@ async function handleGetUrlNotes(message, sendResponse) {
 async function handleDeleteUrlNote(message, sendResponse) {
   try {
     await deleteUrlNote(message.noteId);
-    
+
     // Notify content script to refresh notes count
     if (message.tabId) {
       chrome.tabs.sendMessage(message.tabId, { action: 'refreshNotesCount' });
     }
-    
+
     sendResponse({ success: true });
   } catch (error) {
     console.error('Failed to delete URL note:', error);
@@ -321,11 +321,11 @@ async function handleDeleteUrlNote(message, sendResponse) {
 // Capture screenshot of current tab
 async function handleCaptureScreenshot(message, sendResponse) {
   try {
-    const dataUrl = await chrome.tabs.captureVisibleTab(null, { 
-      format: 'png', 
-      quality: 90 
+    const dataUrl = await chrome.tabs.captureVisibleTab(null, {
+      format: 'png',
+      quality: 90
     });
-    
+
     const base64Data = dataUrl.split(',')[1];
     sendResponse({ success: true, imageData: base64Data });
   } catch (error) {
@@ -348,7 +348,7 @@ async function handleGetSelectedText(message, sender, sendResponse) {
       func: () => {
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
-        
+
         if (!selectedText) return null;
 
         // Get context around selection
@@ -356,7 +356,7 @@ async function handleGetSelectedText(message, sender, sendResponse) {
         if (selection.rangeCount > 0) {
           const range = selection.getRangeAt(0);
           const container = range.commonAncestorContainer;
-          const parentElement = container.nodeType === Node.TEXT_NODE ? 
+          const parentElement = container.nodeType === Node.TEXT_NODE ?
             container.parentElement : container;
           context = parentElement ? parentElement.textContent.trim() : '';
         }
@@ -402,11 +402,10 @@ export async function enrichWithUrlNotes(url, aiData) {
       ...aiData,
       urlNotesContext: notesContext,
       // Add notes summary to AI description if available
-      notesEnhancedDescription: aiData.description ? 
-        `${aiData.description}\n\nUser Notes: ${urlNotes.length} notes including ${
-          notesContext.hasVoiceNotes ? 'voice recordings, ' : ''
-        }${notesContext.hasScreenshots ? 'screenshots, ' : ''
-        }${notesContext.hasTextNotes ? 'text notes' : ''}`.trim() : 
+      notesEnhancedDescription: aiData.description ?
+        `${aiData.description}\n\nUser Notes: ${urlNotes.length} notes including ${notesContext.hasVoiceNotes ? 'voice recordings, ' : ''
+          }${notesContext.hasScreenshots ? 'screenshots, ' : ''
+          }${notesContext.hasTextNotes ? 'text notes' : ''}`.trim() :
         aiData.description
     };
   } catch (error) {

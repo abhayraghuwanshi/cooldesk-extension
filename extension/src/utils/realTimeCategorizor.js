@@ -2,9 +2,9 @@
  * Real-time URL categorization on tab changes
  */
 
+import { detectProject } from '../data/projectCategories.js';
+import { addUrlToWorkspace, listWorkspaces } from '../db';
 import { createWorkspaceFromSingleUrl } from './workspaceAutoCreator.js';
-import { listWorkspaces, addUrlToWorkspace } from '../db.js';
-import { detectProject } from './projectCategories.js';
 
 /**
  * Set up real-time URL categorization
@@ -13,7 +13,7 @@ import { detectProject } from './projectCategories.js';
 export function setupRealTimeCategorizor() {
   // Only works in extension context
   if (typeof chrome === 'undefined' || !chrome?.tabs) {
-    console.log('⚠️ Real-time categorization requires extension context');
+    console.log('Real-time categorization requires extension context');
     return null;
   }
 
@@ -28,7 +28,7 @@ export function setupRealTimeCategorizor() {
       // First check if this URL matches any platform patterns
       const detection = detectProject(url);
       if (!detection) {
-        console.log(`ℹ️ No platform detected for: ${url}`);
+        console.log(`No platform detected for: ${url}`);
         return;
       }
 
@@ -40,7 +40,7 @@ export function setupRealTimeCategorizor() {
 
       if (workspace) {
         console.log(`✅ Created workspace: ${workspace.name}`);
-        
+
         // Notify other parts of the app about the new workspace
         try {
           const bc = new BroadcastChannel('ws_db_changes');
@@ -58,12 +58,12 @@ export function setupRealTimeCategorizor() {
               title: title || url,
               addedAt: Date.now()
             });
-            console.log(`📝 Indexed URL to existing ${detection.categoryName} workspace`);
+            console.log(`Indexed URL to existing ${detection.categoryName} workspace`);
           } catch (indexError) {
-            console.warn(`⚠️ Failed to index URL to existing workspace:`, indexError);
+            console.warn(`Failed to index URL to existing workspace:`, indexError);
           }
         } else {
-          console.log(`📝 Added to existing ${detection.categoryName} workspace`);
+          console.log(`Added to existing ${detection.categoryName} workspace`);
         }
       }
 
