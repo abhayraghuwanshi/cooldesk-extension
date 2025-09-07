@@ -13,15 +13,14 @@ import { Header } from './components/toolbar/Header';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 import './search.css';
 
-import { Chats } from './components/Chats';
 import { ActivityPanel } from './components/default/ActivityPanel';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
-import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
 import GenericUrlParser from './utils/GenericUrlParser';
+import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
 // import './utils/debugUrlIndexing'; // Adds debug functions to window
 
 // Simple error boundary to prevent entire app crash due to child errors
@@ -144,7 +143,7 @@ export default function App() {
         const existingWorkspaces = await listWorkspaces();
         const workspacesToCreate = GenericUrlParser.createWorkspacesFromUrls(urls, existingWorkspaces);
         const createdWorkspaces = [];
-        
+
         for (const workspaceData of workspacesToCreate) {
           try {
             const workspace = {
@@ -645,17 +644,16 @@ export default function App() {
     return Array.from(set)
   }, [data])
 
-  // Items to build the workspace filter options: only saved workspaces + 'All' + 'Chats' (always show Chats)
+  // Items to build the workspace filter options: only saved workspaces + 'All'
   const filterItems = useMemo(() => {
     const all = [{ workspaceGroup: 'All' }];
-    const chats = [{ workspaceGroup: 'Chats' }]; // Always show Chats option
     const extras = savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }));
-    return [...all, ...chats, ...extras];
+    return [...all, ...extras];
   }, [savedWorkspaces])
 
-  // Guard: if current workspace isn't a saved workspace (and not 'All' or 'Chats'), reset to 'All'
+  // Guard: if current workspace isn't a saved workspace (and not 'All'), reset to 'All'
   useEffect(() => {
-    if (workspace === 'All' || workspace === 'Chats') return;
+    if (workspace === 'All') return;
     const exists = savedWorkspaces.some(ws => (ws?.name || '').trim().toLowerCase() === (workspace || '').trim().toLowerCase());
     if (!exists) setWorkspace('All');
   }, [savedWorkspaces, workspace])
@@ -688,10 +686,6 @@ export default function App() {
     const norm = (v) => (v || '').trim().toLowerCase()
     const active = norm(workspace)
 
-    // If "Chats" workspace is selected, return empty array since Chats component handles its own data
-    if (active === 'chats') {
-      return []
-    }
 
     return data.filter((it) => {
       // Only use explicit workspaceGroup; do not fallback to category.name
@@ -1385,32 +1379,7 @@ export default function App() {
                 <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
               )}
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                {/* Grid Type Selector */}
-                {(() => {
-                  const currentWorkspace = savedWorkspaces.find(ws => ws.name === workspace);
-                  if (!currentWorkspace) return null;
 
-                  const currentGridType = currentWorkspace.gridType || 'ItemGrid';
-                  return (
-                    <select
-                      value={currentGridType}
-                      onChange={(e) => handleGridTypeChange(currentWorkspace.id, e.target.value)}
-                      className="add-link-btn"
-                      style={{
-                        padding: '4px 8px',
-                        fontSize: '11px',
-                        border: '1px solid var(--border)',
-                        background: 'var(--surface-1)',
-                        color: 'var(--text)',
-                        borderRadius: '4px'
-                      }}
-                      title="Select grid layout type"
-                    >
-                      <option value="ItemGrid">Item Grid</option>
-                      <option value="ProjectGrid">Project Grid</option>
-                    </select>
-                  );
-                })()}
 
                 <button
                   onClick={() => startCategoryEnrichment(workspace)}
@@ -1447,24 +1416,8 @@ export default function App() {
             </div>
             {showCurrentWorkspace && (
               <>
-                {workspace === 'Chats' ? (
-                  <Chats />
-                ) : workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
+                {workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
                   <div>
-                    {/* <ProjectUrls
-                      selectedWorkspace={savedWorkspaces.find(ws => ws.name === workspace)}
-                      onUrlClick={(url) => {
-                        try {
-                          if (chrome?.tabs?.create) {
-                            chrome.tabs.create({ url: url.url });
-                          } else {
-                            window.open(url.url, '_blank');
-                          }
-                        } catch (error) {
-                          console.error('Failed to open URL:', error);
-                        }
-                      }}
-                    /> */}
                     {renderWorkspaceGrid(
                       savedWorkspaces.find(ws => ws.name === workspace),
                       mergedWorkspaceItems
