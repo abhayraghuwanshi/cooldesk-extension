@@ -16,12 +16,12 @@ import './search.css';
 import { Chats } from './components/Chats';
 import { ActivityPanel } from './components/default/ActivityPanel';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
-import { deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType } from './db';
+import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType } from './db';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
-import { autoCreateWorkspacesFromUrls, autoCreateWorkspacesFromUrlsWithParser } from './utils/workspaceAutoCreator';
+import GenericUrlParser from './utils/GenericUrlParser';
 // import './utils/debugUrlIndexing'; // Adds debug functions to window
 
 // Simple error boundary to prevent entire app crash due to child errors
@@ -141,7 +141,37 @@ export default function App() {
         }
 
         const urls = data.map(item => item.url).filter(Boolean);
-        const createdWorkspaces = await autoCreateWorkspacesFromUrlsWithParser(urls);
+        const existingWorkspaces = await listWorkspaces();
+        const workspacesToCreate = GenericUrlParser.createWorkspacesFromUrls(urls, existingWorkspaces);
+        const createdWorkspaces = [];
+        
+        for (const workspaceData of workspacesToCreate) {
+          try {
+            const workspace = {
+              id: `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              createdAt: Date.now(),
+              ...workspaceData
+            };
+
+            await saveWorkspace(workspace);
+            createdWorkspaces.push(workspace);
+
+            // Index URLs
+            for (const urlObj of workspace.urls) {
+              try {
+                await addUrlToWorkspace(urlObj.url, workspace.id, {
+                  title: urlObj.title,
+                  favicon: urlObj.favicon,
+                  addedAt: urlObj.addedAt
+                });
+              } catch (error) {
+                console.warn(`Failed to index URL ${urlObj.url}:`, error);
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to create workspace ${workspaceData.name}:`, error);
+          }
+        }
 
         if (createdWorkspaces.length > 0) {
           console.log(`✅ Auto-created ${createdWorkspaces.length} platform workspaces:`,

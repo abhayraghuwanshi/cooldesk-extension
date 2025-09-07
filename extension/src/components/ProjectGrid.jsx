@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getUrlParts } from '../utils';
-import { getAllPlatforms, parseUrls } from '../utils/workspaceParser';
-import { WorkspaceItem } from './WorkspaceItem';
+import GenericUrlParser from '../utils/GenericUrlParser';
+import { WorkspaceProject } from './WorkspaceProject';
 
-export function ProjectGrid({ items, onAddRelated, onAddLink, onDelete }) {
+export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddRelated, onAddLink, onDelete, onItemClick }, ref) {
   const [timeSpent, setTimeSpent] = useState({});
   const [selectedWorkspace, setSelectedWorkspace] = useState('All');
-  const [selectedUser, setSelectedUser] = useState('All');
   const itemRefs = useRef([]);
   const columns = 4;
   const chipRefs = useRef([]);
@@ -43,115 +42,44 @@ export function ProjectGrid({ items, onAddRelated, onAddLink, onDelete }) {
       .filter(item => item && typeof item.url === 'string' && item.url.length > 0)
       .map(item => item.url);
 
-    const parseResult = parseUrls(urls);
+    const parseResult = GenericUrlParser.parseMultiple(urls);
 
-    // Separate GitHub and non-GitHub groups
-    const githubGroups = [];
-    const otherGroups = [];
+    // Transform all groups to a unified format
+    const allGroups = [];
 
     parseResult.groups.forEach(group => {
-      if (group.platform.id === 'github') {
-        githubGroups.push(group);
-      } else {
-        // Transform non-GitHub groups to match expected format
-        const values = group.urls.map(urlData => {
-          const originalItem = items.find(item => item.url === urlData.url);
-          return {
-            ...originalItem,
-            title: urlData.title,
-            extractedData: urlData.extracted,
-            timestamp: urlData.timestamp
-          };
-        }).sort((a, b) => {
-          const at = (typeof a?.lastVisitTime === 'number' ? a.lastVisitTime : 0) ||
-            (typeof a?.dateAdded === 'number' ? a.dateAdded : 0);
-          const bt = (typeof b?.lastVisitTime === 'number' ? b.lastVisitTime : 0) ||
-            (typeof b?.dateAdded === 'number' ? b.dateAdded : 0);
-          return bt - at;
-        });
-
-        otherGroups.push({
-          key: group.key,
-          info: {
-            category: group.platform.id,
-            platform: group.platform.name,
-            displayName: group.name,
-            type: group.workspace.type
-          },
-          values,
-          workspace: {
-            id: group.platform.id,
-            name: group.platform.name,
-            type: group.workspace.type,
-            favicon: group.favicon
-          },
-          favicon: group.favicon
-        });
-      }
-    });
-
-    // Create nested structure for GitHub: users -> projects
-    const githubNested = {};
-    githubGroups.forEach(group => {
-      const owner = group.key; // This is now the owner due to groupBy: "owner"
-
-      if (!githubNested[owner]) {
-        githubNested[owner] = {
-          key: owner,
-          info: {
-            category: 'github-user',
-            platform: 'GitHub',
-            displayName: `@${owner}`,
-            type: 'user'
-          },
-          projects: [],
-          favicon: group.favicon
-        };
-      }
-
-      // Group projects under each user
-      const projectMap = new Map();
-      group.urls.forEach(urlData => {
+      const values = group.urls.map(urlData => {
         const originalItem = items.find(item => item.url === urlData.url);
-        const project = urlData.extracted.project || `${owner}/unknown`;
-
-        if (!projectMap.has(project)) {
-          projectMap.set(project, []);
-        }
-
-        projectMap.get(project).push({
+        return {
           ...originalItem,
           title: urlData.title,
-          extractedData: urlData.extracted,
+          extractedData: urlData.details,
           timestamp: urlData.timestamp
-        });
+        };
+      }).sort((a, b) => {
+        const at = (typeof a?.lastVisitTime === 'number' ? a.lastVisitTime : 0) ||
+          (typeof a?.dateAdded === 'number' ? a.dateAdded : 0);
+        const bt = (typeof b?.lastVisitTime === 'number' ? b.lastVisitTime : 0) ||
+          (typeof b?.dateAdded === 'number' ? b.dateAdded : 0);
+        return bt - at;
       });
 
-      // Convert project map to project objects
-      Array.from(projectMap.entries()).forEach(([project, urls]) => {
-        githubNested[owner].projects.push({
-          key: project,
-          info: {
-            category: 'github-project',
-            platform: 'GitHub',
-            displayName: project,
-            type: 'project'
-          },
-          values: urls.sort((a, b) => {
-            const at = (typeof a?.lastVisitTime === 'number' ? a.lastVisitTime : 0) ||
-              (typeof a?.dateAdded === 'number' ? a.dateAdded : 0);
-            const bt = (typeof b?.lastVisitTime === 'number' ? b.lastVisitTime : 0) ||
-              (typeof b?.dateAdded === 'number' ? b.dateAdded : 0);
-            return bt - at;
-          }),
-          workspace: {
-            id: 'github-project',
-            name: 'GitHub Project',
-            type: 'project',
-            favicon: group.favicon
-          },
+      allGroups.push({
+        key: group.workspace,
+        info: {
+          category: group.platform.id,
+          platform: group.platform.name,
+          displayName: group.workspace,
+          type: group.type
+        },
+        values,
+        workspace: {
+          id: group.platform.id,
+          name: group.platform.name,
+          type: group.type,
           favicon: group.favicon
-        });
+        },
+        favicon: group.favicon
       });
     });
 
@@ -161,70 +89,34 @@ export function ProjectGrid({ items, onAddRelated, onAddLink, onDelete }) {
     });
 
     return {
-      githubNested: Object.values(githubNested),
-      otherGroups,
+      allGroups,
       categoryStats
     };
   }, [items]);
 
-  // Filter content by selected workspace and user
+  // Filter content by selected workspace
   const filteredContent = useMemo(() => {
-    let githubUsers = projectGroups.githubNested;
-    let otherGroups = projectGroups.otherGroups;
+    let filteredGroups = projectGroups.allGroups;
 
-    // Filter by workspace category using the category from parsed data
-    if (selectedWorkspace === 'development') {
-      // Only show development platforms (GitHub, GitLab, etc)
-      otherGroups = otherGroups.filter(group =>
-        group.workspace && group.workspace.type === 'repository'
-      );
-    } else if (selectedWorkspace === 'ai-chat') {
-      // Only show AI chat platforms
-      githubUsers = [];
-      otherGroups = otherGroups.filter(group =>
-        group.workspace && group.workspace.type === 'ai-chat'
-      );
-    } else if (selectedWorkspace === 'design') {
-      // Only show design platforms
-      githubUsers = [];
-      otherGroups = otherGroups.filter(group =>
-        group.workspace && group.workspace.type === 'design'
-      );
-    } else if (selectedWorkspace === 'project-management') {
-      githubUsers = [];
-      otherGroups = otherGroups.filter(group =>
-        group.workspace && group.workspace.type === 'project-management'
-      );
-    } else if (selectedWorkspace === 'documentation') {
-      githubUsers = [];
-      otherGroups = otherGroups.filter(group =>
-        group.workspace && group.workspace.type === 'documentation'
-      );
-    } else if (selectedWorkspace === 'communication') {
-      githubUsers = [];
-      otherGroups = otherGroups.filter(group =>
-        group.workspace && group.workspace.type === 'communication'
-      );
-    } else if (selectedWorkspace !== 'All') {
-      // Filter by specific category ID
-      githubUsers = [];
-      otherGroups = otherGroups.filter(group =>
-        group.category && group.category.id === selectedWorkspace
-      );
-    }
-
-    // Filter GitHub users by selected user
-    if (selectedUser !== 'All' && githubUsers.length > 0) {
-      githubUsers = githubUsers.filter(user => user.key === selectedUser);
+    // Filter by workspace category or specific platform
+    if (selectedWorkspace !== 'All') {
+      filteredGroups = filteredGroups.filter(group => {
+        // Filter by platform type (e.g., 'project', 'conversation', etc.)
+        if (group.workspace && group.workspace.type === selectedWorkspace) {
+          return true;
+        }
+        // Filter by specific platform ID
+        if (group.workspace && group.workspace.id === selectedWorkspace) {
+          return true;
+        }
+        return false;
+      });
     }
 
     return {
-      type: selectedWorkspace === 'development' ? 'github-only' :
-        selectedWorkspace === 'All' ? 'mixed' : 'other-only',
-      githubUsers,
-      otherGroups
+      groups: filteredGroups
     };
-  }, [projectGroups, selectedWorkspace, selectedUser]);
+  }, [projectGroups, selectedWorkspace]);
 
   // Create workspace filter options using categories from workspace patterns
   const workspaceOptions = useMemo(() => {
@@ -232,22 +124,22 @@ export function ProjectGrid({ items, onAddRelated, onAddLink, onDelete }) {
 
     // Get parse results with category stats
     const urls = items.filter(item => item?.url).map(item => item.url);
-    const parseResult = parseUrls(urls);
+    const parseResult = GenericUrlParser.parseMultiple(urls);
 
     console.log('Parse result stats:', parseResult.stats); // Debug log
 
     // Get categories from workspace patterns
-    const categories = getAllPlatforms();
+    const categories = GenericUrlParser.getAllPlatforms();
 
-    // Add category-based options that have data
+    // Add platform-based options that have data
     categories.forEach(category => {
-      const categoryCount = parseResult.stats.byCategory[category.id] || 0;
+      const platformCount = parseResult.stats.byPlatform[category.name] || 0;
 
-      if (categoryCount > 0) {
+      if (platformCount > 0) {
         options.push({
           id: category.id,
           name: category.name,
-          count: categoryCount,
+          count: platformCount,
           icon: category.icon,
           color: '#666666'
         });
@@ -263,27 +155,6 @@ export function ProjectGrid({ items, onAddRelated, onAddLink, onDelete }) {
     });
   }, [items]);
 
-  // Create user filter options (for GitHub users when in development workspace)
-  const userOptions = useMemo(() => {
-    if (selectedWorkspace !== 'All' && selectedWorkspace !== 'development') {
-      return [];
-    }
-
-    const options = [{ id: 'All', name: 'All Users', count: projectGroups.githubNested.length }];
-
-    projectGroups.githubNested
-      .sort((a, b) => b.projects.length - a.projects.length)
-      .forEach(user => {
-        options.push({
-          id: user.key,
-          name: `@${user.key}`,
-          count: user.projects.length,
-          icon: '👤'
-        });
-      });
-
-    return options;
-  }, [projectGroups, selectedWorkspace]);
 
   const onKeyDown = (e) => {
     if (e.defaultPrevented) return;
@@ -315,22 +186,6 @@ export function ProjectGrid({ items, onAddRelated, onAddLink, onDelete }) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       setSelectedWorkspace(key);
-      setSelectedUser('All'); // Reset user filter when workspace changes
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      const nextIndex = Math.min(chipRefs.current.length - 1, index + 1);
-      chipRefs.current[nextIndex]?.focus();
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      const prevIndex = Math.max(0, index - 1);
-      chipRefs.current[prevIndex]?.focus();
-    }
-  };
-
-  const onUserChipKeyDown = (e, index, key) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      setSelectedUser(key);
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       const nextIndex = Math.min(chipRefs.current.length - 1, index + 1);
@@ -356,7 +211,7 @@ export function ProjectGrid({ items, onAddRelated, onAddLink, onDelete }) {
       const firstChip = chipRefs.current.find(Boolean);
       if (firstChip) setTimeout(() => firstChip.focus(), 0);
     }
-  }, [filteredContent.githubUsers.length + filteredContent.otherGroups.length]);
+  }, [filteredContent.groups.length]);
 
   // Global key handler
   useEffect(() => {
@@ -374,68 +229,35 @@ export function ProjectGrid({ items, onAddRelated, onAddLink, onDelete }) {
   chipRefs.current = [];
 
   return (
-    <div
-      ref={rootRef}
-      onKeyDown={onKeyDown}
-      role="grid"
-      tabIndex={-1}
-      style={{
-        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-        marginTop: '16px'
-      }}
-    >
-      {/* Content Area */}
-      <div>
-        {/* GitHub Users Section */}
-        {filteredContent.githubUsers.length > 0 && (
-          <div style={{ marginBottom: '32px' }}>
-            {filteredContent.githubUsers.map((user) => (
-              <div key={user.key} style={{ marginBottom: '24px' }}>
-
-                {/* Projects Grid */}
-                <ul className="workspace-grid fixed-four">
-                  {user.projects.map((project, idx) => {
-                    const cleanedKey = getUrlParts(project.key).key;
-                    return (
-                      <WorkspaceItem
-                        key={project.key}
-                        ref={el => itemRefs.current[itemRefs.current.length] = el}
-                        base={project.key}
-                        values={project.values}
-                        onAddRelated={onAddRelated}
-                        timeSpentMs={timeSpent[cleanedKey]}
-                        onAddLink={onAddLink && project.workspace ? () => onAddLink(project.workspace) : undefined}
-                        onDelete={onDelete}
-                      />
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Other Platforms Section */}
-        {filteredContent.otherGroups.length > 0 && (
-          <ul className="workspace-grid fixed-four">
-            {filteredContent.otherGroups.map((group, idx) => {
+    <div>
+      {/* All Groups - Dynamic Template */}
+      {filteredContent.groups.length > 0 && (
+        <div>
+          {filteredContent.groups
+            .filter(group => group && group.key) // Filter out any undefined/null groups or groups without a key
+            .map((group, idx) => {
               const cleanedKey = getUrlParts(group.key).key;
               return (
-                <WorkspaceItem
+                <WorkspaceProject
                   key={group.key}
                   ref={el => itemRefs.current[itemRefs.current.length] = el}
-                  base={group.key}
-                  values={group.values}
-                  onAddRelated={onAddRelated}
+                  workspace={{
+                    key: group.key,
+                    values: group.values,
+                    workspace: group.workspace,
+                    favicon: group.favicon,
+                    info: group.info
+                  }}
                   timeSpentMs={timeSpent[cleanedKey]}
-                  onAddLink={onAddLink && group.workspace ? () => onAddLink(group.workspace) : undefined}
+                  onAddRelated={onAddRelated}
+                  onAddLink={onAddLink}
                   onDelete={onDelete}
+                  onItemClick={onItemClick}
                 />
               );
             })}
-          </ul>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
-}
+});

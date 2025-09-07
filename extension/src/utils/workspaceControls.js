@@ -2,8 +2,8 @@
  * Manual controls for workspace creation
  */
 
-import { autoCreateWorkspacesFromUrls, scanBrowserHistoryAndCreateWorkspaces } from './workspaceAutoCreator.js';
-import { getUIState, saveUIState, listWorkspaces } from '../db';
+import GenericUrlParser from './GenericUrlParser.js';
+import { getUIState, saveUIState, listWorkspaces, saveWorkspace, addUrlToWorkspace } from '../db';
 
 /**
  * Enable/disable auto workspace creation
@@ -49,7 +49,37 @@ export async function manualCreateWorkspaces(data) {
   const urls = data.map(item => item.url).filter(Boolean);
   console.log(`🎯 Manually creating workspaces from ${urls.length} URLs...`);
   
-  const createdWorkspaces = await autoCreateWorkspacesFromUrls(urls);
+  const existingWorkspaces = await listWorkspaces();
+  const workspacesToCreate = GenericUrlParser.createWorkspacesFromUrls(urls, existingWorkspaces);
+  const createdWorkspaces = [];
+  
+  for (const workspaceData of workspacesToCreate) {
+    try {
+      const workspace = {
+        id: `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: Date.now(),
+        ...workspaceData
+      };
+
+      await saveWorkspace(workspace);
+      createdWorkspaces.push(workspace);
+
+      // Index URLs
+      for (const urlObj of workspace.urls) {
+        try {
+          await addUrlToWorkspace(urlObj.url, workspace.id, {
+            title: urlObj.title,
+            favicon: urlObj.favicon,
+            addedAt: urlObj.addedAt
+          });
+        } catch (error) {
+          console.warn(`Failed to index URL ${urlObj.url}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to create workspace ${workspaceData.name}:`, error);
+    }
+  }
   
   if (createdWorkspaces.length > 0) {
     console.log(`✅ Manually created ${createdWorkspaces.length} workspaces:`, 
@@ -112,6 +142,9 @@ if (typeof window !== 'undefined') {
     createNow: manualCreateWorkspaces,
     reset: resetAutoCreateHash,
     settings: getWorkspaceSettings,
-    scanHistory: (days = 30) => scanBrowserHistoryAndCreateWorkspaces(days)
+    scanHistory: async (days = 30) => {
+      const urls = await GenericUrlParser.scanBrowserHistory(days);
+      return manualCreateWorkspaces(urls.map(url => ({ url })));
+    }
   };
 }

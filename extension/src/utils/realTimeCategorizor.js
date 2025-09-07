@@ -2,46 +2,98 @@
  * Real-time URL categorization on tab changes
  */
 
-import { detectProject } from '../data/projectCategories.js';
-import { addUrlToWorkspace, listWorkspaces } from '../db';
-import { createWorkspaceFromSingleUrl } from './workspaceAutoCreator.js';
+import GenericUrlParser from './GenericUrlParser.js';
+import { addUrlToWorkspace, listWorkspaces, saveWorkspace } from '../db';
 
 /**
  * Set up real-time URL categorization
  * Listens to tab updates and categorizes URLs instantly
  */
+// Cross-browser API detection
+function getBrowserAPI() {
+  // Chrome/Chromium
+  if (typeof chrome !== 'undefined' && chrome?.tabs) {
+    return chrome;
+  }
+  
+  // Firefox/Mozilla
+  if (typeof browser !== 'undefined' && browser?.tabs) {
+    return browser;
+  }
+  
+  // Edge Legacy
+  if (typeof msBrowser !== 'undefined' && msBrowser?.tabs) {
+    return msBrowser;
+  }
+  
+  return null;
+}
+
 export function setupRealTimeCategorizor() {
-  // Only works in extension context
-  if (typeof chrome === 'undefined' || !chrome?.tabs) {
-    console.log('Real-time categorization requires extension context');
+  const browserAPI = getBrowserAPI();
+  
+  if (!browserAPI) {
+    console.log('Real-time categorization requires WebExtension context (Chrome/Firefox/Edge)');
     return null;
   }
+  
+  console.log(`🌐 Using ${browserAPI === chrome ? 'Chrome' : browserAPI === browser ? 'Firefox' : 'Edge'} WebExtensions API`);
 
   let isSetup = false;
 
   const categorizeUrl = async (url, title = '') => {
-    if (!url || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) {
+    if (!url || GenericUrlParser.shouldExclude(url)) {
       return;
     }
 
     try {
-      // First check if this URL matches any platform patterns
-      const detection = detectProject(url);
-      if (!detection) {
+      // Parse URL using new generic parser
+      const parsed = GenericUrlParser.parse(url);
+      if (!parsed) {
         console.log(`No platform detected for: ${url}`);
         return;
       }
 
-      console.log(`🎯 Detected ${detection.categoryName} URL: ${url}`, detection);
+      console.log(`🎯 Detected ${parsed.platform.name} URL: ${url}`, parsed);
 
-      // Try to create/update workspace for this URL
+      // Check if workspace already exists
       const existingWorkspaces = await listWorkspaces();
-      const workspace = await createWorkspaceFromSingleUrl(url, existingWorkspaces);
+      const existingWorkspace = existingWorkspaces.find(ws => 
+        ws.name?.toLowerCase() === parsed.workspace.toLowerCase()
+      );
 
-      if (workspace) {
+      if (!existingWorkspace) {
+        // Create new workspace
+        const workspace = {
+          id: `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: parsed.workspace,
+          description: `${parsed.platform.name} workspace`,
+          createdAt: Date.now(),
+          urls: [{
+            url: parsed.url,
+            title: parsed.title || title || url,
+            addedAt: Date.now(),
+            favicon: parsed.favicon
+          }],
+          context: {
+            platform: parsed.platform,
+            details: parsed.details,
+            createdFrom: 'real_time',
+            autoCreated: true
+          }
+        };
+
+        await saveWorkspace(workspace);
         console.log(`✅ Created workspace: ${workspace.name}`);
 
-        // Notify other parts of the app about the new workspace
+        // Index URL
+        await addUrlToWorkspace(url, workspace.id, {
+          title: parsed.title || title || url,
+          favicon: parsed.favicon,
+          addedAt: Date.now()
+        });
+
+        // Broadcast change
         try {
           const bc = new BroadcastChannel('ws_db_changes');
           bc.postMessage({ type: 'workspacesChanged', realTime: true });
@@ -50,20 +102,16 @@ export function setupRealTimeCategorizor() {
           console.warn('Failed to broadcast workspace change:', e);
         }
       } else {
-        // Workspace already exists, but still index this URL to it
-        const platformWorkspace = existingWorkspaces.find(ws => ws.name === detection.categoryName);
-        if (platformWorkspace) {
-          try {
-            await addUrlToWorkspace(url, platformWorkspace.id, {
-              title: title || url,
-              addedAt: Date.now()
-            });
-            console.log(`Indexed URL to existing ${detection.categoryName} workspace`);
-          } catch (indexError) {
-            console.warn(`Failed to index URL to existing workspace:`, indexError);
-          }
-        } else {
-          console.log(`Added to existing ${detection.categoryName} workspace`);
+        // Add URL to existing workspace
+        try {
+          await addUrlToWorkspace(url, existingWorkspace.id, {
+            title: parsed.title || title || url,
+            favicon: parsed.favicon,
+            addedAt: Date.now()
+          });
+          console.log(`📎 Added URL to existing ${parsed.workspace} workspace`);
+        } catch (indexError) {
+          console.warn(`Failed to index URL to existing workspace:`, indexError);
         }
       }
 
@@ -77,16 +125,16 @@ export function setupRealTimeCategorizor() {
     isSetup = true;
 
     // Listen to tab updates (when URL changes)
-    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    browserAPI.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       if (changeInfo.status === 'complete' && tab.url) {
         categorizeUrl(tab.url, tab.title);
       }
     });
 
     // Listen to tab activation (when switching tabs)
-    chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    browserAPI.tabs.onActivated.addListener(async (activeInfo) => {
       try {
-        const tab = await chrome.tabs.get(activeInfo.tabId);
+        const tab = await browserAPI.tabs.get(activeInfo.tabId);
         if (tab.url) {
           categorizeUrl(tab.url, tab.title);
         }
@@ -96,14 +144,33 @@ export function setupRealTimeCategorizor() {
     });
 
     // Listen to new tabs
-    chrome.tabs.onCreated.addListener((tab) => {
-      if (tab.url && !tab.url.startsWith('chrome://')) {
+    browserAPI.tabs.onCreated.addListener((tab) => {
+      if (tab.url && !isInternalUrl(tab.url)) {
         categorizeUrl(tab.url, tab.title);
       }
     });
 
     console.log('🚀 Real-time URL categorization enabled');
   };
+
+  // Helper function to detect internal/system URLs across browsers
+  function isInternalUrl(url) {
+    if (!url) return true;
+    
+    const internalPatterns = [
+      /^chrome:\/\//,      // Chrome internal pages
+      /^chrome-extension:\/\//, // Chrome extensions  
+      /^moz-extension:\/\//, // Firefox extensions
+      /^about:/,           // Firefox about pages
+      /^edge:\/\//,        // Edge internal pages
+      /^extension:\/\//,   // Generic extension protocol
+      /^resource:\/\//,    // Firefox resource protocol
+      /^data:/,            // Data URLs
+      /^javascript:/       // JavaScript URLs
+    ];
+    
+    return internalPatterns.some(pattern => pattern.test(url));
+  }
 
   return {
     enable: setupListeners,
@@ -116,9 +183,16 @@ export function setupRealTimeCategorizor() {
  * Categorize current active tab immediately
  */
 export async function categorizeCurrentTab() {
+  const browserAPI = getBrowserAPI();
+  
+  if (!browserAPI) {
+    console.warn('Browser tabs API not available');
+    return false;
+  }
+
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.url) {
+    const [tab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
+    if (tab?.url && !GenericUrlParser.shouldExclude(tab.url)) {
       const categorizer = setupRealTimeCategorizor();
       await categorizer.categorizeNow(tab.url, tab.title);
       return true;
@@ -130,8 +204,9 @@ export async function categorizeCurrentTab() {
   }
 }
 
-// Auto-setup when module loads in extension context
-if (typeof chrome !== 'undefined' && chrome?.tabs) {
+// Auto-setup when module loads in any WebExtension context
+const browserAPI = getBrowserAPI();
+if (browserAPI) {
   const categorizer = setupRealTimeCategorizor();
   // Auto-enable after short delay to avoid setup conflicts
   setTimeout(() => {

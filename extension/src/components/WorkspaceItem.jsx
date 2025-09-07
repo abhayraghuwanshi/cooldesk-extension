@@ -1,6 +1,7 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatTime, getDomainFromUrl, getFaviconUrl, getUrlParts } from '../utils';
+import { ProjectSublinks } from './ProjectSublinks';
 
 export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLink, onDelete }, ref) {
   const [showDetails, setShowDetails] = useState(false);
@@ -189,34 +190,22 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Project Title */}
-          {values && values.length > 0 && values[0].extractedData && values[0].extractedData.title && (
-            <div style={{
-              fontSize: 16,
-              color: '#ffffff',
-              lineHeight: 1.4,
-              marginBottom: 2,
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              {values[0].extractedData.title}
-            </div>
-          )}
-          
-          {/* Hostname/Domain */}
+          {/* Workspace Title - show workspace name instead of individual URL */}
           <div style={{
-            fontSize: values && values.length > 0 && values[0].extractedData && values[0].extractedData.title ? 13 : 16,
-            color: values && values.length > 0 && values[0].extractedData && values[0].extractedData.title ? 'rgba(255, 255, 255, 0.7)' : '#ffffff',
+            fontSize: 16,
+            color: '#ffffff',
             lineHeight: 1.4,
-            marginBottom: values && values.length > 0 && values[0].extractedData && values[0].extractedData.title ? 0 : 4,
-            fontWeight: values && values.length > 0 && values[0].extractedData && values[0].extractedData.title ? 400 : 400,
+            marginBottom: 2,
+            fontWeight: 600,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
             {(() => {
+              // Try to get workspace name from extracted data, fallback to hostname
+              if (values && values.length > 0 && values[0].extractedData && values[0].extractedData.workspace) {
+                return values[0].extractedData.workspace;
+              }
               try {
                 return new URL(base).hostname;
               } catch {
@@ -225,19 +214,65 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             })()}
           </div>
           
-          {colors.hostname && !(values && values.length > 0 && values[0].extractedData && values[0].extractedData.title) && (
-            <div style={{
-              fontSize: 13,
-              color: 'rgba(255, 255, 255, 0.6)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              {colors.hostname}
-            </div>
-          )}
+          {/* URL Count and Platform Info */}
+          <div style={{
+            fontSize: 13,
+            color: 'rgba(255, 255, 255, 0.7)',
+            lineHeight: 1.4,
+            marginBottom: 0,
+            fontWeight: 400,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}>
+            {(() => {
+              if (values && values.length > 1) {
+                // Check if this is an AI chat workspace with conversations
+                const hasConversations = values.some(item => 
+                  item.extractedData?.details?.type === 'conversation'
+                );
+                
+                if (hasConversations) {
+                  const conversationCount = values.filter(item => 
+                    item.extractedData?.details?.type === 'conversation'
+                  ).length;
+                  return `${conversationCount} conversation${conversationCount !== 1 ? 's' : ''}`;
+                } else {
+                  return `${values.length} URLs`;
+                }
+              } else if (values && values.length > 0 && values[0].extractedData && values[0].extractedData.title) {
+                return values[0].extractedData.title;
+              } else {
+                try {
+                  return new URL(base).hostname;
+                } catch {
+                  return base.length > 40 ? base.slice(0, 37) + '…' : base;
+                }
+              }
+            })()}
+          </div>
         </div>
         <div className="item-actions">
+          {values && values.length > 1 && (
+            <button
+              className="expand-btn"
+              title={showDetails ? "Hide details" : "Show all URLs"}
+              onClick={toggleDetails}
+              style={{
+                background: 'rgba(0, 122, 255, 0.1)',
+                border: '1px solid rgba(0, 122, 255, 0.3)',
+                borderRadius: '6px',
+                padding: '4px 8px',
+                color: '#007AFF',
+                cursor: 'pointer',
+                fontSize: '12px',
+                marginRight: 8,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {showDetails ? '−' : `${values.length}`}
+            </button>
+          )}
           {timeString && <span className="time-spent-badge">{timeString}</span>}
           {onDelete && (
             <button
@@ -278,6 +313,9 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           )}
         </div>
       </div>
+
+      {/* Expanded Details - Show all URLs when there are multiple */}
+      {showDetails && <ProjectSublinks values={values} />}
 
     </li>
   );

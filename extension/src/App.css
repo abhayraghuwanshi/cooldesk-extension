@@ -331,13 +331,6 @@ body,
     /* side spacing */
   }
 
-  .workspace-grid {
-    /* Keep two columns even in sidebar as requested */
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    padding: 0 6px;
-    /* side spacing */
-  }
 
   .modal {
     width: 95%;
@@ -1806,7 +1799,8 @@ body,
 /* Responsive vertical sidebar */
 @media (max-width: 1199px) {
   .content-with-vertical-sidebar {
-    padding-left: 60px; /* Always collapsed at smaller widths */
+    padding-left: 60px;
+    /* Always collapsed at smaller widths */
   }
 }
 
@@ -1815,7 +1809,7 @@ body,
   .vertical-sidebar {
     display: none !important;
   }
-  
+
   .content-with-vertical-sidebar {
     padding-left: 0 !important;
   }
