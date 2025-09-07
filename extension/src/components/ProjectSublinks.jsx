@@ -1,65 +1,92 @@
 import React from 'react';
 import { getDomainFromUrl, getFaviconUrl } from '../utils';
 
-export function ProjectSublinks({ item, colors, onItemClick }) {
-  const domain = getDomainFromUrl(item.url);
-  const title = item.title || item.extractedData?.title || domain || 'Untitled';
+export function ProjectSublinks({ values = [] }) {
+  if (!values || values.length === 0) {
+    return null;
+  }
 
   return (
-    <div
-      onClick={(e) => {
-        e.stopPropagation();
-        if (onItemClick) {
-          onItemClick(item.url);
-        } else {
-          window.open(item.url, '_blank');
-        }
-      }}
-      className="workspace-item"
-    >
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        marginBottom: '8px',
-        flexShrink: 0
-      }}>
-        <img
-          src={getFaviconUrl(item.url)}
-          alt=""
-          style={{
-            width: '16px',
-            height: '16px',
-            marginRight: '8px',
-            flexShrink: 0,
-            borderRadius: '2px'
-          }}
-        />
-        <div style={{
-          fontSize: '12px',
-          color: colors.accent || '#f43f5e',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          fontWeight: 500
-        }}>
-          {domain}
-        </div>
-      </div>
-      <div style={{
-        fontSize: '13px',
-        color: '#fff',
-        fontWeight: 400,
-        lineHeight: '1.4',
-        display: '-webkit-box',
-        WebkitLineClamp: 2,
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        flexGrow: 1,
-        wordBreak: 'break-word'
-      }}>
-        {title}
-      </div>
+    <div style={{
+      padding: '16px',
+      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+      display: 'grid',
+      gridTemplateColumns: 'repeat(4, 1fr)',
+      gap: '12px'
+    }}>
+      {values.map((item, index) => {
+        const domain = getDomainFromUrl(item.url);
+        const title = item.title || item.extractedData?.title || domain || 'Untitled';
+
+        return (
+          <div
+            key={index}
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(item.url, '_blank');
+            }}
+            style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '12px',
+              backdropFilter: 'blur(10px)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: 24,
+                height: 24,
+                borderRadius: 6,
+                background: 'rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <img
+                  src={getFaviconUrl(item.url)}
+                  alt=""
+                  width={14}
+                  height={14}
+                  style={{ borderRadius: 3 }}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 14,
+                  color: '#ffffff',
+                  lineHeight: 1.4,
+                  marginBottom: 2,
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {title}
+                </div>
+                <div style={{
+                  fontSize: 12,
+                  color: 'rgba(255, 255, 255, 0.6)',
+                  lineHeight: 1.4,
+                  fontWeight: 400,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {domain}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

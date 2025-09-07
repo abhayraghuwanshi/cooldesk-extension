@@ -170,35 +170,15 @@ export function WorkspaceProject({
         }
       }}
     >
-
       {/* ProjectSublinks - expandable section */}
       {values && values.length > 1 && (
         <div style={{
           width: '100%',
-          flex: 1
+          flex: 1,
+          marginTop: '16px'
         }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '16px',
-            '@media (max-width: 1400px)': {
-              gridTemplateColumns: 'repeat(3, 1fr)'
-            },
-            '@media (max-width: 1000px)': {
-              gridTemplateColumns: 'repeat(2, 1fr)'
-            },
-            '@media (max-width: 600px)': {
-              gridTemplateColumns: '1fr'
-            }
-          }}>
-            {values && values.map((item, index) => (
-              <ProjectSublinks
-                key={index}
-                item={item}
-                colors={getDomainColor(item.url)}
-                onItemClick={onItemClick}
-              />
-            ))}
+          <div>
+            <ProjectSublinks values={values} />
           </div>
         </div>
       )}
