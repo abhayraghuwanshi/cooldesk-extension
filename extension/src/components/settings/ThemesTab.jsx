@@ -44,8 +44,8 @@ const ThemesTab = ({
     {
       id: 'ocean-depths',
       name: 'Ocean Depths',
-      description: 'Deep ocean theme with blue and cyan waves',
-      preview: 'radial-gradient(50% 60% at 20% 30%, #0ea5e920, #0000 70%), radial-gradient(40% 50% at 80% 20%, #06b6d420, #0000 60%), linear-gradient(140deg, #0c1426 0%, #1e293b 100%)'
+      description: 'Deep mystical waters with purple and indigo depths',
+      preview: 'radial-gradient(50% 60% at 20% 30%, #8b5cf620, #0000 70%), radial-gradient(40% 50% at 80% 20%, #a78bfa20, #0000 60%), linear-gradient(140deg, #1a0c26 0%, #3b1e29 100%)'
     },
     {
       id: 'cherry-blossom',
@@ -56,14 +56,62 @@ const ThemesTab = ({
     {
       id: 'arctic-frost',
       name: 'Arctic Frost',
-      description: 'Cool arctic theme with ice blue and white accents',
-      preview: 'radial-gradient(40% 50% at 30% 20%, #0ea5e915, #0000 70%), radial-gradient(60% 40% at 70% 80%, #60a5fa15, #0000 60%), linear-gradient(155deg, #0f1419 0%, #1e2832 100%)'
+      description: 'Cool arctic with teal and mint ice accents',
+      preview: 'radial-gradient(40% 50% at 30% 20%, #14b8a615, #0000 70%), radial-gradient(60% 40% at 70% 80%, #5eead415, #0000 60%), linear-gradient(155deg, #0f1b1a 0%, #2d4a42 100%)'
     },
     {
       id: 'volcanic-ember',
       name: 'Volcanic Ember',
       description: 'Fiery volcanic theme with red and orange embers',
       preview: 'radial-gradient(60% 80% at 30% 20%, #dc262620, #0000 60%), radial-gradient(50% 60% at 80% 40%, #ea580c20, #0000 60%), linear-gradient(140deg, #1a0f0f 0%, #2d1b1b 100%)'
+    },
+    {
+      id: 'neon-cyberpunk',
+      name: 'Neon Cyberpunk',
+      description: 'Futuristic cyberpunk with neon pink and cyan',
+      preview: 'radial-gradient(60% 50% at 30% 20%, #ec489920, #0000 65%), radial-gradient(40% 60% at 70% 80%, #06b6d420, #0000 70%), linear-gradient(135deg, #0a0a0f 0%, #2a1a2a 100%)'
+    },
+    {
+      id: 'white-cred',
+      name: 'White Credential',
+      description: 'Clean white theme with subtle accents',
+      preview: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)'
+    },
+    {
+      id: 'orange-warm',
+      name: 'Orange Warm',
+      description: 'Warm orange theme with cozy earth tones',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #f9731620, #0000 60%), radial-gradient(50% 60% at 80% 10%, #ea580c20, #0000 60%), linear-gradient(180deg, #2d1b1b 0%, #451a03 100%)'
+    },
+    {
+      id: 'brown-earth',
+      name: 'Brown Earth',
+      description: 'Earthy brown theme with natural tones',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #92400e20, #0000 60%), radial-gradient(50% 60% at 80% 10%, #78350f20, #0000 60%), linear-gradient(180deg, #3c2415 0%, #451a03 100%)'
+    },
+    {
+      id: 'royal-purple',
+      name: 'Royal Purple',
+      description: 'Elegant purple and lavender with gold accents',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #8b5cf620, #0000 60%), radial-gradient(50% 60% at 80% 10%, #a855f720, #0000 60%), linear-gradient(180deg, #1e1b3a 0%, #2d1b69 100%)'
+    },
+    {
+      id: 'golden-honey',
+      name: 'Golden Honey',
+      description: 'Warm golden yellows with amber and bronze accents',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #f59e0b20, #0000 60%), radial-gradient(50% 60% at 80% 10%, #d9770620, #0000 60%), linear-gradient(180deg, #3a2817 0%, #451a03 100%)'
+    },
+    {
+      id: 'mint-sage',
+      name: 'Mint Sage',
+      description: 'Fresh mint and sage greens with earthy undertones',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), radial-gradient(50% 60% at 80% 10%, #6ee7b720, #0000 60%), linear-gradient(180deg, #1e2e23 0%, #0f2027 100%)'
+    },
+    {
+      id: 'crimson-fire',
+      name: 'Crimson Fire',
+      description: 'Bold red with deep crimson and rose gold accents',
+      preview: 'radial-gradient(60% 80% at 20% 30%, #dc262620, #0000 60%), radial-gradient(50% 60% at 80% 10%, #ef444420, #0000 60%), linear-gradient(180deg, #3c1518 0%, #220a0c 100%)'
     }
   ];
 

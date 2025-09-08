@@ -1,0 +1,90 @@
+/* Mint Sage Theme - Fresh mint and sage greens with earthy undertones */
+.bg-mint-sage {
+  background: radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), 
+              radial-gradient(50% 60% at 80% 10%, #6ee7b720, #0000 60%), 
+              linear-gradient(180deg, #1e2e23 0%, #0f2027 100%);
+  min-height: 100vh;
+  color: #e8f5e8;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+
+.bg-mint-sage {
+  --primary-color: #10b981;
+  --primary-hover: #059669;
+  --secondary-color: #6ee7b7;
+  --accent-color: #34d399;
+  --text-primary: #e8f5e8;
+  --text-secondary: #c6f6d5;
+  --text-muted: #a7f3d0;
+  --background-primary: #1e2e23;
+  --background-secondary: #0f2027;
+  --background-tertiary: #065f46;
+  --border-color: rgba(16, 185, 129, 0.3);
+  --border-hover: rgba(16, 185, 129, 0.5);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --shadow-color: rgba(16, 185, 129, 0.4);
+}
+
+/* Button styles */
+.bg-mint-sage .btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  border: none;
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-mint-sage .btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-hover), var(--accent-color));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--shadow-color);
+}
+
+/* Glass morphism effects */
+.bg-mint-sage .glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+/* Input styles */
+.bg-mint-sage input, 
+.bg-mint-sage select, 
+.bg-mint-sage textarea {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.bg-mint-sage input:focus, 
+.bg-mint-sage select:focus, 
+.bg-mint-sage textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+/* Navigation styles */
+.bg-mint-sage .nav-active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-mint-sage .nav-item:hover {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--border-hover);
+}
+
+/* Workspace item styles */
+.bg-mint-sage .workspace-item {
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.bg-mint-sage .workspace-item:hover {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: var(--secondary-color);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}

@@ -2264,7 +2264,7 @@ const VoiceNavigation = () => {
           margin: 0;
           font-size: 20px;
           font-weight: 600;
-          background: linear-gradient(45deg, #fff, #f0f8ff);
+          background: linear-gradient(45deg, ${themeColors.textColor}, ${themeColors.accentColor});
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
@@ -2414,8 +2414,8 @@ const VoiceNavigation = () => {
         }
 
         .mode-btn.interactive {
-          border-color: #FF5722;
-          background: linear-gradient(135deg, #FF5722, #d84315);
+          border-color: ${themeColors.accentColor};
+          background: linear-gradient(135deg, ${themeColors.accentColor}, ${themeColors.accentColor}dd);
         }
 
         .btn-icon, .mode-icon {
@@ -2521,7 +2521,7 @@ const VoiceNavigation = () => {
 
         .message.feedback {
           background: ${themeColors.buttonBg};
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          border: 1px solid ${themeColors.buttonBorder};
         }
 
         .message-icon {
@@ -2536,11 +2536,11 @@ const VoiceNavigation = () => {
 
         /* Help Section */
         .help-section {
-          background: ${themeColors.buttonBg};
+          background: ${themeColors.cardBg};
           border-radius: 12px;
           padding: 16px;
           backdrop-filter: blur(20px);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border: 1px solid ${themeColors.buttonBorder};
           margin-top: 12px;
           animation: slideIn 0.3s ease;
         }
@@ -2565,6 +2565,7 @@ const VoiceNavigation = () => {
           padding: 4px 8px;
           background: ${themeColors.buttonBg};
           border-radius: 12px;
+          color: ${themeColors.textColor};
         }
 
         .commands-compact {
@@ -2575,10 +2576,10 @@ const VoiceNavigation = () => {
         }
 
         .command-group {
-          background: ${themeColors.buttonBg};
+          background: ${themeColors.cardBg};
           border-radius: 8px;
           padding: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border: 1px solid ${themeColors.buttonBorder};
         }
 
         .command-group h4 {
@@ -2598,7 +2599,7 @@ const VoiceNavigation = () => {
         }
 
         .command-items span {
-          color: rgba(255, 255, 255, 0.8);
+          color: ${themeColors.textSecondary};
           font-size: 12px;
           line-height: 1.4;
           padding: 4px 0;
@@ -2609,10 +2610,11 @@ const VoiceNavigation = () => {
           align-items: center;
           gap: 6px;
           padding: 10px;
-          background: rgba(255, 193, 7, 0.15);
-          border: 1px solid rgba(255, 193, 7, 0.3);
+          background: ${themeColors.cardBg};
+          border: 1px solid ${themeColors.accentColor};
           border-radius: 8px;
           font-size: 12px;
+          color: ${themeColors.textColor};
         }
 
         .tip-icon {

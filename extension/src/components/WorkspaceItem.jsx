@@ -11,74 +11,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
   const cleanedBase = getUrlParts(base).key;
   const timeString = formatTime(timeSpentMs || fallbackTimeMs);
 
-  // Dynamic gradient generation based on domain (matching CurrentTabsSection)
-  const getDomainColor = React.useCallback((url) => {
-    let hostname = '';
-    try {
-      hostname = new URL(url || '').hostname.toLowerCase();
-    } catch {
-      return {
-        bg: 'linear-gradient(135deg, rgba(15, 23, 36, 0.8) 0%, rgba(27, 35, 49, 0.8) 100%)',
-        border: '#273043',
-        accent: '#4a5568'
-      };
-    }
-
-    // Accent colors for variety
-    const accentColors = [
-      '#3b82f6', // Blue
-      '#6b7280', // Gray  
-      '#4b5563', // Slate
-      '#22c55e', // Green
-      '#ea580c', // Orange
-      '#a855f7', // Purple
-      '#f43f5e', // Rose
-      '#0891b2', // Cyan
-    ];
-
-    // Simple hash function for consistent color selection
-    let hash = 0;
-    for (let i = 0; i < hostname.length; i++) {
-      hash = ((hash << 5) - hash) + hostname.charCodeAt(i);
-      hash = hash & hash;
-    }
-
-    // Select an accent color based on hash
-    const colorIndex = Math.abs(hash) % accentColors.length;
-    const accent = accentColors[colorIndex];
-
-    // Create gradient variations with transparency for workspace items
-    const variation = Math.abs(hash >> 8) % 4;
-    let bg, border;
-
-    switch (variation) {
-      case 0:
-        bg = `linear-gradient(135deg, rgba(15, 23, 36, 0.8) 0%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.1) 100%)`;
-        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.3)`;
-        break;
-      case 1:
-        bg = `linear-gradient(145deg, rgba(15, 23, 36, 0.8) 0%, rgba(27, 35, 49, 0.8) 50%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.05) 100%)`;
-        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.25)`;
-        break;
-      case 2:
-        bg = `linear-gradient(125deg, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.03) 0%, rgba(15, 23, 36, 0.8) 40%, rgba(27, 35, 49, 0.8) 100%)`;
-        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.2)`;
-        break;
-      default:
-        bg = `linear-gradient(155deg, rgba(15, 23, 36, 0.8) 0%, rgba(27, 35, 49, 0.8) 70%, rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.08) 100%)`;
-        border = `rgba(${parseInt(accent.slice(1, 3), 16)}, ${parseInt(accent.slice(3, 5), 16)}, ${parseInt(accent.slice(5, 7), 16)}, 0.3)`;
-        break;
-    }
-
-    return {
-      bg,
-      border,
-      accent,
-      hostname
-    };
-  }, []);
-
-  const colors = getDomainColor(base);
 
   useEffect(() => {
     // Defer fetching per-item timeSpent until interaction to reduce initial load
@@ -150,14 +82,9 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         }
       }}
       style={{
-        background: 'rgba(255, 255, 255, 0.05)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
         borderRadius: '12px',
         marginBottom: '12px',
         backdropFilter: 'blur(10px)',
-        boxShadow: hovered
-          ? '0 4px 16px rgba(0, 122, 255, 0.15)'
-          : 'none',
         transition: 'all 0.2s ease',
         cursor: 'pointer',
         transform: hovered ? 'translateY(-1px)' : 'translateY(0)'
@@ -174,7 +101,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             width: 32,
             height: 32,
             borderRadius: 8,
-            background: 'rgba(255, 255, 255, 0.1)',
+            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -193,7 +120,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           {/* Workspace Title - show workspace name instead of individual URL */}
           <div style={{
             fontSize: 16,
-            color: '#ffffff',
+            color: 'var(--text, #ffffff)',
             lineHeight: 1.4,
             marginBottom: 2,
             fontWeight: 600,
@@ -217,7 +144,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           {/* URL Count and Platform Info */}
           <div style={{
             fontSize: 13,
-            color: 'rgba(255, 255, 255, 0.7)',
+            color: 'var(--text-dim, rgba(255, 255, 255, 0.7))',
             lineHeight: 1.4,
             marginBottom: 0,
             fontWeight: 400,
@@ -259,15 +186,16 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
               title={showDetails ? "Hide details" : "Show all URLs"}
               onClick={toggleDetails}
               style={{
-                background: 'rgba(0, 122, 255, 0.1)',
-                border: '1px solid rgba(0, 122, 255, 0.3)',
+                background: 'var(--primary, rgba(0, 122, 255, 0.1))',
+                border: '1px solid var(--primary, rgba(0, 122, 255, 0.3))',
                 borderRadius: '6px',
                 padding: '4px 8px',
-                color: '#007AFF',
+                color: 'var(--primary, #007AFF)',
                 cursor: 'pointer',
                 fontSize: '12px',
                 marginRight: 8,
-                transition: 'all 0.2s ease'
+                transition: 'all 0.2s ease',
+                opacity: 0.8
               }}
             >
               {showDetails ? '−' : `${values.length}`}

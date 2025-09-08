@@ -1,0 +1,90 @@
+/* Crimson Fire Theme - Bold red with deep crimson and rose gold accents */
+.bg-crimson-fire {
+  background: radial-gradient(60% 80% at 20% 30%, #dc262620, #0000 60%), 
+              radial-gradient(50% 60% at 80% 10%, #ef444420, #0000 60%), 
+              linear-gradient(180deg, #3c1518 0%, #220a0c 100%);
+  min-height: 100vh;
+  color: #fef2f2;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+
+.bg-crimson-fire {
+  --primary-color: #dc2626;
+  --primary-hover: #b91c1c;
+  --secondary-color: #ef4444;
+  --accent-color: #f59e0b;
+  --text-primary: #fef2f2;
+  --text-secondary: #fecaca;
+  --text-muted: #fca5a5;
+  --background-primary: #3c1518;
+  --background-secondary: #220a0c;
+  --background-tertiary: #7f1d1d;
+  --border-color: rgba(220, 38, 38, 0.3);
+  --border-hover: rgba(220, 38, 38, 0.5);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --shadow-color: rgba(220, 38, 38, 0.4);
+}
+
+/* Button styles */
+.bg-crimson-fire .btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  border: none;
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-crimson-fire .btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-hover), var(--accent-color));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--shadow-color);
+}
+
+/* Glass morphism effects */
+.bg-crimson-fire .glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+/* Input styles */
+.bg-crimson-fire input, 
+.bg-crimson-fire select, 
+.bg-crimson-fire textarea {
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.bg-crimson-fire input:focus, 
+.bg-crimson-fire select:focus, 
+.bg-crimson-fire textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+/* Navigation styles */
+.bg-crimson-fire .nav-active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-crimson-fire .nav-item:hover {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: var(--border-hover);
+}
+
+/* Workspace item styles */
+.bg-crimson-fire .workspace-item {
+  background: rgba(220, 38, 38, 0.05);
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.bg-crimson-fire .workspace-item:hover {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: var(--secondary-color);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}

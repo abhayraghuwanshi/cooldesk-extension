@@ -1,3 +1,21 @@
+/* Import all theme files */
+@import 'themes/cosmic-aurora.css';
+@import 'themes/sunset-horizon.css';
+@import 'themes/forest-depths.css';
+@import 'themes/minimal-dark.css';
+@import 'themes/ocean-depths.css';
+@import 'themes/cherry-blossom.css';
+@import 'themes/arctic-frost.css';
+@import 'themes/volcanic-ember.css';
+@import 'themes/neon-cyberpunk.css';
+@import 'themes/white-cred.css';
+@import 'themes/orange-warm.css';
+@import 'themes/brown-earth.css';
+@import 'themes/royal-purple.css';
+@import 'themes/golden-honey.css';
+@import 'themes/mint-sage.css';
+@import 'themes/crimson-fire.css';
+
 /* AI Midnight Nebula Theme */
 :root {
   /* Surface Colors */
@@ -41,6 +59,11 @@
   --glass-bg: rgba(255, 255, 255, 0.05);
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-backdrop: blur(20px);
+
+  /* Default theme variables for Header compatibility */
+  --background-primary: #121218;
+  --text-primary: #e5e7eb;
+  --border-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Main Theme Class */

@@ -77,13 +77,15 @@ export class GenericUrlParser {
         {
           name: 'conversation',
           test: (paths, url) => url.pathname.includes('/c/') || (paths[0] === 'c' && paths[1]),
-          extract: (paths, url) => {
+          extract: (paths, url, domTitle) => {
             const match = url.pathname.match(/\/c\/([a-f0-9-]{8,})/);
             const chatId = match ? match[1].slice(0, 8) : (paths[1] ? paths[1].slice(0, 8) : 'unknown');
 
-            // Try to extract conversation title from URL or use default
+            // Try to extract conversation title from DOM, URL params, or use default
             let title = `Chat ${chatId}`;
-            if (url.searchParams.has('title')) {
+            if (domTitle && domTitle !== 'ChatGPT' && !domTitle.includes('New chat')) {
+              title = domTitle;
+            } else if (url.searchParams.has('title')) {
               title = decodeURIComponent(url.searchParams.get('title'));
             }
 
@@ -172,18 +174,40 @@ export class GenericUrlParser {
         {
           name: 'conversation',
           test: (paths, url) => url.pathname.includes('/c/') || (paths[0] === 'c' && paths[1]),
-          extract: (paths, url) => {
+          extract: (paths, url, domTitle) => {
             const match = url.pathname.match(/\/c\/([a-f0-9-]{8,})/);
             const chatId = match ? match[1].slice(0, 8) : (paths[1] ? paths[1].slice(0, 8) : 'unknown');
 
-            let title = `Chat ${chatId}`;
-            if (url.searchParams.has('title')) {
+            let title = null;
+
+            // Prefer DOM / history extracted title
+            if (domTitle && domTitle.trim().length > 3) {
+              if (!['ChatGPT', 'New chat'].includes(domTitle.trim())) {
+                title = domTitle.trim();
+              }
+            }
+
+            // If ?title query param exists (shared conversation links)
+            if (!title && url.searchParams.has('title')) {
               title = decodeURIComponent(url.searchParams.get('title'));
+            }
+
+            // Fallback to <title> tag
+            if (!title && typeof document !== 'undefined' && document.title) {
+              const pageTitle = document.title.trim();
+              if (pageTitle && !['ChatGPT', 'New chat'].includes(pageTitle)) {
+                title = pageTitle;
+              }
+            }
+
+            // Last resort → generic
+            if (!title) {
+              title = `Chat ${chatId}`;
             }
 
             return {
               workspace: 'ChatGPT',
-              title: title,
+              title,
               details: {
                 primary: 'ChatGPT',
                 secondary: title,
@@ -194,6 +218,7 @@ export class GenericUrlParser {
               }
             };
           }
+
         },
         // GPTs/custom assistant pattern
         {
@@ -605,9 +630,10 @@ export class GenericUrlParser {
   /**
    * Parse a URL and return structured information
    * @param {string} url - URL to parse
+   * @param {string} [domTitle] - Optional DOM title from the actual page
    * @returns {Object|null} - Parsed URL information or null
    */
-  static parse(url) {
+  static parse(url, domTitle = null) {
     if (!url || typeof url !== 'string') return null;
 
     try {
@@ -622,7 +648,7 @@ export class GenericUrlParser {
       // Try patterns in order (most specific first)
       for (const pattern of platformConfig.patterns) {
         if (pattern.test(paths, urlObj)) {
-          const extracted = pattern.extract(paths, urlObj);
+          const extracted = pattern.extract(paths, urlObj, domTitle);
 
           return {
             url,
@@ -910,6 +936,29 @@ export class GenericUrlParser {
       console.error('Error scanning browser history:', error);
       return [];
     }
+  }
+
+  static async enrichWithHistory(url, title, browserAPI) {
+    if (!browserAPI?.history) return { url, title };
+
+    try {
+      const historyItems = await browserAPI.history.search({
+        text: url,
+        maxResults: 5,
+        startTime: Date.now() - (30 * 24 * 60 * 60 * 1000) // last 30 days
+      });
+
+      if (historyItems?.length) {
+        const match = historyItems.find(h => h.url === url && h.title);
+        if (match && match.title && match.title !== title) {
+          return { url, title: match.title };
+        }
+      }
+    } catch (err) {
+      console.warn("History enrichment failed", err);
+    }
+
+    return { url, title };
   }
 }
 

@@ -37,9 +37,7 @@ export function Header({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [showVoiceNavigation, setShowVoiceNavigation] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState('ai-midnight-nebula');
-
-  // Load Auto Sync and Theme from UI state
+  // Load Auto Sync from UI state
   useEffect(() => {
     (async () => {
       try {
@@ -49,12 +47,6 @@ export function Header({
         } else {
           setAutoSync(true);
           try { await saveUIState({ ...ui, autoSync: true }); } catch { /* noop */ }
-        }
-
-        // Load theme from localStorage
-        const savedTheme = localStorage.getItem('cooldesk-theme');
-        if (savedTheme) {
-          setCurrentTheme(savedTheme);
         }
       } catch {
         setAutoSync(true);
@@ -107,29 +99,6 @@ export function Header({
     }
   }, []);
 
-  // Listen for theme changes
-  useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === 'cooldesk-theme') {
-        setCurrentTheme(e.newValue || 'ai-midnight-nebula');
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    // Also listen for custom theme change events
-    const handleThemeChange = (e) => {
-      setCurrentTheme(e.detail || 'ai-midnight-nebula');
-    };
-
-    window.addEventListener('themeChanged', handleThemeChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('themeChanged', handleThemeChange);
-    };
-  }, []);
-
   const timeStr = now.toLocaleString(undefined, {
     weekday: 'short',
     month: 'short',
@@ -164,113 +133,6 @@ export function Header({
     }
   };
 
-  // Get theme-based colors
-  const getThemeColors = (theme) => {
-    const themes = {
-      'ai-midnight-nebula': {
-        headerBg: 'rgba(10, 10, 15, 0.95)',
-        buttonBg: 'rgba(255, 255, 255, 0.12)',
-        buttonBgHover: 'rgba(255, 255, 255, 0.18)',
-        buttonBorder: 'rgba(255, 255, 255, 0.25)',
-        buttonBorderHover: 'rgba(255, 255, 255, 0.35)',
-        activeBg: 'rgba(52, 199, 89, 0.2)',
-        activeColor: '#34C759',
-        textColor: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.7)'
-      },
-      'cosmic-aurora': {
-        headerBg: 'rgba(15, 23, 42, 0.95)',
-        buttonBg: 'rgba(16, 185, 129, 0.12)',
-        buttonBgHover: 'rgba(16, 185, 129, 0.18)',
-        buttonBorder: 'rgba(16, 185, 129, 0.25)',
-        buttonBorderHover: 'rgba(16, 185, 129, 0.35)',
-        activeBg: 'rgba(16, 185, 129, 0.2)',
-        activeColor: '#10b981',
-        textColor: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.7)'
-      },
-      'sunset-horizon': {
-        headerBg: 'rgba(26, 26, 46, 0.95)',
-        buttonBg: 'rgba(249, 115, 22, 0.12)',
-        buttonBgHover: 'rgba(249, 115, 22, 0.18)',
-        buttonBorder: 'rgba(249, 115, 22, 0.25)',
-        buttonBorderHover: 'rgba(249, 115, 22, 0.35)',
-        activeBg: 'rgba(249, 115, 22, 0.2)',
-        activeColor: '#f97316',
-        textColor: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.7)'
-      },
-      'forest-depths': {
-        headerBg: 'rgba(15, 20, 25, 0.95)',
-        buttonBg: 'rgba(5, 159, 70, 0.12)',
-        buttonBgHover: 'rgba(5, 159, 70, 0.18)',
-        buttonBorder: 'rgba(5, 159, 70, 0.25)',
-        buttonBorderHover: 'rgba(5, 159, 70, 0.35)',
-        activeBg: 'rgba(5, 159, 70, 0.2)',
-        activeColor: '#059f46',
-        textColor: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.7)'
-      },
-      'minimal-dark': {
-        headerBg: 'rgba(31, 41, 55, 0.95)',
-        buttonBg: 'rgba(255, 255, 255, 0.08)',
-        buttonBgHover: 'rgba(255, 255, 255, 0.12)',
-        buttonBorder: 'rgba(255, 255, 255, 0.2)',
-        buttonBorderHover: 'rgba(255, 255, 255, 0.3)',
-        activeBg: 'rgba(59, 130, 246, 0.2)',
-        activeColor: '#3b82f6',
-        textColor: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.7)'
-      },
-      'ocean-depths': {
-        headerBg: 'rgba(12, 20, 38, 0.95)',
-        buttonBg: 'rgba(14, 165, 233, 0.12)',
-        buttonBgHover: 'rgba(14, 165, 233, 0.18)',
-        buttonBorder: 'rgba(14, 165, 233, 0.25)',
-        buttonBorderHover: 'rgba(14, 165, 233, 0.35)',
-        activeBg: 'rgba(14, 165, 233, 0.2)',
-        activeColor: '#0ea5e9',
-        textColor: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.7)'
-      },
-      'cherry-blossom': {
-        headerBg: 'rgba(31, 23, 41, 0.95)',
-        buttonBg: 'rgba(236, 72, 153, 0.12)',
-        buttonBgHover: 'rgba(236, 72, 153, 0.18)',
-        buttonBorder: 'rgba(236, 72, 153, 0.25)',
-        buttonBorderHover: 'rgba(236, 72, 153, 0.35)',
-        activeBg: 'rgba(236, 72, 153, 0.2)',
-        activeColor: '#ec4899',
-        textColor: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.7)'
-      },
-      'arctic-frost': {
-        headerBg: 'rgba(15, 20, 25, 0.95)',
-        buttonBg: 'rgba(14, 165, 233, 0.12)',
-        buttonBgHover: 'rgba(14, 165, 233, 0.18)',
-        buttonBorder: 'rgba(14, 165, 233, 0.25)',
-        buttonBorderHover: 'rgba(14, 165, 233, 0.35)',
-        activeBg: 'rgba(14, 165, 233, 0.2)',
-        activeColor: '#0ea5e9',
-        textColor: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.7)'
-      },
-      'volcanic-ember': {
-        headerBg: 'rgba(26, 15, 15, 0.95)',
-        buttonBg: 'rgba(220, 38, 38, 0.12)',
-        buttonBgHover: 'rgba(220, 38, 38, 0.18)',
-        buttonBorder: 'rgba(220, 38, 38, 0.25)',
-        buttonBorderHover: 'rgba(220, 38, 38, 0.35)',
-        activeBg: 'rgba(220, 38, 38, 0.2)',
-        activeColor: '#dc2626',
-        textColor: '#ffffff',
-        textSecondary: 'rgba(255, 255, 255, 0.7)'
-      }
-    };
-    return themes[theme] || themes['ai-midnight-nebula'];
-  };
-
-  const themeColors = getThemeColors(currentTheme);
 
   const barStyle = isFooter
     ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2000 }
@@ -279,14 +141,13 @@ export function Header({
   return (
     <header className="header ai-header" style={{
       ...barStyle,
-      background: themeColors.headerBg,
       backdropFilter: 'blur(12px)',
-      borderBottom: `1px solid ${themeColors.buttonBorder}`,
+      borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
       <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', flex: 1 }}>
         <div style={{ position: 'relative', flex: 1 }}>
-          <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} themeColors={themeColors} />
+          <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
         </div>
         {/* Navigation Arrows */}
         {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (() => {
@@ -327,9 +188,9 @@ export function Header({
                   style={{
                     fontSize: '12px',
                     fontWeight: '500',
-                    color: themeColors.textColor,
-                    background: `linear-gradient(135deg, ${themeColors.buttonBg} 0%, rgba(255, 255, 255, 0.06) 100%)`,
-                    border: `1px solid ${themeColors.buttonBorder}`,
+                    color: 'var(--text-primary, #ffffff)',
+                    background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
+                    border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
                     borderRadius: '8px',
                     padding: '8px 12px',
                     minWidth: '130px',
@@ -342,14 +203,14 @@ export function Header({
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
                   }}
                   onMouseEnter={(e) => {
-                    e.target.style.background = `linear-gradient(135deg, ${themeColors.buttonBgHover} 0%, rgba(255, 255, 255, 0.10) 100%)`;
-                    e.target.style.borderColor = themeColors.buttonBorderHover;
+                    e.target.style.background = 'var(--primary-color, rgba(0, 122, 255, 0.1))';
+                    e.target.style.borderColor = 'var(--primary-color, rgba(0, 122, 255, 0.3))';
                     e.target.style.transform = 'translateY(-1px)';
                     e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.background = `linear-gradient(135deg, ${themeColors.buttonBg} 0%, rgba(255, 255, 255, 0.06) 100%)`;
-                    e.target.style.borderColor = themeColors.buttonBorder;
+                    e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.05))';
+                    e.target.style.borderColor = 'var(--border-color, rgba(255, 255, 255, 0.1))';
                     e.target.style.transform = 'translateY(0)';
                     e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
                   }}
@@ -359,8 +220,8 @@ export function Header({
                       key={index}
                       value={index}
                       style={{
-                        background: themeColors.headerBg,
-                        color: themeColors.textColor,
+                        background: 'var(--background-primary, rgba(10, 10, 15, 0.95))',
+                        color: 'var(--text-primary, #ffffff)',
                         padding: '8px 12px',
                         fontSize: '12px'
                       }}
@@ -373,9 +234,9 @@ export function Header({
                 <div style={{
                   fontSize: '12px',
                   fontWeight: '500',
-                  color: themeColors.textColor,
-                  background: `linear-gradient(135deg, ${themeColors.buttonBg} 0%, rgba(255, 255, 255, 0.06) 100%)`,
-                  border: `1px solid ${themeColors.buttonBorder}`,
+                  color: 'var(--text-primary, #ffffff)',
+                  background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
+                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
                   borderRadius: '8px',
                   padding: '8px 12px',
                   minWidth: '90px',
@@ -511,7 +372,7 @@ export function Header({
   );
 }
 
-function SearchBox({ search, setSearch, openInSidePanel, focusSignal, themeColors }) {
+function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState([]);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -712,7 +573,7 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal, themeColor
                 padding: 8,
                 opacity: 0.7,
                 fontSize: 12,
-                color: themeColors?.textSecondary || '#ffffff'
+                color: 'var(--text-secondary, #ffffff)'
               }}>No recent searches</div>
             )}
             {!!search && (
@@ -722,8 +583,8 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal, themeColor
                 style={{
                   padding: '8px 10px',
                   cursor: 'pointer',
-                  borderBottom: filtered.length ? `1px solid ${themeColors?.buttonBorder || '#273043'}` : 'none',
-                  color: themeColors?.textColor || '#ffffff'
+                  borderBottom: filtered.length ? '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' : 'none',
+                  color: 'var(--text-primary, #ffffff)'
                 }}
               >
                 Search Google for "{search}"
@@ -735,7 +596,7 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal, themeColor
                 gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                 gap: 6,
                 padding: 8,
-                borderBottom: filtered.length || contentMatches.length ? `1px solid ${themeColors?.buttonBorder || '#273043'}` : 'none'
+                borderBottom: filtered.length || contentMatches.length ? '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' : 'none'
               }}>
                 {engines.map((e) => (
                   <div
@@ -749,9 +610,9 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal, themeColor
                       gap: 8,
                       padding: '8px 10px',
                       cursor: 'pointer',
-                      background: themeColors?.buttonBg || '#0f1522',
+                      background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
                       borderRadius: 6,
-                      border: `1px solid ${themeColors?.buttonBorder || '#273043'}`
+                      border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))'
                     }}
                   >
                     <div style={{ width: 20, height: 20, borderRadius: 4, background: e.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
@@ -759,7 +620,7 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal, themeColor
                     </div>
                     <div style={{
                       fontSize: 12,
-                      color: themeColors?.textSecondary || '#ffffff'
+                      color: 'var(--text-secondary, #ffffff)'
                     }}>Search in {e.name}</div>
                   </div>
                 ))}
@@ -774,15 +635,15 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal, themeColor
                 style={{
                   padding: '8px 10px',
                   cursor: 'pointer',
-                  background: idx === activeIndex ? (themeColors?.buttonBg || '#1b2331') : 'transparent',
-                  color: themeColors?.textColor || '#ffffff'
+                  background: idx === activeIndex ? 'var(--primary-color, rgba(0, 122, 255, 0.1))' : 'transparent',
+                  color: 'var(--text-primary, #ffffff)'
                 }}
               >
                 {item}
               </div>
             ))}
             {contentMatches.length > 0 && (
-              <div style={{ borderTop: `1px solid ${themeColors?.buttonBorder || '#273043'}` }}>
+              <div style={{ borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' }}>
                 {contentMatches.map((m, i) => (
                   <div
                     key={`${m.url}-${i}`}
@@ -796,7 +657,7 @@ function SearchBox({ search, setSearch, openInSidePanel, focusSignal, themeColor
                     style={{
                       padding: '8px 10px',
                       cursor: 'pointer',
-                      color: themeColors?.textColor || '#ffffff'
+                      color: 'var(--text-primary, #ffffff)'
                     }}
                     title={m.url}
                   >

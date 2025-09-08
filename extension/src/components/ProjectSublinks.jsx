@@ -9,7 +9,7 @@ export function ProjectSublinks({ values = [] }) {
   return (
     <div style={{
       padding: '16px',
-      borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+      borderTop: '1px solid var(--border, rgba(255, 255, 255, 0.1))',
       display: 'grid',
       gridTemplateColumns: 'repeat(4, 1fr)',
       gap: '12px'
@@ -26,13 +26,21 @@ export function ProjectSublinks({ values = [] }) {
               window.open(item.url, '_blank');
             }}
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
+              border: '1px solid var(--glass-border, rgba(255, 255, 255, 0.1))',
               borderRadius: '8px',
               padding: '12px',
               backdropFilter: 'blur(10px)',
               cursor: 'pointer',
               transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.borderColor = 'var(--primary, rgba(0, 122, 255, 0.4))';
+              e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.08))';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.borderColor = 'var(--glass-border, rgba(255, 255, 255, 0.1))';
+              e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.05))';
             }}
           >
             <div style={{
@@ -44,7 +52,7 @@ export function ProjectSublinks({ values = [] }) {
                 width: 24,
                 height: 24,
                 borderRadius: 6,
-                background: 'rgba(255, 255, 255, 0.1)',
+                background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -61,7 +69,7 @@ export function ProjectSublinks({ values = [] }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
                   fontSize: 14,
-                  color: '#ffffff',
+                  color: 'var(--text, #ffffff)',
                   lineHeight: 1.4,
                   marginBottom: 2,
                   fontWeight: 500,
@@ -73,7 +81,7 @@ export function ProjectSublinks({ values = [] }) {
                 </div>
                 <div style={{
                   fontSize: 12,
-                  color: 'rgba(255, 255, 255, 0.6)',
+                  color: 'var(--text-dim, rgba(255, 255, 255, 0.6))',
                   lineHeight: 1.4,
                   fontWeight: 400,
                   whiteSpace: 'nowrap',

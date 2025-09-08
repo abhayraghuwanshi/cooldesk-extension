@@ -481,7 +481,11 @@ export default function App() {
               'bg-neon-cyberpunk',
               'bg-white-cred',
               'bg-orange-warm',
-              'bg-brown-earth'
+              'bg-brown-earth',
+              'bg-royal-purple',
+              'bg-golden-honey',
+              'bg-mint-sage',
+              'bg-crimson-fire'
             ];
 
             // Remove all theme classes
