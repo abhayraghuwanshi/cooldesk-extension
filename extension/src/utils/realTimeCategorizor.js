@@ -189,6 +189,48 @@ async function extractChatGPTTitleFromTab(tabId) {
   return null;
 }
 
+/**
+ * Get icon for category
+ * @param {string} category - Category name
+ * @returns {string} - Icon emoji
+ */
+function getIconForCategory(category) {
+  const icons = {
+    'entertainment': '🎬',
+    'productivity': '💼',
+    'social': '👥',
+    'shopping': '🛒',
+    'news': '📰',
+    'education': '📚',
+    'technology': '💻',
+    'finance': '💰',
+    'health': '🏥',
+    'travel': '✈️'
+  };
+  return icons[category] || '🌐';
+}
+
+/**
+ * Get color for category
+ * @param {string} category - Category name
+ * @returns {string} - Hex color
+ */
+function getColorForCategory(category) {
+  const colors = {
+    'entertainment': '#ff6b6b',
+    'productivity': '#4ecdc4',
+    'social': '#45b7d1',
+    'shopping': '#96ceb4',
+    'news': '#feca57',
+    'education': '#ff9ff3',
+    'technology': '#54a0ff',
+    'finance': '#5f27cd',
+    'health': '#00d2d3',
+    'travel': '#ff9f43'
+  };
+  return colors[category] || '#6c757d';
+}
+
 export function setupRealTimeCategorizor() {
   const browserAPI = getBrowserAPI();
 
@@ -213,6 +255,19 @@ export function setupRealTimeCategorizor() {
       const enriched = await GenericUrlParser.enrichWithHistory(url, enhancedTitle, browserAPI);
       enhancedTitle = enriched.title;
 
+      // Categorize URL using category manager
+      const category = categoryManager.categorizeUrl(url);
+      const categoryData = categoryManager.getCategory(category);
+      console.log(`📂 Categorized ${url} as: ${category}`, {
+        categoryData: categoryData ? categoryData.name : 'No category data',
+        allCategories: categoryManager.getAllCategories(),
+        testUrls: {
+          'facebook.com': categoryManager.categorizeUrl('https://facebook.com'),
+          'amazon.com': categoryManager.categorizeUrl('https://amazon.com'),
+          'twitter.com': categoryManager.categorizeUrl('https://twitter.com')
+        }
+      });
+
       // ChatGPT-specific fallback if title is still generic
       if ((url.includes('chat.openai.com') || url.includes('chatgpt.com')) && tabId) {
         if (!enhancedTitle || enhancedTitle === 'ChatGPT' || enhancedTitle === 'New chat') {
@@ -221,21 +276,62 @@ export function setupRealTimeCategorizor() {
         }
       }
 
-      const parsed = GenericUrlParser.parse(url, enhancedTitle);
+      let parsed = GenericUrlParser.parse(url, enhancedTitle);
       if (!parsed) {
-        console.log(`No platform detected for: ${url}`);
-        return;
+        // If no specific platform parser found, create workspace based on category
+        if (category !== 'uncategorized') {
+          console.log(`🔧 No platform parser found for ${url}, using category: ${category}`);
+          const categoryDisplayName = category.charAt(0).toUpperCase() + category.slice(1);
+          console.log(`🏗️ Creating category-based workspace: ${categoryDisplayName}`);
+          
+          // Create a generic parsed object for category-based workspace
+          const categoryParsed = {
+            url: url,
+            platform: {
+              id: category,
+              name: categoryDisplayName,
+              icon: getIconForCategory(category),
+              color: getColorForCategory(category),
+              domain: new URL(url).hostname.replace('www.', '')
+            },
+            workspace: categoryDisplayName,
+            title: enhancedTitle || new URL(url).hostname,
+            details: {
+              primary: categoryDisplayName,
+              secondary: enhancedTitle || 'Website',
+              path: null,
+              id: `${category}-${Date.now()}`,
+              type: 'website',
+              category: category
+            },
+            favicon: `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`,
+            timestamp: Date.now()
+          };
+          
+          // Use the category-based parsed object
+          parsed = categoryParsed;
+          console.log(`✅ Created category-based parsed object:`, parsed);
+        } else {
+          console.log(`❌ No platform detected and uncategorized: ${url}`);
+          return;
+        }
       }
+      
       console.log(`Detected ${parsed.platform.name} URL: ${url}`, parsed);
 
       // Check if workspace already exists
       const existingWorkspaces = await listWorkspaces();
+      console.log(`🔍 Checking existing workspaces for: ${parsed.workspace}`, {
+        existingCount: existingWorkspaces.length,
+        existingNames: existingWorkspaces.map(ws => ws.name)
+      });
       const existingWorkspace = existingWorkspaces.find(ws =>
         ws.name?.toLowerCase() === parsed.workspace.toLowerCase()
       );
 
       if (!existingWorkspace) {
         // Create new workspace
+        console.log(`🆕 Creating new workspace: ${parsed.workspace}`);
         const workspace = {
           id: `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           name: parsed.workspace,
@@ -250,20 +346,32 @@ export function setupRealTimeCategorizor() {
           context: {
             platform: parsed.platform,
             details: parsed.details,
+            category: category,
+            categoryData: categoryData,
             createdFrom: 'real_time',
             autoCreated: true
           }
         };
 
-        await saveWorkspace(workspace);
-        console.log(`Created workspace: ${workspace.name}`);
+        try {
+          await saveWorkspace(workspace);
+          console.log(`✅ Successfully created workspace: ${workspace.name}`);
+        } catch (error) {
+          console.error(`❌ Failed to create workspace: ${workspace.name}`, error);
+          return;
+        }
 
         // Index URL
-        await addUrlToWorkspace(url, workspace.id, {
-          title: enhancedTitle || parsed.title || 'Untitled',
-          favicon: parsed.favicon,
-          addedAt: Date.now()
-        });
+        try {
+          await addUrlToWorkspace(url, workspace.id, {
+            title: enhancedTitle || parsed.title || 'Untitled',
+            favicon: parsed.favicon,
+            addedAt: Date.now()
+          });
+          console.log(`✅ Successfully indexed URL in workspace: ${workspace.name}`);
+        } catch (error) {
+          console.error(`❌ Failed to index URL in workspace: ${workspace.name}`, error);
+        }
 
         // Broadcast change
         try {
@@ -390,10 +498,52 @@ if (browserAPI) {
   }, 1000);
 }
 
+// Test category manager function for debugging
+function testCategoryManager() {
+  console.log('🧪 Testing Category Manager:');
+  console.log('Available categories:', categoryManager.getAllCategories());
+  
+  const testUrls = [
+    'https://facebook.com',
+    'https://twitter.com',
+    'https://instagram.com',
+    'https://amazon.com',
+    'https://ebay.com',
+    'https://walmart.com',
+    'https://netflix.com',
+    'https://gmail.com',
+    'https://example.com'
+  ];
+  
+  testUrls.forEach(url => {
+    const category = categoryManager.categorizeUrl(url);
+    console.log(`${url} -> ${category}`);
+  });
+}
+
+// Manual categorization test function
+async function manualCategorizeTest(testUrl = 'https://facebook.com') {
+  console.log(`🔧 Manually testing categorization for: ${testUrl}`);
+  
+  const categorizer = setupRealTimeCategorizor();
+  if (categorizer) {
+    try {
+      await categorizer.categorizeNow(testUrl, 'Facebook');
+      console.log('✅ Manual categorization completed');
+    } catch (error) {
+      console.error('❌ Manual categorization failed:', error);
+    }
+  } else {
+    console.error('❌ Could not setup real-time categorizer');
+  }
+}
+
 // Export for console usage
 if (typeof window !== 'undefined') {
   window.realTimeCategorizor = {
     setup: setupRealTimeCategorizor,
-    categorizeNow: categorizeCurrentTab
+    categorizeNow: categorizeCurrentTab,
+    testCategories: testCategoryManager,
+    manualTest: manualCategorizeTest
   };
 }

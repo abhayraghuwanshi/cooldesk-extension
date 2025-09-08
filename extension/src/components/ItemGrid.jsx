@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getDomainFromUrl, getUrlParts } from '../utils';
 import { WorkspaceItem } from './WorkspaceItem';
+import categoryManager from '../data/categories.js';
 
 export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDelete }) {
   const [timeSpent, setTimeSpent] = useState({});

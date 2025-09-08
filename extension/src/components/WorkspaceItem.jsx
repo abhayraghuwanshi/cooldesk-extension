@@ -1,4 +1,5 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTrash, faMinus, faPlus, faExternalLinkAlt, faClock, faTag } from '@fortawesome/free-solid-svg-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatTime, getDomainFromUrl, getFaviconUrl, getUrlParts } from '../utils';
 import { ProjectSublinks } from './ProjectSublinks';
@@ -178,8 +179,63 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
               }
             })()}
           </div>
+          
+          {/* Tags display */}
+          {tags.length > 0 && (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '4px',
+              marginTop: '6px',
+              alignItems: 'center'
+            }}>
+              <FontAwesomeIcon 
+                icon={faTag} 
+                style={{
+                  fontSize: '10px',
+                  color: 'var(--text-dim, rgba(255, 255, 255, 0.5))',
+                  marginRight: '2px'
+                }}
+              />
+              {tags.slice(0, 3).map(tag => (
+                <span
+                  key={tag}
+                  style={{
+                    fontSize: '10px',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    background: 'var(--tag-bg, rgba(255, 255, 255, 0.1))',
+                    color: 'var(--text-dim, rgba(255, 255, 255, 0.7))',
+                    border: '1px solid var(--tag-border, rgba(255, 255, 255, 0.2))'
+                  }}
+                >
+                  {tag}
+                </span>
+              ))}
+              {tags.length > 3 && (
+                <span style={{
+                  fontSize: '10px',
+                  color: 'var(--text-dim, rgba(255, 255, 255, 0.5))'
+                }}>
+                  +{tags.length - 3}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="item-actions">
+          {/* External link icon - shows on hover */}
+          <div style={{
+            display: hovered ? 'flex' : 'none',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '8px',
+            color: 'var(--text-dim, rgba(255, 255, 255, 0.7))',
+            fontSize: '12px'
+          }}>
+            <FontAwesomeIcon icon={faExternalLinkAlt} />
+          </div>
+          
           {values && values.length > 1 && (
             <button
               className="expand-btn"
@@ -198,10 +254,22 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
                 opacity: 0.8
               }}
             >
-              {showDetails ? '−' : `${values.length}`}
+              {showDetails ? <FontAwesomeIcon icon={faMinus} /> : `${values.length}`}
             </button>
           )}
-          {timeString && <span className="time-spent-badge">{timeString}</span>}
+          {timeString && (
+            <span className="time-spent-badge" style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '12px',
+              color: 'var(--text-dim, rgba(255, 255, 255, 0.7))',
+              marginRight: '8px'
+            }}>
+              <FontAwesomeIcon icon={faClock} />
+              {timeString}
+            </span>
+          )}
           {onDelete && (
             <button
               className="delete-btn"
@@ -236,7 +304,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
                 e.target.style.transform = 'scale(1)';
               }}
             >
-              <FontAwesomeIcon icon="faTrash" />
+              <FontAwesomeIcon icon={faTrash} />
             </button>
           )}
         </div>

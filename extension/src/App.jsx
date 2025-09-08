@@ -20,6 +20,7 @@ import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
 import GenericUrlParser from './utils/GenericUrlParser';
+import categoryManager from './data/categories';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
 // import './utils/debugUrlIndexing'; // Adds debug functions to window
 
@@ -117,6 +118,72 @@ export default function App() {
   // UI state: dismissible settings warning
   const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)
 
+  // Helper function to create category-based workspaces
+  const createCategoryBasedWorkspaces = (urls, existingWorkspaces) => {
+    const categoryGroups = new Map();
+    const existingNames = new Set(existingWorkspaces.map(ws => ws.name?.toLowerCase()));
+
+    // Group URLs by category
+    urls.forEach(url => {
+      if (!url) return;
+      
+      const category = categoryManager.categorizeUrl(url);
+      if (category === 'uncategorized') return;
+      
+      // Skip if GenericUrlParser can handle this URL (to avoid duplicates)
+      const parsed = GenericUrlParser.parse(url);
+      if (parsed) return;
+      
+      const categoryDisplayName = category.charAt(0).toUpperCase() + category.slice(1);
+      
+      // Skip if workspace already exists
+      if (existingNames.has(categoryDisplayName.toLowerCase())) return;
+      
+      if (!categoryGroups.has(category)) {
+        categoryGroups.set(category, {
+          category,
+          displayName: categoryDisplayName,
+          urls: []
+        });
+      }
+      
+      const group = categoryGroups.get(category);
+      if (!group.urls.some(u => u === url)) {
+        group.urls.push(url);
+      }
+    });
+
+    // Convert groups to workspace configurations
+    const workspacesToCreate = [];
+    for (const [category, group] of categoryGroups) {
+      if (group.urls.length === 0) continue;
+      
+      const categoryData = categoryManager.getCategory(category);
+      const workspaceConfig = {
+        name: group.displayName,
+        description: `${group.displayName} websites`,
+        gridType: 'ItemGrid',
+        urls: group.urls.map(url => ({
+          url,
+          title: new URL(url).hostname,
+          addedAt: Date.now(),
+          favicon: getFaviconUrl(url, 32)
+        })),
+        context: {
+          category,
+          categoryData: categoryData ? { name: categoryData.name, urls: categoryData.urls, patterns: categoryData.patterns } : null,
+          createdFrom: 'auto_category',
+          autoCreated: true
+        }
+      };
+      
+      workspacesToCreate.push(workspaceConfig);
+      existingNames.add(group.displayName.toLowerCase());
+    }
+    
+    return workspacesToCreate;
+  };
+
   // Auto-create platform-based workspaces from URLs in history/bookmarks
   useEffect(() => {
     const autoCreatePlatformWorkspaces = async () => {
@@ -141,7 +208,15 @@ export default function App() {
 
         const urls = data.map(item => item.url).filter(Boolean);
         const existingWorkspaces = await listWorkspaces();
-        const workspacesToCreate = GenericUrlParser.createWorkspacesFromUrls(urls, existingWorkspaces);
+        
+        // Create platform-specific workspaces (GitHub, ChatGPT, etc.)
+        const platformWorkspacesToCreate = GenericUrlParser.createWorkspacesFromUrls(urls, existingWorkspaces);
+        
+        // Create category-based workspaces (Social, Shopping, etc.)
+        const categoryWorkspacesToCreate = createCategoryBasedWorkspaces(urls, existingWorkspaces);
+        
+        // Combine both types
+        const workspacesToCreate = [...platformWorkspacesToCreate, ...categoryWorkspacesToCreate];
         const createdWorkspaces = [];
 
         for (const workspaceData of workspacesToCreate) {
