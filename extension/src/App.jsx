@@ -127,6 +127,9 @@ export default function App() {
     urls.forEach(url => {
       if (!url) return;
       
+      // Filter out URLs that should be excluded (OAuth, login, settings, etc.)
+      if (GenericUrlParser.shouldExclude(url)) return;
+      
       const category = categoryManager.categorizeUrl(url);
       if (category === 'uncategorized') return;
       

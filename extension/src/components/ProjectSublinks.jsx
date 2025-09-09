@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTrash, faExternalLinkAlt } from '@fortawesome/free-solid-svg-icons';
 import { getDomainFromUrl, getFaviconUrl } from '../utils';
 
-export function ProjectSublinks({ values = [] }) {
+export function ProjectSublinks({ values = [], onDelete }) {
+  const [hoveredIndex, setHoveredIndex] = useState(null);
   if (!values || values.length === 0) {
     return null;
   }
@@ -21,10 +24,6 @@ export function ProjectSublinks({ values = [] }) {
         return (
           <div
             key={index}
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open(item.url, '_blank');
-            }}
             style={{
               background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
               border: '1px solid var(--glass-border, rgba(255, 255, 255, 0.1))',
@@ -32,22 +31,25 @@ export function ProjectSublinks({ values = [] }) {
               padding: '12px',
               backdropFilter: 'blur(10px)',
               cursor: 'pointer',
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s ease',
+              position: 'relative'
             }}
-            onMouseEnter={(e) => {
-              e.target.style.borderColor = 'var(--primary, rgba(0, 122, 255, 0.4))';
-              e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.08))';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.borderColor = 'var(--glass-border, rgba(255, 255, 255, 0.1))';
-              e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.05))';
-            }}
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex(null)}
           >
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
+            {/* Main clickable area */}
+            <div 
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(item.url, '_blank');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                flex: 1
+              }}
+            >
               <div style={{
                 width: 24,
                 height: 24,
@@ -91,6 +93,75 @@ export function ProjectSublinks({ values = [] }) {
                   {domain}
                 </div>
               </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              display: 'flex',
+              gap: '4px',
+              opacity: hoveredIndex === index ? 1 : 0,
+              transition: 'opacity 0.2s ease'
+            }}>
+              {/* External link button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(item.url, '_blank');
+                }}
+                style={{
+                  background: 'var(--primary, rgba(0, 122, 255, 0.2))',
+                  border: '1px solid var(--primary, rgba(0, 122, 255, 0.4))',
+                  borderRadius: '4px',
+                  padding: '4px',
+                  color: 'var(--primary, #007AFF)',
+                  cursor: 'pointer',
+                  fontSize: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease'
+                }}
+                title="Open link"
+              >
+                <FontAwesomeIcon icon={faExternalLinkAlt} />
+              </button>
+
+              {/* Delete button */}
+              {onDelete && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(item.url, [item]);
+                  }}
+                  style={{
+                    background: 'rgba(255, 59, 48, 0.2)',
+                    border: '1px solid rgba(255, 59, 48, 0.4)',
+                    borderRadius: '4px',
+                    padding: '4px',
+                    color: '#FF3B30',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
+                  title="Delete this link"
+                  onMouseEnter={(e) => {
+                    e.target.style.background = '#FF3B30';
+                    e.target.style.color = 'white';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'rgba(255, 59, 48, 0.2)';
+                    e.target.style.color = '#FF3B30';
+                  }}
+                >
+                  <FontAwesomeIcon icon={faTrash} />
+                </button>
+              )}
             </div>
           </div>
         );

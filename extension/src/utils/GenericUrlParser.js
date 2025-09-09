@@ -33,7 +33,10 @@ export class GenericUrlParser {
         // Repository pattern - group all into one workspace
         {
           name: 'repository',
-          test: (paths) => paths.length >= 2,
+          test: (paths, url) => {
+            // Must have at least 2 paths (owner/repo) and no tab parameters
+            return paths.length >= 2 && !url.search.includes('tab=');
+          },
           extract: (paths) => ({
             workspace: 'GitHub', // Group all repositories into one workspace
             title: `${paths[0]}/${paths[1]}`,
@@ -48,10 +51,30 @@ export class GenericUrlParser {
             }
           })
         },
-        // Fallback
+        // User profile pattern (only clean profile URLs)
+        {
+          name: 'user_profile',
+          test: (paths, url) => {
+            // Only match single-path user profiles without query parameters
+            return paths.length === 1 && url.search === '';
+          },
+          extract: (paths) => ({
+            workspace: 'GitHub',
+            title: `@${paths[0]}`,
+            details: {
+              primary: paths[0],
+              secondary: 'Profile',
+              path: null,
+              id: paths[0],
+              type: 'user',
+              username: paths[0]
+            }
+          })
+        },
+        // Fallback for root GitHub
         {
           name: 'general',
-          test: () => true,
+          test: (paths, url) => paths.length === 0 && url.search === '',
           extract: () => ({
             workspace: 'GitHub',
             title: 'GitHub',
@@ -72,6 +95,7 @@ export class GenericUrlParser {
       icon: '🤖',
       color: '#10a37f',
       groupBy: 'platform', // Group all chats into one workspace
+      excludeParams: ['model', 'q'],
       patterns: [
         // Conversation/chat pattern
         {
@@ -148,7 +172,17 @@ export class GenericUrlParser {
         },
         {
           name: 'general',
-          test: () => true,
+          test: (paths, url) => {
+            // Exclude URLs with unnecessary query parameters
+            if (url.searchParams.has('model') || url.searchParams.has('q')) {
+              const qValue = url.searchParams.get('q');
+              // Allow q parameter only if it has meaningful content
+              if (qValue === 'undefined' || qValue === '' || qValue === null) {
+                return false;
+              }
+            }
+            return paths.length === 0; // Only match root domain
+          },
           extract: () => ({
             workspace: 'ChatGPT',
             title: 'ChatGPT',
@@ -169,6 +203,7 @@ export class GenericUrlParser {
       icon: '🤖',
       color: '#10a37f',
       groupBy: 'platform', // Group all chats into one workspace 
+      excludeParams: ['model', 'q'],
       patterns: [
         // Conversation/chat pattern (same as chat.openai.com)
         {
@@ -244,7 +279,17 @@ export class GenericUrlParser {
         },
         {
           name: 'general',
-          test: () => true,
+          test: (paths, url) => {
+            // Exclude URLs with unnecessary query parameters
+            if (url.searchParams.has('model') || url.searchParams.has('q')) {
+              const qValue = url.searchParams.get('q');
+              // Allow q parameter only if it has meaningful content
+              if (qValue === 'undefined' || qValue === '' || qValue === null) {
+                return false;
+              }
+            }
+            return paths.length === 0; // Only match root domain
+          },
           extract: () => ({
             workspace: 'ChatGPT',
             title: 'ChatGPT',
@@ -264,6 +309,7 @@ export class GenericUrlParser {
       name: 'Claude',
       color: '#cc785c',
       groupBy: 'platform', // Group all chats into one workspace
+      excludePaths: ['login', 'oauth', 'settings', 'recents', 'new', 'upgrade', 'billing', 'profile', 'account', 'terms', 'privacy'],
       patterns: [
         {
           name: 'chat',
@@ -286,7 +332,13 @@ export class GenericUrlParser {
         },
         {
           name: 'general',
-          test: () => true,
+          test: (paths) => {
+            // Exclude specific paths we don't want to categorize
+            if (paths.length > 0 && this.config['claude.ai'].excludePaths.includes(paths[0])) {
+              return false;
+            }
+            return true;
+          },
           extract: () => ({
             workspace: 'Claude',
             title: 'Chats',
@@ -348,11 +400,18 @@ export class GenericUrlParser {
       icon: '🎨',
       color: '#f24e1e',
       groupBy: 'platform', // Group all designs into one workspace
+      excludeParams: ['node-id', 't', 'p', 'fuid', 'viewport'], // View parameters that create duplicates
       patterns: [
         // Design file pattern (most specific)
         {
           name: 'design_file',
-          test: (paths) => ['file', 'design'].includes(paths[0]) && paths[1] && paths[2],
+          test: (paths, url) => {
+            // Exclude URLs with view parameters that create duplicates
+            if (url.searchParams.has('node-id') || url.searchParams.has('t') || url.searchParams.has('p') || url.searchParams.has('fuid')) {
+              return false;
+            }
+            return ['file', 'design'].includes(paths[0]) && paths[1] && paths[2];
+          },
           extract: (paths, url) => {
             const fileId = paths[1];
             let fileName = decodeURIComponent(paths[2]).replace(/-/g, ' ');
@@ -374,7 +433,13 @@ export class GenericUrlParser {
         // Prototype pattern
         {
           name: 'prototype',
-          test: (paths) => paths[0] === 'proto' && paths[1],
+          test: (paths, url) => {
+            // Exclude URLs with view parameters that create duplicates
+            if (url.searchParams.has('node-id') || url.searchParams.has('t') || url.searchParams.has('p') || url.searchParams.has('fuid')) {
+              return false;
+            }
+            return paths[0] === 'proto' && paths[1];
+          },
           extract: (paths, url) => {
             const protoId = paths[1];
             return {
@@ -393,7 +458,13 @@ export class GenericUrlParser {
         // Team/project dashboard
         {
           name: 'team',
-          test: (paths) => ['team', 'project'].includes(paths[0]) && paths[1],
+          test: (paths, url) => {
+            // Exclude URLs with view parameters
+            if (url.searchParams.has('fuid')) {
+              return false;
+            }
+            return ['team', 'project'].includes(paths[0]) && paths[1];
+          },
           extract: (paths) => {
             const teamId = paths[1];
             return {
@@ -412,7 +483,13 @@ export class GenericUrlParser {
         // FigJam collaboration boards
         {
           name: 'figjam',
-          test: (paths, url) => url.hostname.includes('figjam') || paths[0] === 'board',
+          test: (paths, url) => {
+            // Exclude URLs with view parameters that create duplicates
+            if (url.searchParams.has('node-id') || url.searchParams.has('t') || url.searchParams.has('p') || url.searchParams.has('fuid')) {
+              return false;
+            }
+            return url.hostname.includes('figjam') || paths[0] === 'board';
+          },
           extract: (paths, url) => {
             const boardId = paths[1] || 'unknown';
             const boardName = decodeURIComponent(paths[2] || 'FigJam Board').replace(/-/g, ' ');
@@ -433,7 +510,10 @@ export class GenericUrlParser {
         },
         {
           name: 'general',
-          test: () => true,
+          test: (paths, url) => {
+            // Only match clean root Figma URLs without view parameters
+            return paths.length === 0 && !url.searchParams.has('node-id') && !url.searchParams.has('t') && !url.searchParams.has('p') && !url.searchParams.has('fuid');
+          },
           extract: () => ({
             workspace: 'Figma',
             title: 'Figma',
@@ -542,11 +622,18 @@ export class GenericUrlParser {
       icon: '🗒️',
       color: '#000000',
       groupBy: 'platform', // Group all pages into one workspace
+      excludeParams: ['pvs', 'showMoveTo', 'v', 'pm', 'tab'], // View/navigation parameters to ignore
       patterns: [
         // Workspace page pattern (most specific)
         {
           name: 'workspace_page',
-          test: (paths) => paths.length >= 2 && paths[1].length >= 32,
+          test: (paths, url) => {
+            // Exclude URLs with view parameters that create duplicates
+            if (url.searchParams.has('pvs') || url.searchParams.has('showMoveTo')) {
+              return false;
+            }
+            return paths.length >= 2 && paths[1].length >= 32;
+          },
           extract: (paths, url) => {
             const workspaceName = decodeURIComponent(paths[0]).replace(/-/g, ' ');
             const pageId = paths[1].split('-').pop();
@@ -569,7 +656,13 @@ export class GenericUrlParser {
         // Direct page pattern
         {
           name: 'page',
-          test: (paths) => paths.length >= 1 && paths[0].length >= 32,
+          test: (paths, url) => {
+            // Exclude URLs with view parameters that create duplicates
+            if (url.searchParams.has('pvs') || url.searchParams.has('showMoveTo')) {
+              return false;
+            }
+            return paths.length >= 1 && paths[0].length >= 32;
+          },
           extract: (paths, url) => {
             const pageId = paths[0].split('-').pop();
             const pageTitle = paths[0].split('-').slice(0, -1).join(' ') || 'Untitled';
@@ -590,7 +683,13 @@ export class GenericUrlParser {
         // Workspace pattern
         {
           name: 'workspace',
-          test: (paths) => paths.length === 1,
+          test: (paths, url) => {
+            // Exclude URLs with view parameters
+            if (url.searchParams.has('pvs') || url.searchParams.has('showMoveTo')) {
+              return false;
+            }
+            return paths.length === 1;
+          },
           extract: (paths) => {
             const workspaceName = decodeURIComponent(paths[0]).replace(/-/g, ' ');
             return {
@@ -607,10 +706,13 @@ export class GenericUrlParser {
             };
           }
         },
-        // Fallback
+        // Fallback - only match clean root URLs
         {
           name: 'general',
-          test: () => true,
+          test: (paths, url) => {
+            // Only match root notion.so without any paths or view parameters
+            return paths.length === 0 && !url.searchParams.has('pvs') && !url.searchParams.has('showMoveTo');
+          },
           extract: () => ({
             workspace: 'Notion',
             title: 'Notion',
@@ -823,15 +925,191 @@ export class GenericUrlParser {
     if (!url) return true;
 
     const excludePatterns = [
+      // Browser internal URLs
       /chrome:\/\//,
       /chrome-extension:\/\//,
       /moz-extension:\/\//,
-      /\/login\/?$/,
-      /\/logout\/?$/,
-      /\/signup\/?$/,
+      /edge:\/\//,
+      /about:/,
+      
+      // OAuth and authentication URLs
+      /\/o\/oauth2\//,
+      /\/oauth\//,
+      /\/auth\//,
+      /\/sso\//,
+      /accounts\.google\.com\/o\/oauth2/,
+      /accounts\.google\.com\/signin/,
+      /login\.microsoftonline\.com/,
+      /github\.com\/login\/oauth/,
+      /facebook\.com\/v\d+\.\d+\/dialog\/oauth/,
+      /twitter\.com\/oauth/,
+      /linkedin\.com\/oauth/,
+      
+      // Login, logout, signup pages
+      /\/login\/?(\?.*)?$/,
+      /\/logout\/?(\?.*)?$/,
+      /\/signup\/?(\?.*)?$/,
+      /\/signin\/?(\?.*)?$/,
+      /\/signout\/?(\?.*)?$/,
+      /\/register\/?(\?.*)?$/,
+      /\/auth\/.*$/,
+      
+      // Settings and configuration pages
+      /\/settings\//,
+      /\/config\//,
+      /\/admin\//,
+      /\/preferences\//,
+      /\/account\//,
+      /\/billing\//,
+      /\/profile\//,
+      /\/user\//,
+      
+      // API endpoints and callbacks
+      /\/api\//,
+      /\/callback/,
+      /\/redirect/,
+      /\/return/,
+      /\/finish_.*_sso/,
+      
+      // Marketing and tracking URLs
       /utm_source=/,
       /utm_medium=/,
-      /utm_campaign=/
+      /utm_campaign=/,
+      /utm_term=/,
+      /utm_content=/,
+      /fbclid=/,
+      /gclid=/,
+      /msclkid=/,
+      
+      // Temporary and session URLs
+      /storagerelay:/,
+      /\/tmp\//,
+      /\/temp\//,
+      /sessionid=/,
+      /session_token=/,
+      /access_token=/,
+      /refresh_token=/,
+      
+      // Privacy and legal pages
+      /\/privacy/,
+      /\/terms/,
+      /\/cookies/,
+      /\/legal/,
+      /\/policy/,
+      
+      // Development and testing
+      /localhost/,
+      /127\.0\.0\.1/,
+      /192\.168\./,
+      /\.local/,
+      /staging\./,
+      /test\./,
+      /dev\./,
+      
+      // File downloads and resources
+      /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|tar|gz)(\?|#|$)/i,
+      /\/download/,
+      /\/uploads\//,
+      /\/assets\//,
+      /\/static\//,
+      /\/media\//,
+      
+      // Error and status pages
+      /\/404/,
+      /\/500/,
+      /\/error/,
+      /\/maintenance/,
+      /\/status/,
+      
+      // Specific known problematic patterns from Claude
+      /claude\.ai\/login/,
+      /claude\.ai\/oauth/,
+      /claude\.ai\/settings/,
+      /claude\.ai\/recents/,
+      /claude\.ai\/new$/,
+      /claude\.ai\/upgrade/,
+      
+      // ChatGPT URLs with unnecessary parameters
+      /chatgpt\.com\/\?model=/,
+      /chatgpt\.com\/\?q=undefined/,
+      /chat\.openai\.com\/\?model=/,
+      
+      // GitHub auxiliary URLs that are not useful for workspaces
+      /github\.com\/.*\/tree\//,
+      /github\.com\/.*\/blob\//,
+      /github\.com\/.*\/commits\//,
+      /github\.com\/.*\/commit\//,
+      /github\.com\/.*\/branches/,
+      /github\.com\/.*\/tags/,
+      /github\.com\/.*\/releases/,
+      /github\.com\/.*\/issues\//,
+      /github\.com\/.*\/pull\//,
+      /github\.com\/.*\/actions/,
+      /github\.com\/.*\/security/,
+      /github\.com\/.*\/insights/,
+      /github\.com\/.*\/settings/,
+      /github\.com\/.*\/network/,
+      /github\.com\/.*\/graphs/,
+      /github\.com\/.*\/pulse/,
+      /github\.com\/.*\/wiki/,
+      /github\.com\/.*\/projects/,
+      /github\.com\/.*\/compare/,
+      /github\.com\/.*\/stargazers/,
+      /github\.com\/.*\/watchers/,
+      /github\.com\/.*\/forks/,
+      /\?tab=readme/,
+      /\?tab=code/,
+      /\?tab=issues/,
+      /\?tab=pulls/,
+      /\?tab=actions/,
+      /\?tab=projects/,
+      /\?tab=wiki/,
+      /\?tab=security/,
+      /\?tab=insights/,
+      /\?tab=settings/,
+      /\?tab=overview/,
+      /\?tab=repositories/,
+      /\?tab=stars/,
+      /\?tab=followers/,
+      /\?tab=following/,
+      /\?tab=packages/,
+      /\?tab=sponsors/,
+      /github\.com\/.*\?.*from=.*&to=/,  // Date range parameters like ?from=2024-12-01&to=2024-12-31
+      /github\.com\/.*\?.*type=source/,   // Repository type filters
+      /github\.com\/.*\?.*sort=updated/,  // Sorting parameters
+      /github\.com\/.*\?.*q=/,            // Search query parameters
+      /#start-of-content$/,
+      /#readme$/,
+      
+      // Generic OAuth providers
+      /auth0\.com/,
+      /okta\.com/,
+      /\.auth\./,
+      /sso\./,
+      
+      // Session and state parameters (these are usually temporary URLs)
+      /state=/,
+      /code=/,
+      /token=/,
+      /nonce=/,
+      /session=/,
+      
+      // Notion view parameters that create duplicates
+      /notion\.so\/.*\?pvs=/,           // Private view parameters like ?pvs=12
+      /notion\.so\/.*\?showMoveTo=/,    // Move dialog parameters
+      /notion\.so\/.*\?.*&pvs=/,        // pvs in combination with other params
+      /notion\.so\/.*\?.*&showMoveTo=/, // showMoveTo in combination
+      /notion\.so\/.*showMoveTo=/,      // showMoveTo anywhere in query string
+      
+      // Figma view parameters that create duplicates
+      /figma\.com\/.*\?node-id=/,       // Node selection parameters
+      /figma\.com\/.*\?t=/,             // View/frame parameters 
+      /figma\.com\/.*\?p=/,             // Prototype parameters
+      /figma\.com\/.*\?fuid=/,          // User ID parameters
+      /figma\.com\/.*\?.*&node-id=/,    // node-id in combination
+      /figma\.com\/.*\?.*&t=/,          // t parameter in combination
+      /figma\.com\/.*\?.*&p=/,          // p parameter in combination
+      /figma\.com\/.*\?.*&fuid=/,       // fuid parameter in combination
     ];
 
     return excludePatterns.some(pattern => pattern.test(url));
@@ -846,7 +1124,10 @@ export class GenericUrlParser {
   static createWorkspacesFromUrls(urls, existingWorkspaces = []) {
     if (!Array.isArray(urls)) return [];
 
-    const { groups } = this.parseMultiple(urls);
+    // Filter out URLs that should be excluded (OAuth, login, settings, etc.)
+    const filteredUrls = urls.filter(url => url && !this.shouldExclude(url));
+
+    const { groups } = this.parseMultiple(filteredUrls);
     const existingNames = new Set(existingWorkspaces.map(ws => ws.name?.toLowerCase()));
     const workspacesToCreate = [];
 

@@ -1,4 +1,4 @@
-import { faCalendarDay, faChevronDown, faChevronRight, faExternalLinkAlt, faEye, faMicrophone, faPause, faPlay, faPlus, faSave, faStop, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faCircle, faClock, faEye, faMicrophone, faPause, faPlay, faPlus, faSave, faStop, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db';
@@ -6,6 +6,7 @@ import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbU
 export function NotesSection() {
   const [notes, setNotes] = React.useState([]);
   const [text, setText] = React.useState('');
+  const [newNoteStatus, setNewNoteStatus] = React.useState('todo');
   const [editingId, setEditingId] = React.useState(null);
   const [editText, setEditText] = React.useState('');
 
@@ -18,12 +19,9 @@ export function NotesSection() {
   const audioRefs = React.useRef({});
   const [previewNote, setPreviewNote] = React.useState(null);
 
-  // Daily notes state
-  const [dailyNotes, setDailyNotes] = React.useState(null);
-  const [showDailyNotes, setShowDailyNotes] = React.useState(false);
-  const [selectedDate, setSelectedDate] = React.useState(new Date().toISOString().split('T')[0]);
-  const [editingDailyNotes, setEditingDailyNotes] = React.useState(false);
-  const [dailyNotesText, setDailyNotesText] = React.useState('');
+  // Notes display limit state
+  const [notesDisplayLimit, setNotesDisplayLimit] = React.useState(6);
+  const [showAllNotes, setShowAllNotes] = React.useState(false);
 
   const loadNotes = React.useCallback(async () => {
     try {
@@ -36,12 +34,13 @@ export function NotesSection() {
     const t = (text || '').trim();
     if (!t) return;
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const note = { id, text: t, type: 'text', createdAt: Date.now() };
+    const note = { id, text: t, type: 'text', status: newNoteStatus, createdAt: Date.now() };
     try { await dbUpsertNote(note); } catch { }
     setText('');
+    setNewNoteStatus('todo');
     // Reload to reflect authoritative DB ordering and cap
     await loadNotes();
-  }, [text, loadNotes]);
+  }, [text, newNoteStatus, loadNotes]);
 
   // Voice recording functions
   const startRecording = React.useCallback(async () => {
@@ -65,6 +64,7 @@ export function NotesSection() {
             type: 'voice',
             audioData: base64Audio,
             duration: recordingTime,
+            status: 'todo',
             createdAt: Date.now()
           };
           try { await dbUpsertNote(note); } catch { }
@@ -176,128 +176,47 @@ export function NotesSection() {
 
   const closePreview = React.useCallback(() => setPreviewNote(null), []);
 
-  // Daily notes functions
-  const loadDailyNotes = React.useCallback(async (date) => {
-    try {
-      const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'getDailyNotes', date }, resolve);
-      });
-
-      if (response?.ok) {
-        setDailyNotes(response.dailyNotes);
-        setDailyNotesText(response.dailyNotes.content || '');
-      } else {
-        setDailyNotes({
-          date,
-          content: '',
-          selections: [],
-          metadata: { created: 0, lastUpdated: 0, selectionCount: 0 }
-        });
-        setDailyNotesText('');
-      }
-    } catch (e) {
-      console.error('Failed to load daily notes:', e);
+  // Todo status functions
+  const getStatusIcon = React.useCallback((status) => {
+    switch (status) {
+      case 'done': return faCheck;
+      case 'in-progress': return faClock;
+      case 'todo':
+      default: return faCircle;
     }
   }, []);
 
-  const saveDailyNotes = React.useCallback(async () => {
-    if (!selectedDate) return;
-
-    try {
-      const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({
-          type: 'updateDailyNotes',
-          date: selectedDate,
-          content: dailyNotesText
-        }, resolve);
-      });
-
-      if (response?.ok) {
-        await loadDailyNotes(selectedDate);
-        setEditingDailyNotes(false);
-      }
-    } catch (e) {
-      console.error('Failed to save daily notes:', e);
-    }
-  }, [selectedDate, dailyNotesText, loadDailyNotes]);
-
-  const toggleDailyNotes = React.useCallback(() => {
-    if (!showDailyNotes) {
-      loadDailyNotes(selectedDate);
-    }
-    setShowDailyNotes(!showDailyNotes);
-  }, [showDailyNotes, selectedDate, loadDailyNotes]);
-
-  const handleDateChange = React.useCallback((date) => {
-    setSelectedDate(date);
-    loadDailyNotes(date);
-  }, [loadDailyNotes]);
-
-  // Function to open URL in new tab
-  const openUrl = React.useCallback((url) => {
-    if (chrome?.tabs?.create) {
-      chrome.tabs.create({ url, active: true });
-    } else {
-      window.open(url, '_blank');
+  const getStatusColor = React.useCallback((status) => {
+    switch (status) {
+      case 'done': return '#34C759';
+      case 'in-progress': return '#FF9500';
+      case 'todo':
+      default: return 'rgba(255, 255, 255, 0.5)';
     }
   }, []);
 
-  // Function to render markdown links as clickable elements
-  const renderContentWithLinks = React.useCallback((content) => {
-    if (!content) return content;
-
-    // Simple markdown link parser: [text](url)
-    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = linkRegex.exec(content)) !== null) {
-      // Add text before the link
-      if (match.index > lastIndex) {
-        parts.push(content.substring(lastIndex, match.index));
-      }
-
-      // Add clickable link
-      const linkText = match[1];
-      const url = match[2];
-      parts.push(
-        <button
-          key={match.index}
-          onClick={(e) => {
-            e.stopPropagation();
-            openUrl(url);
-          }}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#10b981',
-            textDecoration: 'underline',
-            cursor: 'pointer',
-            fontSize: 'inherit',
-            padding: 0,
-            font: 'inherit'
-          }}
-          title={`Open ${url}`}
-        >
-          {linkText}
-          <FontAwesomeIcon
-            icon={faExternalLinkAlt}
-            style={{ marginLeft: 4, fontSize: '0.8em', opacity: 0.7 }}
-          />
-        </button>
-      );
-
-      lastIndex = match.index + match[0].length;
+  const getStatusLabel = React.useCallback((status) => {
+    switch (status) {
+      case 'done': return 'Done';
+      case 'in-progress': return 'In Progress';
+      case 'todo':
+      default: return 'To Do';
     }
+  }, []);
 
-    // Add remaining text
-    if (lastIndex < content.length) {
-      parts.push(content.substring(lastIndex));
-    }
+  const changeNoteStatus = React.useCallback(async (noteId, newStatus) => {
+    const note = notes.find(n => n.id === noteId);
+    if (!note) return;
 
-    return parts.length > 0 ? parts : content;
-  }, [openUrl]);
+    const updatedNote = { ...note, status: newStatus };
+    try { await dbUpsertNote(updatedNote); } catch { }
+    await loadNotes();
+  }, [notes, loadNotes]);
+
+  const toggleNotesDisplay = React.useCallback(() => {
+    setShowAllNotes(!showAllNotes);
+  }, [showAllNotes]);
+
 
   React.useEffect(() => { loadNotes(); }, [loadNotes]);
 
@@ -321,7 +240,7 @@ export function NotesSection() {
           color: '#ffffff',
           letterSpacing: '-0.5px'
         }}>
-          Notes
+          Quick Todos
         </h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -378,6 +297,35 @@ export function NotesSection() {
             <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} style={{ fontSize: 14 }} />
             {isRecording && <span>{formatDuration(recordingTime)}</span>}
           </button>
+          <button
+            onClick={toggleNotesDisplay}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 16,
+              border: 'none',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: 'rgba(255, 255, 255, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              fontSize: 11,
+              fontWeight: 500
+            }}
+            title={showAllNotes ? 'Show recent only' : 'Show all notes'}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+              e.target.style.color = '#ffffff';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+              e.target.style.color = 'rgba(255, 255, 255, 0.8)';
+            }}
+          >
+            {showAllNotes ? 'Recent' : `All (${notes.length})`}
+          </button>
         </div>
       </div>
 
@@ -423,7 +371,58 @@ export function NotesSection() {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <span>Ctrl + Enter to save</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <select
+                value={newNoteStatus}
+                onChange={(e) => setNewNoteStatus(e.target.value)}
+                style={{
+                  padding: '6px 24px 6px 10px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: getStatusColor(newNoteStatus),
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 6px center',
+                  backgroundSize: '12px',
+                  minWidth: 85,
+                  transition: 'all 0.2s ease'
+                }}
+                title="Set initial status"
+              >
+                <option value="todo">To Do</option>
+                <option value="in-progress">In Progress</option>
+                <option value="done">Done</option>
+              </select>
+              <div style={{
+                width: 16,
+                height: 16,
+                borderRadius: 8,
+                background: newNoteStatus === 'done' ? getStatusColor(newNoteStatus) : 'transparent',
+                border: newNoteStatus !== 'done' ? `1.5px solid ${getStatusColor(newNoteStatus)}` : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <FontAwesomeIcon
+                  icon={getStatusIcon(newNoteStatus)}
+                  style={{
+                    fontSize: newNoteStatus === 'done' ? 8 : 6,
+                    color: newNoteStatus === 'done' ? 'white' : getStatusColor(newNoteStatus),
+                    opacity: newNoteStatus === 'done' ? 1 : 0.8
+                  }}
+                />
+              </div>
+            </div>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button
               onClick={addNote}
@@ -466,7 +465,7 @@ export function NotesSection() {
             No notes yet
           </div>
         )}
-        {notes.map(n => (
+        {(showAllNotes ? notes : notes.slice(0, notesDisplayLimit)).map(n => (
           <div
             key={n.id}
             style={{
@@ -557,6 +556,66 @@ export function NotesSection() {
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  {/* Status Dropdown */}
+                  <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                    <select
+                      value={n.status || 'todo'}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        changeNoteStatus(n.id, e.target.value);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      style={{
+                        padding: '6px 24px 6px 10px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        color: getStatusColor(n.status || 'todo'),
+                        fontSize: 12,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        appearance: 'none',
+                        WebkitAppearance: 'none',
+                        MozAppearance: 'none',
+                        backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 6px center',
+                        backgroundSize: '12px',
+                        minWidth: 90,
+                        transition: 'all 0.2s ease'
+                      }}
+                      title="Change status"
+                    >
+                      <option value="todo">To Do</option>
+                      <option value="in-progress">In Progress</option>
+                      <option value="done">Done</option>
+                    </select>
+                  </div>
+
+                  {/* Status Icon */}
+                  <div style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 10,
+                    background: n.status === 'done' ? getStatusColor(n.status) : 'transparent',
+                    border: n.status !== 'done' ? `2px solid ${getStatusColor(n.status)}` : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <FontAwesomeIcon
+                      icon={getStatusIcon(n.status || 'todo')}
+                      style={{
+                        fontSize: n.status === 'done' ? 10 : 8,
+                        color: n.status === 'done' ? 'white' : getStatusColor(n.status || 'todo'),
+                        opacity: n.status === 'done' ? 1 : 0.8
+                      }}
+                    />
+                  </div>
+                </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {n.type === 'voice' ? (
                     <>
@@ -685,353 +744,47 @@ export function NotesSection() {
             )}
           </div>
         ))}
-      </div>
-
-      {/* Daily Notes Section - Apple Style */}
-      <div style={{
-        marginTop: 24,
-        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-        paddingTop: 24
-      }}>
-        <div
-          onClick={toggleDailyNotes}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: 'pointer',
-            marginBottom: showDailyNotes ? 20 : 0,
-            padding: '8px 4px',
-            borderRadius: 8,
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-          }}
-        >
-          <h2 style={{
-            marginBottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontSize: 20,
-            fontWeight: 600,
-            color: '#ffffff',
-            letterSpacing: '-0.3px'
-          }}>
-            <FontAwesomeIcon icon={faCalendarDay} style={{ color: '#FF9500', fontSize: 18 }} />
-            Daily Notes
-            {dailyNotes?.metadata?.selectionCount > 0 && (
-              <span style={{
-                fontSize: 12,
-                color: '#ffffff',
-                background: 'rgba(255, 149, 0, 0.2)',
-                padding: '4px 8px',
-                borderRadius: 12,
-                marginLeft: 4,
-                fontWeight: 500,
-                border: '1px solid rgba(255, 149, 0, 0.3)'
-              }}>
-                {dailyNotes.metadata.selectionCount}
-              </span>
-            )}
-          </h2>
+        
+        {/* Notes limit indicator */}
+        {!showAllNotes && notes.length > notesDisplayLimit && (
           <div style={{
-            width: 24,
-            height: 24,
-            borderRadius: 12,
-            background: 'rgba(255, 255, 255, 0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.2s ease'
+            textAlign: 'center',
+            marginTop: 12,
+            padding: '8px 16px',
+            background: 'rgba(255, 255, 255, 0.05)',
+            borderRadius: 8,
+            border: '1px solid rgba(255, 255, 255, 0.1)'
           }}>
-            <FontAwesomeIcon
-              icon={showDailyNotes ? faChevronDown : faChevronRight}
-              style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: 10 }}
-            />
-          </div>
-        </div>
-
-        {showDailyNotes && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Date selector - Apple Style */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: 12,
-              padding: 12,
-              border: '1px solid rgba(255, 255, 255, 0.1)'
+            <span style={{
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: 12,
+              fontWeight: 400
             }}>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => handleDateChange(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  color: '#ffffff',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  fontFamily: 'inherit',
-                  cursor: 'pointer'
-                }}
-              />
-              {dailyNotes && dailyNotes.metadata.lastUpdated > 0 && (
-                <span style={{
-                  fontSize: 12,
-                  color: 'rgba(255, 255, 255, 0.5)',
-                  fontWeight: 400
-                }}>
-                  Updated {new Date(dailyNotes.metadata.lastUpdated).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </span>
-              )}
-            </div>
-
-            {/* Daily notes content - Apple Style */}
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: 12,
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              overflow: 'hidden'
-            }}>
-              {editingDailyNotes ? (
-                <div style={{ padding: 16 }}>
-                  <textarea
-                    value={dailyNotesText}
-                    onChange={(e) => setDailyNotesText(e.target.value)}
-                    placeholder="Your daily notes... Selected text from web pages is automatically added here."
-                    autoFocus
-                    style={{
-                      width: '100%',
-                      minHeight: 120,
-                      padding: 0,
-                      border: 'none',
-                      background: 'transparent',
-                      color: '#ffffff',
-                      fontSize: 16,
-                      lineHeight: 1.4,
-                      resize: 'vertical',
-                      fontFamily: 'inherit',
-                      outline: 'none'
-                    }}
-                    onInput={(e) => {
-                      e.target.style.height = 'auto';
-                      e.target.style.height = Math.max(120, e.target.scrollHeight) + 'px';
-                    }}
-                  />
-                  <div style={{
-                    display: 'flex',
-                    gap: 8,
-                    justifyContent: 'flex-end',
-                    marginTop: 16,
-                    paddingTop: 16,
-                    borderTop: '1px solid rgba(255, 255, 255, 0.1)'
-                  }}>
-                    <button
-                      onClick={() => {
-                        setEditingDailyNotes(false);
-                        setDailyNotesText(dailyNotes?.content || '');
-                      }}
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: 8,
-                        border: 'none',
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        color: '#ffffff',
-                        fontSize: 14,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faTimes} style={{ fontSize: 12 }} />
-                      Cancel
-                    </button>
-                    <button
-                      onClick={saveDailyNotes}
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: 8,
-                        border: 'none',
-                        background: '#007AFF',
-                        color: 'white',
-                        fontSize: 14,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        boxShadow: '0 2px 8px rgba(0, 122, 255, 0.3)'
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faSave} style={{ fontSize: 12 }} />
-                      Save
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  onClick={() => setEditingDailyNotes(true)}
-                  style={{
-                    minHeight: 100,
-                    padding: 16,
-                    color: '#ffffff',
-                    fontSize: 16,
-                    lineHeight: 1.4,
-                    cursor: 'pointer',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}
-                >
-                  {dailyNotes?.content ?
-                    renderContentWithLinks(dailyNotes.content) : (
-                      <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', fontSize: 15 }}>
-                        Tap to add your daily notes... Selected text from web pages will appear here automatically.
-                      </span>
-                    )}
-                </div>
-              )}
-            </div>
-
-            {/* Auto-captured selections - Apple Style */}
-            {dailyNotes?.selections && dailyNotes.selections.length > 0 && (
-              <div>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 12
-                }}>
-                  <h3 style={{
-                    fontSize: 16,
-                    fontWeight: 600,
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    margin: 0,
-                    letterSpacing: '-0.2px'
-                  }}>
-                    Auto-captured
-                  </h3>
-                  <span style={{
-                    fontSize: 12,
-                    color: '#ffffff',
-                    background: 'rgba(52, 199, 89, 0.2)',
-                    padding: '2px 8px',
-                    borderRadius: 8,
-                    fontWeight: 500,
-                    border: '1px solid rgba(52, 199, 89, 0.3)'
-                  }}>
-                    {dailyNotes.selections.length}
-                  </span>
-                </div>
-                <div style={{
-                  maxHeight: 200,
-                  overflowY: 'auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8
-                }}>
-                  {dailyNotes.selections.slice(-5).reverse().map(selection => (
-                    <div key={selection.id} style={{
-                      background: 'rgba(52, 199, 89, 0.05)',
-                      border: '1px solid rgba(52, 199, 89, 0.15)',
-                      borderRadius: 10,
-                      padding: 12,
-                      transition: 'all 0.2s ease',
-                      cursor: 'pointer'
-                    }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(52, 199, 89, 0.08)';
-                        e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.25)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(52, 199, 89, 0.05)';
-                        e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.15)';
-                      }}
-                    >
-                      <div style={{
-                        color: '#ffffff',
-                        marginBottom: 6,
-                        fontSize: 14,
-                        lineHeight: 1.3,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden'
-                      }}>
-                        "{selection.text}"
-                      </div>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontSize: 11,
-                        color: 'rgba(255, 255, 255, 0.6)'
-                      }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openUrl(selection.source?.url);
-                          }}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#34C759',
-                            cursor: 'pointer',
-                            fontSize: 11,
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            textDecoration: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            fontWeight: 500,
-                            transition: 'all 0.2s ease'
-                          }}
-                          title={`Open ${selection.source?.url}`}
-                          onMouseEnter={(e) => {
-                            e.target.style.background = 'rgba(52, 199, 89, 0.15)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.background = 'none';
-                          }}
-                        >
-                          {selection.source?.domain || 'Unknown'}
-                          <FontAwesomeIcon
-                            icon={faExternalLinkAlt}
-                            style={{ fontSize: 9, opacity: 0.8 }}
-                          />
-                        </button>
-                        <span style={{ fontWeight: 400 }}>{selection.time}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              Showing {notesDisplayLimit} of {notes.length} notes
+            </span>
+            <button
+              onClick={toggleNotesDisplay}
+              style={{
+                marginLeft: 8,
+                padding: '4px 8px',
+                borderRadius: 4,
+                border: 'none',
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: '#007AFF',
+                fontSize: 11,
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+              }}
+            >
+              Show All
+            </button>
           </div>
         )}
       </div>

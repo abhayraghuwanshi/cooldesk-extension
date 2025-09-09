@@ -2,6 +2,7 @@ import React from 'react';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { CoolFeedSection } from './CoolFeedSection';
 import { CurrentTabsSection } from './CurrentTabsSection';
+import { DailyNotesSection } from './DailyNotesSection';
 import { NotesSection } from './NotesSection';
 import { PingsSection } from './PingsSection';
 
@@ -149,6 +150,7 @@ export function ActivityPanel({ activeSection = 0 }) {
     { name: 'Current Tabs', component: <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /> },
     { name: 'Pins', component: <PingsSection /> },
     { name: 'Notes', component: <NotesSection /> },
+    { name: 'Daily Notes', component: <DailyNotesSection /> },
     { name: 'Cool Feed', component: <CoolFeedSection /> }
   ];
 
@@ -179,45 +181,6 @@ export function ActivityPanel({ activeSection = 0 }) {
                 pointerEvents: isAllMode ? 'auto' : (isCurrentSection ? 'auto' : 'none')
               }}
             >
-              {/* Section indicator */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                marginBottom: '12px',
-                gap: '8px'
-              }}>
-                <div style={{
-                  width: '4px',
-                  height: '20px',
-                  background: isAllMode
-                    ? 'linear-gradient(135deg, #34C759 0%, #30D158 100%)'
-                    : (isCurrentSection
-                      ? 'linear-gradient(135deg, #34C759 0%, #30D158 100%)'
-                      : 'rgba(255, 255, 255, 0.2)'),
-                  borderRadius: '2px',
-                  transition: 'all 0.3s ease'
-                }} />
-                <h3 style={{
-                  margin: 0,
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  color: isAllMode
-                    ? '#ffffff'
-                    : (isCurrentSection ? '#ffffff' : 'rgba(255, 255, 255, 0.5)'),
-                  transition: 'all 0.3s ease'
-                }}>
-                  {section.name}
-                </h3>
-                {(isAllMode || isCurrentSection) && (
-                  <div style={{
-                    fontSize: '12px',
-                    color: 'rgba(52, 199, 89, 0.8)',
-                    fontWeight: '500'
-                  }}>
-                    {isAllMode ? '• Visible' : '• Active'}
-                  </div>
-                )}
-              </div>
               {section.component}
             </div>
           </ErrorBoundary>

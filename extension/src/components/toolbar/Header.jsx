@@ -152,7 +152,7 @@ export function Header({
         {/* Navigation Arrows */}
         {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (() => {
           // Define sections for ActivityPanel navigation - add 'All' as first option
-          const sections = ['All', 'Current Tabs', 'Pins', 'Notes', 'Cool Feed'];
+          const sections = ['All', 'Current Tabs', 'Pins', 'Notes', 'Daily Notes', 'Cool Feed'];
           const isActivityNavigation = activeSection !== undefined && setActiveSection;
 
           const currentLabel = isActivityNavigation

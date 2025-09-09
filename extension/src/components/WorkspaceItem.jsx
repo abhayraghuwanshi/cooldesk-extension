@@ -311,7 +311,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
       </div>
 
       {/* Expanded Details - Show all URLs when there are multiple */}
-      {showDetails && <ProjectSublinks values={values} />}
+      {showDetails && <ProjectSublinks values={values} onDelete={onDelete} />}
 
     </li>
   );
