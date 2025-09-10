@@ -222,37 +222,57 @@ async function main() {
 
     // Handle media control commands
     if (msg?.type === 'MEDIA_COMMAND') {
-      console.log('[Background] Media command received:', msg.action);
+      console.log('[Background] Full message received:', JSON.stringify(msg));
+      console.log('[Background] Media command received:', msg.action, 'targetTabId:', msg.targetTabId);
 
       (async () => {
         try {
-          // Find music tabs
-          const musicDomains = [
-            'spotify.com',
-            'music.youtube.com',
-            'youtube.com',
-            'soundcloud.com',
-            'music.apple.com',
-            'pandora.com',
-            'deezer.com',
-            'tidal.com'
-          ];
+          let targetTabs = [];
 
-          const tabs = await chrome.tabs.query({});
-          const musicTabs = tabs.filter(tab =>
-            musicDomains.some(domain => tab.url?.includes(domain))
-          );
+          // If targetTabId is specified, use only that tab
+          if (msg.targetTabId) {
+            try {
+              const specificTab = await chrome.tabs.get(msg.targetTabId);
+              if (specificTab) {
+                targetTabs = [specificTab];
+                console.log('[Background] Using specific target tab:', specificTab.url);
+              }
+            } catch (e) {
+              console.log('[Background] Target tab not found:', msg.targetTabId);
+            }
+          }
 
-          if (musicTabs.length === 0) {
-            console.log('[Background] No music tabs found');
-            sendResponse({ ok: false, error: 'No music tabs found' });
+          // If no specific tab or specific tab not found, fall back to all music tabs
+          if (targetTabs.length === 0) {
+            const musicDomains = [
+              'spotify.com',
+              'music.youtube.com',
+              'youtube.com',
+              'soundcloud.com',
+              'music.apple.com',
+              'pandora.com',
+              'deezer.com',
+              'tidal.com',
+              'netflix.com'
+            ];
+
+            const tabs = await chrome.tabs.query({});
+            targetTabs = tabs.filter(tab =>
+              musicDomains.some(domain => tab.url?.includes(domain))
+            );
+            console.log('[Background] Using all music tabs:', targetTabs.length);
+          }
+
+          if (targetTabs.length === 0) {
+            console.log('[Background] No target tabs found');
+            sendResponse({ ok: false, error: 'No target tabs found' });
             cleanup();
             return;
           }
 
-          // Send command to all music tabs
+          // Send command to target tabs
           let commandSent = false;
-          for (const tab of musicTabs) {
+          for (const tab of targetTabs) {
             try {
               await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
@@ -275,6 +295,9 @@ async function main() {
                     if (action === 'play' || action === 'pause') {
                       // YouTube (regular) selectors
                       let playBtn = document.querySelector('.ytp-play-button');
+
+                      // Netflix selectors
+                      if (!playBtn) playBtn = document.querySelector('[data-uia="control-play-pause-toggle"], .PlayerControlsNeo__button--play-pause, button[aria-label*="Play"], button[aria-label*="Pause"]');
 
                       // Spotify selectors
                       if (!playBtn) playBtn = document.querySelector('[data-testid="control-button-playpause"]');
@@ -334,9 +357,9 @@ async function main() {
           }
 
           if (commandSent) {
-            sendResponse({ ok: true, action: msg.action, tabsFound: musicTabs.length });
+            sendResponse({ ok: true, action: msg.action, tabsFound: targetTabs.length, targetTabId: msg.targetTabId });
           } else {
-            sendResponse({ ok: false, error: 'Failed to execute command on any music tab' });
+            sendResponse({ ok: false, error: 'Failed to execute command on any target tab' });
           }
         } catch (e) {
           console.error('[Background] Media command error:', e);

@@ -1,20 +1,17 @@
 import {
   faArrowUpRightFromSquare,
-  faBackward,
   faCalendarDays,
   faCircleQuestion,
   faEnvelope,
-  faForward,
   faMicrophone,
   faPalette,
-  faPause,
-  faPlay,
   faPlus
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getUIState, saveUIState } from '../../db';
+import MusicControls from './MusicControls';
 import VoiceNavigation from './VoiceNavigation';
 
 export function Header({
@@ -34,8 +31,6 @@ export function Header({
 }) {
   const [autoSync, setAutoSync] = useState(true);
   const [now, setNow] = useState(new Date());
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTrack, setCurrentTrack] = useState(null);
   const [showVoiceNavigation, setShowVoiceNavigation] = useState(false);
   // Load Auto Sync from UI state
   useEffect(() => {
@@ -58,45 +53,6 @@ export function Header({
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
-  }, []);
-
-  // Music controller functions using native Chrome media session
-  const sendMediaCommand = async (action) => {
-    try {
-      // Use Chrome's native media session commands
-      if (chrome?.runtime?.sendMessage) {
-        await chrome.runtime.sendMessage({
-          type: 'MEDIA_COMMAND',
-          action: action
-        });
-      }
-    } catch (e) {
-      console.warn('Media control failed:', e);
-    }
-  };
-
-  const handlePlayPause = () => {
-    const action = isPlaying ? 'pause' : 'play';
-    sendMediaCommand(action);
-    setIsPlaying(!isPlaying);
-  };
-
-  const handlePrevious = () => sendMediaCommand('previoustrack');
-  const handleNext = () => sendMediaCommand('nexttrack');
-
-  // Listen for media session updates from background script
-  useEffect(() => {
-    const messageListener = (message) => {
-      if (message.type === 'MEDIA_STATE_UPDATE') {
-        setIsPlaying(message.isPlaying);
-        setCurrentTrack(message.track);
-      }
-    };
-
-    if (chrome?.runtime?.onMessage) {
-      chrome.runtime.onMessage.addListener(messageListener);
-      return () => chrome.runtime.onMessage.removeListener(messageListener);
-    }
   }, []);
 
   const timeStr = now.toLocaleString(undefined, {
@@ -145,8 +101,8 @@ export function Header({
       borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
-      <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', flex: 1 }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+      <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', flex: 1, flexWrap: 'nowrap' }}>
+        <div style={{ position: 'relative', flex: 1, marginRight: '10vw' }}>
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
         </div>
         {/* Navigation Arrows */}
@@ -276,32 +232,46 @@ export function Header({
         >
           <FontAwesomeIcon icon={progress.running ? faSpinner : (autoSync ? faRobot : faToggleOff)} spin={!!progress.running} />
         </button> */}
-        {/* Music Controls */}
-        <div className="music-controls" style={{ display: 'flex', gap: '4px', alignItems: 'center', marginRight: '8px' }}>
-          <button className="icon-btn music-btn" onClick={handlePrevious} title="Previous Track">
-            <FontAwesomeIcon icon={faBackward} />
-          </button>
-          <button className="icon-btn music-btn" onClick={handlePlayPause} title={isPlaying ? "Pause" : "Play"}>
-            <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} />
-          </button>
-          <button className="icon-btn music-btn" onClick={handleNext} title="Next Track">
-            <FontAwesomeIcon icon={faForward} />
-          </button>
-        </div>
+        <MusicControls />
 
         <button
           className={`icon-btn ${showVoiceNavigation ? 'active' : ''}`}
           onClick={() => setShowVoiceNavigation(!showVoiceNavigation)}
           title={showVoiceNavigation ? "Hide Voice Navigation" : "Show Voice Navigation"}
           aria-pressed={showVoiceNavigation}
+          style={{
+            background: showVoiceNavigation 
+              ? 'linear-gradient(135deg, var(--accent-primary, #34C759), var(--accent-secondary, #30D158))' 
+              : 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+            borderColor: showVoiceNavigation ? 'var(--accent-primary, #34C759)' : 'var(--border-primary, rgba(255, 255, 255, 0.1))',
+            color: showVoiceNavigation ? 'white' : 'var(--text, #e5e7eb)'
+          }}
         >
           <FontAwesomeIcon icon={faMicrophone} />
         </button>
 
-        <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">
+        <button 
+          className="icon-btn" 
+          onClick={() => setShowCreateWorkspace(true)} 
+          title="Create Workspace"
+          style={{
+            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
+            color: 'var(--text, #e5e7eb)'
+          }}
+        >
           <FontAwesomeIcon icon={faPlus} />
         </button>
-        <button className="icon-btn" onClick={() => setShowSettings(true)} title="Customization">
+        <button 
+          className="icon-btn" 
+          onClick={() => setShowSettings(true)} 
+          title="Customization"
+          style={{
+            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
+            color: 'var(--text, #e5e7eb)'
+          }}
+        >
           <FontAwesomeIcon icon={faPalette} />
         </button>
         <button
@@ -313,6 +283,11 @@ export function Header({
             } catch { }
           }}
           title="Open Gmail"
+          style={{
+            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
+            color: 'var(--text, #e5e7eb)'
+          }}
         >
           <FontAwesomeIcon icon={faEnvelope} />
         </button>
@@ -325,6 +300,11 @@ export function Header({
             } catch { }
           }}
           title="Open Google Calendar"
+          style={{
+            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
+            color: 'var(--text, #e5e7eb)'
+          }}
         >
           <FontAwesomeIcon icon={faCalendarDays} />
         </button>
@@ -344,13 +324,27 @@ export function Header({
             alert(msg);
           }}
           title="Help (shortcuts)"
+          style={{
+            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
+            color: 'var(--text, #e5e7eb)'
+          }}
         >
           <FontAwesomeIcon icon={faCircleQuestion} />
         </button>
-        <button className="icon-btn" onClick={openInSidePanel} title="Open in Sidebar">
+        <button 
+          className="icon-btn" 
+          onClick={openInSidePanel} 
+          title="Open in Sidebar"
+          style={{
+            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
+            color: 'var(--text, #e5e7eb)'
+          }}
+        >
           <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
         </button>
-        <div style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap' }} title={now.toLocaleString()}>
+        <div style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap', flexShrink: 0, minWidth: 'fit-content' }} title={now.toLocaleString()}>
           {timeStr}
         </div>
       </div>
