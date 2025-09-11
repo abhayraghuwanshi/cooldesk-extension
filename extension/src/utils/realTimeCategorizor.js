@@ -2,7 +2,7 @@
  * Real-time URL categorization on tab changes
  */
 
-import { addUrlToWorkspace, listWorkspaces, saveWorkspace } from '../db';
+import { addUrlToWorkspace, listWorkspaces, saveWorkspace } from '../db/index.js';
 import GenericUrlParser from './GenericUrlParser.js';
 import categoryManager from '../data/categories.js';
 

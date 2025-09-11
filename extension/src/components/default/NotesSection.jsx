@@ -1,7 +1,7 @@
 import { faCheck, faCircle, faClock, faEye, faMicrophone, faPause, faPlay, faPlus, faSave, faStop, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db';
+import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
 
 export function NotesSection() {
   const [notes, setNotes] = React.useState([]);

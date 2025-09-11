@@ -1,5 +1,5 @@
 // Background script handler for URL notes functionality
-import { deleteUrlNote, getUrlNotes, saveUrlNote } from '../db/url-notes-db.js';
+import { deleteUrlNote, getUrlNotes, saveUrlNote } from '../db/index.js';
 
 // Handle URL notes related messages
 export function handleUrlNotesMessages(message, sender, sendResponse) {

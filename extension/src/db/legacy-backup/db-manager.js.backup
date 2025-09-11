@@ -1,0 +1,133 @@
+// Centralized IndexedDB manager to prevent conflicts and handle errors gracefully
+
+class DBManager {
+    constructor() {
+        this.openPromises = new Map(); // Cache opening promises to prevent concurrent opens
+        this.databases = new Map(); // Cache opened databases
+        this.useIndexedDB = true; // Global flag to disable IndexedDB if it fails consistently
+    }
+
+    async openDB(dbName, version, upgradeCallback) {
+        // Check if we should skip IndexedDB entirely
+        if (!this.useIndexedDB) {
+            console.log(`[DBManager] IndexedDB disabled, skipping ${dbName}`);
+            return null;
+        }
+
+        // Return cached promise if already opening
+        const cacheKey = `${dbName}_${version}`;
+        if (this.openPromises.has(cacheKey)) {
+            return this.openPromises.get(cacheKey);
+        }
+
+        // Create new opening promise
+        const openPromise = this._openDBInternal(dbName, version, upgradeCallback);
+        this.openPromises.set(cacheKey, openPromise);
+
+        try {
+            const db = await openPromise;
+            if (db) {
+                this.databases.set(cacheKey, db);
+            }
+            return db;
+        } catch (error) {
+            console.error(`[DBManager] Failed to open ${dbName}:`, error);
+            this.openPromises.delete(cacheKey);
+            
+            // If we get consistent errors, disable IndexedDB for this session
+            if (error.name === 'QuotaExceededError' || error.name === 'UnknownError') {
+                console.warn('[DBManager] Disabling IndexedDB due to persistent errors');
+                this.useIndexedDB = false;
+            }
+            
+            return null;
+        }
+    }
+
+    async _openDBInternal(dbName, version, upgradeCallback) {
+        return new Promise((resolve, reject) => {
+            // Check if IndexedDB is available
+            if (!window.indexedDB) {
+                console.warn(`[DBManager] IndexedDB not available for ${dbName}`);
+                resolve(null);
+                return;
+            }
+
+            try {
+                const request = indexedDB.open(dbName, version);
+
+                request.onupgradeneeded = (event) => {
+                    try {
+                        if (upgradeCallback) {
+                            upgradeCallback(event);
+                        }
+                    } catch (upgradeError) {
+                        console.error(`[DBManager] Upgrade failed for ${dbName}:`, upgradeError);
+                        reject(upgradeError);
+                    }
+                };
+
+                request.onsuccess = () => {
+                    try {
+                        const db = request.result;
+                        console.log(`[DBManager] Successfully opened ${dbName}`);
+                        resolve(db);
+                    } catch (successError) {
+                        console.error(`[DBManager] Success handler failed for ${dbName}:`, successError);
+                        resolve(null);
+                    }
+                };
+
+                request.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error(`[DBManager] Failed to open ${dbName}:`, {
+                        name: error?.name,
+                        message: error?.message,
+                        code: error?.code,
+                        error: error
+                    });
+                    resolve(null); // Don't reject, just return null for graceful fallback
+                };
+
+                request.onblocked = () => {
+                    console.warn(`[DBManager] Database ${dbName} blocked by another connection`);
+                    // Try to resolve after a delay
+                    setTimeout(() => resolve(null), 1000);
+                };
+
+            } catch (initError) {
+                console.error(`[DBManager] Init failed for ${dbName}:`, initError);
+                resolve(null);
+            }
+        });
+    }
+
+    // Get a cached database
+    getDB(dbName, version) {
+        const cacheKey = `${dbName}_${version}`;
+        return this.databases.get(cacheKey);
+    }
+
+    // Close all databases (useful for cleanup)
+    closeAll() {
+        for (const [key, db] of this.databases.entries()) {
+            try {
+                if (db && db.close) {
+                    db.close();
+                }
+            } catch (error) {
+                console.warn(`[DBManager] Error closing ${key}:`, error);
+            }
+        }
+        this.databases.clear();
+        this.openPromises.clear();
+    }
+
+    // Check if IndexedDB is working
+    isIndexedDBAvailable() {
+        return this.useIndexedDB && !!window.indexedDB;
+    }
+}
+
+// Export singleton instance
+export const dbManager = new DBManager();

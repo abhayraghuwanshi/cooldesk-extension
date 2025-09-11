@@ -1,7 +1,7 @@
 import { faArrowUpRightFromSquare, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { deletePing as dbDeletePing, listPings as dbListPings, upsertPing as dbUpsertPing } from '../../db';
+import { deletePing as dbDeletePing, listPings as dbListPings, upsertPing as dbUpsertPing } from '../../db/index.js';
 import { enqueueOpenInChrome } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils';
 

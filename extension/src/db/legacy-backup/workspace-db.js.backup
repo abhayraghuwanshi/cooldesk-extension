@@ -1,4 +1,5 @@
 import { getHostWorkspaces, setHostWorkspaces } from '../services/extensionApi';
+import { dbManager } from './db-manager.js';
 
 const DB_NAME = 'workspacesDB'
 const DB_VERSION = 2
@@ -9,54 +10,64 @@ let dbCache = null
 async function openWorkspaceDB() {
     if (dbCache) return dbCache
 
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION)
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result
-            if (!db.objectStoreNames.contains(WORKSPACES_STORE)) {
-                const store = db.createObjectStore(WORKSPACES_STORE, { keyPath: 'id' })
+    // Use centralized DB manager
+    dbCache = await dbManager.openDB(DB_NAME, DB_VERSION, (event) => {
+        const db = event.target.result
+        if (!db.objectStoreNames.contains(WORKSPACES_STORE)) {
+            const store = db.createObjectStore(WORKSPACES_STORE, { keyPath: 'id' })
+            try {
+                store.createIndex('by_name', 'name', { unique: false })
+                store.createIndex('by_createdAt', 'createdAt', { unique: false })
+                store.createIndex('by_gridType', 'gridType', { unique: false })
+            } catch (indexError) {
+                console.warn('[Workspace DB] Index creation failed:', indexError)
+            }
+        } else {
+            // Handle migration for existing stores
+            const transaction = event.target.transaction
+            if (transaction) {
+                const store = transaction.objectStore(WORKSPACES_STORE)
                 try {
-                    store.createIndex('by_name', 'name', { unique: false })
-                    store.createIndex('by_createdAt', 'createdAt', { unique: false })
-                    store.createIndex('by_gridType', 'gridType', { unique: false })
-                } catch { }
-            } else {
-                // Handle migration for existing stores
-                const transaction = event.target.transaction
-                if (transaction) {
-                    const store = transaction.objectStore(WORKSPACES_STORE)
-                    try {
-                        // Add new indexes if they don't exist
-                        if (!store.indexNames.contains('by_gridType')) {
-                            store.createIndex('by_gridType', 'gridType', { unique: false })
-                        }
-                        if (!store.indexNames.contains('by_name')) {
-                            store.createIndex('by_name', 'name', { unique: false })
-                        }
-                    } catch { /* ignore index creation errors */ }
+                    // Add new indexes if they don't exist
+                    if (!store.indexNames.contains('by_gridType')) {
+                        store.createIndex('by_gridType', 'gridType', { unique: false })
+                    }
+                    if (!store.indexNames.contains('by_name')) {
+                        store.createIndex('by_name', 'name', { unique: false })
+                    }
+                } catch (indexError) {
+                    console.warn('[Workspace DB] Index migration failed:', indexError)
                 }
             }
         }
-        request.onsuccess = () => {
-            dbCache = request.result
-            resolve(dbCache)
-        }
-        request.onerror = (event) => {
-            console.error('[DB Debug] Database open failed:', event.target.error)
-            reject(event.target.error)
-        }
-    })
+    });
+
+    return dbCache;
 }
 
 export async function listWorkspaces() {
     const db = await openWorkspaceDB()
-    const items = await new Promise((resolve, reject) => {
-        const tx = db.transaction(WORKSPACES_STORE, 'readonly')
-        const store = tx.objectStore(WORKSPACES_STORE)
-        const req = store.getAll()
-        req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : [])
-        req.onerror = () => reject(req.error)
-    })
+    
+    let items = []
+    
+    if (db) {
+        // Use IndexedDB if available
+        try {
+            items = await new Promise((resolve, reject) => {
+                const tx = db.transaction(WORKSPACES_STORE, 'readonly')
+                const store = tx.objectStore(WORKSPACES_STORE)
+                const req = store.getAll()
+                req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : [])
+                req.onerror = () => reject(req.error)
+            })
+        } catch (error) {
+            console.warn('[DB Debug] IndexedDB query failed, using fallback storage:', error)
+            items = []
+        }
+    } else {
+        // Fallback to Chrome storage
+        console.log('[DB Debug] Using Chrome storage fallback for listWorkspaces')
+    }
     // Mirror to host in background; do not block UI if host is unavailable
     try {
         if (Array.isArray(items) && items.length) {

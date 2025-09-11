@@ -1,4 +1,4 @@
-const DB_NAME = 'cooldesk-db'
+const DB_NAME = 'cooldesk-pins-db'
 const DB_VERSION = 1
 const PINS_STORE = 'pins'
 
@@ -89,7 +89,13 @@ export async function deletePing(url) {
             const store = tx.objectStore(PINS_STORE)
             const req = store.delete(url)
             req.onsuccess = () => resolve()
-            req.onerror = () => resolve()
-        } catch { resolve() }
+            req.onerror = (event) => {
+                console.error('[Pins DB] Delete failed:', event.target.error)
+                resolve()
+            }
+        } catch (error) {
+            console.error('[Pins DB] Delete exception:', error)
+            resolve()
+        }
     })
 }

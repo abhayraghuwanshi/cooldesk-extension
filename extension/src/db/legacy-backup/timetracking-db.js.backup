@@ -1,4 +1,4 @@
-const DB_NAME = 'ActivityTimeSeriesDB'
+const DB_NAME = 'TimeTrackingDB'
 const DB_VERSION = 1
 const TIME_TRACKING_STORE = 'timeTracking'
 
@@ -29,7 +29,7 @@ async function openDB() {
             resolve(dbCache)
         }
         request.onerror = (event) => {
-            console.error('[DB Debug] Database open failed:', event.target.error)
+            console.error('[TimeTracking DB] Database open failed:', event.target.error)
             reject(event.target.error)
         }
     })

@@ -6,8 +6,11 @@ export const getDomainFromUrl = (url) => {
 // Works if bundled with `psl` or if `window.psl` is injected. Falls back gracefully otherwise.
 let pslLib = null;
 try {
-  // eslint-disable-next-line global-require
-  pslLib = require('psl');
+  // Avoid require() in service worker context where it's not available
+  if (typeof importScripts === 'undefined') {
+    // eslint-disable-next-line global-require
+    pslLib = require('psl');
+  }
 } catch (_) {
   pslLib = null;
 }
@@ -15,12 +18,18 @@ try {
 const getBaseDomain = (host) => {
   if (!host) return '';
   try {
-    const maybePsl = (typeof window !== 'undefined' && window.psl) ? window.psl : pslLib;
+    // Check for window in a way that works in both browser and non-browser environments
+    const maybePsl = (typeof window !== 'undefined' && window.psl)
+      ? window.psl
+      : (pslLib || null);
+
     if (maybePsl && typeof maybePsl.parse === 'function') {
       const res = maybePsl.parse(host);
       if (res && res.domain) return res.domain; // eTLD+1
     }
-  } catch { }
+  } catch (e) {
+    console.warn('PSL parsing failed:', e);
+  }
   // Fallback: last two labels
   const labels = String(host).split('.');
   return labels.length >= 2 ? labels.slice(-2).join('.') : host;

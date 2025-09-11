@@ -1,10 +1,9 @@
 // MV3 background service worker (type: module)
-import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats } from '../db/activityTimeSeries-db.js';
+import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats, setupDatabase } from '../db/index.js';
 import { storageGetWithTTL } from '../services/extensionApi.js';
 import { populateAndStore } from './data.js';
 // Modular background pieces - these initialize their own message handlers
 import { initializeActivity } from './activity.js';
-import { initializeAI } from './ai.js';
 import { initializeData } from './data.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
@@ -136,7 +135,23 @@ async function main() {
   console.log('[Background] Main function started');
 
   // Initialize AI module
-  initializeAI();
+  // initializeAI();
+
+  // Initialize unified database system first
+  console.log('[Background] Initializing database system...');
+  try {
+    const dbResult = await setupDatabase();
+    if (dbResult.success) {
+      console.log('[Background] ✅ Database system ready');
+      if (dbResult.migrated) {
+        console.log('[Background] ✅ Legacy data migrated successfully');
+      }
+    } else {
+      console.error('[Background] ❌ Database initialization failed:', dbResult.error);
+    }
+  } catch (error) {
+    console.error('[Background] ❌ Database setup error:', error);
+  }
 
   // Initialize Data module
   initializeData();

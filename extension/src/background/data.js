@@ -1,5 +1,5 @@
 // Data collection and storage operations (bookmarks, history)
-import { getSettings } from '../db/db.js';
+import { getSettings } from '../db/index.js';
 import { storageGetWithTTL, storageSetWithTTL } from '../services/extensionApi.js';
 
 // Global variable to track last populate time
@@ -129,6 +129,7 @@ export function initializeDataCollection() {
 
 // Initialize data collection
 export function initializeData() {
+  console.log('[Background] Initializing data handlers...');
   initializeDataCollection();
 }
 

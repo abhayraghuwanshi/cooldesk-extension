@@ -17,7 +17,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useRef, useState } from 'react';
-import { getUIState, saveUIState } from '../../db';
+import { getUIState, saveUIState } from '../../db/index.js';
 import { triggerAutoCategorize } from '../../utils/messaging';
 
 export function VerticalHeader({

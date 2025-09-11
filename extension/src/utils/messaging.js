@@ -43,14 +43,38 @@ export async function sendBackgroundMessage(message) {
     try {
         // Chrome extension environment
         if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+            // Check if runtime is still connected before sending
+            if (!chrome.runtime?.id) {
+                console.log('Extension context invalidated, skipping message:', message.action);
+                return { ok: false, error: 'Extension context invalidated', skipped: true };
+            }
+
             return new Promise((resolve, reject) => {
-                chrome.runtime.sendMessage(message, (response) => {
-                    if (chrome.runtime.lastError) {
-                        reject(new Error(chrome.runtime.lastError.message));
-                    } else {
-                        resolve(response);
-                    }
-                });
+                try {
+                    chrome.runtime.sendMessage(message, (response) => {
+                        // Check chrome.runtime.lastError immediately to prevent unchecked error
+                        const lastError = chrome.runtime.lastError;
+                        if (lastError) {
+                            const error = lastError.message;
+                            console.warn(`Background connection failed for ${message.action || 'unknown'}:`, error);
+                            
+                            // Handle specific connection errors gracefully
+                            if (error.includes('Could not establish connection') || 
+                                error.includes('Receiving end does not exist') ||
+                                error.includes('Extension context invalidated')) {
+                                resolve({ ok: false, error: 'Background script unavailable', skipped: true });
+                                return;
+                            }
+                            
+                            resolve({ ok: false, error: error, skipped: true });
+                        } else {
+                            resolve(response || { ok: true });
+                        }
+                    });
+                } catch (sendError) {
+                    console.warn(`Failed to send message for ${message.action || 'unknown'}:`, sendError);
+                    resolve({ ok: false, error: 'Message send failed', skipped: true });
+                }
             });
         }
 

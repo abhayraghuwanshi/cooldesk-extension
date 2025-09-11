@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getHostDashboard, setHostDashboard, setHostUrls } from '../services/extensionApi';
-import { listWorkspaces, listAllUrls } from '../db';
+import { listWorkspaces, listAllUrls } from '../db/index.js';
 
 const normalize = (dashboardData) => {
   const bookmarks = (dashboardData?.bookmarks || []).map((b) => ({ ...b, type: 'Bookmark' }))

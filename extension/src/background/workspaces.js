@@ -1,6 +1,5 @@
 // Workspace management and related message handlers
-import { listAllUrls } from '../db/workspace-url-db.js';
-import { listWorkspaces } from '../db/workspace-db.js';
+import { listAllUrls, listWorkspaces } from '../db/index.js';
 import { setHostUrls, setHostWorkspaces } from '../services/extensionApi.js';
 
 // Initialize workspace functionality

@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { getUIState, saveUIState } from '../../db';
+import { getUIState, saveUIState } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils';
 import VoiceNavigation from './VoiceNavigation';
 

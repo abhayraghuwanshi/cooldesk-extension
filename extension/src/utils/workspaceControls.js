@@ -3,7 +3,7 @@
  */
 
 import GenericUrlParser from './GenericUrlParser.js';
-import { getUIState, saveUIState, listWorkspaces, saveWorkspace, addUrlToWorkspace } from '../db';
+import { getUIState, saveUIState, listWorkspaces, saveWorkspace, addUrlToWorkspace } from '../db/index.js';
 
 /**
  * Enable/disable auto workspace creation

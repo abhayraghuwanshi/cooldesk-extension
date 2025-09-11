@@ -10,7 +10,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { getUIState, saveUIState } from '../../db';
+import { getUIState, saveUIState } from '../../db/index.js';
 import MusicControls from './MusicControls';
 import VoiceNavigation from './VoiceNavigation';
 

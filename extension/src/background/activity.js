@@ -1,5 +1,5 @@
 // Activity tracking, time series, and session management
-import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, putActivityRow, putActivityTimeSeriesEvent } from '../db/activityTimeSeries-db.js';
+import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, putActivityRow, putActivityTimeSeriesEvent } from '../db/index.js';
 import { setHostActivity } from '../services/extensionApi.js';
 import { getUrlParts } from '../utils.js';
 

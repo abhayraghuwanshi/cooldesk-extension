@@ -21,7 +21,7 @@ export function ActivityPanel({ activeSection = 0 }) {
   const addPing = React.useCallback(async (tab) => {
     try {
       if (!tab?.url) return;
-      const { upsertPing } = await import('../../db');
+      const { upsertPing } = await import('../../db/index.js');
       const { getFaviconUrl } = await import('../../utils');
 
       const ping = {

@@ -1,4 +1,4 @@
-import { faPlus, faTrash, faTriangleExclamation, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -7,7 +7,6 @@ import { ItemGrid } from './components/ItemGrid';
 import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
 import { SettingsModal } from './components/popups/SettingsModal';
-import { SyncControlsModal } from './components/popups/SyncControlsModal';
 import { ProjectGrid } from './components/ProjectGrid';
 import { Header } from './components/toolbar/Header';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
@@ -15,12 +14,12 @@ import './search.css';
 
 import { ActivityPanel } from './components/default/ActivityPanel';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
-import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType } from './db';
+import categoryManager from './data/categories';
+import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
-import { getDomainFromUrl, getFaviconUrl, getUrlParts } from './utils';
+import { getFaviconUrl, getUrlParts } from './utils';
 import GenericUrlParser from './utils/GenericUrlParser';
-import categoryManager from './data/categories';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
 // import './utils/debugUrlIndexing'; // Adds debug functions to window
 
@@ -70,7 +69,6 @@ export default function App() {
   const [focusSearchTick, setFocusSearchTick] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' })
-  const [progress, setProgress] = useState({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
   const [relatedProducts, setRelatedProducts] = useState([])
   const [loadingRelated, setLoadingRelated] = useState(false)
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
@@ -88,12 +86,8 @@ export default function App() {
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
   const activeSectionTimeoutRef = useRef(null)
   const [processes, setProcesses] = useState([])
-  const [showSyncControls, setShowSyncControls] = useState(false)
   const [useVerticalLayout, setUseVerticalLayout] = useState(false)
 
-  // Keep a live ref of progress.running so interval callbacks see the latest value
-  const progressRunningRef = useRef(false);
-  useEffect(() => { progressRunningRef.current = !!progress.running; }, [progress.running]);
 
   // Auto-reset active section after 5 seconds of inactivity
   useEffect(() => {
@@ -126,22 +120,22 @@ export default function App() {
     // Group URLs by category
     urls.forEach(url => {
       if (!url) return;
-      
+
       // Filter out URLs that should be excluded (OAuth, login, settings, etc.)
       if (GenericUrlParser.shouldExclude(url)) return;
-      
+
       const category = categoryManager.categorizeUrl(url);
       if (category === 'uncategorized') return;
-      
+
       // Skip if GenericUrlParser can handle this URL (to avoid duplicates)
       const parsed = GenericUrlParser.parse(url);
       if (parsed) return;
-      
+
       const categoryDisplayName = category.charAt(0).toUpperCase() + category.slice(1);
-      
+
       // Skip if workspace already exists
       if (existingNames.has(categoryDisplayName.toLowerCase())) return;
-      
+
       if (!categoryGroups.has(category)) {
         categoryGroups.set(category, {
           category,
@@ -149,7 +143,7 @@ export default function App() {
           urls: []
         });
       }
-      
+
       const group = categoryGroups.get(category);
       if (!group.urls.some(u => u === url)) {
         group.urls.push(url);
@@ -160,7 +154,7 @@ export default function App() {
     const workspacesToCreate = [];
     for (const [category, group] of categoryGroups) {
       if (group.urls.length === 0) continue;
-      
+
       const categoryData = categoryManager.getCategory(category);
       const workspaceConfig = {
         name: group.displayName,
@@ -171,19 +165,13 @@ export default function App() {
           title: new URL(url).hostname,
           addedAt: Date.now(),
           favicon: getFaviconUrl(url, 32)
-        })),
-        context: {
-          category,
-          categoryData: categoryData ? { name: categoryData.name, urls: categoryData.urls, patterns: categoryData.patterns } : null,
-          createdFrom: 'auto_category',
-          autoCreated: true
-        }
+        }))
       };
-      
+
       workspacesToCreate.push(workspaceConfig);
       existingNames.add(group.displayName.toLowerCase());
     }
-    
+
     return workspacesToCreate;
   };
 
@@ -191,7 +179,7 @@ export default function App() {
   useEffect(() => {
     const autoCreatePlatformWorkspaces = async () => {
       try {
-        if (!data || data.length === 0) return;
+        if (!data || !Array.isArray(data) || data.length === 0) return;
 
         // Check if auto-creation is enabled (default: true, but user can disable)
         const ui = await getUIState();
@@ -210,14 +198,21 @@ export default function App() {
         }
 
         const urls = data.map(item => item.url).filter(Boolean);
-        const existingWorkspaces = await listWorkspaces();
-        
+        const workspacesResult = await listWorkspaces();
+        const existingWorkspaces = workspacesResult?.success ? workspacesResult.data : [];
+
+        // Ensure existingWorkspaces is an array
+        if (!Array.isArray(existingWorkspaces)) {
+          console.warn('existingWorkspaces is not an array:', existingWorkspaces);
+          return;
+        }
+
         // Create platform-specific workspaces (GitHub, ChatGPT, etc.)
         const platformWorkspacesToCreate = GenericUrlParser.createWorkspacesFromUrls(urls, existingWorkspaces);
-        
+
         // Create category-based workspaces (Social, Shopping, etc.)
         const categoryWorkspacesToCreate = createCategoryBasedWorkspaces(urls, existingWorkspaces);
-        
+
         // Combine both types
         const workspacesToCreate = [...platformWorkspacesToCreate, ...categoryWorkspacesToCreate];
         const createdWorkspaces = [];
@@ -255,7 +250,8 @@ export default function App() {
             createdWorkspaces.map(w => w.name));
 
           // Refresh the saved workspaces list
-          const refreshed = await listWorkspaces();
+          const refreshedResult = await listWorkspaces();
+          const refreshed = refreshedResult?.success ? refreshedResult.data : [];
           setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
         }
 
@@ -352,34 +348,6 @@ export default function App() {
     }
   };
 
-  // Auto Sync: when enabled in UI state, trigger Bulk Sync on load and periodically
-  useEffect(() => {
-    let disposed = false;
-    let intervalId = null;
-    (async () => {
-      try {
-        const ui = await getUIState();
-        const initialOn = ui?.autoSync === true || ui?.autoSync === undefined; // default ON if missing
-        if (initialOn && !disposed && !progressRunningRef.current) {
-          try { await handleBulkSync(); } catch { /* ignore */ }
-        }
-
-        // Schedule periodic bulk runs; check latest UI state each tick
-        const PERIOD_MS = 5 * 60 * 1000; // 5 minutes
-        intervalId = setInterval(async () => {
-          if (disposed) return;
-          try {
-            const latest = await getUIState();
-            const enabled = latest?.autoSync === true || latest?.autoSync === undefined; // default ON if missing
-            if (enabled && !progressRunningRef.current) {
-              handleBulkSync();
-            }
-          } catch { /* ignore */ }
-        }, PERIOD_MS);
-      } catch { /* ignore */ }
-    })();
-    return () => { disposed = true; if (intervalId) clearInterval(intervalId); };
-  }, [])
 
   // Populate settings on load from host (Electron app API), then mirror locally
   useEffect(() => {
@@ -612,7 +580,8 @@ export default function App() {
       // Load saved workspaces initially from IndexedDB
       ; (async () => {
         try {
-          let workspaces = await listWorkspaces()
+          let workspacesResult = await listWorkspaces()
+          let workspaces = workspacesResult?.success ? workspacesResult.data : []
           // One-time migration from chrome.storage.local -> IndexedDB
           if (!Array.isArray(workspaces) || workspaces.length === 0) {
             try {
@@ -623,7 +592,8 @@ export default function App() {
                 for (const w of legacyList) {
                   try { await saveWorkspace(w) } catch { }
                 }
-                workspaces = await listWorkspaces()
+                let workspacesResult = await listWorkspaces()
+                workspaces = workspacesResult?.success ? workspacesResult.data : []
               }
             } catch { }
           }
@@ -644,14 +614,7 @@ export default function App() {
       })()
 
     const onMsg = (req) => {
-      if (req?.action === 'aiProgress') {
-        setProgress((p) => ({ ...p, running: true, processed: req.processed || 0, total: req.total || 0, currentItem: req.currentItem || '', apiHits: req.apiHits || 0 }))
-      } else if (req?.action === 'aiComplete') {
-        setProgress((p) => ({ ...p, running: false }))
-      } else if (req?.action === 'aiError') {
-        setProgress({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error: req.error || 'Unknown error' })
-        setTimeout(() => setProgress((p) => ({ ...p, error: '' })), 4000)
-      } else if (req?.action === 'updateData') {
+      if (req?.action === 'updateData') {
         // data reloaded via hook
       } else if (req?.action === 'focusSearch') {
         // Trigger focusing the bottom search box
@@ -663,7 +626,8 @@ export default function App() {
     // Subscribe to IndexedDB changes via BroadcastChannel
     const unsubscribe = subscribeWorkspaceChanges(async () => {
       try {
-        const workspaces = await listWorkspaces()
+        const workspacesResult = await listWorkspaces()
+        const workspaces = workspacesResult?.success ? workspacesResult.data : []
         setSavedWorkspaces(Array.isArray(workspaces) ? workspaces : [])
       } catch (e) {
         console.error('Failed to refresh workspaces:', e)
@@ -814,7 +778,8 @@ export default function App() {
   const handleAddSavedUrlToWorkspace = async (newUrl, workspaceName) => {
     try {
       try { console.log('[App] handleAddSavedUrlToWorkspace: start', { newUrl, workspaceName }); } catch { }
-      const workspaces = await listWorkspaces();
+      const workspacesResult = await listWorkspaces();
+      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
       try { console.log('[App] handleAddSavedUrlToWorkspace: existing workspaces', { count: Array.isArray(workspaces) ? workspaces.length : 0 }); } catch { }
       const norm = (s) => (s || '').trim().toLowerCase();
       let ws = workspaces.find(w => norm(w.name) === norm(workspaceName));
@@ -824,8 +789,7 @@ export default function App() {
           name: workspaceName,
           description: '',
           createdAt: Date.now(),
-          urls: [],
-          context: {},
+          urls: []
         };
         try { console.log('[App] handleAddSavedUrlToWorkspace: creating new workspace', { id: ws.id, name: ws.name }); } catch { }
       } else {
@@ -848,7 +812,8 @@ export default function App() {
       try { console.log('[App] handleAddSavedUrlToWorkspace: saving workspace', { id: updated.id, name: updated.name, urls: updated.urls.length }); } catch { }
       await saveWorkspace(updated);
       try { console.log('[App] handleAddSavedUrlToWorkspace: save complete, reloading list'); } catch { }
-      const refreshed = await listWorkspaces();
+      const refreshedResult = await listWorkspaces();
+      const refreshed = refreshedResult?.success ? refreshedResult.data : [];
       try {
         console.log('[App] handleAddSavedUrlToWorkspace: refreshed workspaces', { count: Array.isArray(refreshed) ? refreshed.length : 0 });
       } catch { }
@@ -867,7 +832,8 @@ export default function App() {
     try {
       if (!workspace || workspace === 'All') return;
       const norm = (s) => (s || '').trim().toLowerCase();
-      const workspaces = await listWorkspaces();
+      const workspacesResult = await listWorkspaces();
+      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
       const ws = workspaces.find(w => norm(w.name) === norm(workspace));
       if (!ws) return;
 
@@ -892,7 +858,8 @@ export default function App() {
         const toUpdate = Array.isArray(values) ? values.filter(v => typeof v?.id === 'string' ? !v.id.startsWith(syntheticPrefix) : !!v?.id) : [];
         await Promise.all(toUpdate.map(v => updateItemWorkspace(v.id, 'Unknown')));
       } catch { }
-      const refreshed = await listWorkspaces();
+      const refreshedResult = await listWorkspaces();
+      const refreshed = refreshedResult?.success ? refreshedResult.data : [];
       setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
 
       // Trigger data refresh to update UI
@@ -907,49 +874,8 @@ export default function App() {
     }
   };
 
-  const startEnrichment = async () => {
-    setProgress({ running: true, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
-    try {
-      const res = await sendMessage({ action: 'enrichWithAI' })
-      if (!res?.ok) throw new Error(res?.error || 'Failed to start enrichment')
-    } catch (err) {
-      if (err.message.includes('Receiving end does not exist')) {
-        const error = 'Could not connect to the background service.'
-        setProgress({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error })
-        setTimeout(() => setProgress((p) => ({ ...p, error: '' })), 4000)
-      } else {
-        console.error('Error starting enrichment:', err)
-      }
-    }
-  }
 
-  const startCategoryEnrichment = async (category) => {
-    setProgress({ running: true, processed: 0, total: 0, currentItem: '', apiHits: 0, error: '' })
-    try {
-      const res = await sendMessage({ action: 'enrichWithAICategory', category })
-      if (!res?.ok) throw new Error(res?.error || 'Failed to start category enrichment')
-    } catch (err) {
-      if (err.message.includes('Receiving end does not exist')) {
-        const error = 'Could not connect to the background service.'
-        setProgress({ running: false, processed: 0, total: 0, currentItem: '', apiHits: 0, error })
-        setTimeout(() => setProgress((p) => ({ ...p, error: '' })), 4000)
-      } else {
-        console.error('Error starting category enrichment:', err)
-      }
-    }
-  }
 
-  // Handlers for SyncControlsModal (granular pre-control layer)
-  const handleBulkSync = async () => {
-    await startEnrichment();
-  };
-  const handleRecategorize = async () => {
-    // For now, reuse enrichment pipeline; background should respect recategorization flags if any
-    await startEnrichment();
-  };
-  const handleSingleCategorySync = async (category) => {
-    await startCategoryEnrichment(category);
-  };
 
   const handleAddItemToWorkspace = async (item, workspaceName) => {
     try {
@@ -973,7 +899,8 @@ export default function App() {
       } catch (e) { try { console.warn('[App] handleAddItemToWorkspace: storage patch failed', e); } catch { } }
 
       // 2) Also persist URL into saved Workspaces (so workspace view shows it)
-      const workspaces = await listWorkspaces();
+      const workspacesResult = await listWorkspaces();
+      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
       const norm = (s) => (s || '').trim().toLowerCase();
       let ws = workspaces.find(w => norm(w.name) === norm(workspaceName));
       if (!ws) {
@@ -983,7 +910,6 @@ export default function App() {
           description: '',
           createdAt: Date.now(),
           urls: [],
-          context: {},
         };
         try { console.log('[App] handleAddItemToWorkspace: creating new workspace', { id: ws.id, name: ws.name }); } catch { }
       }
@@ -1001,7 +927,8 @@ export default function App() {
           };
           try { console.log('[App] handleAddItemToWorkspace: saving workspace with new URL', { id: ws.id, name: ws.name, urls: ws.urls.length }); } catch { }
           await saveWorkspace(ws);
-          const refreshed = await listWorkspaces();
+          const refreshedResult = await listWorkspaces();
+          const refreshed = refreshedResult?.success ? refreshedResult.data : [];
           setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
         } else {
           try { console.log('[App] handleAddItemToWorkspace: URL already saved, skipping save'); } catch { }
@@ -1046,7 +973,8 @@ export default function App() {
   const handleSaveWorkspacePrompt = async (updatedWorkspace) => {
     try {
       await saveWorkspace(updatedWorkspace);
-      const ws = await listWorkspaces();
+      const wsResult = await listWorkspaces();
+      const ws = wsResult?.success ? wsResult.data : [];
       setSavedWorkspaces(Array.isArray(ws) ? ws : []);
     } catch (e) {
       console.error('Failed to save workspace prompt', e);
@@ -1092,7 +1020,8 @@ export default function App() {
       await deleteWorkspaceById(wsObj.id);
 
       // Refresh list and switch to All
-      const refreshed = await listWorkspaces();
+      const refreshedResult = await listWorkspaces();
+      const refreshed = refreshedResult?.success ? refreshedResult.data : [];
       setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
       setWorkspace('All');
     } catch (e) {
@@ -1134,7 +1063,8 @@ export default function App() {
 
   const handleSaveLink = async (workspaceId, newUrl) => {
     try {
-      const workspaces = await listWorkspaces();
+      const workspacesResult = await listWorkspaces();
+      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
       let workspaceToUpdate = workspaces.find(ws => ws.id === workspaceId);
 
       // If not found by id, try resolving by name (when id is of form name:WorkspaceName)
@@ -1150,8 +1080,7 @@ export default function App() {
               name: byName,
               description: '',
               createdAt: Date.now(),
-              urls: [],
-              context: {},
+              urls: []
             };
           }
         }
@@ -1184,7 +1113,8 @@ export default function App() {
 
       await saveWorkspace(updatedWorkspace);
       // Refresh local list so the newly created workspace appears immediately
-      const ws = await listWorkspaces();
+      const wsResult = await listWorkspaces();
+      const ws = wsResult?.success ? wsResult.data : [];
       setSavedWorkspaces(Array.isArray(ws) ? ws : []);
       handleCloseAddLinkModal();
     } catch (err) {
@@ -1263,7 +1193,8 @@ export default function App() {
     try {
       await updateWorkspaceGridType(workspaceId, newGridType);
       // Refresh workspaces to get updated grid type
-      const refreshed = await listWorkspaces();
+      const refreshedResult = await listWorkspaces();
+      const refreshed = refreshedResult?.success ? refreshedResult.data : [];
       setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
       console.log(`[App] Updated grid type to ${newGridType} for workspace ${workspaceId}`);
     } catch (error) {
@@ -1318,11 +1249,7 @@ export default function App() {
           title: tab.title,
           addedAt: Date.now(),
           favicon: getFaviconUrl(tab.url)
-        }],
-        context: {
-          domain: getDomainFromUrl(tab.url),
-          createdFrom: 'current_tab'
-        }
+        }]
       }
 
       // Save to IndexedDB
@@ -1374,15 +1301,6 @@ export default function App() {
 
       {/* Main Content Area with conditional wrapper */}
       <div>
-        <SyncControlsModal
-          show={showSyncControls}
-          onClose={() => setShowSyncControls(false)}
-          onBulkSync={handleBulkSync}
-          onRecategorize={handleRecategorize}
-          onSingleCategorySync={handleSingleCategorySync}
-          categories={(Array.isArray(savedWorkspaces) ? savedWorkspaces : []).map(ws => ws.name).filter(Boolean)}
-          progress={progress}
-        />
 
         {/* Warning: Require Gemini API key for AI features */}
         {(() => {
@@ -1443,35 +1361,15 @@ export default function App() {
         </div>
 
 
-        {progress.running && (
-          <div className="progress">
-            <div className="progress-bar" style={{ width: `${progress.total ? (progress.processed / progress.total) * 100 : 0}%` }} />
-            <div className="progress-text">{progress.processed}/{progress.total} (API {progress.apiHits}) — {progress.currentItem}</div>
-          </div>
-        )}
-
-        {progress.error && <div className="error">{progress.error}</div>}
 
         {/* Workspace section (only when a specific workspace is selected) */}
         {workspace !== 'All' && (
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
               <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({mergedWorkspaceItems.length})</span>
-              {refreshing && (
-                <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>Syncing…</span>
-              )}
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
 
 
-                <button
-                  onClick={() => startCategoryEnrichment(workspace)}
-                  className="add-link-btn ai-button"
-                  aria-label={`Add recent links to ${workspace}`}
-                  title={`Add recent links to ${workspace}`}
-                  style={{ padding: '4px 8px' }}
-                >
-                  <FontAwesomeIcon icon={faWandMagicSparkles} />
-                </button>
 
 
 
@@ -1633,8 +1531,6 @@ export default function App() {
           setSearch={setSearch}
           populate={populate}
           setShowSettings={setShowSettings}
-          openSyncControls={() => setShowSyncControls(true)}
-          progress={progress}
           setShowCreateWorkspace={setShowCreateWorkspace}
           openInTab={openInTab}
           isFooter={true}

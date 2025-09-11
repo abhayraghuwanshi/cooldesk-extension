@@ -1,0 +1,135 @@
+// Database utility functions for production-ready error handling and logging
+
+/**
+ * Standardized error handler for database operations
+ */
+export function handleDBError(operation, error, context = {}) {
+    const errorDetails = {
+        operation,
+        error: error?.message || String(error),
+        name: error?.name,
+        code: error?.code,
+        context,
+        timestamp: Date.now()
+    }
+    
+    console.error(`[DB Error] ${operation}:`, errorDetails)
+    
+    // Log to Chrome storage for debugging (non-blocking)
+    try {
+        chrome.storage.local.get(['db_errors']).then(({ db_errors = [] }) => {
+            const errors = Array.isArray(db_errors) ? db_errors : []
+            errors.push(errorDetails)
+            // Keep only last 50 errors
+            if (errors.length > 50) errors.splice(0, errors.length - 50)
+            chrome.storage.local.set({ db_errors: errors }).catch(() => {})
+        }).catch(() => {})
+    } catch {}
+    
+    return errorDetails
+}
+
+/**
+ * Retry wrapper for database operations
+ */
+export async function retryDBOperation(operation, maxRetries = 3, delay = 1000) {
+    let lastError
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await operation()
+        } catch (error) {
+            lastError = error
+            handleDBError(`Retry attempt ${attempt}/${maxRetries}`, error)
+            
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, delay * attempt))
+            }
+        }
+    }
+    
+    throw lastError
+}
+
+/**
+ * Database health check
+ */
+export async function checkDBHealth() {
+    const results = {
+        indexedDBAvailable: !!window.indexedDB,
+        storageQuota: null,
+        databases: {},
+        timestamp: Date.now()
+    }
+    
+    // Check storage quota
+    try {
+        if (navigator.storage && navigator.storage.estimate) {
+            const estimate = await navigator.storage.estimate()
+            results.storageQuota = {
+                quota: estimate.quota,
+                usage: estimate.usage,
+                usagePercent: estimate.quota > 0 ? Math.round((estimate.usage / estimate.quota) * 100) : 0
+            }
+        }
+    } catch (error) {
+        handleDBError('Storage quota check', error)
+    }
+    
+    // Test basic IndexedDB operations
+    const dbNames = [
+        'cooldesk-db',
+        'workspacesDB', 
+        'UrlNotesDB',
+        'NotesDB',
+        'cooldesk-pins-db',
+        'TimeTrackingDB',
+        'ActivityTimeSeriesDB',
+        'workspaceUrlsDB'
+    ]
+    
+    for (const dbName of dbNames) {
+        try {
+            const db = await new Promise((resolve, reject) => {
+                const req = indexedDB.open(dbName)
+                req.onsuccess = () => resolve(req.result)
+                req.onerror = () => reject(req.error)
+                setTimeout(() => reject(new Error('Timeout')), 5000)
+            })
+            
+            results.databases[dbName] = {
+                status: 'healthy',
+                version: db.version,
+                stores: Array.from(db.objectStoreNames)
+            }
+            
+            db.close()
+        } catch (error) {
+            results.databases[dbName] = {
+                status: 'error',
+                error: error.message
+            }
+        }
+    }
+    
+    return results
+}
+
+/**
+ * Clean up old error logs periodically
+ */
+export async function cleanupErrorLogs() {
+    try {
+        const { db_errors = [] } = await chrome.storage.local.get(['db_errors'])
+        const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000)
+        
+        const recentErrors = db_errors.filter(error => error.timestamp > oneWeekAgo)
+        
+        if (recentErrors.length !== db_errors.length) {
+            await chrome.storage.local.set({ db_errors: recentErrors })
+            console.log(`[DB Utils] Cleaned up ${db_errors.length - recentErrors.length} old error logs`)
+        }
+    } catch (error) {
+        handleDBError('Error log cleanup', error)
+    }
+}

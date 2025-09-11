@@ -1123,6 +1123,7 @@ export class GenericUrlParser {
    */
   static createWorkspacesFromUrls(urls, existingWorkspaces = []) {
     if (!Array.isArray(urls)) return [];
+    if (!Array.isArray(existingWorkspaces)) existingWorkspaces = [];
 
     // Filter out URLs that should be excluded (OAuth, login, settings, etc.)
     const filteredUrls = urls.filter(url => url && !this.shouldExclude(url));
@@ -1139,18 +1140,12 @@ export class GenericUrlParser {
           name: group.workspace,
           description: `${group.platform.name} workspace`,
           gridType: 'ProjectGrid',
-          urls: group.urls.map(urlData => ({
+          urls: Array.isArray(group.urls) ? group.urls.map(urlData => ({
             url: urlData.url,
             title: urlData.title,
             addedAt: urlData.timestamp || Date.now(),
             favicon: group.favicon
-          })),
-          context: {
-            platform: group.platform,
-            type: group.type,
-            createdFrom: 'auto_parser',
-            autoCreated: true
-          }
+          })) : []
         });
 
         existingNames.add(normalizedName);

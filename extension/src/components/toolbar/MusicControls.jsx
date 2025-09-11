@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { faBackward, faForward, faMusic, faPause, faPlay, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBackward, faForward, faPause, faPlay, faMusic, faVideo, faSpinner } from '@fortawesome/free-solid-svg-icons';
+import React, { useEffect, useState } from 'react';
 
 export default function MusicControls() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -11,7 +11,7 @@ export default function MusicControls() {
   const detectAppType = (url, title) => {
     const hostname = url ? new URL(url).hostname.toLowerCase() : '';
     const titleLower = (title || '').toLowerCase();
-    
+
     if (hostname.includes('spotify') || titleLower.includes('spotify')) {
       return { name: 'Spotify', type: 'music', icon: faMusic, color: '#1DB954' };
     }
@@ -48,7 +48,7 @@ export default function MusicControls() {
     if (hostname.includes('amazon') && (hostname.includes('prime') || titleLower.includes('prime video'))) {
       return { name: 'Prime Video', type: 'video', icon: faVideo, color: '#00A8E1' };
     }
-    
+
     // Generic fallback
     return { name: 'Media Player', type: 'unknown', icon: faPlay, color: 'var(--accent-primary, #34C759)' };
   };
@@ -57,7 +57,7 @@ export default function MusicControls() {
   const sendMediaCommand = async (action, targetTabId = null) => {
     try {
       console.log(`[MusicControls] Sending direct ${action} command to tab:`, targetTabId);
-      
+
       if (!targetTabId) {
         console.warn('No target tab ID provided');
         return;
@@ -69,7 +69,7 @@ export default function MusicControls() {
           target: { tabId: targetTabId },
           func: (action) => {
             console.log(`[Content] Executing ${action} command`);
-            
+
             // Try Media Session API first
             if ('mediaSession' in navigator && navigator.mediaSession) {
               try {
@@ -165,19 +165,19 @@ export default function MusicControls() {
           title: tab.title,
           app: detectAppType(tab.url, tab.title)
         }));
-        
+
         // Also check for any paused media tabs that might not be audible
         const allTabs = await chrome.tabs.query({});
         const potentialMediaTabs = allTabs.filter(tab => {
           const hostname = tab.url ? new URL(tab.url).hostname.toLowerCase() : '';
-          return hostname.includes('spotify') || hostname.includes('netflix') || 
-                 hostname.includes('youtube') || hostname.includes('twitch') ||
-                 hostname.includes('soundcloud') || hostname.includes('apple') ||
-                 hostname.includes('pandora') || hostname.includes('tidal') ||
-                 hostname.includes('deezer') || hostname.includes('hulu') ||
-                 hostname.includes('disney') || hostname.includes('amazon');
+          return hostname.includes('spotify') || hostname.includes('netflix') ||
+            hostname.includes('youtube') || hostname.includes('twitch') ||
+            hostname.includes('soundcloud') || hostname.includes('apple') ||
+            hostname.includes('pandora') || hostname.includes('tidal') ||
+            hostname.includes('deezer') || hostname.includes('hulu') ||
+            hostname.includes('disney') || hostname.includes('amazon');
         });
-        
+
         const allMediaTabs = [...mediaTabs];
         potentialMediaTabs.forEach(tab => {
           if (!mediaTabs.find(mt => mt.id === tab.id)) {
@@ -189,15 +189,13 @@ export default function MusicControls() {
             });
           }
         });
-        
-        console.log('[MusicControls] Found media tabs:', allMediaTabs.map(t => ({name: t.app.name, url: t.url, id: t.id})));
-        
+
         // Only update state if the tabs have actually changed
         const currentIds = mediaApps.map(app => app.id).sort();
         const newIds = allMediaTabs.map(app => app.id).sort();
         if (JSON.stringify(currentIds) !== JSON.stringify(newIds)) {
           setMediaApps(allMediaTabs);
-          
+
           // Set active app to the first playing media if none selected
           if (allMediaTabs.length > 0 && !activeApp) {
             setActiveApp(allMediaTabs[0]);
@@ -212,7 +210,7 @@ export default function MusicControls() {
   // Get current media state from the active tab
   const checkMediaState = async () => {
     if (!activeApp?.id) return;
-    
+
     try {
       if (chrome?.tabs?.get) {
         const tab = await chrome.tabs.get(activeApp.id);
@@ -230,9 +228,9 @@ export default function MusicControls() {
 
   const handlePlayPause = async () => {
     if (!activeApp?.id) return;
-    
+
     const action = isPlaying ? 'pause' : 'play';
-    
+
     try {
       // Always send command to the selected app in dropdown
       await sendMediaCommand(action, activeApp.id);
@@ -359,9 +357,9 @@ export default function MusicControls() {
         </div>
       )}
 
-      <button 
-        className="icon-btn music-btn" 
-        onClick={handlePrevious} 
+      <button
+        className="icon-btn music-btn"
+        onClick={handlePrevious}
         title={`Previous Track${activeApp ? ` (${activeApp.app.name})` : ''}`}
         disabled={!activeApp}
         style={{
@@ -374,15 +372,15 @@ export default function MusicControls() {
       >
         <FontAwesomeIcon icon={faBackward} />
       </button>
-      
-      <button 
-        className="icon-btn music-btn" 
-        onClick={handlePlayPause} 
+
+      <button
+        className="icon-btn music-btn"
+        onClick={handlePlayPause}
         title={`${isPlaying ? "Pause" : "Play"}${activeApp ? ` (${activeApp.app.name})` : ''}`}
         disabled={!activeApp}
         style={{
           background: isPlaying && activeApp
-            ? `linear-gradient(135deg, ${activeApp.app.color}, var(--accent-secondary, #30D158))` 
+            ? `linear-gradient(135deg, ${activeApp.app.color}, var(--accent-secondary, #30D158))`
             : 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
           borderColor: isPlaying && activeApp ? activeApp.app.color : 'var(--border-primary, rgba(255, 255, 255, 0.1))',
           color: isPlaying && activeApp ? 'white' : (activeApp ? 'var(--text, #e5e7eb)' : 'var(--text-muted, #6b7280)'),
@@ -392,10 +390,10 @@ export default function MusicControls() {
       >
         <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} />
       </button>
-      
-      <button 
-        className="icon-btn music-btn" 
-        onClick={handleNext} 
+
+      <button
+        className="icon-btn music-btn"
+        onClick={handleNext}
         title={`Next Track${activeApp ? ` (${activeApp.app.name})` : ''}`}
         disabled={!activeApp}
         style={{

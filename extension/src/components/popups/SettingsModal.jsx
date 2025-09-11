@@ -1,17 +1,14 @@
-import { faBullseye, faCog, faColumns, faFolder, faPalette, faRocket, faSync, faUser } from '@fortawesome/free-solid-svg-icons';
+import { faBullseye, faFolder, faPalette, faRocket, faUser } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { getPersonaUrlCount, personas, validatePersona } from '../../data/personas';
-import { listWorkspaces, saveWorkspace } from '../../db';
+import { listWorkspaces, saveWorkspace } from '../../db/index.js';
 import { getSyncStatus } from '../../services/conditionalSync';
-import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
-import { deleteWorkspaceById, getCurrentUser, initializeFirebase, listWorkspaces as listWorkspacesFirebase, onAuthStateChange, saveSettings as saveSettingsDB, signInWithGoogle, signOutUser, subscribeWorkspaceChanges } from '../../services/firebase';
+import { sendMessage, storageGet } from '../../services/extensionApi';
+import { deleteWorkspaceById, getCurrentUser, initializeFirebase, listWorkspaces as listWorkspacesFirebase, onAuthStateChange, signInWithGoogle, signOutUser, subscribeWorkspaceChanges } from '../../services/firebase';
 import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import AccountTab from '../settings/AccountTab';
-import LayoutTab from '../settings/LayoutTab';
 import PersonasTab from '../settings/PersonasTab';
-import SetupTab from '../settings/SetupTab';
-import SyncTab from '../settings/SyncTab';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
 import WorkspacesTab from '../settings/WorkspacesTab';
@@ -231,10 +228,6 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
               };
             }
           }),
-          context: {
-            persona: selectedPersona.title,
-            originalCategory: category.originalName
-          },
         };
 
         try {
@@ -372,9 +365,34 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
     let unsub = null;
     unsub = subscribeWorkspaceChanges(async () => {
       try {
-        const list = await listWorkspacesFirebase();
-        // Merge with local workspaces or handle sync logic here if needed
-        setWorkspaces(Array.isArray(list) ? list : []);
+        const firebaseList = await listWorkspacesFirebase();
+        const localList = await listWorkspaces();
+        
+        // Merge local and Firebase workspaces, avoiding duplicates
+        const mergedWorkspaces = [];
+        const seenIds = new Set();
+        
+        // Add local workspaces first
+        if (Array.isArray(localList)) {
+          localList.forEach(workspace => {
+            if (workspace?.id && !seenIds.has(workspace.id)) {
+              mergedWorkspaces.push(workspace);
+              seenIds.add(workspace.id);
+            }
+          });
+        }
+        
+        // Add Firebase workspaces that aren't duplicates
+        if (Array.isArray(firebaseList)) {
+          firebaseList.forEach(workspace => {
+            if (workspace?.id && !seenIds.has(workspace.id)) {
+              mergedWorkspaces.push(workspace);
+              seenIds.add(workspace.id);
+            }
+          });
+        }
+        
+        setWorkspaces(mergedWorkspaces);
       } catch { }
     });
     return () => { try { unsub && unsub(); } catch { } };
@@ -453,7 +471,6 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
           description: row.description || '',
           createdAt: Date.now(),
           urls: [],
-          context: {},
         }
         try { await saveWorkspace(ws) } catch { }
       }
@@ -478,7 +495,6 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
         description: (w.description || '').trim(),
         createdAt: w.createdAt || Date.now(),
         urls: Array.isArray(w.urls) ? w.urls : [],
-        context: typeof w.context === 'object' && w.context ? w.context : {},
       }
       await saveWorkspace(payload)
     } catch (e) { /* ignore */ }
@@ -499,7 +515,6 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
       description,
       createdAt: Date.now(),
       urls: [],
-      context: {},
     }
     await saveWorkspace(ws)
     setShowCreateWorkspace(false)
@@ -681,36 +696,6 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
               onThemeChange={handleThemeChange}
               onFontSizeChange={handleFontSizeChange}
               onFontFamilyChange={handleFontFamilyChange}
-            />
-          </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faCog} style={{ marginRight: '8px' }} />Setup</>}>
-            <SetupTab
-              localSettings={localSettings}
-              setLocalSettings={setLocalSettings}
-              markEdited={markEdited}
-              basicSaved={basicSaved}
-              setBasicSaved={setBasicSaved}
-              suggesting={suggesting}
-              error={error}
-              setError={setError}
-              handleSuggestCategories={handleSuggestCategories}
-              saveSettingsDB={saveSettingsDB}
-              storageSet={storageSet}
-            />
-          </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faColumns} style={{ marginRight: '8px' }} />Layout</>}>
-            <LayoutTab
-              useVerticalLayout={useVerticalLayout}
-              onLayoutToggle={onLayoutToggle}
-            />
-          </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faSync} style={{ marginRight: '8px' }} />Sync</>}>
-            <SyncTab
-              syncConfig={syncConfig}
-              syncStatus={syncStatus}
-              syncConfigLoading={syncConfigLoading}
-              handleToggleHostSync={handleToggleHostSync}
-              handleSyncConfigChange={handleSyncConfigChange}
             />
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>

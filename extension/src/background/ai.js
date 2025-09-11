@@ -1,6 +1,4 @@
-import { getSettings } from '../db/db.js';
-import { addUrlToWorkspace, getUrlRecord, listAllUrls, upsertUrl } from '../db/workspace-url-db.js';
-import { listWorkspaces, saveWorkspace } from '../db/workspace-db.js';
+import { getSettings, addUrlToWorkspace, listWorkspaces, saveWorkspace } from '../db/index.js';
 import { createCircuitBreaker, getUrlParts } from '../utils.js';
 import { buildCategoryListPrompt, buildEnrichmentPromptForWorkspace } from '../utils/prompts.js';
 import { activityData } from './activity.js';
