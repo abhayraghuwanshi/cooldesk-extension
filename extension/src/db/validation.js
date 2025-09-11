@@ -121,6 +121,7 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.MIN_LENGTH]: 1,
             [ValidationRules.MAX_LENGTH]: 100
         },
+        // Legacy fields for compatibility
         title: {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.MAX_LENGTH]: 300
@@ -128,6 +129,27 @@ export const VALIDATION_SCHEMAS = {
         content: {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.MAX_LENGTH]: 50000 // 50KB limit
+        },
+        // Current fields used by NotesSection
+        text: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 50000 // 50KB limit
+        },
+        type: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.ENUM]: ['text', 'voice']
+        },
+        status: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.ENUM]: ['todo', 'in-progress', 'done']
+        },
+        // Voice note specific fields
+        audioData: {
+            [ValidationRules.TYPE]: 'string' // Base64 encoded audio
+        },
+        duration: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
         },
         tags: {
             [ValidationRules.TYPE]: 'array',

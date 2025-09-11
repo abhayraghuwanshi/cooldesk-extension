@@ -1,4 +1,4 @@
-import { faCheck, faCircle, faClock, faEye, faMicrophone, faPause, faPlay, faPlus, faSave, faStop, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faCircle, faClock, faEye, faMicrophone, faPause, faPlay, faSave, faStop, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
@@ -25,9 +25,16 @@ export function NotesSection() {
 
   const loadNotes = React.useCallback(async () => {
     try {
+      console.log('[NotesSection] Loading notes...');
       const list = await dbListNotes();
-      setNotes(Array.isArray(list) ? list : []);
-    } catch { setNotes([]); }
+      console.log('[NotesSection] Notes result:', list);
+      const notesData = list?.data || list || [];
+      console.log('[NotesSection] Extracted notes data:', notesData);
+      setNotes(Array.isArray(notesData) ? notesData : []);
+    } catch (error) { 
+      console.error('[NotesSection] Error loading notes:', error);
+      setNotes([]); 
+    }
   }, []);
 
   const addNote = React.useCallback(async () => {
@@ -35,7 +42,13 @@ export function NotesSection() {
     if (!t) return;
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const note = { id, text: t, type: 'text', status: newNoteStatus, createdAt: Date.now() };
-    try { await dbUpsertNote(note); } catch { }
+    console.log('[NotesSection] Creating note:', note);
+    try { 
+      const result = await dbUpsertNote(note);
+      console.log('[NotesSection] Note creation result:', result);
+    } catch (error) {
+      console.error('[NotesSection] Error creating note:', error);
+    }
     setText('');
     setNewNoteStatus('todo');
     // Reload to reflect authoritative DB ordering and cap
@@ -67,7 +80,13 @@ export function NotesSection() {
             status: 'todo',
             createdAt: Date.now()
           };
-          try { await dbUpsertNote(note); } catch { }
+          console.log('[NotesSection] Creating voice note:', note);
+          try { 
+            const result = await dbUpsertNote(note);
+            console.log('[NotesSection] Voice note creation result:', result);
+          } catch (error) {
+            console.error('[NotesSection] Error creating voice note:', error);
+          }
           await loadNotes();
         };
         reader.readAsDataURL(blob);
@@ -145,7 +164,13 @@ export function NotesSection() {
   }, []);
 
   const removeNote = React.useCallback(async (id) => {
-    try { await dbDeleteNote(id); } catch { }
+    console.log('[NotesSection] Deleting note:', id);
+    try { 
+      const result = await dbDeleteNote(id);
+      console.log('[NotesSection] Note deletion result:', result);
+    } catch (error) {
+      console.error('[NotesSection] Error deleting note:', error);
+    }
     await loadNotes();
   }, [loadNotes]);
 
@@ -159,7 +184,13 @@ export function NotesSection() {
     if (!editingId) return setEditingId(null);
     const existing = notes.find(n => n.id === editingId) || { id: editingId, createdAt: Date.now() };
     const updated = { ...existing, text: t };
-    try { await dbUpsertNote(updated); } catch { }
+    console.log('[NotesSection] Saving edited note:', updated);
+    try { 
+      const result = await dbUpsertNote(updated);
+      console.log('[NotesSection] Note edit result:', result);
+    } catch (error) {
+      console.error('[NotesSection] Error saving edited note:', error);
+    }
     await loadNotes();
     setEditingId(null);
     setEditText('');
@@ -209,7 +240,13 @@ export function NotesSection() {
     if (!note) return;
 
     const updatedNote = { ...note, status: newStatus };
-    try { await dbUpsertNote(updatedNote); } catch { }
+    console.log('[NotesSection] Changing note status:', updatedNote);
+    try { 
+      const result = await dbUpsertNote(updatedNote);
+      console.log('[NotesSection] Note status change result:', result);
+    } catch (error) {
+      console.error('[NotesSection] Error changing note status:', error);
+    }
     await loadNotes();
   }, [notes, loadNotes]);
 
@@ -243,60 +280,6 @@ export function NotesSection() {
           Quick Todos
         </h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={addNote}
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 16,
-              border: 'none',
-              background: '#007AFF',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0, 122, 255, 0.3)',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'scale(1.05)';
-              e.target.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'scale(1)';
-              e.target.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.3)';
-            }}
-            title="Add note"
-          >
-            <FontAwesomeIcon icon={faPlus} style={{ fontSize: 14 }} />
-          </button>
-          <button
-            onClick={isRecording ? stopRecording : startRecording}
-            style={{
-              width: isRecording ? 80 : 32,
-              height: 32,
-              borderRadius: 16,
-              border: 'none',
-              background: isRecording ? '#FF3B30' : '#34C759',
-              color: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              cursor: 'pointer',
-              boxShadow: isRecording
-                ? '0 2px 8px rgba(255, 59, 48, 0.3)'
-                : '0 2px 8px rgba(52, 199, 89, 0.3)',
-              transition: 'all 0.3s ease',
-              fontSize: 12,
-              fontWeight: 500
-            }}
-            title={isRecording ? 'Stop recording' : 'Start voice recording'}
-          >
-            <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} style={{ fontSize: 14 }} />
-            {isRecording && <span>{formatDuration(recordingTime)}</span>}
-          </button>
           <button
             onClick={toggleNotesDisplay}
             style={{
@@ -445,6 +428,29 @@ export function NotesSection() {
             >
               <FontAwesomeIcon icon={faSave} style={{ fontSize: 10 }} />
               Save
+            </button>
+            <button
+              onClick={isRecording ? stopRecording : startRecording}
+              style={{
+                padding: isRecording ? '6px 12px' : '6px 8px',
+                borderRadius: 6,
+                border: 'none',
+                background: isRecording ? '#FF3B30' : '#34C759',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                fontSize: 12,
+                fontWeight: 500,
+                minWidth: isRecording ? 'auto' : '32px'
+              }}
+              title={isRecording ? 'Stop recording' : 'Start voice recording'}
+            >
+              <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} style={{ fontSize: 10 }} />
+              {isRecording && <span>{formatDuration(recordingTime)}</span>}
             </button>
             <span style={{ opacity: 0.7 }}>{text.length} characters</span>
           </div>

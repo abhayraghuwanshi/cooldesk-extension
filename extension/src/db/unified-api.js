@@ -353,19 +353,32 @@ export const saveNote = withErrorHandling(async (noteData) => {
     const tx = db.transaction(DB_CONFIG.STORES.NOTES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.NOTES)
     
-    // Enforce note limit of 200 by cleaning oldest
-    const allNotes = await listNotes({ limit: 1000 })
-    if (allNotes.length >= 200) {
-        const toDelete = allNotes.slice(199) // Keep 199, delete rest
-        for (const oldNote of toDelete) {
-            store.delete(oldNote.id)
-        }
-    }
-    
-    const request = store.put(note)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(note)
-        request.onerror = () => reject(request.error)
+        // Enforce note limit of 200 by cleaning oldest - do this within the transaction
+        const getAllRequest = store.getAll()
+        
+        getAllRequest.onsuccess = () => {
+            const allNotes = getAllRequest.result || []
+            
+            // If we have too many notes, delete the oldest ones
+            if (allNotes.length >= 200) {
+                // Sort by creation time (oldest first)
+                allNotes.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+                const toDelete = allNotes.slice(0, allNotes.length - 199) // Keep 199, delete rest
+                
+                // Delete old notes within the same transaction
+                toDelete.forEach(oldNote => {
+                    store.delete(oldNote.id)
+                })
+            }
+            
+            // Now save the new note
+            const putRequest = store.put(note)
+            putRequest.onsuccess = () => resolve(note)
+            putRequest.onerror = () => reject(putRequest.error)
+        }
+        
+        getAllRequest.onerror = () => reject(getAllRequest.error)
     })
 }, {
     operation: 'saveNote',
