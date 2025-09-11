@@ -9,11 +9,25 @@ const WorkspacesTab = ({
   handleDeleteWorkspace,
   handleOpenCreateWorkspace
 }) => {
+  console.log('[WorkspacesTab] Rendering with editableWorkspaces:', editableWorkspaces);
+  
   return (
     <div>
       <label>
-        <span>Workspaces</span>
+        <span>Workspaces ({editableWorkspaces?.length || 0})</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {editableWorkspaces?.length === 0 && (
+            <div style={{ 
+              padding: '20px', 
+              textAlign: 'center', 
+              color: '#9ca3af',
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              No workspaces found. Click "Add Workspace" to create one.
+            </div>
+          )}
           {editableWorkspaces.map((row) => (
             <div key={row.id} style={{
               display: 'flex',

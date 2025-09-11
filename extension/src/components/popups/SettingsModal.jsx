@@ -353,9 +353,16 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
     if (!show) return;
     (async () => {
       try {
+        console.log('[SettingsModal] Loading local workspaces...');
         const list = await listWorkspaces();
-        setWorkspaces(Array.isArray(list) ? list : []);
-      } catch { setWorkspaces([]); }
+        console.log('[SettingsModal] Local workspaces result:', list);
+        const workspaceData = list?.data || list || [];
+        console.log('[SettingsModal] Extracted workspace data:', workspaceData);
+        setWorkspaces(Array.isArray(workspaceData) ? workspaceData : []);
+      } catch (error) { 
+        console.error('[SettingsModal] Error loading local workspaces:', error);
+        setWorkspaces([]); 
+      }
     })();
   }, [show]);
 
@@ -365,16 +372,24 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
     let unsub = null;
     unsub = subscribeWorkspaceChanges(async () => {
       try {
+        console.log('[SettingsModal] Firebase workspace change detected, merging...');
         const firebaseList = await listWorkspacesFirebase();
         const localList = await listWorkspaces();
+        
+        console.log('[SettingsModal] Firebase workspaces:', firebaseList);
+        console.log('[SettingsModal] Local workspaces for merge:', localList);
         
         // Merge local and Firebase workspaces, avoiding duplicates
         const mergedWorkspaces = [];
         const seenIds = new Set();
         
+        // Extract data from response objects
+        const localData = localList?.data || localList || [];
+        const firebaseData = firebaseList?.data || firebaseList || [];
+        
         // Add local workspaces first
-        if (Array.isArray(localList)) {
-          localList.forEach(workspace => {
+        if (Array.isArray(localData)) {
+          localData.forEach(workspace => {
             if (workspace?.id && !seenIds.has(workspace.id)) {
               mergedWorkspaces.push(workspace);
               seenIds.add(workspace.id);
@@ -383,8 +398,8 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
         }
         
         // Add Firebase workspaces that aren't duplicates
-        if (Array.isArray(firebaseList)) {
-          firebaseList.forEach(workspace => {
+        if (Array.isArray(firebaseData)) {
+          firebaseData.forEach(workspace => {
             if (workspace?.id && !seenIds.has(workspace.id)) {
               mergedWorkspaces.push(workspace);
               seenIds.add(workspace.id);
@@ -392,8 +407,11 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
           });
         }
         
+        console.log('[SettingsModal] Merged workspaces:', mergedWorkspaces);
         setWorkspaces(mergedWorkspaces);
-      } catch { }
+      } catch (error) {
+        console.error('[SettingsModal] Error merging workspaces:', error);
+      }
     });
     return () => { try { unsub && unsub(); } catch { } };
   }, [show, firebaseInitialized]);
@@ -411,11 +429,14 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
 
   // Derived rows for inline editing of workspaces
   const editableWorkspaces = useMemo(() => {
-    return (Array.isArray(workspaces) ? workspaces : []).map(w => ({
+    console.log('[SettingsModal] Creating editableWorkspaces from:', workspaces);
+    const result = (Array.isArray(workspaces) ? workspaces : []).map(w => ({
       id: w.id,
       name: w.name || '',
       description: w.description || '',
     }));
+    console.log('[SettingsModal] editableWorkspaces result:', result);
+    return result;
   }, [workspaces]);
 
   if (!show) return null
@@ -496,14 +517,32 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
         createdAt: w.createdAt || Date.now(),
         urls: Array.isArray(w.urls) ? w.urls : [],
       }
+      console.log('[SettingsModal] Saving workspace row:', payload);
       await saveWorkspace(payload)
-    } catch (e) { /* ignore */ }
+      console.log('[SettingsModal] Workspace row saved successfully');
+    } catch (e) { 
+      console.error('[SettingsModal] Error saving workspace row:', e);
+    }
   }
 
   const handleDeleteWorkspace = async (id) => {
     try {
+      console.log('[SettingsModal] Deleting workspace:', id);
       await deleteWorkspaceById(id)
-    } catch { }
+      console.log('[SettingsModal] Workspace deleted, refreshing list...');
+      
+      // Refresh workspaces list
+      try {
+        const list = await listWorkspaces();
+        console.log('[SettingsModal] Refreshed workspaces after deletion:', list);
+        const workspaceData = list?.data || list || [];
+        setWorkspaces(Array.isArray(workspaceData) ? workspaceData : []);
+      } catch (error) {
+        console.error('[SettingsModal] Error refreshing workspaces after deletion:', error);
+      }
+    } catch (error) {
+      console.error('[SettingsModal] Error deleting workspace:', error);
+    }
   }
 
   const handleOpenCreateWorkspace = () => setShowCreateWorkspace(true)
@@ -516,7 +555,20 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
       createdAt: Date.now(),
       urls: [],
     }
+    console.log('[SettingsModal] Creating workspace:', ws);
     await saveWorkspace(ws)
+    console.log('[SettingsModal] Workspace saved, refreshing list...');
+    
+    // Refresh workspaces list
+    try {
+      const list = await listWorkspaces();
+      console.log('[SettingsModal] Refreshed workspaces after creation:', list);
+      const workspaceData = list?.data || list || [];
+      setWorkspaces(Array.isArray(workspaceData) ? workspaceData : []);
+    } catch (error) {
+      console.error('[SettingsModal] Error refreshing workspaces after creation:', error);
+    }
+    
     setShowCreateWorkspace(false)
   }
 
