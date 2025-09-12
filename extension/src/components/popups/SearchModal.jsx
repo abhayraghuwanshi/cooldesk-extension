@@ -224,7 +224,6 @@ export function SearchModal({
                 height: '60vh',
                 background: 'var(--background-secondary, rgba(20, 20, 30, 0.95))',
                 backdropFilter: 'blur(20px)',
-                border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
                 borderRadius: '16px',
                 overflow: 'hidden',
                 boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--border-subtle, rgba(255, 255, 255, 0.05))',
@@ -252,7 +251,7 @@ export function SearchModal({
                         style={{
                             flex: 1,
                             background: 'transparent',
-                            border: 'none',
+                            border: 'transparent',
                             outline: 'none',
                             fontSize: '18px',
                             color: 'var(--text-primary, rgba(255, 255, 255, 0.9))',
@@ -400,8 +399,8 @@ export function SearchModal({
                                                 fontWeight: '600',
                                                 overflow: 'hidden'
                                             }}>
-                                                <img 
-                                                    src={e.favicon} 
+                                                <img
+                                                    src={e.favicon}
                                                     alt={e.name}
                                                     style={{
                                                         width: '16px',
@@ -528,8 +527,8 @@ export function SearchModal({
                                             fontSize: '14px',
                                             overflow: 'hidden'
                                         }}>
-                                            <img 
-                                                src={getFaviconUrl(m.url)} 
+                                            <img
+                                                src={getFaviconUrl(m.url)}
                                                 alt="favicon"
                                                 style={{
                                                     width: '16px',
