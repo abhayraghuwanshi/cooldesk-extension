@@ -181,15 +181,8 @@ export function injectFooterBar() {
       // Check if extension context is still valid
       if (!chrome?.runtime?.id) {
         console.warn('[CoolDesk Button] Extension context invalidated, cannot communicate with background');
-        // Direct fallback to opening extension page
-        try {
-          const extensionUrl = `chrome-extension://${chrome.runtime.id || 'unknown'}/index.html`;
-
-          window.open(extensionUrl, '_blank');
-        } catch (e) {
-          console.error('[CoolDesk Button] Failed to open extension directly:', e);
-          alert('Extension needs to be reloaded. Please refresh the page and try again.');
-        }
+        // When context is invalidated, we cannot get the extension URL reliably
+        alert('Extension disconnected. Please refresh the page to reconnect and use the extension.');
         return;
       }
 

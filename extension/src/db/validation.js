@@ -137,7 +137,7 @@ export const VALIDATION_SCHEMAS = {
         },
         type: {
             [ValidationRules.TYPE]: 'string',
-            [ValidationRules.ENUM]: ['text', 'voice']
+            [ValidationRules.ENUM]: ['text', 'voice', 'voice-text']
         },
         status: {
             [ValidationRules.TYPE]: 'string',
@@ -150,6 +150,9 @@ export const VALIDATION_SCHEMAS = {
         duration: {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
+        },
+        hasTranscription: {
+            [ValidationRules.TYPE]: 'boolean'
         },
         tags: {
             [ValidationRules.TYPE]: 'array',

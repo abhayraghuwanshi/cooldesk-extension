@@ -18,6 +18,11 @@ export function NotesSection() {
   const recordingTimerRef = React.useRef(null);
   const audioRefs = React.useRef({});
   const [previewNote, setPreviewNote] = React.useState(null);
+  
+  // Speech-to-text state
+  const [isTranscribing, setIsTranscribing] = React.useState(false);
+  const [transcribedText, setTranscribedText] = React.useState('');
+  const recognitionRef = React.useRef(null);
 
   // Notes display limit state
   const [notesDisplayLimit, setNotesDisplayLimit] = React.useState(6);
@@ -55,7 +60,170 @@ export function NotesSection() {
     await loadNotes();
   }, [text, newNoteStatus, loadNotes]);
 
-  // Voice recording functions
+  // Speech-to-text recording function (with dual audio + text recording)
+  const startSpeechToText = React.useCallback(async () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
+
+    try {
+      // Start audio recording for backup
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      // Set up speech recognition
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US'; // Set to English, but will try to translate from any language
+      
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      // When audio recording stops, process both audio and text
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        
+        reader.onloadend = async () => {
+          const base64Audio = reader.result.split(',')[1];
+          const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+          
+          // Create a hybrid note with both voice and text
+          const note = {
+            id,
+            type: 'voice-text', // New hybrid type
+            audioData: base64Audio,
+            text: finalTranscript.trim() || 'Voice note (transcription failed)',
+            duration: recordingTime,
+            status: newNoteStatus,
+            createdAt: Date.now(),
+            hasTranscription: !!finalTranscript.trim()
+          };
+          
+          console.log('[NotesSection] Creating hybrid voice+text note:', note);
+          try { 
+            const result = await dbUpsertNote(note);
+            console.log('[NotesSection] Hybrid note creation result:', result);
+          } catch (error) {
+            console.error('[NotesSection] Error creating hybrid note:', error);
+          }
+          await loadNotes();
+        };
+        
+        reader.readAsDataURL(blob);
+        
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recognition.onstart = () => {
+        console.log('[NotesSection] Speech recognition started');
+        setIsTranscribing(true);
+        setTranscribedText('');
+        setRecordingTime(0);
+        
+        // Start audio recording
+        setMediaRecorder(recorder);
+        recorder.start();
+        
+        // Start timer for both speech recognition and audio recording
+        recordingTimerRef.current = setInterval(() => {
+          setRecordingTime(prev => prev + 1);
+        }, 1000);
+      };
+
+      recognition.onresult = (event) => {
+        interimTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' ';
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        // Update the displayed text with both final and interim results
+        const fullText = (finalTranscript + interimTranscript).trim();
+        setTranscribedText(fullText);
+        
+        // Also update the main text input with the transcribed text
+        setText(fullText);
+      };
+
+      recognition.onerror = (event) => {
+        console.error('[NotesSection] Speech recognition error:', event.error);
+        setIsTranscribing(false);
+        
+        // Stop audio recording if speech recognition fails
+        if (recorder && recorder.state === 'recording') {
+          recorder.stop();
+        }
+        
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+        
+        if (event.error === 'not-allowed') {
+          alert('Microphone access denied. Please allow microphone access and try again.');
+        } else {
+          alert(`Speech recognition error: ${event.error}`);
+        }
+      };
+
+      recognition.onend = () => {
+        console.log('[NotesSection] Speech recognition ended');
+        setIsTranscribing(false);
+        
+        // Stop audio recording when speech recognition ends
+        if (recorder && recorder.state === 'recording') {
+          recorder.stop();
+        }
+        
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+        
+        // Clear the text input after saving (since we're auto-saving)
+        setText('');
+        setTranscribedText('');
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+      
+    } catch (error) {
+      console.error('[NotesSection] Error starting speech-to-text:', error);
+      alert('Could not access microphone. Please check permissions and try again.');
+    }
+  }, [recordingTime, newNoteStatus, loadNotes]);
+
+  const stopSpeechToText = React.useCallback(() => {
+    if (recognitionRef.current && isTranscribing) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      setMediaRecorder(null);
+    }
+  }, [isTranscribing, mediaRecorder]);
+
+  // Voice recording functions (keeping original for audio notes)
   const startRecording = React.useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -325,7 +493,7 @@ export function NotesSection() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addNote(); }}
-          placeholder="Start typing..."
+          placeholder={isTranscribing ? "🎤 Listening... speak now" : "Start typing..."}
           style={{
             width: '100%',
             minHeight: 40,
@@ -430,12 +598,12 @@ export function NotesSection() {
               Save
             </button>
             <button
-              onClick={isRecording ? stopRecording : startRecording}
+              onClick={isTranscribing ? stopSpeechToText : startSpeechToText}
               style={{
-                padding: isRecording ? '6px 12px' : '6px 8px',
+                padding: isTranscribing ? '6px 12px' : '6px 8px',
                 borderRadius: 6,
                 border: 'none',
-                background: isRecording ? '#FF3B30' : '#34C759',
+                background: isTranscribing ? '#FF3B30' : '#34C759',
                 color: 'white',
                 display: 'flex',
                 alignItems: 'center',
@@ -445,12 +613,12 @@ export function NotesSection() {
                 transition: 'all 0.3s ease',
                 fontSize: 12,
                 fontWeight: 500,
-                minWidth: isRecording ? 'auto' : '32px'
+                minWidth: isTranscribing ? 'auto' : '32px'
               }}
-              title={isRecording ? 'Stop recording' : 'Start voice recording'}
+              title={isTranscribing ? 'Stop speech-to-text' : 'Start speech-to-text (translates to English)'}
             >
-              <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} style={{ fontSize: 10 }} />
-              {isRecording && <span>{formatDuration(recordingTime)}</span>}
+              <FontAwesomeIcon icon={isTranscribing ? faStop : faMicrophone} style={{ fontSize: 10 }} />
+              {isTranscribing && <span>{formatDuration(recordingTime)}</span>}
             </button>
             <span style={{ opacity: 0.7 }}>{text.length} characters</span>
           </div>
@@ -481,23 +649,23 @@ export function NotesSection() {
               border: '1px solid rgba(255, 255, 255, 0.1)',
               backdropFilter: 'blur(10px)',
               transition: 'all 0.2s ease',
-              cursor: n.type === 'text' && editingId !== n.id ? 'pointer' : 'default'
+              cursor: (n.type === 'text' || (n.type === 'voice-text' && n.text)) && editingId !== n.id ? 'pointer' : 'default'
             }}
-            onClick={() => n.type === 'text' && editingId !== n.id && startEdit(n)}
+            onClick={() => (n.type === 'text' || (n.type === 'voice-text' && n.text)) && editingId !== n.id && startEdit(n)}
             onMouseEnter={(e) => {
-              if (n.type === 'text' && editingId !== n.id) {
+              if ((n.type === 'text' || (n.type === 'voice-text' && n.text)) && editingId !== n.id) {
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
                 e.currentTarget.style.transform = 'translateY(-1px)';
               }
             }}
             onMouseLeave={(e) => {
-              if (n.type === 'text' && editingId !== n.id) {
+              if ((n.type === 'text' || (n.type === 'voice-text' && n.text)) && editingId !== n.id) {
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
                 e.currentTarget.style.transform = 'translateY(0)';
               }
             }}
           >
-            {editingId === n.id && n.type === 'text' ? (
+            {editingId === n.id && (n.type === 'text' || n.type === 'voice-text') ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <textarea
                   value={editText}
@@ -623,7 +791,7 @@ export function NotesSection() {
                   </div>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  {n.type === 'voice' ? (
+                  {n.type === 'voice' || n.type === 'voice-text' ? (
                     <>
                       <div style={{
                         display: 'flex',
@@ -635,7 +803,7 @@ export function NotesSection() {
                           width: 32,
                           height: 32,
                           borderRadius: 16,
-                          background: '#34C759',
+                          background: n.type === 'voice-text' ? '#007AFF' : '#34C759',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center'
@@ -644,13 +812,33 @@ export function NotesSection() {
                         </div>
                         <div>
                           <div style={{ fontSize: 16, fontWeight: 500, color: '#ffffff' }}>
-                            Voice Note
+                            {n.type === 'voice-text' ? 'Voice + Text Note' : 'Voice Note'}
                           </div>
                           <div style={{ fontSize: 14, color: 'rgba(255, 255, 255, 0.6)' }}>
                             {formatDuration(n.duration || 0)}
+                            {n.type === 'voice-text' && n.hasTranscription && (
+                              <span style={{ marginLeft: 8, color: '#34C759' }}>✓ Transcribed</span>
+                            )}
                           </div>
                         </div>
                       </div>
+                      
+                      {/* Show transcribed text for voice-text notes */}
+                      {n.type === 'voice-text' && n.text && (
+                        <div style={{
+                          fontSize: 14,
+                          color: '#e5e7eb',
+                          lineHeight: 1.4,
+                          marginBottom: 8,
+                          padding: '8px 12px',
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          borderRadius: 8,
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}>
+                          {n.text}
+                        </div>
+                      )}
+                      
                       <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' }}>
                         {n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-US', {
                           month: 'short',
@@ -684,7 +872,7 @@ export function NotesSection() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 4 }}>
-                  {n.type === 'voice' && (
+                  {(n.type === 'voice' || n.type === 'voice-text') && n.audioData && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

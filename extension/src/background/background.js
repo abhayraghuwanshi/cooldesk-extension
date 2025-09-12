@@ -91,6 +91,16 @@ async function saveToDailyNotes(selectionData) {
 
     console.log(`[Background] Added to daily notes: ${selectionData.text.substring(0, 30)}...`);
 
+    // Notify listeners about daily notes update
+    try {
+      const bc = new BroadcastChannel('ws_db_changes');
+      bc.postMessage({ type: 'dailyNotesChanged', date: today });
+      bc.close();
+    } catch (e) {
+      // Ignore errors - just logging
+      console.debug('[Background] BroadcastChannel not available for daily notes sync');
+    }
+
     // Update daily summary
     await updateDailyNotesSummary(today, dailyData.metadata.selectionCount);
 
@@ -555,10 +565,73 @@ async function main() {
           dailyData.metadata.lastUpdated = Date.now();
 
           await chrome.storage.local.set({ [storageKey]: dailyData });
+          
+          // Notify listeners about daily notes update
+          try {
+            const bc = new BroadcastChannel('ws_db_changes');
+            bc.postMessage({ type: 'dailyNotesChanged', date });
+            bc.close();
+          } catch (e) {
+            console.debug('[Background] BroadcastChannel not available for manual daily notes sync');
+          }
+          
           sendResponse({ ok: true, updated: true });
         } catch (e) {
           console.error('[Background] Error updating daily notes:', e);
           sendResponse({ ok: false, error: e?.message || 'Failed to update daily notes' });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+    
+    // Delete a specific selection from daily notes
+    if (msg?.type === 'deleteSelection') {
+      console.log('[Background] Deleting selection:', msg.selectionId, 'from', msg.date);
+      (async () => {
+        try {
+          const { date, selectionId } = msg;
+          if (!date || !selectionId) throw new Error('Date and selectionId are required');
+          
+          const storageKey = `dailyNotes_${date}`;
+          const result = await chrome.storage.local.get([storageKey]);
+          const dailyData = result[storageKey];
+          
+          if (!dailyData || !dailyData.selections) {
+            sendResponse({ ok: false, error: 'Daily notes not found' });
+            return;
+          }
+          
+          // Remove the selection with matching ID
+          const originalLength = dailyData.selections.length;
+          dailyData.selections = dailyData.selections.filter(selection => selection.id !== selectionId);
+          
+          if (dailyData.selections.length === originalLength) {
+            sendResponse({ ok: false, error: 'Selection not found' });
+            return;
+          }
+          
+          // Update metadata
+          dailyData.metadata.lastUpdated = Date.now();
+          dailyData.metadata.selectionCount = dailyData.selections.length;
+          
+          // Save updated data
+          await chrome.storage.local.set({ [storageKey]: dailyData });
+          
+          // Notify listeners about daily notes update
+          try {
+            const bc = new BroadcastChannel('ws_db_changes');
+            bc.postMessage({ type: 'dailyNotesChanged', date });
+            bc.close();
+          } catch (e) {
+            console.debug('[Background] BroadcastChannel not available for delete selection sync');
+          }
+          
+          sendResponse({ ok: true, deleted: true });
+        } catch (e) {
+          console.error('[Background] Error deleting selection:', e);
+          sendResponse({ ok: false, error: e?.message || 'Failed to delete selection' });
         } finally {
           cleanup();
         }

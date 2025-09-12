@@ -80,6 +80,8 @@ export {
     // Utility functions
     getDatabaseHealth,
     subscribeWorkspaceChanges,
+    subscribePinsChanges,
+    subscribeDailyNotesChanges,
     subscribeSettingsChanges,
     closeDatabaseConnection
     

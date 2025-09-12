@@ -8,11 +8,12 @@ import {
   faPlus
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useState } from 'react';
 import { getUIState, saveUIState } from '../../db/index.js';
 import MusicControls from './MusicControls';
+import { SearchBox } from './SearchBox.jsx';
 import VoiceNavigation from './VoiceNavigation';
+
 
 export function Header({
   search,
@@ -207,31 +208,6 @@ export function Header({
             </div>
           );
         })()}
-        {/* <button className="icon-btn" onClick={openSyncControls} title="Organize using AI">
-          <FontAwesomeIcon icon={progress.running ? faSpinner : faRobot} spin={!!progress.running} />
-        </button> */}
-        {/* <button
-          className={`icon-btn ${autoSync ? 'active' : ''}`}
-          title={autoSync ? 'Auto Categorize is ON - Click to turn OFF' : 'Auto Categorize is OFF - Click to turn ON'}
-          aria-pressed={autoSync}
-          onClick={async () => {
-            try {
-              const next = !autoSync;
-              setAutoSync(next);
-              const ui = await getUIState();
-              await saveUIState({ ...ui, autoSync: next });
-
-              // Trigger auto-categorize when turning ON
-              if (next) {
-                await triggerAutoCategorize();
-              }
-            } catch (e) {
-              console.warn('Failed to toggle auto-categorize:', e);
-            }
-          }}
-        >
-          <FontAwesomeIcon icon={progress.running ? faSpinner : (autoSync ? faRobot : faToggleOff)} spin={!!progress.running} />
-        </button> */}
         <MusicControls />
 
         <button
@@ -240,8 +216,8 @@ export function Header({
           title={showVoiceNavigation ? "Hide Voice Navigation" : "Show Voice Navigation"}
           aria-pressed={showVoiceNavigation}
           style={{
-            background: showVoiceNavigation 
-              ? 'linear-gradient(135deg, var(--accent-primary, #34C759), var(--accent-secondary, #30D158))' 
+            background: showVoiceNavigation
+              ? 'linear-gradient(135deg, var(--accent-primary, #34C759), var(--accent-secondary, #30D158))'
               : 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
             borderColor: showVoiceNavigation ? 'var(--accent-primary, #34C759)' : 'var(--border-primary, rgba(255, 255, 255, 0.1))',
             color: showVoiceNavigation ? 'white' : 'var(--text, #e5e7eb)'
@@ -250,9 +226,9 @@ export function Header({
           <FontAwesomeIcon icon={faMicrophone} />
         </button>
 
-        <button 
-          className="icon-btn" 
-          onClick={() => setShowCreateWorkspace(true)} 
+        <button
+          className="icon-btn"
+          onClick={() => setShowCreateWorkspace(true)}
           title="Create Workspace"
           style={{
             background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
@@ -262,9 +238,9 @@ export function Header({
         >
           <FontAwesomeIcon icon={faPlus} />
         </button>
-        <button 
-          className="icon-btn" 
-          onClick={() => setShowSettings(true)} 
+        <button
+          className="icon-btn"
+          onClick={() => setShowSettings(true)}
           title="Customization"
           style={{
             background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
@@ -332,9 +308,9 @@ export function Header({
         >
           <FontAwesomeIcon icon={faCircleQuestion} />
         </button>
-        <button 
-          className="icon-btn" 
-          onClick={openInSidePanel} 
+        <button
+          className="icon-btn"
+          onClick={openInSidePanel}
           title="Open in Sidebar"
           style={{
             background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
@@ -363,308 +339,5 @@ export function Header({
         </div>
       )}
     </header>
-  );
-}
-
-function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
-  const [open, setOpen] = useState(false);
-  const [recent, setRecent] = useState([]);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const [contentMatches, setContentMatches] = useState([]);
-  const [portalPos, setPortalPos] = useState({ left: 0, top: 0, width: 0 });
-  const wrapRef = useRef(null);
-  const inputRef = useRef(null);
-  const dataRef = useRef({ list: [] });
-
-  // Focus the input when focusSignal changes
-  useEffect(() => {
-    if (!focusSignal) return;
-    if (!inputRef.current) return;
-    try { inputRef.current.focus(); inputRef.current.select?.(); } catch { }
-    setOpen(true);
-  }, [focusSignal]);
-
-  useLayoutEffect(() => {
-    if (!open) return undefined;
-    const update = () => {
-      const r = wrapRef.current ? wrapRef.current.getBoundingClientRect() : null;
-      if (r) setPortalPos({ left: r.left, top: r.bottom, width: r.width });
-    };
-    update();
-    const opts = { passive: true };
-    window.addEventListener('resize', update, opts);
-    window.addEventListener('scroll', update, opts);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update);
-    };
-  }, [open]);
-
-  const engines = [
-    { id: 'google', name: 'Google', color: '#4285F4', icon: 'G', buildUrl: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`, supportsQuery: true },
-    { id: 'perplexity', name: 'Perplexity', color: '#6B5BFF', icon: '🌀', buildUrl: (q) => `https://www.perplexity.ai/search?q=${encodeURIComponent(q)}`, supportsQuery: true },
-    { id: 'chatgpt', name: 'ChatGPT', color: '#10A37F', icon: '🤖', buildUrl: (q) => `https://chat.openai.com/?q=${encodeURIComponent(q)}`, supportsQuery: false },
-    { id: 'grok', name: 'Grok', color: '#000000', icon: '𝕏', buildUrl: (q) => `https://grok.com/?q=${encodeURIComponent(q)}`, supportsQuery: true },
-  ];
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const ui = await getUIState();
-        const rs = Array.isArray(ui?.recentSearches) ? ui.recentSearches : [];
-        setRecent(rs.slice(0, 10));
-      } catch { }
-    })();
-  }, []);
-
-  // Load dashboardData once for content-based suggestions
-  useEffect(() => {
-    (async () => {
-      try {
-        const { dashboardData } = await chrome.storage.local.get(['dashboardData']);
-        const bookmarks = dashboardData?.bookmarks || [];
-        const history = dashboardData?.history || [];
-        const all = [];
-        for (const b of bookmarks) {
-          if (!b) continue;
-          all.push({ type: 'bookmark', title: b.title || b.name || b.url || '', url: b.url || '' });
-        }
-        for (const h of history) {
-          if (!h) continue;
-          all.push({ type: 'history', title: h.title || h.url || '', url: h.url || '' });
-        }
-        dataRef.current.list = all;
-      } catch { }
-    })();
-  }, []);
-
-  useEffect(() => {
-    const onClick = (e) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('click', onClick);
-    return () => document.removeEventListener('click', onClick);
-  }, []);
-
-  const runSearch = async (q) => {
-    const query = (q || '').trim();
-    if (!query) return;
-    // Save recent
-    try {
-      const ui = await getUIState();
-      const rs = Array.isArray(ui?.recentSearches) ? ui.recentSearches : [];
-      const next = [query, ...rs.filter((x) => x !== query)].slice(0, 10);
-      await saveUIState({ ...ui, recentSearches: next });
-      setRecent(next);
-    } catch { }
-    // Open in extension side panel
-    try {
-      await openInSidePanel(query);
-    } catch (err) {
-      console.error('Open in side panel failed:', err);
-      // Fallback to Google
-      try {
-        if (chrome?.tabs?.create) {
-          chrome.tabs.create({ url: `https://www.google.com/search?q=${encodeURIComponent(query)}` });
-        }
-      } catch { }
-    }
-    setOpen(false);
-  };
-
-  // Open a specific engine with the current query.
-  // If the engine doesn't support query params, copy to clipboard first.
-  const openWithEngine = async (engineId, q) => {
-    const engine = engines.find(e => e.id === engineId);
-    if (!engine) return;
-    const query = (q || '').trim();
-    if (!query) return;
-    if (!engine.supportsQuery) {
-      try { await navigator.clipboard.writeText(query); } catch { }
-    }
-    const url = engine.supportsQuery ? engine.buildUrl(query) : engine.buildUrl();
-    try {
-      if (chrome?.tabs?.create) chrome.tabs.create({ url });
-    } catch { }
-    setOpen(false);
-  };
-
-  const onKeyDown = (e) => {
-    const lower = (search || '').toLowerCase();
-    const list = lower ? recent.filter(r => r.toLowerCase().includes(lower)) : recent;
-    if (e.key === 'ArrowDown') {
-      if (list.length === 0) return;
-      e.preventDefault();
-      setOpen(true);
-      setActiveIndex((i) => (i + 1) % list.length);
-    } else if (e.key === 'ArrowUp') {
-      if (list.length === 0) return;
-      e.preventDefault();
-      setOpen(true);
-      setActiveIndex((i) => (i <= 0 ? list.length - 1 : i - 1));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const choice = (activeIndex >= 0 && activeIndex < list.length) ? list[activeIndex] : search;
-      runSearch(choice);
-    } else if (e.key === 'Escape') {
-      setOpen(false);
-    }
-  };
-
-  const showList = open && (search || recent.length > 0);
-  const filtered = (search ? recent.filter(r => r.toLowerCase().includes((search || '').toLowerCase())) : recent);
-
-  // Compute content matches when typing
-  useEffect(() => {
-    const q = (search || '').trim().toLowerCase();
-    if (!q) { setContentMatches([]); return; }
-    const out = [];
-    for (const item of dataRef.current.list) {
-      const inTitle = (item.title || '').toLowerCase().includes(q);
-      const inUrl = (item.url || '').toLowerCase().includes(q);
-      if (inTitle || inUrl) {
-        out.push(item);
-        if (out.length >= 8) break;
-      }
-    }
-    setContentMatches(out);
-  }, [search]);
-
-  return (
-    <div ref={wrapRef} style={{
-      width: '100%',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
-    }}>
-      <input
-        ref={inputRef}
-        value={search}
-        onChange={(e) => { setSearch(e.target.value); setOpen(true); setActiveIndex(-1); }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        type="text"
-        placeholder="Search Everything..."
-        className="ai-input"
-        style={{
-          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
-        }}
-      />
-      {showList && (() => {
-        const dropdown = (
-          <div
-            className="search-suggestions top"
-            style={{
-              position: 'fixed',
-              left: `${portalPos.left}px`,
-              top: `${portalPos.top - 50}px`,
-              width: `${portalPos.width}px`,
-              zIndex: 2147483647,
-              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
-            }}
-          >
-            {recent.length === 0 && !search && (
-              <div style={{
-                padding: 8,
-                opacity: 0.7,
-                fontSize: 12,
-                color: 'var(--text-secondary, #ffffff)'
-              }}>No recent searches</div>
-            )}
-            {!!search && (
-              <div
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => runSearch(search)}
-                style={{
-                  padding: '8px 10px',
-                  cursor: 'pointer',
-                  borderBottom: filtered.length ? '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' : 'none',
-                  color: 'var(--text-primary, #ffffff)'
-                }}
-              >
-                Search Google for "{search}"
-              </div>
-            )}
-            {!!search && (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                gap: 6,
-                padding: 8,
-                borderBottom: filtered.length || contentMatches.length ? '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' : 'none'
-              }}>
-                {engines.map((e) => (
-                  <div
-                    key={e.id}
-                    onMouseDown={(ev) => ev.preventDefault()}
-                    onClick={() => openWithEngine(e.id, search)}
-                    title={`Search in ${e.name}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '8px 10px',
-                      cursor: 'pointer',
-                      background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
-                      borderRadius: 6,
-                      border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))'
-                    }}
-                  >
-                    <div style={{ width: 20, height: 20, borderRadius: 4, background: e.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-                      <span>{e.icon}</span>
-                    </div>
-                    <div style={{
-                      fontSize: 12,
-                      color: 'var(--text-secondary, #ffffff)'
-                    }}>Search in {e.name}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {filtered.map((item, idx) => (
-              <div
-                key={item}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => runSearch(item)}
-                className="suggestion-item"
-                style={{
-                  padding: '8px 10px',
-                  cursor: 'pointer',
-                  background: idx === activeIndex ? 'var(--primary-color, rgba(0, 122, 255, 0.1))' : 'transparent',
-                  color: 'var(--text-primary, #ffffff)'
-                }}
-              >
-                {item}
-              </div>
-            ))}
-            {contentMatches.length > 0 && (
-              <div style={{ borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' }}>
-                {contentMatches.map((m, i) => (
-                  <div
-                    key={`${m.url}-${i}`}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      try {
-                        if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
-                      } catch { }
-                      setOpen(false);
-                    }}
-                    style={{
-                      padding: '8px 10px',
-                      cursor: 'pointer',
-                      color: 'var(--text-primary, #ffffff)'
-                    }}
-                    title={m.url}
-                  >
-                    <span style={{ opacity: 0.7, marginRight: 6 }}>{m.type === 'bookmark' ? '🔖' : '🕘'}</span>
-                    <span>{m.title || m.url}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-        return createPortal(dropdown, document.body);
-      })()}
-    </div>
   );
 }

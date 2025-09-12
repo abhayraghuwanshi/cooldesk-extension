@@ -1,7 +1,7 @@
 import { faArrowUpRightFromSquare, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { deletePing as dbDeletePing, listPings as dbListPings, upsertPing as dbUpsertPing } from '../../db/index.js';
+import { deletePing as dbDeletePing, listPings as dbListPings, subscribePinsChanges, upsertPing as dbUpsertPing } from '../../db/index.js';
 import { enqueueOpenInChrome } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils';
 
@@ -10,17 +10,26 @@ export function PingsSection({ tabs }) {
 
   const loadPings = React.useCallback(async () => {
     try {
-      const all = await dbListPings();
+      console.log('[PingsSection] Loading pings...');
+      const result = await dbListPings();
+      console.log('[PingsSection] Pings result:', result);
+      const pingsData = result?.data || result || [];
+      console.log('[PingsSection] Extracted pings data:', pingsData);
       // newest first
+      const all = Array.isArray(pingsData) ? pingsData : [];
       all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setPings(all);
-    } catch { /* ignore */ }
+    } catch (error) { 
+      console.error('[PingsSection] Error loading pings:', error);
+      setPings([]);
+    }
   }, []);
 
   const addPing = React.useCallback(async (tab) => {
     try {
       if (!tab?.url) return;
       const ping = {
+        id: `ping_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         url: tab.url,
         title: tab.title || (() => { try { return new URL(tab.url).hostname; } catch { return tab.url; } })(),
         favicon: (() => {
@@ -34,13 +43,25 @@ export function PingsSection({ tabs }) {
         })(),
         createdAt: Date.now(),
       };
-      await dbUpsertPing(ping);
+      console.log('[PingsSection] Creating ping:', ping);
+      const result = await dbUpsertPing(ping);
+      console.log('[PingsSection] Ping creation result:', result);
       await loadPings();
-    } catch { /* ignore */ }
+    } catch (error) { 
+      console.error('[PingsSection] Error creating ping:', error);
+    }
   }, [loadPings]);
 
   const removePing = React.useCallback(async (url) => {
-    try { if (!url) return; await dbDeletePing(url); await loadPings(); } catch { }
+    try { 
+      if (!url) return; 
+      console.log('[PingsSection] Deleting ping:', url);
+      const result = await dbDeletePing(url);
+      console.log('[PingsSection] Ping deletion result:', result);
+      await loadPings(); 
+    } catch (error) {
+      console.error('[PingsSection] Error deleting ping:', error);
+    }
   }, [loadPings]);
 
   const openOrFocusUrl = React.useCallback((url) => {
@@ -74,6 +95,20 @@ export function PingsSection({ tabs }) {
 
   React.useEffect(() => {
     loadPings();
+  }, [loadPings]);
+
+  // Subscribe to pin changes for real-time updates
+  React.useEffect(() => {
+    console.log('[PingsSection] Setting up pins change subscription...');
+    const unsubscribe = subscribePinsChanges(() => {
+      console.log('[PingsSection] Pins changed, reloading...');
+      loadPings();
+    });
+    
+    return () => {
+      console.log('[PingsSection] Cleaning up pins change subscription...');
+      unsubscribe();
+    };
   }, [loadPings]);
 
   return (

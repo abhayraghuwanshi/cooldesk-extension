@@ -848,19 +848,40 @@ export const upsertPing = withErrorHandling(async (pingData) => {
     const tx = db.transaction(DB_CONFIG.STORES.PINS, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.PINS)
     
-    // Enforce cap of 6 by cleaning oldest
-    const allPins = await listPings({ limit: 1000 })
-    if (allPins.length >= 6) {
-        const toDelete = allPins.slice(5) // Keep 5, delete rest
-        for (const oldPin of toDelete) {
-            store.delete(oldPin.id)
-        }
-    }
-    
-    const request = store.put(pin)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(pin)
-        request.onerror = () => reject(request.error)
+        // Enforce cap of 6 by cleaning oldest - do this within the transaction
+        const getAllRequest = store.getAll()
+        
+        getAllRequest.onsuccess = () => {
+            const allPins = getAllRequest.result || []
+            
+            // If we have too many pins, delete the oldest ones
+            if (allPins.length >= 6) {
+                // Sort by creation time (oldest first)
+                allPins.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+                const toDelete = allPins.slice(0, allPins.length - 5) // Keep 5, delete rest
+                
+                // Delete old pins within the same transaction
+                toDelete.forEach(oldPin => {
+                    store.delete(oldPin.id)
+                })
+            }
+            
+            // Now save the new pin
+            const putRequest = store.put(pin)
+            putRequest.onsuccess = () => {
+                // Notify listeners
+                try {
+                    const bc = new BroadcastChannel('ws_db_changes')
+                    bc.postMessage({ type: 'pinsChanged' })
+                    bc.close()
+                } catch {}
+                resolve(pin)
+            }
+            putRequest.onerror = () => reject(putRequest.error)
+        }
+        
+        getAllRequest.onerror = () => reject(getAllRequest.error)
     })
 }, {
     operation: 'upsertPing',
@@ -879,7 +900,15 @@ export const deletePing = withErrorHandling(async (pinId) => {
     
     const request = store.delete(pinId)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(true)
+        request.onsuccess = () => {
+            // Notify listeners
+            try {
+                const bc = new BroadcastChannel('ws_db_changes')
+                bc.postMessage({ type: 'pinsChanged' })
+                bc.close()
+            } catch {}
+            resolve(true)
+        }
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -1022,6 +1051,38 @@ export function subscribeWorkspaceChanges(callback) {
         bc = new BroadcastChannel('ws_db_changes')
         bc.onmessage = (ev) => {
             if (ev?.data?.type === 'workspacesChanged') callback()
+        }
+    } catch { }
+    return () => {
+        try { bc && bc.close() } catch { }
+    }
+}
+
+/**
+ * Subscribe to pins changes
+ */
+export function subscribePinsChanges(callback) {
+    let bc
+    try {
+        bc = new BroadcastChannel('ws_db_changes')
+        bc.onmessage = (ev) => {
+            if (ev?.data?.type === 'pinsChanged') callback()
+        }
+    } catch { }
+    return () => {
+        try { bc && bc.close() } catch { }
+    }
+}
+
+/**
+ * Subscribe to daily notes changes
+ */
+export function subscribeDailyNotesChanges(callback) {
+    let bc
+    try {
+        bc = new BroadcastChannel('ws_db_changes')
+        bc.onmessage = (ev) => {
+            if (ev?.data?.type === 'dailyNotesChanged') callback(ev.data.date)
         }
     } catch { }
     return () => {

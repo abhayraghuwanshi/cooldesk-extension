@@ -1,6 +1,8 @@
-import { faCalendarDay, faExternalLinkAlt, faSave, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faCalendarDay, faExternalLinkAlt, faSave, faTimes, faTrash, faLink, faGlobe } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
+import { subscribeDailyNotesChanges } from '../../db/index.js';
+import { getFaviconUrl } from '../../utils.js';
 
 export function DailyNotesSection() {
   // Daily notes state
@@ -59,6 +61,33 @@ export function DailyNotesSection() {
     loadDailyNotes(date);
   }, [loadDailyNotes]);
 
+  // Delete a specific auto-captured selection
+  const deleteSelection = React.useCallback(async (selectionId) => {
+    if (!selectedDate || !selectionId) return;
+
+    try {
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          type: 'deleteSelection',
+          date: selectedDate,
+          selectionId
+        }, resolve);
+      });
+
+      if (response?.ok) {
+        await loadDailyNotes(selectedDate);
+      }
+    } catch (e) {
+      console.error('Failed to delete selection:', e);
+    }
+  }, [selectedDate, loadDailyNotes]);
+
+  // Helper function to convert time string to minutes for sorting
+  const convertTimeToMinutes = React.useCallback((timeStr) => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  }, []);
+
   // Function to open URL in new tab
   const openUrl = React.useCallback((url) => {
     if (chrome?.tabs?.create) {
@@ -68,66 +97,286 @@ export function DailyNotesSection() {
     }
   }, []);
 
-  // Function to render markdown links as clickable elements
+  // Function to render content with icons and clickable links
   const renderContentWithLinks = React.useCallback((content) => {
     if (!content) return content;
 
-    // Simple markdown link parser: [text](url)
-    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
+    // Split content into lines for processing
+    const lines = content.split('\n');
+    
+    // Group content by URL/source and separate manual notes
+    const autoGroups = [];
+    let currentGroup = null;
+    let manualNotes = [];
 
-    while ((match = linkRegex.exec(content)) !== null) {
-      // Add text before the link
-      if (match.index > lastIndex) {
-        parts.push(content.substring(lastIndex, match.index));
+    lines.forEach((line, lineIndex) => {
+      if (!line.trim()) {
+        return; // Skip empty lines for grouping
       }
 
-      // Add clickable link
-      const linkText = match[1];
-      const url = match[2];
-      parts.push(
-        <button
-          key={match.index}
-          onClick={(e) => {
-            e.stopPropagation();
-            openUrl(url);
-          }}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#10b981',
-            textDecoration: 'underline',
-            cursor: 'pointer',
-            fontSize: 'inherit',
-            padding: 0,
-            font: 'inherit'
-          }}
-          title={`Open ${url}`}
-        >
-          {linkText}
-          <FontAwesomeIcon
-            icon={faExternalLinkAlt}
-            style={{ marginLeft: 4, fontSize: '0.8em', opacity: 0.7 }}
-          />
-        </button>
+      // Check if line is auto-captured (contains "From [domain](url):")
+      const autoCaptureRegex = /^\[(\d{1,2}:\d{2})\]\s+From\s+\[([^\]]+)\]\(([^)]+)\):\s*$/;
+      const autoCaptureMatch = line.match(autoCaptureRegex);
+      
+      // Check if line contains quoted text (auto-captured selection)
+      const isQuotedText = line.startsWith('"') && line.endsWith('"') && line.length > 2;
+      
+      if (autoCaptureMatch) {
+        // Save current auto-capture group if exists
+        if (currentGroup) {
+          autoGroups.push(currentGroup);
+        }
+        
+        // Start new auto-capture group
+        const [, time, domain, url] = autoCaptureMatch;
+        currentGroup = {
+          type: 'auto',
+          time,
+          timeValue: convertTimeToMinutes(time), // For sorting
+          domain,
+          url,
+          selections: []
+        };
+      } else if (isQuotedText && currentGroup) {
+        // Add to current auto-capture group
+        currentGroup.selections.push(line);
+      } else {
+        // Add to manual notes
+        if (line.trim()) {
+          manualNotes.push(line);
+        }
+      }
+    });
+
+    // Save any remaining auto-capture group
+    if (currentGroup) {
+      autoGroups.push(currentGroup);
+    }
+
+    // Sort auto groups by time (earliest first)
+    autoGroups.sort((a, b) => a.timeValue - b.timeValue);
+
+    // Render grouped content
+    const processedLines = [];
+    
+    // 1. First render manual notes at the top
+    if (manualNotes.length > 0) {
+      manualNotes.forEach((line, lineIndex) => {
+        // Process markdown links
+        const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+        const parts = [];
+        let lastIndex = 0;
+        let match;
+        let hasLinks = false;
+
+        while ((match = linkRegex.exec(line)) !== null) {
+          hasLinks = true;
+          if (match.index > lastIndex) {
+            parts.push(line.substring(lastIndex, match.index));
+          }
+
+          const linkText = match[1];
+          const url = match[2];
+          parts.push(
+            <button
+              key={match.index}
+              onClick={(e) => {
+                e.stopPropagation();
+                openUrl(url);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#10b981',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                fontSize: 'inherit',
+                padding: 0,
+                font: 'inherit'
+              }}
+              title={`Open ${url}`}
+            >
+              {linkText}
+              <FontAwesomeIcon
+                icon={faExternalLinkAlt}
+                style={{ marginLeft: 4, fontSize: '0.8em', opacity: 0.7 }}
+              />
+            </button>
+          );
+
+          lastIndex = match.index + match[0].length;
+        }
+
+        if (lastIndex < line.length) {
+          parts.push(line.substring(lastIndex));
+        }
+
+        const lineContent = hasLinks ? parts : line;
+        processedLines.push(
+          <div key={`manual-${lineIndex}`} style={{
+            margin: '6px 0',
+            lineHeight: 1.5,
+            color: '#ffffff'
+          }}>
+            {lineContent}
+          </div>
+        );
+      });
+      
+      // Add separator between manual notes and auto-captured content
+      if (autoGroups.length > 0) {
+        processedLines.push(
+          <div key="separator" style={{
+            margin: '16px 0',
+            height: 1,
+            background: 'rgba(255, 255, 255, 0.1)'
+          }} />
+        );
+      }
+    }
+    
+    // 2. Then render auto-captured groups sorted by time
+    autoGroups.forEach((group, groupIndex) => {
+      const faviconUrl = getFaviconUrl(group.url, 16);
+      
+      // Group header with favicon
+      processedLines.push(
+        <div key={`auto-${groupIndex}`} style={{
+          margin: '12px 0 8px 0',
+          padding: '8px 12px',
+          background: 'rgba(52, 199, 89, 0.03)',
+          border: '1px solid rgba(52, 199, 89, 0.1)',
+          borderRadius: 8
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 6, 
+            marginBottom: 8,
+            color: 'rgba(255, 255, 255, 0.7)',
+            fontSize: '13px',
+            fontWeight: 500
+          }}>
+            <FontAwesomeIcon 
+              icon={faGlobe} 
+              style={{ 
+                color: '#34C759', 
+                fontSize: '11px',
+                flexShrink: 0
+              }} 
+            />
+            <span style={{ color: 'rgba(255, 255, 255, 0.6)' }}>[{group.time}]</span>
+            <span>From</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                openUrl(group.url);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#34C759',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                fontSize: 'inherit',
+                padding: 0,
+                font: 'inherit',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+              title={`Open ${group.url}`}
+            >
+              {faviconUrl && (
+                <img
+                  src={faviconUrl}
+                  alt=""
+                  width={14}
+                  height={14}
+                  style={{ 
+                    borderRadius: 2,
+                    flexShrink: 0,
+                    opacity: 0.9
+                  }}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              )}
+              {group.domain}
+              <FontAwesomeIcon
+                icon={faExternalLinkAlt}
+                style={{ fontSize: '9px', opacity: 0.7 }}
+              />
+            </button>
+            <span style={{
+              fontSize: '11px',
+              color: 'rgba(255, 255, 255, 0.5)',
+              background: 'rgba(52, 199, 89, 0.1)',
+              padding: '2px 6px',
+              borderRadius: 4,
+              marginLeft: 'auto'
+            }}>
+              {group.selections.length} selection{group.selections.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          
+          {/* Render selections */}
+          {group.selections.map((selection, selIndex) => (
+            <div key={selIndex} style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 6,
+              margin: '4px 0',
+              paddingLeft: 8
+            }}>
+              <FontAwesomeIcon 
+                icon={faLink} 
+                style={{ 
+                  color: '#FF9500', 
+                  fontSize: '10px',
+                  marginTop: 3,
+                  flexShrink: 0
+                }} 
+              />
+              <span style={{ 
+                fontStyle: 'italic',
+                color: 'rgba(255, 255, 255, 0.9)',
+                lineHeight: 1.4,
+                fontSize: '14px'
+              }}>
+                {selection}
+              </span>
+            </div>
+          ))}
+        </div>
       );
+    });
 
-      lastIndex = match.index + match[0].length;
-    }
-
-    // Add remaining text
-    if (lastIndex < content.length) {
-      parts.push(content.substring(lastIndex));
-    }
-
-    return parts.length > 0 ? parts : content;
+    return processedLines.length > 0 ? processedLines : content;
   }, [openUrl]);
 
   // Auto-load today's notes on mount
   React.useEffect(() => {
     loadDailyNotes(selectedDate);
+  }, [loadDailyNotes, selectedDate]);
+
+  // Subscribe to daily notes changes for real-time updates
+  React.useEffect(() => {
+    console.log('[DailyNotesSection] Setting up daily notes change subscription...');
+    const unsubscribe = subscribeDailyNotesChanges((changedDate) => {
+      console.log('[DailyNotesSection] Daily notes changed for date:', changedDate);
+      // Reload if the changed date matches our currently selected date
+      if (changedDate === selectedDate) {
+        console.log('[DailyNotesSection] Reloading daily notes for current date...');
+        loadDailyNotes(selectedDate);
+      }
+    });
+    
+    return () => {
+      console.log('[DailyNotesSection] Cleaning up daily notes change subscription...');
+      unsubscribe();
+    };
   }, [loadDailyNotes, selectedDate]);
 
   return (
@@ -331,121 +580,6 @@ export function DailyNotesSection() {
           )}
         </div>
 
-        {/* Auto-captured selections - Apple Style */}
-        {dailyNotes?.selections && dailyNotes.selections.length > 0 && (
-          <div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              marginBottom: 12
-            }}>
-              <h3 style={{
-                fontSize: 16,
-                fontWeight: 600,
-                color: 'rgba(255, 255, 255, 0.7)',
-                margin: 0,
-                letterSpacing: '-0.2px'
-              }}>
-                Auto-captured
-              </h3>
-              <span style={{
-                fontSize: 12,
-                color: '#ffffff',
-                background: 'rgba(52, 199, 89, 0.2)',
-                padding: '2px 8px',
-                borderRadius: 8,
-                fontWeight: 500,
-                border: '1px solid rgba(52, 199, 89, 0.3)'
-              }}>
-                {dailyNotes.selections.length}
-              </span>
-            </div>
-            <div style={{
-              maxHeight: 200,
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8
-            }}>
-              {dailyNotes.selections.slice(-5).reverse().map(selection => (
-                <div key={selection.id} style={{
-                  background: 'rgba(52, 199, 89, 0.05)',
-                  border: '1px solid rgba(52, 199, 89, 0.15)',
-                  borderRadius: 10,
-                  padding: 12,
-                  transition: 'all 0.2s ease',
-                  cursor: 'pointer'
-                }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(52, 199, 89, 0.08)';
-                    e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.25)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(52, 199, 89, 0.05)';
-                    e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.15)';
-                  }}
-                >
-                  <div style={{
-                    color: '#ffffff',
-                    marginBottom: 6,
-                    fontSize: 14,
-                    lineHeight: 1.3,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden'
-                  }}>
-                    "{selection.text}"
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: 11,
-                    color: 'rgba(255, 255, 255, 0.6)'
-                  }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openUrl(selection.source?.url);
-                      }}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#34C759',
-                        cursor: 'pointer',
-                        fontSize: 11,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        textDecoration: 'none',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        fontWeight: 500,
-                        transition: 'all 0.2s ease'
-                      }}
-                      title={`Open ${selection.source?.url}`}
-                      onMouseEnter={(e) => {
-                        e.target.style.background = 'rgba(52, 199, 89, 0.15)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.background = 'none';
-                      }}
-                    >
-                      {selection.source?.domain || 'Unknown'}
-                      <FontAwesomeIcon
-                        icon={faExternalLinkAlt}
-                        style={{ fontSize: 9, opacity: 0.8 }}
-                      />
-                    </button>
-                    <span style={{ fontWeight: 400 }}>{selection.time}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
