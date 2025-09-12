@@ -115,18 +115,7 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
 
   // Handle get URL notes (full notes data)
   if (message.action === 'getUrlNotes') {
-    (async () => {
-      try {
-        const urlNotes = await getUrlNotes(message.url);
-        sendResponse({
-          success: true,
-          notes: urlNotes || []
-        });
-      } catch (error) {
-        console.error('Failed to get URL notes:', error);
-        sendResponse({ success: false, error: error.message });
-      }
-    })();
+    handleGetUrlNotes(message, sendResponse);
     return true;
   }
 
@@ -199,33 +188,28 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
     return true;
   }
 
+  // Handle remaining URL notes actions
   switch (message.action) {
     case 'getUrlNotesCount':
       handleGetUrlNotesCount(message, sendResponse);
-      return true; // Keep message channel open for async response
+      return true;
 
     case 'openUrlNotes':
       handleOpenUrlNotes(message, sender);
-      break;
+      sendResponse({ success: true });
+      return true;
 
     case 'closeUrlNotes':
       handleCloseUrlNotes(message, sender);
-      break;
+      sendResponse({ success: true });
+      return true;
 
     case 'saveUrlNote':
       handleSaveUrlNote(message, sendResponse);
       return true;
 
-    case 'getUrlNotes':
-      handleGetUrlNotes(message, sendResponse);
-      return true;
-
     case 'deleteUrlNote':
       handleDeleteUrlNote(message, sendResponse);
-      return true;
-
-    case 'captureScreenshot':
-      handleCaptureScreenshot(message, sendResponse);
       return true;
 
     case 'getSelectedText':
@@ -293,27 +277,41 @@ async function handleSaveUrlNote(message, sendResponse) {
 // Get URL notes
 async function handleGetUrlNotes(message, sendResponse) {
   try {
+    console.log('[Background Debug] Getting URL notes for:', message.url);
     const notes = await getUrlNotes(message.url);
-    sendResponse({ notes });
+    console.log('[Background Debug] Found', notes?.length || 0, 'URL notes');
+    sendResponse({ 
+      success: true,
+      notes: notes || [] 
+    });
   } catch (error) {
-    console.error('Failed to get URL notes:', error);
-    sendResponse({ notes: [] });
+    console.error('[Background Debug] Failed to get URL notes:', error);
+    sendResponse({ 
+      success: false, 
+      notes: [],
+      error: error.message 
+    });
   }
 }
 
 // Delete URL note
 async function handleDeleteUrlNote(message, sendResponse) {
   try {
+    console.log('[Background Debug] Deleting URL note:', message.noteId);
     await deleteUrlNote(message.noteId);
 
     // Notify content script to refresh notes count
     if (message.tabId) {
-      chrome.tabs.sendMessage(message.tabId, { action: 'refreshNotesCount' });
+      try {
+        await chrome.tabs.sendMessage(message.tabId, { action: 'refreshNotesCount' });
+      } catch (tabError) {
+        console.warn('[Background Debug] Failed to notify tab of deletion:', tabError);
+      }
     }
 
     sendResponse({ success: true });
   } catch (error) {
-    console.error('Failed to delete URL note:', error);
+    console.error('[Background Debug] Failed to delete URL note:', error);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -321,15 +319,23 @@ async function handleDeleteUrlNote(message, sendResponse) {
 // Capture screenshot of current tab
 async function handleCaptureScreenshot(message, sendResponse) {
   try {
+    console.log('[Background Debug] Capturing screenshot...');
     const dataUrl = await chrome.tabs.captureVisibleTab(null, {
       format: 'png',
       quality: 90
     });
 
     const base64Data = dataUrl.split(',')[1];
-    sendResponse({ success: true, imageData: base64Data });
+    console.log('[Background Debug] Screenshot captured, size:', Math.round(base64Data.length / 1024), 'KB');
+    sendResponse({ 
+      success: true, 
+      imageData: base64Data,
+      screenshot: dataUrl,  // Keep both formats for compatibility
+      url: message.url,
+      title: message.title 
+    });
   } catch (error) {
-    console.error('Failed to capture screenshot:', error);
+    console.error('[Background Debug] Failed to capture screenshot:', error);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -337,9 +343,11 @@ async function handleCaptureScreenshot(message, sendResponse) {
 // Get selected text from active tab
 async function handleGetSelectedText(message, sender, sendResponse) {
   try {
+    console.log('[Background Debug] Getting selected text from active tab...');
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) {
-      sendResponse({ selectedText: null });
+      console.warn('[Background Debug] No active tab found');
+      sendResponse({ success: false, selectedText: null });
       return;
     }
 
@@ -371,10 +379,18 @@ async function handleGetSelectedText(message, sender, sendResponse) {
     });
 
     const selectedText = results?.[0]?.result;
-    sendResponse({ selectedText });
+    console.log('[Background Debug] Selected text:', selectedText ? 'found' : 'none');
+    sendResponse({ 
+      success: true,
+      selectedText 
+    });
   } catch (error) {
-    console.error('Failed to get selected text:', error);
-    sendResponse({ selectedText: null });
+    console.error('[Background Debug] Failed to get selected text:', error);
+    sendResponse({ 
+      success: false,
+      selectedText: null,
+      error: error.message 
+    });
   }
 }
 

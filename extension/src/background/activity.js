@@ -323,9 +323,19 @@ export function initializeActivityTracking() {
 
 // Handle activity messages from content scripts
 export function handleActivityMessage(msg, sender) {
-    if (!sender.tab?.url || !msg.type) return;
+    if (!sender.tab?.url || !msg.type) {
+        console.log('[Activity Debug] Skipping message - missing URL or type:', { hasUrl: !!sender.tab?.url, hasType: !!msg.type });
+        return;
+    }
+    
     const cleaned = cleanUrl(sender.tab.url);
-    if (!cleaned) return;
+    if (!cleaned) {
+        console.log('[Activity Debug] Skipping message - could not clean URL:', sender.tab.url);
+        return;
+    }
+    
+    console.log('[Activity Debug] Processing activity for URL:', cleaned, 'type:', msg.type);
+    
     if (!activityData[cleaned]) activityData[cleaned] = { time: 0, scroll: 0, clicks: 0, forms: 0 };
     if (!sessionEvents.has(cleaned)) {
         sessionEvents.set(cleaned, {
@@ -340,28 +350,34 @@ export function handleActivityMessage(msg, sender) {
             hasAudio: false,
             isAudioSite: isAudioStreamingSite(cleaned)
         });
+        console.log('[Activity Debug] Created new session for:', cleaned);
     }
     const sessionEvent = sessionEvents.get(cleaned);
 
     if (msg.type !== 'visibility') {
         switch (msg.type) {
             case 'scroll':
-                activityData[cleaned].scroll = Math.max(activityData[cleaned].scroll || 0, msg.depth || 0);
-                sessionEvent.scrollDepth = Math.max(sessionEvent.scrollDepth, msg.depth || 0);
+                // Fix: Content script sends 'scrollPercent' but we were looking for 'depth'
+                const scrollValue = Math.round((msg.scrollPercent || msg.depth || 0) * 100); // Convert to percentage
+                activityData[cleaned].scroll = Math.max(activityData[cleaned].scroll || 0, scrollValue);
+                sessionEvent.scrollDepth = Math.max(sessionEvent.scrollDepth, scrollValue);
                 sessionEvent.interactions.push('scroll');
                 sessionEvent.lastSeen = Date.now();
+                console.log('[Activity Debug] Updated scroll for', cleaned, 'to', scrollValue);
                 break;
             case 'click':
                 activityData[cleaned].clicks = (activityData[cleaned].clicks || 0) + 1;
                 sessionEvent.clicks += 1;
                 sessionEvent.interactions.push('click');
                 sessionEvent.lastSeen = Date.now();
+                console.log('[Activity Debug] Incremented clicks for', cleaned, 'to', activityData[cleaned].clicks);
                 break;
             case 'formSubmit':
                 activityData[cleaned].forms = (activityData[cleaned].forms || 0) + 1;
                 sessionEvent.forms += 1;
                 sessionEvent.interactions.push('form');
                 sessionEvent.lastSeen = Date.now();
+                console.log('[Activity Debug] Incremented forms for', cleaned, 'to', activityData[cleaned].forms);
                 break;
             case 'audioDetected':
                 sessionEvent.hasAudio = true;
@@ -398,66 +414,139 @@ export function handleActivityMessage(msg, sender) {
     }
 }
 
-// Message handlers for activity-related requests
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg?.action === 'getActivityData') {
-        (async () => {
-            try {
-                // Allow overriding cutoff via chrome.storage.local: activityDays (number)
-                const { activityDays } = await chrome.storage.local.get(['activityDays']);
-                const days = Number.isFinite(Number(activityDays)) && Number(activityDays) > 0 ? Number(activityDays) : 90;
-                const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
+// Message handling functions for activity-related requests (called from main background script)
+export async function handleGetActivityData(msg, sender, sendResponse) {
+    try {
+        // Allow overriding cutoff via chrome.storage.local: activityDays (number)
+        const { activityDays } = await chrome.storage.local.get(['activityDays']);
+        const days = Number.isFinite(Number(activityDays)) && Number(activityDays) > 0 ? Number(activityDays) : 90;
+        const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
 
-                const rows = await getAllActivity();
+        console.log('[Activity Debug] Getting activity data with cutoff:', new Date(cutoffMs).toISOString());
 
-                // Filter to recent activity; if updatedAt is missing (older records), keep them only if we have non-zero time
-                const recent = (Array.isArray(rows) ? rows : [])
-                    .filter(r => {
-                        const ua = Number(r?.updatedAt);
-                        if (Number.isFinite(ua)) return ua >= cutoffMs;
-                        return (Number(r?.time) || 0) > 0; // legacy fallback
-                    })
-                    // Sort by time descending to keep most relevant first
-                    .sort((a, b) => (Number(b?.time) || 0) - (Number(a?.time) || 0));
+        const rows = await getAllActivity();
+        console.log('[Activity Debug] Raw activity rows:', rows?.length || 0);
 
-                sendResponse({ ok: true, rows: recent });
-            } catch (e) {
-                sendResponse({ ok: false, error: String(e) });
+        // Transform and filter recent activity data to handle both legacy and new time-series formats
+        const normalized = (Array.isArray(rows) ? rows : [])
+            .map(r => {
+                // Normalize the record format for frontend consumption
+                const result = {
+                    url: r.url,
+                    time: r.time || r.metrics?.timeSpent || 0,
+                    scroll: r.scroll || r.metrics?.scrollDepth || 0,
+                    clicks: r.clicks || r.metrics?.clicks || 0,
+                    forms: r.forms || r.metrics?.forms || 0,
+                    updatedAt: r.updatedAt || r.timestamp || 0,
+                    timestamp: r.timestamp || r.updatedAt || 0
+                };
+                
+                console.log('[Activity Debug] Normalized record:', {
+                    url: result.url,
+                    time: result.time,
+                    timestamp: result.timestamp,
+                    timestampDate: new Date(result.timestamp).toISOString()
+                });
+                
+                return result;
+            });
+
+        console.log('[Activity Debug] Normalized records:', normalized.length);
+
+        const filtered = normalized.filter(r => {
+            // Skip URLs that are empty or problematic browser internals
+            if (!r.url) {
+                console.log('[Activity Debug] Skipping empty URL');
+                return false;
             }
-        })();
-        return true;
-    }
 
-    if (msg?.action === 'getTimeSeriesStats') {
-        (async () => {
-            try {
-                const stats = await getTimeSeriesStorageStats();
-                sendResponse({ ok: true, stats });
-            } catch (e) {
-                sendResponse({ ok: false, error: String(e) });
+            // Skip some browser internals but keep useful ones like new tab pages
+            if (r.url.startsWith('chrome-extension://') || 
+                r.url.startsWith('chrome://settings') || 
+                r.url.startsWith('chrome://extensions') ||
+                r.url.startsWith('about:blank')) {
+                console.log('[Activity Debug] Skipping browser internal URL:', r.url);
+                return false;
             }
-        })();
-        return true;
-    }
 
-    if (msg?.action === 'cleanupTimeSeriesData') {
-        (async () => {
-            try {
-                const retentionDays = typeof msg.retentionDays === 'number' ? msg.retentionDays : 30;
-                const deleted = await cleanupOldTimeSeriesData(retentionDays);
-                sendResponse({ ok: true, deleted });
-            } catch (e) {
-                sendResponse({ ok: false, error: String(e) });
-            }
-        })();
-        return true;
-    }
+            // Check recency using updatedAt/timestamp  
+            const timestamp = r.updatedAt || r.timestamp || 0;
+            const isRecent = timestamp > 0 && timestamp >= cutoffMs;
+            const hasActivity = (Number(r.time) || 0) > 0;
+            
+            const shouldKeep = isRecent || hasActivity;
+            
+            console.log('[Activity Debug] Filter decision for', r.url, {
+                timestamp,
+                timestampDate: timestamp ? new Date(timestamp).toISOString() : 'none',
+                isRecent,
+                hasActivity: hasActivity,
+                time: r.time,
+                shouldKeep
+            });
+            
+            return shouldKeep;
+        });
 
+        console.log('[Activity Debug] Filtered records:', filtered.length);
+
+        // Sort by time descending to keep most relevant first
+        const sorted = filtered.sort((a, b) => (Number(b.time) || 0) - (Number(a.time) || 0));
+
+        console.log('[Activity Debug] Final sorted records:', sorted.length);
+        sorted.slice(0, 5).forEach((r, i) => {
+            console.log(`[Activity Debug] Top ${i+1}:`, { url: r.url, time: r.time });
+        });
+
+        sendResponse({ ok: true, rows: sorted });
+    } catch (e) {
+        console.error('[Activity Debug] Error in handleGetActivityData:', e);
+        sendResponse({ ok: false, error: String(e) });
+    }
+}
+
+export async function handleGetTimeSeriesStats(msg, sender, sendResponse) {
+    try {
+        const stats = await getTimeSeriesStorageStats();
+        sendResponse({ ok: true, stats });
+    } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+    }
+}
+
+export async function handleCleanupTimeSeriesData(msg, sender, sendResponse) {
+    try {
+        const retentionDays = typeof msg.retentionDays === 'number' ? msg.retentionDays : 30;
+        const deleted = await cleanupOldTimeSeriesData(retentionDays);
+        sendResponse({ ok: true, deleted });
+    } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+    }
+}
+
+export function handleActivityContentScriptMessage(msg, sender) {
+    // Skip daily notes and text selection messages - they should be handled by the main background script
+    if (msg.type === 'updateDailyNotes' || 
+        msg.type === 'getDailyNotes' || 
+        msg.type === 'deleteSelection' || 
+        msg.type === 'textSelected' || 
+        msg.type === 'textDeselected') {
+        return false;
+    }
+    
     // Handle activity tracking messages from content scripts
     if (msg.type && sender.tab) {
+        console.log('[Activity Debug] Processing content script message:', {
+            type: msg.type,
+            url: sender.tab.url,
+            tabId: sender.tab.id,
+            hasExtraData: Object.keys(msg).length > 2
+        });
         handleActivityMessage(msg, sender);
+        return true;
     }
-});
+    return false;
+}
 
 // Initialize activity tracking
 export function initializeActivity() {

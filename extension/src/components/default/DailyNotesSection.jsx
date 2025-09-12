@@ -14,8 +14,14 @@ export function DailyNotesSection() {
   // Daily notes functions
   const loadDailyNotes = React.useCallback(async (date) => {
     try {
-      const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'getDailyNotes', date }, resolve);
+      const response = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({ type: 'getDailyNotes', date }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        });
       });
 
       if (response?.ok) {
@@ -39,17 +45,25 @@ export function DailyNotesSection() {
     if (!selectedDate) return;
 
     try {
-      const response = await new Promise((resolve) => {
+      const response = await new Promise((resolve, reject) => {
         chrome.runtime.sendMessage({
           type: 'updateDailyNotes',
           date: selectedDate,
           content: dailyNotesText
-        }, resolve);
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        });
       });
 
       if (response?.ok) {
         await loadDailyNotes(selectedDate);
         setEditingDailyNotes(false);
+      } else {
+        console.error('Failed to save daily notes:', response?.error);
       }
     } catch (e) {
       console.error('Failed to save daily notes:', e);
@@ -66,16 +80,24 @@ export function DailyNotesSection() {
     if (!selectedDate || !selectionId) return;
 
     try {
-      const response = await new Promise((resolve) => {
+      const response = await new Promise((resolve, reject) => {
         chrome.runtime.sendMessage({
           type: 'deleteSelection',
           date: selectedDate,
           selectionId
-        }, resolve);
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        });
       });
 
       if (response?.ok) {
         await loadDailyNotes(selectedDate);
+      } else {
+        console.error('Failed to delete selection:', response?.error);
       }
     } catch (e) {
       console.error('Failed to delete selection:', e);

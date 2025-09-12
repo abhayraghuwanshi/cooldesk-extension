@@ -3,7 +3,13 @@ import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats, setupDatabase } fr
 import { storageGetWithTTL } from '../services/extensionApi.js';
 import { populateAndStore } from './data.js';
 // Modular background pieces - these initialize their own message handlers
-import { initializeActivity } from './activity.js';
+import { 
+  initializeActivity, 
+  handleGetActivityData, 
+  handleGetTimeSeriesStats, 
+  handleCleanupTimeSeriesData,
+  handleActivityContentScriptMessage 
+} from './activity.js';
 import { initializeData } from './data.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
@@ -402,6 +408,64 @@ async function main() {
       console.log('[Background Debug] Message handled by URL notes handler');
       cleanup();
       return true;
+    }
+
+    // Handle activity-related messages
+    if (msg?.action === 'getActivityData') {
+      console.log('[Background Debug] Handling getActivityData');
+      (async () => {
+        try {
+          await handleGetActivityData(msg, sender, sendResponse);
+        } catch (e) {
+          console.error('[Background] Error in getActivityData:', e);
+          sendResponse({ ok: false, error: String(e) });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.action === 'getTimeSeriesStats') {
+      console.log('[Background Debug] Handling getTimeSeriesStats');
+      (async () => {
+        try {
+          await handleGetTimeSeriesStats(msg, sender, sendResponse);
+        } catch (e) {
+          console.error('[Background] Error in getTimeSeriesStats:', e);
+          sendResponse({ ok: false, error: String(e) });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.action === 'cleanupTimeSeriesData') {
+      console.log('[Background Debug] Handling cleanupTimeSeriesData');
+      (async () => {
+        try {
+          await handleCleanupTimeSeriesData(msg, sender, sendResponse);
+        } catch (e) {
+          console.error('[Background] Error in cleanupTimeSeriesData:', e);
+          sendResponse({ ok: false, error: String(e) });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Handle activity tracking messages from content scripts
+    if (msg.type && sender.tab) {
+      console.log('[Background Debug] Potential activity message:', { type: msg.type, url: sender.tab?.url });
+    }
+    
+    const activityHandled = handleActivityContentScriptMessage(msg, sender);
+    if (activityHandled) {
+      console.log('[Background Debug] Message handled by activity content script handler');
+      cleanup();
+      return false; // Don't send response for content script activity messages
     }
 
     if (msg?.ping === 'bg') {

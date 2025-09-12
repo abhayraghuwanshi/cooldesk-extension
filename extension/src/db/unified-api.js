@@ -572,19 +572,45 @@ export const saveUIState = withErrorHandling(async (uiStateData) => {
  * Put activity time series event
  */
 export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData) => {
+    console.log('[DB Debug] putActivityTimeSeriesEvent called with:', {
+        id: eventData.id,
+        url: eventData.url,
+        timestamp: eventData.timestamp,
+        hasMetrics: !!eventData.metrics
+    })
+    
     const event = validateAndSanitize({
         id: eventData.id || generateId(),
+        timestamp: eventData.timestamp || Date.now(),
+        sessionId: eventData.sessionId || `session_${Date.now()}`,
         ...eventData
     }, 'activitySeries')
+    
+    console.log('[DB Debug] Event after validation:', {
+        id: event.id,
+        url: event.url,
+        timestamp: event.timestamp,
+        sessionId: event.sessionId,
+        time: event.time,
+        metrics: event.metrics
+    })
     
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
     
+    console.log('[DB Debug] About to store event in:', DB_CONFIG.STORES.ACTIVITY_SERIES)
+    
     const request = store.put(event)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(event)
-        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+            console.log('[DB Debug] Successfully stored activity event:', event.id)
+            resolve(event)
+        }
+        request.onerror = () => {
+            console.error('[DB Debug] Error storing activity event:', request.error)
+            reject(request.error)
+        }
     })
 }, {
     operation: 'putActivityTimeSeriesEvent',
@@ -600,22 +626,53 @@ export const putActivityRow = putActivityTimeSeriesEvent
  * Get all activity data
  */
 export const getAllActivity = withErrorHandling(async () => {
+    console.log('[DB Debug] getAllActivity called')
+    
     const db = await getUnifiedDB()
+    console.log('[DB Debug] Database obtained:', !!db)
+    
     const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
     
-    const request = store.getAll()
-    const results = await new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result || [])
-        request.onerror = () => reject(request.error)
+    console.log('[DB Debug] Transaction and store created for:', DB_CONFIG.STORES.ACTIVITY_SERIES)
+    
+    // First check how many records are in the store
+    const countRequest = store.count()
+    const count = await new Promise((resolve, reject) => {
+        countRequest.onsuccess = () => resolve(countRequest.result)
+        countRequest.onerror = () => reject(countRequest.error)
     })
     
-    return results.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+    console.log('[DB Debug] Total records in activity_series store:', count)
+    
+    const request = store.getAll()
+    const results = await new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+            const data = request.result || []
+            console.log('[DB Debug] Retrieved records:', data.length)
+            if (data.length > 0) {
+                console.log('[DB Debug] Sample record:', data[0])
+            }
+            resolve(data)
+        }
+        request.onerror = () => {
+            console.error('[DB Debug] Error getting all activity:', request.error)
+            reject(request.error)
+        }
+    })
+    
+    const sorted = results.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+    console.log('[DB Debug] Returning sorted results:', sorted.length)
+    
+    return sorted
 }, {
     operation: 'getAllActivity',
     severity: ErrorSeverity.LOW,
     strategy: ErrorStrategy.FALLBACK,
-    fallbackFunction: () => []
+    fallbackFunction: () => {
+        console.log('[DB Debug] Using fallback function - returning empty array')
+        return []
+    }
 })
 
 /**

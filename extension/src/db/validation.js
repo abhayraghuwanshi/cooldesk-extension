@@ -281,12 +281,10 @@ export const VALIDATION_SCHEMAS = {
             // Removed strict URL validation to handle edge cases
         },
         timestamp: {
-            [ValidationRules.REQUIRED]: true,
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
         },
         sessionId: {
-            [ValidationRules.REQUIRED]: true,
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.MIN_LENGTH]: 1
         },
@@ -295,6 +293,27 @@ export const VALIDATION_SCHEMAS = {
         },
         context: {
             [ValidationRules.TYPE]: 'object'
+        },
+        // Legacy fields for backward compatibility
+        time: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        scroll: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        clicks: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        forms: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        updatedAt: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
         }
     },
 

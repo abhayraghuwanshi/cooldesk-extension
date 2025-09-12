@@ -78,6 +78,68 @@ export function initContentInteractions() {
     }
   }
 
+  // Text selection tracking for daily notes (like Sider AI) - with debouncing
+  let lastSelectedText = '';
+  let selectionTimeout = null;
+
+  try {
+    document.addEventListener('selectionchange', () => {
+      // Clear existing timeout
+      if (selectionTimeout) {
+        clearTimeout(selectionTimeout);
+      }
+      
+      // Debounce selection changes to avoid capturing every character while dragging
+      selectionTimeout = setTimeout(() => {
+        try {
+          const selection = window.getSelection();
+          const selectedText = selection.toString().trim();
+          
+          // Only process meaningful selections (>= 15 chars, different from last)
+          if (selectedText.length >= 15 && selectedText !== lastSelectedText) {
+            lastSelectedText = selectedText;
+            
+            // Get selection context and position
+            const range = selection.getRangeAt(0);
+            const boundingRect = range.getBoundingClientRect();
+            
+            // Get surrounding context (50 chars before/after)
+            const beforeText = range.startContainer.textContent?.substring(
+              Math.max(0, range.startOffset - 50), 
+              range.startOffset
+            ) || '';
+            const afterText = range.endContainer.textContent?.substring(
+              range.endOffset, 
+              Math.min(range.endContainer.textContent.length, range.endOffset + 50)
+            ) || '';
+            
+            sendInteraction('textSelected', {
+              text: selectedText,
+              beforeText,
+              afterText,
+              position: {
+                x: boundingRect.x,
+                y: boundingRect.y,
+                width: boundingRect.width,
+                height: boundingRect.height
+              },
+              length: selectedText.length,
+              wordCount: selectedText.split(/\s+/).length
+            });
+            
+            console.log('[ContentInteractions] Text selected:', selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''));
+          } else if (selectedText.length === 0 && lastSelectedText) {
+            // Selection cleared
+            lastSelectedText = '';
+            sendInteraction('textDeselected', { cleared: true });
+          }
+        } catch (e) {
+          console.warn('[ContentInteractions] Selection tracking error:', e);
+        }
+      }, 500); // Wait 500ms after selection stops changing
+    });
+  } catch { /* no-op */ }
+
   // Listen for preview collection requests from extension UI
   try {
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
