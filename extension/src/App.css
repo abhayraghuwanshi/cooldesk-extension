@@ -35,6 +35,11 @@ body,
   backdrop-filter: blur(8px);
 }
 
+/* Vertical Sidebar */
+.vertical-sidebar.ai-sidebar {
+  backdrop-filter: blur(20px);
+}
+
 /* Bottom search styles have been moved to src/search.css */
 
 /* Ensure header search matches header surface color (avoid odd gradient box) */
@@ -1785,35 +1790,7 @@ body,
   color: #93c5fd;
 }
 
-/* Vertical Header Styles */
-.content-with-vertical-sidebar {
-  padding-left: 280px;
-  transition: padding-left 0.3s ease;
-}
-
-/* Collapsed vertical sidebar */
-.content-with-vertical-sidebar.collapsed {
-  padding-left: 60px;
-}
-
-/* Responsive vertical sidebar */
-@media (max-width: 1199px) {
-  .content-with-vertical-sidebar {
-    padding-left: 60px;
-    /* Always collapsed at smaller widths */
-  }
-}
-
-/* At very small widths, hide the sidebar completely */
-@media (max-width: 768px) {
-  .vertical-sidebar {
-    display: none !important;
-  }
-
-  .content-with-vertical-sidebar {
-    padding-left: 0 !important;
-  }
-}
+/* Removed duplicate vertical sidebar CSS - now handled dynamically in JavaScript */
 
 /* Sidebar button styles */
 .sidebar-btn {

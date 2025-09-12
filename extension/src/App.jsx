@@ -9,6 +9,7 @@ import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
 import { SettingsModal } from './components/popups/SettingsModal';
 import { ProjectGrid } from './components/ProjectGrid';
 import { Header } from './components/toolbar/Header';
+import { VerticalHeader } from './components/toolbar/VerticalHeader';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 import './search.css';
 
@@ -87,6 +88,7 @@ export default function App() {
   const activeSectionTimeoutRef = useRef(null)
   const [processes, setProcesses] = useState([])
   const [useVerticalLayout, setUseVerticalLayout] = useState(false)
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth)
 
 
   // Auto-reset active section after 5 seconds of inactivity
@@ -108,6 +110,16 @@ export default function App() {
       }
     };
   }, [activeSection]); // Re-run whenever activeSection changes
+
+  // Window resize handler for responsive behavior
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // UI state: dismissible settings warning
   const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)
@@ -1296,8 +1308,15 @@ export default function App() {
     }
   };
 
+  // Determine if we should show vertical header (responsive or user preference)
+  const shouldShowVertical = useVerticalLayout || windowWidth < 1200;
+
   return (
-    <div className="popup-wrap" style={{ paddingBottom: useVerticalLayout ? 0 : 64 }}>
+    <div className="popup-wrap" style={{ 
+      paddingBottom: shouldShowVertical ? 0 : 64,
+      marginLeft: shouldShowVertical ? (windowWidth < 1200 ? '60px' : '280px') : 0,
+      transition: 'margin-left 0.3s ease'
+    }}>
 
       {/* Main Content Area with conditional wrapper */}
       <div>
@@ -1525,20 +1544,39 @@ export default function App() {
           </div>
         )}
 
-        {/* Original Header (only when vertical layout is disabled) */}
-        <Header
-          search={search}
-          setSearch={setSearch}
-          populate={populate}
-          setShowSettings={setShowSettings}
-          setShowCreateWorkspace={setShowCreateWorkspace}
-          openInTab={openInTab}
-          isFooter={true}
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          activeSection={activeSection}
-          setActiveSection={setActiveSection}
-        />
+        {/* Conditional Header: VerticalHeader when small screen or user preference, otherwise horizontal Header */}
+        {shouldShowVertical ? (
+          <VerticalHeader
+            search={search}
+            setSearch={setSearch}
+            populate={populate}
+            setShowSettings={setShowSettings}
+            openSyncControls={() => {}} // Placeholder function
+            progress={{ running: false }} // Placeholder progress object
+            setShowCreateWorkspace={setShowCreateWorkspace}
+            openInTab={openInTab}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            activeSection={activeSection}
+            setActiveSection={setActiveSection}
+          />
+        ) : (
+          <Header
+            search={search}
+            setSearch={setSearch}
+            populate={populate}
+            setShowSettings={setShowSettings}
+            openSyncControls={() => {}} // Placeholder function
+            progress={{ running: false }} // Placeholder progress object
+            setShowCreateWorkspace={setShowCreateWorkspace}
+            openInTab={openInTab}
+            isFooter={true}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            activeSection={activeSection}
+            setActiveSection={setActiveSection}
+          />
+        )}
 
 
         <AddToWorkspaceModal

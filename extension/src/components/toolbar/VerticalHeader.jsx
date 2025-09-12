@@ -7,6 +7,7 @@ import {
   faCircleQuestion,
   faEnvelope,
   faForward,
+  faMicrophone,
   faPalette,
   faPause,
   faPlay,
@@ -19,6 +20,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useRef, useState } from 'react';
 import { getUIState, saveUIState } from '../../db/index.js';
 import { triggerAutoCategorize } from '../../utils/messaging';
+import VoiceNavigation from './VoiceNavigation';
 
 export function VerticalHeader({
   search,
@@ -40,6 +42,7 @@ export function VerticalHeader({
   const [currentTrack, setCurrentTrack] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [showVoiceNavigation, setShowVoiceNavigation] = useState(false);
 
   // Load Auto Sync from UI state (default ON if missing)
   useEffect(() => {
@@ -147,7 +150,7 @@ export function VerticalHeader({
   };
 
   // Navigation logic
-  const sections = ['All', 'Current Tabs', 'Pings', 'Notes', 'Cool Feed'];
+  const sections = ['All', 'Current Tabs', 'Pins', 'Notes', 'Daily Notes', 'Cool Feed'];
   const isActivityNavigation = activeSection !== undefined && setActiveSection;
 
   const currentLabel = isActivityNavigation
@@ -173,15 +176,15 @@ export function VerticalHeader({
   const sidebarWidth = effectiveCollapsed ? '60px' : '280px';
 
   return (
-    <div className="vertical-sidebar" style={{
+    <div className="vertical-sidebar ai-sidebar" style={{
       position: 'fixed',
       left: 0,
       top: 0,
       bottom: 0,
       width: sidebarWidth,
-      background: 'linear-gradient(180deg, rgba(15, 21, 34, 0.95) 0%, rgba(27, 35, 49, 0.95) 100%)',
+      background: 'var(--glass-bg, linear-gradient(180deg, rgba(15, 21, 34, 0.95) 0%, rgba(27, 35, 49, 0.95) 100%))',
       backdropFilter: 'blur(20px)',
-      borderRight: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRight: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
       boxShadow: '2px 0 20px rgba(0, 0, 0, 0.3)',
       zIndex: 2000,
       transition: 'width 0.3s ease',
@@ -193,7 +196,7 @@ export function VerticalHeader({
       {/* Collapse Toggle */}
       <div style={{
         padding: '12px',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: effectiveCollapsed ? 'center' : 'space-between'
@@ -202,7 +205,7 @@ export function VerticalHeader({
           <div className="logo-text" style={{
             fontSize: '16px',
             fontWeight: '600',
-            color: '#ffffff',
+            color: 'var(--text-primary, #ffffff)',
             letterSpacing: '-0.5px'
           }}>
             Cool-Desk
@@ -215,7 +218,7 @@ export function VerticalHeader({
           style={{
             background: 'none',
             border: 'none',
-            color: shouldAutoCollapse ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.7)',
+            color: shouldAutoCollapse ? 'var(--text-dim, rgba(255, 255, 255, 0.3))' : 'var(--text, rgba(255, 255, 255, 0.7))',
             cursor: shouldAutoCollapse ? 'not-allowed' : 'pointer',
             padding: '6px',
             borderRadius: '6px',
@@ -231,7 +234,7 @@ export function VerticalHeader({
 
       {/* Search Section */}
       {!effectiveCollapsed && (
-        <div style={{ padding: '16px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+        <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' }}>
           <VerticalSearchBox
             search={search}
             setSearch={setSearch}
@@ -244,7 +247,7 @@ export function VerticalHeader({
       {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (
         <div style={{
           padding: effectiveCollapsed ? '8px' : '16px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+          borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
           display: 'flex',
           flexDirection: effectiveCollapsed ? 'column' : 'row',
           alignItems: 'center',
@@ -265,7 +268,7 @@ export function VerticalHeader({
             <div style={{
               fontSize: '12px',
               fontWeight: '500',
-              color: 'rgba(255, 255, 255, 0.8)',
+              color: 'var(--text, rgba(255, 255, 255, 0.8))',
               textAlign: 'center',
               flex: 1,
               textTransform: 'capitalize'
@@ -327,8 +330,8 @@ export function VerticalHeader({
             gap: '4px',
             justifyContent: 'center',
             padding: '8px 0',
-            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+            borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
             margin: '8px 0'
           }}>
             <SidebarButton
@@ -353,6 +356,15 @@ export function VerticalHeader({
         )}
 
         {/* Action Buttons */}
+        <SidebarButton
+          icon={faMicrophone}
+          label="Voice Navigation"
+          active={showVoiceNavigation}
+          collapsed={effectiveCollapsed}
+          onClick={() => setShowVoiceNavigation(!showVoiceNavigation)}
+          tooltip={showVoiceNavigation ? "Hide Voice Navigation" : "Show Voice Navigation"}
+        />
+
         <SidebarButton
           icon={faPlus}
           label="Create Workspace"
@@ -423,19 +435,36 @@ export function VerticalHeader({
       {/* Time Display */}
       <div style={{
         padding: effectiveCollapsed ? '12px 8px' : '16px',
-        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+        borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
         textAlign: 'center'
       }}>
         <div style={{
           fontSize: effectiveCollapsed ? '10px' : '12px',
           opacity: 0.8,
-          color: '#ffffff',
+          color: 'var(--text-primary, #ffffff)',
           transform: effectiveCollapsed ? 'rotate(-90deg)' : 'none',
           whiteSpace: 'nowrap'
         }} title={now.toLocaleString()}>
           {effectiveCollapsed ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : timeStr}
         </div>
       </div>
+
+      {/* VoiceNavigation Component */}
+      {showVoiceNavigation && (
+        <div style={{
+          position: 'fixed',
+          left: effectiveCollapsed ? '80px' : '300px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          zIndex: 1999,
+          maxWidth: '600px',
+          width: 'calc(100vw - ' + (effectiveCollapsed ? '100px' : '320px') + ')',
+          maxHeight: '80vh',
+          overflow: 'auto'
+        }}>
+          <VoiceNavigation />
+        </div>
+      )}
     </div>
   );
 }
@@ -461,11 +490,11 @@ function SidebarButton({
         gap: collapsed ? '0' : '12px',
         padding: collapsed ? '8px' : '12px 16px',
         background: active
-          ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)'
-          : 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
-        border: `1px solid ${active ? 'rgba(96, 165, 250, 0.4)' : 'rgba(255, 255, 255, 0.2)'}`,
+          ? 'linear-gradient(135deg, var(--primary, rgba(96, 165, 250, 0.2)) 0%, var(--accent, rgba(139, 92, 246, 0.2)) 100%)'
+          : 'var(--glass-bg, linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%))',
+        border: `1px solid ${active ? 'var(--primary, rgba(96, 165, 250, 0.4))' : 'var(--border-color, rgba(255, 255, 255, 0.2))'}`,
         borderRadius: '8px',
-        color: '#ffffff',
+        color: 'var(--text-primary, #ffffff)',
         cursor: 'pointer',
         backdropFilter: 'blur(10px)',
         transition: 'all 0.2s ease',
@@ -552,9 +581,9 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
           width: '100%',
           padding: '10px 12px',
           borderRadius: '8px',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          background: 'rgba(255, 255, 255, 0.1)',
-          color: '#ffffff',
+          border: '1px solid var(--border-color, rgba(255, 255, 255, 0.2))',
+          background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+          color: 'var(--text-primary, #ffffff)',
           fontSize: '14px',
           fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
         }}
@@ -567,8 +596,8 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
           left: 0,
           right: 0,
           marginTop: '4px',
-          background: 'rgba(15, 21, 34, 0.95)',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
+          background: 'var(--glass-bg, rgba(15, 21, 34, 0.95))',
+          border: '1px solid var(--border-color, rgba(255, 255, 255, 0.2))',
           borderRadius: '8px',
           backdropFilter: 'blur(20px)',
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
@@ -583,7 +612,7 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
                 padding: '8px 12px',
                 cursor: 'pointer',
                 fontSize: '12px',
-                borderBottom: recent.length ? '1px solid rgba(255, 255, 255, 0.1)' : 'none'
+                borderBottom: recent.length ? '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' : 'none'
               }}
             >
               Search for "{search}"
@@ -597,7 +626,7 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
                 padding: '8px 12px',
                 cursor: 'pointer',
                 fontSize: '12px',
-                borderBottom: idx < recent.length - 1 ? '1px solid rgba(255, 255, 255, 0.1)' : 'none'
+                borderBottom: idx < recent.length - 1 ? '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' : 'none'
               }}
             >
               {item}

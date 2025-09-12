@@ -183,7 +183,7 @@ async function main() {
     try {
       await populateAndStore()
 
-      // Initialize side panel settings on install
+      // Initialize side panel settings on install (same as working sample.js)
       if (chrome?.sidePanel?.setOptions) {
         try {
           await chrome.sidePanel.setOptions({
@@ -712,10 +712,12 @@ async function main() {
           const senderTab = sender?.tab;
           const windowId = senderTab?.windowId;
 
-          // First attempt: Try to open side panel directly
+          // First attempt: Try to open side panel directly (same as working sample.js)
+          // 🚨 WORKING CODE - DO NOT ADD setOptions() calls here - they break functionality
           if (chrome?.sidePanel?.open && windowId) {
             try {
               console.log('[Background] Attempting to open side panel for window:', windowId);
+              // ✅ This simple direct call works - DO NOT MODIFY
               await chrome.sidePanel.open({ windowId });
               console.log('[Background] Side panel opened successfully!');
               sendResponse({ ok: true, method: 'sidePanel' });
@@ -917,7 +919,7 @@ async function main() {
     chrome.action.onClicked.addListener(async (tab) => {
       console.log('[Background] Extension action clicked, opening side panel...');
       try {
-        // Use the windowId from the active tab, not getCurrent()
+        // Use the windowId from the active tab, not getCurrent() (same as working sample.js)
         const windowId = tab?.windowId;
         if (chrome?.sidePanel?.open && windowId) {
           console.log('[Background] Opening side panel for window:', windowId);

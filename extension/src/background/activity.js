@@ -525,12 +525,13 @@ export async function handleCleanupTimeSeriesData(msg, sender, sendResponse) {
 }
 
 export function handleActivityContentScriptMessage(msg, sender) {
-    // Skip daily notes and text selection messages - they should be handled by the main background script
+    // Skip daily notes, text selection, and side panel messages - they should be handled by the main background script
     if (msg.type === 'updateDailyNotes' || 
         msg.type === 'getDailyNotes' || 
         msg.type === 'deleteSelection' || 
         msg.type === 'textSelected' || 
-        msg.type === 'textDeselected') {
+        msg.type === 'textDeselected' ||
+        msg.type === 'openSidePanel') {
         return false;
     }
     

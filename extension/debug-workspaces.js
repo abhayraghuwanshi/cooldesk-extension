@@ -1,1 +1,0 @@
-console.log('Debug: Checking workspaces...'); import('./src/db/index.js').then(db => db.listWorkspaces().then(workspaces => console.log('Workspaces found:', workspaces)).catch(err => console.error('Error loading workspaces:', err)))

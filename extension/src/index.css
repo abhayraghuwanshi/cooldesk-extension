@@ -111,15 +111,7 @@ button:focus-visible {
   outline: none !important;
 }
 
-/* Content area adjustment when vertical sidebar is active */
-.content-with-vertical-sidebar {
-  margin-right: 280px; /* Default expanded width */
-  transition: margin-right 0.3s ease;
-}
-
-.content-with-vertical-sidebar.collapsed {
-  margin-right: 60px; /* Collapsed width */
-}
+/* Removed .content-with-vertical-sidebar classes - now using inline styles in JavaScript */
 
 /* Animation for smooth transitions */
 @keyframes slideInRight {
@@ -137,19 +129,4 @@ button:focus-visible {
   animation: slideInRight 0.3s ease-out;
 }
 
-/* Responsive behavior */
-@media (max-width: 768px) {
-  .vertical-sidebar {
-    width: 100% !important;
-    transform: translateX(100%);
-    transition: transform 0.3s ease;
-  }
-  
-  .vertical-sidebar.mobile-open {
-    transform: translateX(0);
-  }
-  
-  .content-with-vertical-sidebar {
-    margin-right: 0;
-  }
-}
+/* Removed conflicting mobile responsive rules - now handled in JavaScript */

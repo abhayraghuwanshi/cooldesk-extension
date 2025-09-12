@@ -10,8 +10,9 @@ export function NotesSection() {
   const [editingId, setEditingId] = React.useState(null);
   const [editText, setEditText] = React.useState('');
 
-  // Voice recording state
+  // Unified recording state
   const [isRecording, setIsRecording] = React.useState(false);
+  const [recordingMode, setRecordingMode] = React.useState('transcribe'); // 'transcribe' or 'audio'
   const [mediaRecorder, setMediaRecorder] = React.useState(null);
   const [recordingTime, setRecordingTime] = React.useState(0);
   const [playingId, setPlayingId] = React.useState(null);
@@ -19,10 +20,12 @@ export function NotesSection() {
   const audioRefs = React.useRef({});
   const [previewNote, setPreviewNote] = React.useState(null);
   
-  // Speech-to-text state
-  const [isTranscribing, setIsTranscribing] = React.useState(false);
+  // Speech-to-text state (only for transcribe mode)
   const [transcribedText, setTranscribedText] = React.useState('');
   const recognitionRef = React.useRef(null);
+  
+  // Auto-save for text input
+  const autoSaveTimeoutRef = React.useRef(null);
 
   // Notes display limit state
   const [notesDisplayLimit, setNotesDisplayLimit] = React.useState(6);
@@ -42,8 +45,8 @@ export function NotesSection() {
     }
   }, []);
 
-  const addNote = React.useCallback(async () => {
-    const t = (text || '').trim();
+  const addNote = React.useCallback(async (noteText = text, autoSave = false) => {
+    const t = (noteText || '').trim();
     if (!t) return;
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const note = { id, text: t, type: 'text', status: newNoteStatus, createdAt: Date.now() };
@@ -54,21 +57,35 @@ export function NotesSection() {
     } catch (error) {
       console.error('[NotesSection] Error creating note:', error);
     }
-    setText('');
-    setNewNoteStatus('todo');
+    if (!autoSave) {
+      setText('');
+      setNewNoteStatus('todo');
+    }
     // Reload to reflect authoritative DB ordering and cap
     await loadNotes();
   }, [text, newNoteStatus, loadNotes]);
 
-  // Speech-to-text recording function (with dual audio + text recording)
-  const startSpeechToText = React.useCallback(async () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
-      return;
+  // Auto-save text after user stops typing
+  const handleTextChange = React.useCallback((newText) => {
+    setText(newText);
+    
+    // Clear existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
     }
+    
+    // Only auto-save if there's meaningful content
+    if (newText.trim().length > 3) {
+      autoSaveTimeoutRef.current = setTimeout(() => {
+        addNote(newText, true);
+        setText(''); // Clear input after auto-save
+      }, 2000); // Auto-save after 2 seconds of no typing
+    }
+  }, [addNote]);
 
+  // Unified recording function
+  const startRecording = React.useCallback(async () => {
     try {
-      // Start audio recording for backup
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       const chunks = [];
@@ -77,18 +94,62 @@ export function NotesSection() {
         if (e.data.size > 0) chunks.push(e.data);
       };
 
-      // Set up speech recognition
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US'; // Set to English, but will try to translate from any language
-      
       let finalTranscript = '';
       let interimTranscript = '';
+      let recognition = null;
 
-      // When audio recording stops, process both audio and text
+      // Set up speech recognition if in transcribe mode
+      if (recordingMode === 'transcribe') {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+          alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+          return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event) => {
+          interimTranscript = '';
+          
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript + ' ';
+            } else {
+              interimTranscript += transcript;
+            }
+          }
+          
+          // Update the displayed text with both final and interim results
+          const fullText = (finalTranscript + interimTranscript).trim();
+          setTranscribedText(fullText);
+          setText(fullText);
+        };
+
+        recognition.onerror = (event) => {
+          console.error('[NotesSection] Speech recognition error:', event.error);
+          if (event.error === 'not-allowed') {
+            alert('Microphone access denied. Please allow microphone access and try again.');
+          } else {
+            alert(`Speech recognition error: ${event.error}`);
+          }
+          stopRecording();
+        };
+
+        recognition.onend = () => {
+          console.log('[NotesSection] Speech recognition ended');
+          if (recorder && recorder.state === 'recording') {
+            recorder.stop();
+          }
+        };
+      }
+
+      // When audio recording stops, process the note
       recorder.onstop = async () => {
         const blob = new Blob(chunks, { type: 'audio/webm' });
         const reader = new FileReader();
@@ -97,24 +158,37 @@ export function NotesSection() {
           const base64Audio = reader.result.split(',')[1];
           const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
           
-          // Create a hybrid note with both voice and text
-          const note = {
-            id,
-            type: 'voice-text', // New hybrid type
-            audioData: base64Audio,
-            text: finalTranscript.trim() || 'Voice note (transcription failed)',
-            duration: recordingTime,
-            status: newNoteStatus,
-            createdAt: Date.now(),
-            hasTranscription: !!finalTranscript.trim()
-          };
+          let note;
+          if (recordingMode === 'transcribe') {
+            // Create hybrid voice+text note
+            note = {
+              id,
+              type: 'voice-text',
+              audioData: base64Audio,
+              text: finalTranscript.trim() || 'Voice note (transcription failed)',
+              duration: recordingTime,
+              status: newNoteStatus,
+              createdAt: Date.now(),
+              hasTranscription: !!finalTranscript.trim()
+            };
+          } else {
+            // Create audio-only note
+            note = {
+              id,
+              type: 'voice',
+              audioData: base64Audio,
+              duration: recordingTime,
+              status: newNoteStatus,
+              createdAt: Date.now()
+            };
+          }
           
-          console.log('[NotesSection] Creating hybrid voice+text note:', note);
+          console.log(`[NotesSection] Creating ${recordingMode} note:`, note);
           try { 
             const result = await dbUpsertNote(note);
-            console.log('[NotesSection] Hybrid note creation result:', result);
+            console.log('[NotesSection] Note creation result:', result);
           } catch (error) {
-            console.error('[NotesSection] Error creating hybrid note:', error);
+            console.error('[NotesSection] Error creating note:', error);
           }
           await loadNotes();
         };
@@ -125,94 +199,33 @@ export function NotesSection() {
         stream.getTracks().forEach(track => track.stop());
       };
 
-      recognition.onstart = () => {
-        console.log('[NotesSection] Speech recognition started');
-        setIsTranscribing(true);
-        setTranscribedText('');
-        setRecordingTime(0);
-        
-        // Start audio recording
-        setMediaRecorder(recorder);
-        recorder.start();
-        
-        // Start timer for both speech recognition and audio recording
-        recordingTimerRef.current = setInterval(() => {
-          setRecordingTime(prev => prev + 1);
-        }, 1000);
-      };
-
-      recognition.onresult = (event) => {
-        interimTranscript = '';
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-        
-        // Update the displayed text with both final and interim results
-        const fullText = (finalTranscript + interimTranscript).trim();
-        setTranscribedText(fullText);
-        
-        // Also update the main text input with the transcribed text
-        setText(fullText);
-      };
-
-      recognition.onerror = (event) => {
-        console.error('[NotesSection] Speech recognition error:', event.error);
-        setIsTranscribing(false);
-        
-        // Stop audio recording if speech recognition fails
-        if (recorder && recorder.state === 'recording') {
-          recorder.stop();
-        }
-        
-        if (recordingTimerRef.current) {
-          clearInterval(recordingTimerRef.current);
-          recordingTimerRef.current = null;
-        }
-        
-        if (event.error === 'not-allowed') {
-          alert('Microphone access denied. Please allow microphone access and try again.');
-        } else {
-          alert(`Speech recognition error: ${event.error}`);
-        }
-      };
-
-      recognition.onend = () => {
-        console.log('[NotesSection] Speech recognition ended');
-        setIsTranscribing(false);
-        
-        // Stop audio recording when speech recognition ends
-        if (recorder && recorder.state === 'recording') {
-          recorder.stop();
-        }
-        
-        if (recordingTimerRef.current) {
-          clearInterval(recordingTimerRef.current);
-          recordingTimerRef.current = null;
-        }
-        
-        // Clear the text input after saving (since we're auto-saving)
-        setText('');
-        setTranscribedText('');
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
+      // Start recording
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      setRecordingTime(0);
+      setText('');
+      setTranscribedText('');
       
+      recorder.start();
+      
+      if (recognition) {
+        recognitionRef.current = recognition;
+        recognition.start();
+      }
+
+      // Start timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+
     } catch (error) {
-      console.error('[NotesSection] Error starting speech-to-text:', error);
+      console.error('[NotesSection] Error starting recording:', error);
       alert('Could not access microphone. Please check permissions and try again.');
     }
-  }, [recordingTime, newNoteStatus, loadNotes]);
+  }, [recordingMode, recordingTime, newNoteStatus, loadNotes]);
 
-  const stopSpeechToText = React.useCallback(() => {
-    if (recognitionRef.current && isTranscribing) {
+  const stopRecording = React.useCallback(() => {
+    if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
@@ -221,76 +234,18 @@ export function NotesSection() {
       mediaRecorder.stop();
       setMediaRecorder(null);
     }
-  }, [isTranscribing, mediaRecorder]);
 
-  // Voice recording functions (keeping original for audio notes)
-  const startRecording = React.useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks = [];
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      recorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          const base64Audio = reader.result.split(',')[1];
-          const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          const note = {
-            id,
-            type: 'voice',
-            audioData: base64Audio,
-            duration: recordingTime,
-            status: 'todo',
-            createdAt: Date.now()
-          };
-          console.log('[NotesSection] Creating voice note:', note);
-          try { 
-            const result = await dbUpsertNote(note);
-            console.log('[NotesSection] Voice note creation result:', result);
-          } catch (error) {
-            console.error('[NotesSection] Error creating voice note:', error);
-          }
-          await loadNotes();
-        };
-        reader.readAsDataURL(blob);
-
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      setMediaRecorder(recorder);
-      setIsRecording(true);
-      setRecordingTime(0);
-      recorder.start();
-
-      // Start timer
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
-
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      alert('Could not access microphone. Please check permissions.');
+    setIsRecording(false);
+    
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
     }
-  }, [recordingTime, loadNotes]);
 
-  const stopRecording = React.useCallback(() => {
-    if (mediaRecorder && isRecording) {
-      mediaRecorder.stop();
-      setIsRecording(false);
-      setMediaRecorder(null);
-
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-        recordingTimerRef.current = null;
-      }
-    }
-  }, [mediaRecorder, isRecording]);
+    // Clear text after recording stops
+    setText('');
+    setTranscribedText('');
+  }, [mediaRecorder]);
 
   const playVoiceNote = React.useCallback((note) => {
     if (playingId === note.id) {
@@ -425,6 +380,15 @@ export function NotesSection() {
 
   React.useEffect(() => { loadNotes(); }, [loadNotes]);
 
+  // Cleanup auto-save timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div style={{
       marginBottom: 16,
@@ -491,9 +455,14 @@ export function NotesSection() {
       }}>
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addNote(); }}
-          placeholder={isTranscribing ? "🎤 Listening... speak now" : "Start typing..."}
+          onChange={(e) => handleTextChange(e.target.value)}
+          onKeyDown={(e) => { 
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              if (text.trim()) addNote();
+            }
+          }}
+          placeholder={isRecording ? "🎤 Recording... speak now" : "Start typing... (auto-saves after 2s)"}
           style={{
             width: '100%',
             minHeight: 40,
@@ -575,35 +544,54 @@ export function NotesSection() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Recording Mode Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <select
+                value={recordingMode}
+                onChange={(e) => setRecordingMode(e.target.value)}
+                disabled={isRecording}
+                style={{
+                  padding: '6px 24px 6px 10px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  color: recordingMode === 'transcribe' ? '#34C759' : '#FF9500',
+                  fontSize: 11,
+                  fontWeight: 500,
+                  cursor: isRecording ? 'not-allowed' : 'pointer',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 6px center',
+                  backgroundSize: '12px',
+                  minWidth: 85,
+                  transition: 'all 0.2s ease',
+                  opacity: isRecording ? 0.5 : 1
+                }}
+                title="Select recording mode"
+              >
+                <option value="transcribe">Transcribe</option>
+                <option value="audio">Audio Only</option>
+              </select>
+              <span style={{ 
+                fontSize: 10, 
+                color: 'rgba(255, 255, 255, 0.5)',
+                fontWeight: 500
+              }}>
+                {recordingMode === 'transcribe' ? '📝+🎙️' : '🎙️'}
+              </span>
+            </div>
+            
+            {/* Unified Recording Button */}
             <button
-              onClick={addNote}
-              disabled={!text.trim()}
+              onClick={isRecording ? stopRecording : startRecording}
               style={{
-                padding: '6px 12px',
+                padding: isRecording ? '6px 12px' : '6px 8px',
                 borderRadius: 6,
                 border: 'none',
-                background: text.trim() ? '#007AFF' : 'rgba(255, 255, 255, 0.1)',
-                color: text.trim() ? 'white' : 'rgba(255, 255, 255, 0.5)',
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: text.trim() ? 'pointer' : 'not-allowed',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4
-              }}
-              title="Save note"
-            >
-              <FontAwesomeIcon icon={faSave} style={{ fontSize: 10 }} />
-              Save
-            </button>
-            <button
-              onClick={isTranscribing ? stopSpeechToText : startSpeechToText}
-              style={{
-                padding: isTranscribing ? '6px 12px' : '6px 8px',
-                borderRadius: 6,
-                border: 'none',
-                background: isTranscribing ? '#FF3B30' : '#34C759',
+                background: isRecording ? '#FF3B30' : (recordingMode === 'transcribe' ? '#34C759' : '#FF9500'),
                 color: 'white',
                 display: 'flex',
                 alignItems: 'center',
@@ -613,14 +601,17 @@ export function NotesSection() {
                 transition: 'all 0.3s ease',
                 fontSize: 12,
                 fontWeight: 500,
-                minWidth: isTranscribing ? 'auto' : '32px'
+                minWidth: isRecording ? 'auto' : '32px'
               }}
-              title={isTranscribing ? 'Stop speech-to-text' : 'Start speech-to-text (translates to English)'}
+              title={isRecording ? 'Stop recording' : `Start ${recordingMode === 'transcribe' ? 'speech-to-text' : 'audio'} recording`}
             >
-              <FontAwesomeIcon icon={isTranscribing ? faStop : faMicrophone} style={{ fontSize: 10 }} />
-              {isTranscribing && <span>{formatDuration(recordingTime)}</span>}
+              <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} style={{ fontSize: 10 }} />
+              {isRecording && <span>{formatDuration(recordingTime)}</span>}
             </button>
-            <span style={{ opacity: 0.7 }}>{text.length} characters</span>
+            
+            <span style={{ opacity: 0.7, fontSize: 11 }}>
+              {text.length} chars {text.trim().length > 3 && !isRecording && '• auto-saving...'}
+            </span>
           </div>
         </div>
       </div>
