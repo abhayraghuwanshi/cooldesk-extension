@@ -4,16 +4,16 @@ import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
 
 // Simple utility functions at module level to avoid hoisting issues
-// Every note becomes a checklist - all content is actionable
 const parseCheckboxText = (text) => {
-  const lines = text.split('\n').filter(line => line.trim()); // Remove empty lines
+  const lines = text.split('\n');
+  let hasCheckboxes = false;
 
   const parsedLines = lines.map(line => {
     const checkboxPattern = /^(\s*)([-*]?\s*)?(\[([\sxX])\]|[☐☑])\s*(.*)/;
     const match = line.match(checkboxPattern);
 
     if (match) {
-      // Already has checkbox format
+      hasCheckboxes = true;
       const indent = match[1] || '';
       const bullet = match[2] || '';
       const checkbox = match[3] || '';
@@ -31,18 +31,14 @@ const parseCheckboxText = (text) => {
       };
     }
 
-    // Convert regular text to checkbox format
     return {
-      type: 'checkbox',
-      indent: '',
-      bullet: '',
-      checked: false, // All new items start unchecked
-      content: line.trim(),
+      type: 'text',
+      content: line,
       originalLine: line
     };
   });
 
-  return { lines: parsedLines, hasCheckboxes: true }; // Always has checkboxes now
+  return { lines: parsedLines, hasCheckboxes };
 };
 
 const CheckboxLine = ({ line, lineIndex, onToggle }) => {
@@ -96,41 +92,7 @@ const CheckboxLine = ({ line, lineIndex, onToggle }) => {
   );
 };
 
-// Smart date formatting function
-const formatSmartDate = (timestamp) => {
-  if (!timestamp) return '';
-
-  const now = Date.now();
-  const noteDate = new Date(timestamp);
-  const diffMs = now - timestamp;
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  // Less than 1 minute
-  if (diffMins < 1) return 'now';
-
-  // Less than 1 hour
-  if (diffMins < 60) return `${diffMins}m`;
-
-  // Less than 24 hours
-  if (diffHours < 24) return `${diffHours}h`;
-
-  // Less than 7 days
-  if (diffDays < 7) return `${diffDays}d`;
-
-  // Less than 30 days
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w`;
-
-  // Older - show month/day
-  return noteDate.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric'
-  });
-};
-
 const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlaying }) => {
-  const [isHovered, setIsHovered] = React.useState(false);
   const handleToggleCheckbox = async (lineIndex) => {
     const { lines } = parseCheckboxText(note.text || '');
     if (lineIndex >= 0 && lineIndex < lines.length && lines[lineIndex].type === 'checkbox') {
@@ -158,62 +120,113 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
   };
 
   const renderNoteContent = () => {
-    const { lines } = parseCheckboxText(note.text || '');
+    const { lines, hasCheckboxes } = parseCheckboxText(note.text || '');
 
-    // All content is now checkbox-based
-    return lines.map((line, lineIndex) => (
-      <CheckboxLine
-        key={lineIndex}
-        line={line}
-        lineIndex={lineIndex}
-        onToggle={handleToggleCheckbox}
-      />
-    ));
+    if (hasCheckboxes) {
+      return lines.map((line, lineIndex) => (
+        <CheckboxLine
+          key={lineIndex}
+          line={line}
+          lineIndex={lineIndex}
+          onToggle={handleToggleCheckbox}
+        />
+      ));
+    }
+
+    return note.text;
   };
 
   return (
-    <div
-      style={{
-        background: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 10,
-        padding: 12,
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(10px)',
-        transition: 'all 0.2s ease'
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+    <div style={{
+      background: 'rgba(255, 255, 255, 0.05)',
+      borderRadius: 12,
+      padding: 16,
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backdropFilter: 'blur(10px)',
+      transition: 'all 0.2s ease'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* All notes show content the same way - just checkboxes */}
-          <div style={{
-            fontSize: 16,
-            color: '#ffffff',
-            lineHeight: 1.4,
-            fontWeight: 400
-          }}>
-            {renderNoteContent()}
-          </div>
+          {note.type === 'voice' || note.type === 'voice-text' ? (
+            <>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 8
+              }}>
+                <div style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  background: note.type === 'voice-text' ? '#007AFF' : '#34C759',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <FontAwesomeIcon icon={faMicrophone} style={{ fontSize: 14, color: 'white' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 500, color: '#ffffff' }}>
+                    {note.type === 'voice-text' ? 'Voice + Text Note' : 'Voice Note'}
+                  </div>
+                  <div style={{ fontSize: 14, color: 'rgba(255, 255, 255, 0.6)' }}>
+                    {Math.floor((note.duration || 0) / 60)}:{String((note.duration || 0) % 60).padStart(2, '0')}
+                    {note.type === 'voice-text' && note.hasTranscription && (
+                      <span style={{ marginLeft: 8, color: '#34C759' }}>✓ Transcribed</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {note.type === 'voice-text' && note.text && (
+                <div style={{
+                  fontSize: 14,
+                  color: '#e5e7eb',
+                  lineHeight: 1.4,
+                  marginBottom: 8,
+                  padding: '8px 12px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                }}>
+                  {renderNoteContent()}
+                </div>
+              )}
+
+              <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' }}>
+                {note.createdAt ? new Date(note.createdAt).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }) : ''}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{
+                fontSize: 16,
+                color: '#ffffff',
+                lineHeight: 1.4,
+                marginBottom: 8,
+                fontWeight: 400
+              }}>
+                {renderNoteContent()}
+              </div>
+              <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' }}>
+                {note.createdAt ? new Date(note.createdAt).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }) : ''}
+              </div>
+            </>
+          )}
         </div>
 
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          opacity: isHovered ? 1 : 0,
-          transform: isHovered ? 'translateX(0)' : 'translateX(8px)',
-          transition: 'all 0.2s ease'
-        }}>
-          {/* Date display inline with buttons */}
-          <span style={{
-            fontSize: 10,
-            color: 'rgba(255, 255, 255, 0.4)',
-            fontWeight: 500,
-            whiteSpace: 'nowrap'
-          }}>
-            {formatSmartDate(note.createdAt)}
-          </span>
+        <div style={{ display: 'flex', gap: 4 }}>
           {(note.type === 'voice' || note.type === 'voice-text') && note.audioData && (
             <button
               onClick={(e) => {
@@ -311,30 +324,12 @@ export function NotesSection() {
     }
   };
 
-  const addNote = async (noteText = text, autoSave = false, noteType = 'text', audioData = null) => {
+  const addNote = async (noteText = text, autoSave = false) => {
     const t = (noteText || '').trim();
     if (!t) return;
 
-    // Convert all new text to checkbox format automatically
-    const lines = t.split('\n').filter(line => line.trim());
-    const checkboxText = lines.map(line => {
-      // If already has checkbox format, keep it
-      const checkboxPattern = /^(\s*)([-*]?\s*)?(\[([\sxX])\]|[☐☑])\s*(.*)/;
-      if (checkboxPattern.test(line)) {
-        return line;
-      }
-      // Convert to checkbox format
-      return `[ ] ${line.trim()}`;
-    }).join('\n');
-
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const note = {
-      id,
-      text: checkboxText,
-      type: noteType,
-      createdAt: Date.now(),
-      ...(audioData && { audioData })
-    };
+    const note = { id, text: t, type: 'text', createdAt: Date.now() };
 
     try {
       await dbUpsertNote(note);
@@ -351,6 +346,17 @@ export function NotesSection() {
 
   const handleTextChange = (newText) => {
     setText(newText);
+
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    if (newText.trim().length > 3) {
+      autoSaveTimeoutRef.current = setTimeout(() => {
+        addNote(newText, true);
+        setText('');
+      }, 2000);
+    }
   };
 
   const handleToggleCheckbox = async (noteId, updatedText) => {
@@ -400,162 +406,29 @@ export function NotesSection() {
     audio.play().catch(() => setPlayingId(null));
   };
 
-  const startRecording = async () => {
-    if (isRecording) return;
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const chunks = [];
-      let recognition = null;
-      let transcribedText = '';
-
-      // Set up speech recognition for transcription
-      if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-
-        recognition.onresult = (event) => {
-          let interim = '';
-          let final = '';
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              final += transcript + ' ';
-            } else {
-              interim += transcript;
-            }
-          }
-
-          transcribedText = final + interim;
-          // Update text field in real-time during recording
-          setText(transcribedText.trim());
-        };
-
-        recognition.onerror = (event) => {
-          console.warn('[NotesSection] Speech recognition error:', event.error);
-        };
-
-        recognition.start();
-      }
-
-      const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : 'audio/webm'
-      });
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunks.push(event.data);
-        }
-      };
-
-      recorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const reader = new FileReader();
-
-        // Stop speech recognition
-        if (recognition) {
-          recognition.stop();
-        }
-
-        reader.onloadend = async () => {
-          const base64data = reader.result.split(',')[1];
-
-          // Use transcribed text if available, otherwise fallback
-          const finalText = transcribedText.trim() || text.trim() || 'Voice note';
-
-          // Create voice note with both audio and transcribed text
-          await addNote(finalText, false, 'voice', base64data);
-          setText('');
-        };
-
-        reader.readAsDataURL(blob);
-        stream.getTracks().forEach(track => track.stop());
-        setIsRecording(false);
-        setRecordingTime(0);
-        if (recordingTimerRef.current) {
-          clearInterval(recordingTimerRef.current);
-        }
-      };
-
-      setMediaRecorder(recorder);
-      setIsRecording(true);
-      setRecordingTime(0);
-
-      // Start timer
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
-
-      recorder.start();
-    } catch (error) {
-      console.error('[NotesSection] Recording error:', error);
-      alert('Could not access microphone. Please check permissions.');
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorder && isRecording) {
-      mediaRecorder.stop();
-    }
-  };
-
-  const formatRecordingTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Calculate filter counts
-  const filterCounts = React.useMemo(() => {
-    const counts = {
-      all: notes.length,
-      incomplete: 0,
-      completed: 0
-    };
-
-    notes.forEach(note => {
-      // Count by completion status
-      const text = note.text || '';
-      const { lines } = parseCheckboxText(text);
-
-      const hasIncomplete = lines.some(line => line.type === 'checkbox' && !line.checked);
-      const hasCompleted = lines.some(line => line.type === 'checkbox' && line.checked);
-
-      if (hasIncomplete && !hasCompleted) {
-        counts.incomplete++;
-      } else if (hasCompleted && !hasIncomplete) {
-        counts.completed++;
-      } else if (hasIncomplete && hasCompleted) {
-        // Mixed notes count for both
-        counts.incomplete++;
-        counts.completed++;
-      }
-    });
-
-    return counts;
-  }, [notes]);
-
-  // Filter notes - all notes now have checkboxes
+  // Filter notes
   const filteredNotes = React.useMemo(() => {
     if (notesFilter === 'all') return notes;
 
     return notes.filter(note => {
       const text = note.text || '';
-      const { lines } = parseCheckboxText(text);
+      const { hasCheckboxes } = parseCheckboxText(text);
 
       switch (notesFilter) {
         case 'incomplete': {
+          if (!hasCheckboxes) return false;
+          const { lines } = parseCheckboxText(text);
           return lines.some(line => line.type === 'checkbox' && !line.checked);
         }
         case 'completed': {
+          if (!hasCheckboxes) return false;
+          const { lines } = parseCheckboxText(text);
           return lines.some(line => line.type === 'checkbox' && line.checked);
         }
+        case 'text':
+          return note.type === 'text';
+        case 'voice':
+          return note.type === 'voice' || note.type === 'voice-text';
         default:
           return true;
       }
@@ -572,15 +445,8 @@ export function NotesSection() {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-      }
-      // Stop recording if component unmounts
-      if (isRecording && mediaRecorder) {
-        mediaRecorder.stop();
-      }
     };
-  }, [isRecording, mediaRecorder]);
+  }, []);
 
   return (
     <div style={{
@@ -602,7 +468,7 @@ export function NotesSection() {
           color: '#ffffff',
           letterSpacing: '-0.5px'
         }}>
-          Actionable Notes ✓
+          Notes
         </h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select
@@ -620,9 +486,11 @@ export function NotesSection() {
               appearance: 'none'
             }}
           >
-            <option value="all">📋 All ({filterCounts.all})</option>
-            <option value="incomplete">☐ Incomplete ({filterCounts.incomplete})</option>
-            <option value="completed">✅ Completed ({filterCounts.completed})</option>
+            <option value="all">📋 All ({notes.length})</option>
+            <option value="incomplete">☐ Incomplete</option>
+            <option value="completed">✅ Completed</option>
+            <option value="text">📝 Text ({notes.filter(n => n.type === 'text').length})</option>
+            <option value="voice">🎤 Voice ({notes.filter(n => n.type === 'voice' || n.type === 'voice-text').length})</option>
           </select>
         </div>
       </div>
@@ -644,7 +512,7 @@ export function NotesSection() {
               if (text.trim()) addNote();
             }
           }}
-          placeholder="Type your note or use voice recording with auto-transcription...\nAll notes become actionable checklist items automatically!"
+          placeholder="Start typing... (auto-saves after 2s)\nTry: '- [ ] Task' or '[ ] Item' for checklists"
           style={{
             width: '100%',
             minHeight: 40,
@@ -673,58 +541,29 @@ export function NotesSection() {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <span>Use Cmd+Enter to save • All notes become checkboxes automatically</span>
+          <span>Use Cmd+Enter to save • Type '[ ]' for checkboxes</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* Voice Recording Button */}
             <button
-              onClick={isRecording ? stopRecording : startRecording}
+              onClick={() => {
+                const newText = text + (text && !text.endsWith('\n') ? '\n' : '') + '[ ] ';
+                setText(newText);
+              }}
               style={{
                 padding: '6px 8px',
                 borderRadius: 6,
                 border: 'none',
-                background: isRecording ? '#FF3B30' : 'rgba(255, 255, 255, 0.1)',
-                color: 'white',
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: 'rgba(255, 255, 255, 0.8)',
                 cursor: 'pointer',
                 fontSize: 11,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                transition: 'all 0.2s ease'
+                fontWeight: 500
               }}
-              title={isRecording ? 'Stop recording and transcribe' : 'Start voice recording with auto-transcription'}
+              title="Add checkbox item"
             >
-              <FontAwesomeIcon
-                icon={isRecording ? faStop : faMicrophone}
-                style={{ fontSize: 10 }}
-              />
-              {isRecording ? `Stop ${formatRecordingTime(recordingTime)}` : 'Voice'}
+              <FontAwesomeIcon icon={faSquare} style={{ fontSize: 10 }} /> ✓
             </button>
-
-            {/* Save Button */}
-            <button
-              onClick={() => {
-                if (text.trim()) addNote();
-              }}
-              disabled={!text.trim()}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 6,
-                border: 'none',
-                background: text.trim() ? '#34C759' : 'rgba(255, 255, 255, 0.05)',
-                color: text.trim() ? 'white' : 'rgba(255, 255, 255, 0.3)',
-                cursor: text.trim() ? 'pointer' : 'not-allowed',
-                fontSize: 11,
-                fontWeight: 500,
-                transition: 'all 0.2s ease'
-              }}
-              title="Save note as checklist"
-            >
-              Save
-            </button>
-
             <span style={{ opacity: 0.7, fontSize: 11 }}>
-              {text.length} chars
+              {text.length} chars {text.trim().length > 3 && !isRecording && '• auto-saving...'}
             </span>
           </div>
         </div>

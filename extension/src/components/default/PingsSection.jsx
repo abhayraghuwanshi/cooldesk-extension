@@ -7,6 +7,7 @@ import { getFaviconUrl } from '../../utils';
 
 export function PingsSection({ tabs }) {
   const [pings, setPings] = React.useState([]);
+  const [hoveredPingId, setHoveredPingId] = React.useState(null);
 
   const loadPings = React.useCallback(async () => {
     try {
@@ -149,7 +150,7 @@ export function PingsSection({ tabs }) {
         </h2>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div>
         {pings.length === 0 ? (
           <div style={{
             textAlign: 'center',
@@ -165,170 +166,112 @@ export function PingsSection({ tabs }) {
             No pins yet. Pin your favorite tabs for quick access.
           </div>
         ) : (
-          pings.slice(0, 6).map(p => (
-            <div
-              key={p.url}
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: 12,
-                padding: 16,
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                backdropFilter: 'blur(10px)',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = `0 4px 16px rgba(255, 149, 0, 0.15)`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            >
-              {/* Favicon */}
-              <div style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                background: 'rgba(255, 149, 0, 0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                border: '1px solid rgba(255, 149, 0, 0.2)'
-              }}>
-                {p.favicon ? (
-                  <img
-                    src={p.favicon}
-                    alt=""
-                    width={18}
-                    height={18}
-                    style={{ borderRadius: 4 }}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            paddingBottom: '16px',
+            flexWrap: 'wrap'
+          }}>
+            {pings.slice(0, 12).map(p => (
+              <div
+                key={p.url}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openOrFocusUrl(p.url);
+                }}
+                onMouseEnter={() => setHoveredPingId(p.url)}
+                onMouseLeave={() => setHoveredPingId(null)}
+                title={`${p.title || (() => {
+                  try {
+                    return new URL(p.url).hostname;
+                  } catch {
+                    return p.url;
+                  }
+                })()}\n${p.url}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '8px',
+                  cursor: 'pointer',
+                  background: hoveredPingId === p.url ? 'rgba(255, 149, 0, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '8px',
+                  border: `1px solid ${hoveredPingId === p.url ? 'rgba(255, 149, 0, 0.3)' : 'rgba(255, 255, 255, 0.05)'}`,
+                  transition: 'all 0.2s ease',
+                  width: '48px',
+                  height: '48px',
+                  position: 'relative'
+                }}
+              >
+                <img
+                  src={p.favicon || getFaviconUrl(p.url)}
+                  alt={p.title || 'Pin'}
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    objectFit: 'contain',
+                    borderRadius: '4px'
+                  }}
+                  onError={(e) => {
+                    // Try fallback favicon from origin
+                    try {
+                      const u = new URL(p.url);
+                      const originFavicon = `${u.origin}/favicon.ico`;
+                      if (e.target.src !== originFavicon) {
+                        e.target.src = originFavicon;
+                        return;
+                      }
+                    } catch { }
+                    // If all favicon attempts fail, show pin icon
+                    const fallback = document.createElement('div');
+                    fallback.style.cssText = `
+                      width: 24px;
+                      height: 24px;
+                      border-radius: 4px;
+                      background: rgba(255, 149, 0, 0.2);
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      font-size: 12px;
+                      color: #FF9500;
+                    `;
+                    fallback.innerHTML = '📌';
+                    e.target.parentNode.replaceChild(fallback, e.target);
+                  }}
+                />
+
+                {/* Remove button on hover */}
+                {hoveredPingId === p.url && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removePing(p.url);
                     }}
-                  />
-                ) : (
-                  <FontAwesomeIcon
-                    icon={faThumbtack}
-                    style={{ fontSize: 14, color: '#FF9500' }}
-                  />
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-4px',
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: '#FF3B30',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      fontSize: '8px',
+                      fontWeight: 'bold'
+                    }}
+                    title="Remove pin"
+                  >
+                    ×
+                  </button>
                 )}
               </div>
-
-              {/* Ping Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 16,
-                  color: '#ffffff',
-                  lineHeight: 1.4,
-                  fontWeight: 400,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
-                  {p.title || (() => {
-                    try {
-                      return new URL(p.url).hostname;
-                    } catch {
-                      return p.url;
-                    }
-                  })()}
-                </div>
-                <div style={{
-                  fontSize: 13,
-                  color: 'rgba(255, 255, 255, 0.6)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  marginTop: 2
-                }}>
-                  {(() => {
-                    try {
-                      return new URL(p.url).hostname;
-                    } catch {
-                      return p.url;
-                    }
-                  })()}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                {/* Open Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openOrFocusUrl(p.url);
-                  }}
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    border: 'none',
-                    background: 'rgba(0, 122, 255, 0.1)',
-                    color: '#007AFF',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  title="Open pinned page"
-                  onMouseEnter={(e) => {
-                    e.target.style.background = '#007AFF';
-                    e.target.style.color = 'white';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = 'rgba(0, 122, 255, 0.1)';
-                    e.target.style.color = '#007AFF';
-                  }}
-                >
-                  <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 12 }} />
-                </button>
-
-                {/* Remove Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removePing(p.url);
-                  }}
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    border: 'none',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    color: '#FF3B30',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    opacity: 0.7
-                  }}
-                  title="Remove pin"
-                  onMouseEnter={(e) => {
-                    e.target.style.background = '#FF3B30';
-                    e.target.style.color = 'white';
-                    e.target.style.opacity = '1';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                    e.target.style.color = '#FF3B30';
-                    e.target.style.opacity = '0.7';
-                  }}
-                >
-                  <FontAwesomeIcon icon={faTrash} style={{ fontSize: 12 }} />
-                </button>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </div>

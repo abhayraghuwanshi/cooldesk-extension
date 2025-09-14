@@ -392,8 +392,24 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                     );
                   })()}
 
-                  {/* Tab Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* Tab Info - Clickable */}
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      cursor: 'pointer',
+                      padding: '4px 0'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
+                      if (hasTabsUpdate) return focusTab(tab);
+                      if (tab?.url) {
+                        enqueueOpenInChrome(tab.url).catch(() => { });
+                      }
+                    }}
+                    title="Click to focus tab"
+                  >
                     <div style={{
                       fontSize: 16,
                       color: '#ffffff',
@@ -402,8 +418,16 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       fontWeight: 400,
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}>
+                      textOverflow: 'ellipsis',
+                      transition: 'color 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.color = '#007AFF';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.color = '#ffffff';
+                    }}
+                    >
                       {tab.title || (() => {
                         try {
                           return new URL(tab?.url || '').hostname;
@@ -418,16 +442,31 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                         color: 'rgba(255, 255, 255, 0.6)',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>
+                        textOverflow: 'ellipsis',
+                        transition: 'color 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.color = 'rgba(0, 122, 255, 0.8)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.color = 'rgba(255, 255, 255, 0.6)';
+                      }}
+                      >
                         {colors.hostname}
                       </div>
                     )}
                   </div>
 
                   {/* Action Buttons */}
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    {/* Pin Button (hover only) */}
+                  <div style={{
+                    display: 'flex',
+                    gap: 4,
+                    flexShrink: 0,
+                    opacity: hoveredTabId === tab.id ? 1 : 0,
+                    transform: hoveredTabId === tab.id ? 'translateX(0)' : 'translateX(8px)',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    {/* Pin Button */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -444,8 +483,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        opacity: hoveredTabId === tab.id ? 1 : 0.3
+                        transition: 'all 0.2s ease'
                       }}
                       title="Pin tab"
                       onMouseEnter={(e) => {
