@@ -24,54 +24,38 @@ export function WorkspaceFilters({ items, active, onChange }) {
           ref={el => btnRefs.current[i] = el}
           style={{
             background: ws === active
-              ? 'linear-gradient(135deg, rgba(52, 199, 89, 0.2) 0%, rgba(52, 199, 89, 0.1) 100%)'
-              : 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%)',
-            borderRadius: '24px',
-            padding: '12px 24px',
-            color: ws === active ? '#34C759' : '#ffffff',
-            fontSize: '16px',
-            fontWeight: '600',
+              ? 'rgba(255, 255, 255, 0.15)'
+              : 'rgba(255, 255, 255, 0.08)',
+            border: ws === active
+              ? '1px solid rgba(255, 255, 255, 0.3)'
+              : '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            color: ws === active ? '#ffffff' : 'rgba(255, 255, 255, 0.8)',
+            fontSize: '14px',
+            fontWeight: '500',
             cursor: 'pointer',
-            backdropFilter: 'blur(16px)',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            transition: 'all 0.2s ease',
             display: 'flex',
             alignItems: 'center',
-            minWidth: '80px',
-            minHeight: '44px',
+            height: '32px',
             justifyContent: 'center',
             fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
             outline: 'none',
-            boxShadow: ws === active
-              ? '0 8px 32px rgba(52, 199, 89, 0.25), 0 2px 8px rgba(0, 0, 0, 0.1)'
-              : '0 4px 16px rgba(0, 0, 0, 0.08)',
             position: 'relative',
-            overflow: 'hidden'
+            whiteSpace: 'nowrap'
           }}
           onMouseEnter={(e) => {
             if (ws !== active) {
-              e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%)';
-              e.target.style.transform = 'translateY(-2px) scale(1.02)';
-              e.target.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.15)';
-              e.target.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+              e.target.style.background = 'rgba(255, 255, 255, 0.12)';
+              e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
             }
           }}
           onMouseLeave={(e) => {
             if (ws !== active) {
-              e.target.style.background = 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%)';
-              e.target.style.transform = 'translateY(0) scale(1)';
-              e.target.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.08)';
-              e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+              e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
             }
-          }}
-          onFocus={(e) => {
-            e.target.style.boxShadow = ws === active
-              ? '0 8px 32px rgba(52, 199, 89, 0.35), 0 0 0 3px rgba(52, 199, 89, 0.3)'
-              : '0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 3px rgba(255, 255, 255, 0.3)';
-          }}
-          onBlur={(e) => {
-            e.target.style.boxShadow = ws === active
-              ? '0 8px 32px rgba(52, 199, 89, 0.25), 0 2px 8px rgba(0, 0, 0, 0.1)'
-              : '0 4px 16px rgba(0, 0, 0, 0.08)';
           }}
         >
           {ws}
