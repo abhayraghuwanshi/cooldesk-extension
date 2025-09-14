@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrash, faExternalLinkAlt } from '@fortawesome/free-solid-svg-icons';
+import React, { useState } from 'react';
 import { getDomainFromUrl, getFaviconUrl } from '../utils';
 
 export function ProjectSublinks({ values = [], onDelete }) {
@@ -11,7 +11,6 @@ export function ProjectSublinks({ values = [], onDelete }) {
 
   return (
     <div style={{
-      padding: '16px',
       borderTop: '1px solid var(--border, rgba(255, 255, 255, 0.1))',
       display: 'grid',
       gridTemplateColumns: 'repeat(4, 1fr)',
@@ -28,7 +27,6 @@ export function ProjectSublinks({ values = [], onDelete }) {
               background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
               border: '1px solid var(--glass-border, rgba(255, 255, 255, 0.1))',
               borderRadius: '8px',
-              padding: '12px',
               backdropFilter: 'blur(10px)',
               cursor: 'pointer',
               transition: 'all 0.2s ease',
@@ -38,7 +36,7 @@ export function ProjectSublinks({ values = [], onDelete }) {
             onMouseLeave={() => setHoveredIndex(null)}
           >
             {/* Main clickable area */}
-            <div 
+            <div
               onClick={(e) => {
                 e.stopPropagation();
                 window.open(item.url, '_blank');
@@ -51,9 +49,9 @@ export function ProjectSublinks({ values = [], onDelete }) {
               }}
             >
               <div style={{
-                width: 24,
-                height: 24,
-                borderRadius: 6,
+                width: 48,
+                height: 48,
+                borderRadius: 10,
                 background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
                 display: 'flex',
                 alignItems: 'center',
@@ -63,9 +61,9 @@ export function ProjectSublinks({ values = [], onDelete }) {
                 <img
                   src={getFaviconUrl(item.url)}
                   alt=""
-                  width={14}
-                  height={14}
-                  style={{ borderRadius: 3 }}
+                  width={32}
+                  height={32}
+                  style={{ borderRadius: 6 }}
                 />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -81,17 +79,6 @@ export function ProjectSublinks({ values = [], onDelete }) {
                 }}>
                   {title}
                 </div>
-                <div style={{
-                  fontSize: 12,
-                  color: 'var(--text-dim, rgba(255, 255, 255, 0.6))',
-                  lineHeight: 1.4,
-                  fontWeight: 400,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
-                  {domain}
-                </div>
               </div>
             </div>
 
@@ -106,28 +93,6 @@ export function ProjectSublinks({ values = [], onDelete }) {
               transition: 'opacity 0.2s ease'
             }}>
               {/* External link button */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.open(item.url, '_blank');
-                }}
-                style={{
-                  background: 'var(--primary, rgba(0, 122, 255, 0.2))',
-                  border: '1px solid var(--primary, rgba(0, 122, 255, 0.4))',
-                  borderRadius: '4px',
-                  padding: '4px',
-                  color: 'var(--primary, #007AFF)',
-                  cursor: 'pointer',
-                  fontSize: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s ease'
-                }}
-                title="Open link"
-              >
-                <FontAwesomeIcon icon={faExternalLinkAlt} />
-              </button>
 
               {/* Delete button */}
               {onDelete && (

@@ -9,20 +9,93 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const [tabsError, setTabsError] = React.useState(null);
   const [hoveredTabId, setHoveredTabId] = React.useState(null);
   const [removingTabIds, setRemovingTabIds] = React.useState(new Set());
+  const [tabScreenshots, setTabScreenshots] = React.useState(new Map());
+  const [capturingTabIds, setCapturingTabIds] = React.useState(new Set());
+
+  // Capture screenshot for a specific tab using content script
+  const captureTabScreenshot = React.useCallback(async (tab) => {
+    if (!tab || !tab.id) return null;
+
+    try {
+      // Mark as capturing
+      setCapturingTabIds(prev => new Set(prev).add(tab.id));
+
+      // Send message to content script to capture screenshot
+      const response = await new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome?.tabs?.sendMessage) {
+          chrome.tabs.sendMessage(
+            tab.id,
+            { action: 'captureScreenshot' },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                console.warn('Content script screenshot failed:', chrome.runtime.lastError.message);
+                resolve({ ok: false, error: chrome.runtime.lastError.message });
+              } else {
+                resolve(response || { ok: false, error: 'No response' });
+              }
+            }
+          );
+        } else {
+          resolve({ ok: false, error: 'Chrome tabs API not available' });
+        }
+      });
+
+      if (response.ok && response.screenshot) {
+        setTabScreenshots(prev => new Map(prev).set(tab.id, response.screenshot));
+        return response.screenshot;
+      } else {
+        console.warn('Screenshot capture failed:', response.error);
+        return null;
+      }
+    } catch (e) {
+      console.warn('Failed to capture tab screenshot:', e);
+      return null;
+    } finally {
+      // Remove from capturing set
+      setCapturingTabIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tab.id);
+        return newSet;
+      });
+    }
+  }, []);
+
+  // Capture screenshot for the currently active tab only
+  const captureActiveTabScreenshot = React.useCallback(async (tabList) => {
+    if (!Array.isArray(tabList) || tabList.length === 0) return;
+
+    try {
+      // Find the currently active tab in the current window
+      const activeTab = tabList.find(tab => tab.active && !tab.hidden);
+
+      if (activeTab && !tabScreenshots.has(activeTab.id)) {
+        // Capture screenshot for active tab without switching
+        await captureTabScreenshot(activeTab);
+      }
+    } catch (e) {
+      console.warn('Failed to capture active tab screenshot:', e);
+    }
+  }, [captureTabScreenshot, tabScreenshots]);
 
   const refreshTabs = React.useCallback(() => {
     setTabsError(null);
     try {
       const hasTabsQuery = typeof chrome !== 'undefined' && chrome?.tabs?.query;
       if (hasTabsQuery) {
-        chrome.tabs.query({}, (list) => {
+        chrome.tabs.query({}, async (list) => {
           const lastErr = chrome.runtime?.lastError;
           if (lastErr) {
             setTabsError(lastErr.message || 'Unable to query tabs');
             setTabs([]);
             return;
           }
-          setTabs(Array.isArray(list) ? list : []);
+          const tabList = Array.isArray(list) ? list : [];
+          setTabs(tabList);
+
+          // Capture screenshot for active tab only (async, don't wait)
+          if (tabList.length > 0) {
+            setTimeout(() => captureActiveTabScreenshot(tabList), 500);
+          }
         });
       } else {
         // Fallback: fetch tabs mirrored by the extension to the host (Electron mode)
@@ -222,6 +295,16 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     <div style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
+      {/* CSS for spinner animation */}
+      <style>
+        {`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}
+      </style>
+
       {/* Apple-style Header */}
       <div style={{
         display: 'flex',
@@ -297,9 +380,15 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           {String(tabsError)}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '12px',
+          width: '100%'
+        }}>
           {sortedTabs.length === 0 ? (
             <div style={{
+              gridColumn: 'span 4',
               textAlign: 'center',
               color: 'rgba(255, 255, 255, 0.5)',
               fontSize: 16,
@@ -317,19 +406,29 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                   key={tab.id}
                   style={{
                     background: 'rgba(255, 255, 255, 0.05)',
-                    borderRadius: 12,
-                    padding: 16,
+                    borderRadius: 8,
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     backdropFilter: 'blur(10px)',
                     transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    position: 'relative'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+
+                    // Simply navigate to the tab and stay there
+                    const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
+                    if (hasTabsUpdate) {
+                      focusTab(tab);
+                    } else if (tab?.url) {
+                      enqueueOpenInChrome(tab.url).catch(() => { });
+                    }
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                    e.currentTarget.style.boxShadow = `0 4px 16px rgba(0, 122, 255, 0.15)`;
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = `0 8px 24px rgba(0, 122, 255, 0.2)`;
                     setHoveredTabId(tab.id);
                   }}
                   onMouseLeave={(e) => {
@@ -339,35 +438,100 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                     setHoveredTabId(null);
                   }}
                 >
-                  {/* Favicon */}
-                  {(() => {
-                    const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
-                    const primaryRaw = (tab.favIconUrl && safeHttp(tab.favIconUrl)) ? tab.favIconUrl : getFaviconUrl(tab.url, 64);
-                    let originIco = '';
-                    try {
-                      const u = new URL(tab.url || '');
-                      if (u.protocol === 'http:' || u.protocol === 'https:') {
-                        originIco = `${u.origin}/favicon.ico`;
+                  {/* Screenshot/Preview Area */}
+                  <div style={{
+                    width: '100%',
+                    height: '120px',
+                    background: colors.bg,
+                    border: `1px solid ${colors.border}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    {/* Screenshot or Favicon */}
+                    {(() => {
+                      const screenshot = tabScreenshots.get(tab.id);
+                      const isCapturing = capturingTabIds.has(tab.id);
+
+                      // Show capturing indicator
+                      if (isCapturing) {
+                        return (
+                          <div style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'rgba(0, 0, 0, 0.3)',
+                            color: 'white',
+                            fontSize: '12px'
+                          }}>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}>
+                              <div style={{
+                                width: '12px',
+                                height: '12px',
+                                border: '2px solid rgba(255, 255, 255, 0.3)',
+                                borderTop: '2px solid white',
+                                borderRadius: '50%',
+                                animation: 'spin 1s linear infinite'
+                              }} />
+                              Capturing...
+                            </div>
+                          </div>
+                        );
                       }
-                    } catch { }
-                    const src = primaryRaw || originIco || '';
-                    return src ? (
-                      <div style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 8,
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}>
+
+                      // Show actual screenshot if available
+                      if (screenshot) {
+                        return (
+                          <img
+                            src={screenshot}
+                            alt={`Screenshot of ${tab.title}`}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              objectPosition: 'top left'
+                            }}
+                            onError={() => {
+                              // Remove failed screenshot from cache
+                              setTabScreenshots(prev => {
+                                const newMap = new Map(prev);
+                                newMap.delete(tab.id);
+                                return newMap;
+                              });
+                            }}
+                          />
+                        );
+                      }
+
+                      // Fallback to favicon
+                      const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
+                      const primaryRaw = (tab.favIconUrl && safeHttp(tab.favIconUrl)) ? tab.favIconUrl : getFaviconUrl(tab.url, 64);
+                      let originIco = '';
+                      try {
+                        const u = new URL(tab.url || '');
+                        if (u.protocol === 'http:' || u.protocol === 'https:') {
+                          originIco = `${u.origin}/favicon.ico`;
+                        }
+                      } catch { }
+                      const src = primaryRaw || originIco || '';
+                      return src ? (
                         <img
                           src={src}
                           alt=""
-                          width={18}
-                          height={18}
-                          style={{ borderRadius: 4 }}
+                          width={32}
+                          height={32}
+                          style={{
+                            borderRadius: 6,
+                            opacity: 0.8
+                          }}
                           onError={(e) => {
                             if (originIco && e.currentTarget.src !== originIco) {
                               e.currentTarget.src = originIco;
@@ -380,54 +544,52 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                             e.currentTarget.style.display = 'none';
                           }}
                         />
-                      </div>
-                    ) : (
-                      <div style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 8,
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        flexShrink: 0
-                      }} />
-                    );
-                  })()}
+                      ) : (
+                        <div style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 6,
+                          background: 'rgba(255, 255, 255, 0.2)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '16px'
+                        }}>
+                          🌐
+                        </div>
+                      );
+                    })()}
 
-                  {/* Tab Info - Clickable */}
-                  <div
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      cursor: 'pointer',
-                      padding: '4px 0'
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
-                      if (hasTabsUpdate) return focusTab(tab);
-                      if (tab?.url) {
-                        enqueueOpenInChrome(tab.url).catch(() => { });
-                      }
-                    }}
-                    title="Click to focus tab"
-                  >
+                    {/* Domain indicator */}
                     <div style={{
-                      fontSize: 16,
+                      position: 'absolute',
+                      bottom: '4px',
+                      right: '4px',
+                      background: 'rgba(0, 0, 0, 0.6)',
+                      color: 'white',
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontWeight: '500'
+                    }}>
+                      {colors.hostname || 'Unknown'}
+                    </div>
+                  </div>
+
+                  {/* Tab Title */}
+                  <div style={{
+                    padding: '12px',
+                    background: 'rgba(0, 0, 0, 0.2)'
+                  }}>
+                    <div style={{
+                      fontSize: '14px',
                       color: '#ffffff',
-                      lineHeight: 1.4,
-                      marginBottom: 4,
-                      fontWeight: 400,
+                      fontWeight: '500',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      transition: 'color 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.color = '#007AFF';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.color = '#ffffff';
-                    }}
-                    >
+                      lineHeight: 1.3
+                    }}>
                       {tab.title || (() => {
                         try {
                           return new URL(tab?.url || '').hostname;
@@ -436,171 +598,97 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                         }
                       })()}
                     </div>
-                    {colors.hostname && (
-                      <div style={{
-                        fontSize: 13,
-                        color: 'rgba(255, 255, 255, 0.6)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        transition: 'color 0.2s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.target.style.color = 'rgba(0, 122, 255, 0.8)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.color = 'rgba(255, 255, 255, 0.6)';
-                      }}
+                  </div>
+
+                  {/* Action Buttons - Positioned over screenshot on hover */}
+                  {hoveredTabId === tab.id && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      display: 'flex',
+                      gap: '4px',
+                      background: 'rgba(0, 0, 0, 0.7)',
+                      borderRadius: '6px',
+                      padding: '4px'
+                    }}>
+                      {/* Screenshot Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          captureTabScreenshot(tab);
+                        }}
+                        disabled={capturingTabIds.has(tab.id)}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 4,
+                          border: 'none',
+                          background: capturingTabIds.has(tab.id)
+                            ? 'rgba(128, 128, 128, 0.9)'
+                            : 'rgba(0, 122, 255, 0.9)',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: capturingTabIds.has(tab.id) ? 'not-allowed' : 'pointer',
+                          fontSize: '10px'
+                        }}
+                        title={capturingTabIds.has(tab.id) ? "Capturing..." : "Capture screenshot"}
                       >
-                        {colors.hostname}
-                      </div>
-                    )}
-                  </div>
+                        📸
+                      </button>
 
-                  {/* Action Buttons */}
-                  <div style={{
-                    display: 'flex',
-                    gap: 4,
-                    flexShrink: 0,
-                    opacity: hoveredTabId === tab.id ? 1 : 0,
-                    transform: hoveredTabId === tab.id ? 'translateX(0)' : 'translateX(8px)',
-                    transition: 'all 0.2s ease'
-                  }}>
-                    {/* Pin Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddPing(tab);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 16,
-                        border: 'none',
-                        background: 'rgba(255, 149, 0, 0.1)',
-                        color: '#FF9500',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                      title="Pin tab"
-                      onMouseEnter={(e) => {
-                        e.target.style.background = '#FF9500';
-                        e.target.style.color = 'white';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.background = 'rgba(255, 149, 0, 0.1)';
-                        e.target.style.color = '#FF9500';
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faThumbtack} style={{ fontSize: 12 }} />
-                    </button>
+                      {/* Pin Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddPing(tab);
+                        }}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 4,
+                          border: 'none',
+                          background: 'rgba(255, 149, 0, 0.9)',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          fontSize: '10px'
+                        }}
+                        title="Pin tab"
+                      >
+                        📌
+                      </button>
 
-                    {/* Focus Tab Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
-                        if (hasTabsUpdate) return focusTab(tab);
-                        if (tab?.url) {
-                          enqueueOpenInChrome(tab.url).catch(() => { });
-                        }
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 16,
-                        border: 'none',
-                        background: 'rgba(0, 122, 255, 0.1)',
-                        color: '#007AFF',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                      title="Focus tab"
-                      onMouseEnter={(e) => {
-                        e.target.style.background = '#007AFF';
-                        e.target.style.color = 'white';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.background = 'rgba(0, 122, 255, 0.1)';
-                        e.target.style.color = '#007AFF';
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 12 }} />
-                    </button>
-
-                    {/* Duplicate Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        duplicateTab(tab);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 16,
-                        border: 'none',
-                        background: 'rgba(52, 199, 89, 0.1)',
-                        color: '#34C759',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                      title="Duplicate tab"
-                      onMouseEnter={(e) => {
-                        e.target.style.background = '#34C759';
-                        e.target.style.color = 'white';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.background = 'rgba(52, 199, 89, 0.1)';
-                        e.target.style.color = '#34C759';
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faClone} style={{ fontSize: 12 }} />
-                    </button>
-
-                    {/* Remove Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeTab(tab);
-                      }}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 16,
-                        border: 'none',
-                        background: 'rgba(255, 255, 255, 0.1)',
-                        color: '#FF3B30',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        opacity: 0.7
-                      }}
-                      title="Close tab"
-                      onMouseEnter={(e) => {
-                        e.target.style.background = '#FF3B30';
-                        e.target.style.color = 'white';
-                        e.target.style.opacity = '1';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                        e.target.style.color = '#FF3B30';
-                        e.target.style.opacity = '0.7';
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faTrash} style={{ fontSize: 12 }} />
-                    </button>
-                  </div>
+                      {/* Close Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeTab(tab);
+                        }}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 4,
+                          border: 'none',
+                          background: 'rgba(255, 59, 48, 0.9)',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: 'bold'
+                        }}
+                        title="Close tab"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })

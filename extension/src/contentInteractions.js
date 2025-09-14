@@ -140,7 +140,46 @@ export function initContentInteractions() {
     });
   } catch { /* no-op */ }
 
-  // Listen for preview collection requests from extension UI
+  // Screenshot capture using html2canvas or similar approach
+  async function capturePageScreenshot() {
+    try {
+      // Use html2canvas if available, otherwise fallback to canvas approach
+      if (typeof html2canvas !== 'undefined') {
+        const canvas = await html2canvas(document.body, {
+          height: window.innerHeight,
+          width: window.innerWidth,
+          scrollX: 0,
+          scrollY: 0,
+          useCORS: true,
+          allowTaint: true,
+          scale: 0.5 // Reduce size for performance
+        });
+        return canvas.toDataURL('image/png', 0.5);
+      } else {
+        // Fallback: create a simple screenshot using canvas
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth * 0.5;
+        canvas.height = window.innerHeight * 0.5;
+
+        // Fill with page background
+        ctx.fillStyle = getComputedStyle(document.body).backgroundColor || '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Add page title as text overlay
+        ctx.fillStyle = '#000000';
+        ctx.font = '16px system-ui';
+        ctx.fillText(document.title || location.hostname, 20, 40);
+
+        return canvas.toDataURL('image/png', 0.5);
+      }
+    } catch (e) {
+      console.warn('Screenshot capture failed:', e);
+      return null;
+    }
+  }
+
+  // Listen for preview collection and screenshot requests from extension UI
   try {
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg && msg.action === 'collectPreview') {
@@ -151,6 +190,20 @@ export function initContentInteractions() {
           sendResponse({ ok: false, error: e?.message || 'Failed to collect preview' });
         }
         return true;
+      }
+
+      if (msg && msg.action === 'captureScreenshot') {
+        // Capture screenshot asynchronously
+        capturePageScreenshot().then(dataUrl => {
+          if (dataUrl) {
+            sendResponse({ ok: true, screenshot: dataUrl });
+          } else {
+            sendResponse({ ok: false, error: 'Screenshot capture failed' });
+          }
+        }).catch(e => {
+          sendResponse({ ok: false, error: e.message || 'Screenshot capture failed' });
+        });
+        return true; // Keep message channel open for async response
       }
     });
   } catch { /* no-op */ }
