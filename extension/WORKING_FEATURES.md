@@ -65,6 +65,35 @@ await chrome.sidePanel.open({ windowId });
 - Modify storage keys for workspaces or workspace relationships
 - Change the one-time backfill logic in workspaces.js
 
+### ✅ Responsive Header/Sidebar System (WORKING - DO NOT CHANGE)
+**Files:** `src/App.jsx`, `src/components/toolbar/Header.jsx`, `src/components/toolbar/VerticalHeader.jsx`, `src/App.css`, `src/index.css`
+**Status:** WORKING as of 2025-01-12
+
+**What works:**
+- Responsive switching between horizontal Header and vertical VerticalHeader based on screen width
+- Auto-collapse VerticalHeader at widths < 1200px (60px collapsed, 280px expanded)
+- User preference override to force vertical layout at any screen size
+- Unified theming system using CSS variables (--glass-bg, --border-color, --text-primary, etc.)
+- Feature parity between both components (search, voice navigation, music controls, buttons)
+- Smooth transitions and proper content margin adjustments
+- VoiceNavigation integration with proper positioning in both layouts
+
+**Critical working parts - DO NOT MODIFY:**
+- Window resize detection logic in App.jsx (lines 114-122)
+- Conditional rendering logic in App.jsx (lines 1547-1578)
+- CSS variable theming system in both Header components
+- CSS classes: `.header.ai-header` and `.vertical-sidebar.ai-sidebar`
+- Props passing consistency between Header and VerticalHeader
+- Removed conflicting CSS media queries from index.css
+
+**⚠️ DO NOT:**
+- Modify responsive breakpoint logic (1200px threshold)
+- Change CSS variable naming convention or fallback values
+- Remove theme classes from either component
+- Add conflicting CSS media queries that hide/transform components
+- Modify VoiceNavigation positioning calculations
+- Change component prop interfaces without updating both Header variants
+
 ### ✅ Voice Navigation Feature (WORKING - DO NOT CHANGE)
 **Files:** `src/services/voiceCommandProcessor.js`, `src/components/toolbar/VoiceNavigation.jsx`
 **Status:** WORKING as of 2025-01-12

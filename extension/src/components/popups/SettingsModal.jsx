@@ -359,9 +359,9 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
         const workspaceData = list?.data || list || [];
         console.log('[SettingsModal] Extracted workspace data:', workspaceData);
         setWorkspaces(Array.isArray(workspaceData) ? workspaceData : []);
-      } catch (error) { 
+      } catch (error) {
         console.error('[SettingsModal] Error loading local workspaces:', error);
-        setWorkspaces([]); 
+        setWorkspaces([]);
       }
     })();
   }, [show]);
@@ -375,18 +375,18 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
         console.log('[SettingsModal] Firebase workspace change detected, merging...');
         const firebaseList = await listWorkspacesFirebase();
         const localList = await listWorkspaces();
-        
+
         console.log('[SettingsModal] Firebase workspaces:', firebaseList);
         console.log('[SettingsModal] Local workspaces for merge:', localList);
-        
+
         // Merge local and Firebase workspaces, avoiding duplicates
         const mergedWorkspaces = [];
         const seenIds = new Set();
-        
+
         // Extract data from response objects
         const localData = localList?.data || localList || [];
         const firebaseData = firebaseList?.data || firebaseList || [];
-        
+
         // Add local workspaces first
         if (Array.isArray(localData)) {
           localData.forEach(workspace => {
@@ -396,7 +396,7 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
             }
           });
         }
-        
+
         // Add Firebase workspaces that aren't duplicates
         if (Array.isArray(firebaseData)) {
           firebaseData.forEach(workspace => {
@@ -406,7 +406,7 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
             }
           });
         }
-        
+
         console.log('[SettingsModal] Merged workspaces:', mergedWorkspaces);
         setWorkspaces(mergedWorkspaces);
       } catch (error) {
@@ -520,7 +520,7 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
       console.log('[SettingsModal] Saving workspace row:', payload);
       await saveWorkspace(payload)
       console.log('[SettingsModal] Workspace row saved successfully');
-    } catch (e) { 
+    } catch (e) {
       console.error('[SettingsModal] Error saving workspace row:', e);
     }
   }
@@ -530,7 +530,7 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
       console.log('[SettingsModal] Deleting workspace:', id);
       await deleteWorkspaceById(id)
       console.log('[SettingsModal] Workspace deleted, refreshing list...');
-      
+
       // Refresh workspaces list
       try {
         const list = await listWorkspaces();
@@ -558,7 +558,7 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
     console.log('[SettingsModal] Creating workspace:', ws);
     await saveWorkspace(ws)
     console.log('[SettingsModal] Workspace saved, refreshing list...');
-    
+
     // Refresh workspaces list
     try {
       const list = await listWorkspaces();
@@ -568,7 +568,7 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
     } catch (error) {
       console.error('[SettingsModal] Error refreshing workspaces after creation:', error);
     }
-    
+
     setShowCreateWorkspace(false)
   }
 
@@ -753,9 +753,6 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
           <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>
             <AccountTab
               currentUser={currentUser}
-              authLoading={authLoading}
-              handleGoogleSignIn={handleGoogleSignIn}
-              handleSignOut={handleSignOut}
             />
           </TabItem>
         </Tabs>

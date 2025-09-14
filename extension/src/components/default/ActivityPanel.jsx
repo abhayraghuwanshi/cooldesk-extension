@@ -4,7 +4,6 @@ import { CoolFeedSection } from './CoolFeedSection';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { DailyNotesSection } from './DailyNotesSection';
 import { NotesSection } from './NotesSection';
-import { PingsSection } from './PingsSection';
 
 export function ActivityPanel({ activeSection = 0 }) {
   // State for preview modal
@@ -148,7 +147,6 @@ export function ActivityPanel({ activeSection = 0 }) {
   // Define sections array matching Header navigation
   const sections = [
     { name: 'Current Tabs', component: <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /> },
-    { name: 'Pins', component: <PingsSection /> },
     { name: 'Notes', component: <NotesSection /> },
     { name: 'Daily Notes', component: <DailyNotesSection /> },
     { name: 'Cool Feed', component: <CoolFeedSection /> }

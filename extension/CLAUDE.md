@@ -15,6 +15,8 @@
 
 ### Key Components
 - `src/components/default/DailyNotesSection.jsx` - Daily notes UI and message handling
+- `src/components/toolbar/Header.jsx` - Horizontal header for wide screens (≥1200px)
+- `src/components/toolbar/VerticalHeader.jsx` - Responsive vertical sidebar with unified theming
 - `src/db/index.js` - Unified database API for all storage operations
 - `src/utils/GenericUrlParser.js` - URL parsing and workspace auto-creation (1200+ lines)
 - `src/data/personas.js` - Persona-based workspace templates
@@ -24,6 +26,8 @@
 - **Chrome Runtime Error Handling**: Always wrap sendMessage calls with chrome.runtime.lastError
 - **Side Panel Opening**: Use simple `chrome.sidePanel.open({ windowId })` approach
 - **Storage Keys**: Follow existing patterns in storage key naming
+- **Responsive Headers**: Auto-switch Header/VerticalHeader at 1200px width breakpoint
+- **CSS Theming**: Use CSS variables (--glass-bg, --border-color, --text-primary) with fallbacks
 
 ## ⚠️ Critical Rules
 1. NEVER modify activity.js exclusions without understanding impact

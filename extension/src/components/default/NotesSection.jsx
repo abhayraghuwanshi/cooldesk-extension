@@ -31,6 +31,9 @@ export function NotesSection() {
   const [notesDisplayLimit, setNotesDisplayLimit] = React.useState(6);
   const [showAllNotes, setShowAllNotes] = React.useState(false);
 
+  // Filter state
+  const [notesFilter, setNotesFilter] = React.useState('all');
+
   const loadNotes = React.useCallback(async () => {
     try {
       console.log('[NotesSection] Loading notes...');
@@ -377,6 +380,31 @@ export function NotesSection() {
     setShowAllNotes(!showAllNotes);
   }, [showAllNotes]);
 
+  // Filter notes based on selected filter
+  const filteredNotes = React.useMemo(() => {
+    if (notesFilter === 'all') return notes;
+
+    return notes.filter(note => {
+      switch (notesFilter) {
+        case 'todo':
+          return note.status === 'todo' || note.status === 'in-progress' ||
+                 (note.text && (note.text.includes('TODO:') || note.text.includes('☐')));
+        case 'done':
+          return note.status === 'done' || (note.text && note.text.includes('☑'));
+        case 'text':
+          return note.type === 'text';
+        case 'voice':
+          return note.type === 'voice' || note.type === 'voice-text';
+        case 'voice-text':
+          return note.type === 'voice-text';
+        case 'in-progress':
+          return note.status === 'in-progress';
+        default:
+          return true;
+      }
+    });
+  }, [notes, notesFilter]);
+
 
   React.useEffect(() => { loadNotes(); }, [loadNotes]);
 
@@ -411,7 +439,38 @@ export function NotesSection() {
         }}>
           Quick Todos
         </h2>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select
+            value={notesFilter}
+            onChange={(e) => setNotesFilter(e.target.value)}
+            style={{
+              padding: '6px 24px 6px 10px',
+              borderRadius: 16,
+              border: 'none',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: 'rgba(255, 255, 255, 0.8)',
+              fontSize: 11,
+              fontWeight: 500,
+              cursor: 'pointer',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              MozAppearance: 'none',
+              backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.6)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 6px center',
+              backgroundSize: '12px',
+              minWidth: 85,
+              transition: 'all 0.2s ease'
+            }}
+            title="Filter notes"
+          >
+            <option value="all">📋 All ({notes.length})</option>
+            <option value="todo">✅ Todo ({notes.filter(n => n.status === 'todo' || n.status === 'in-progress' || (n.text && (n.text.includes('TODO:') || n.text.includes('☐')))).length})</option>
+            <option value="done">✔️ Done ({notes.filter(n => n.status === 'done' || (n.text && n.text.includes('☑'))).length})</option>
+            <option value="text">📝 Text ({notes.filter(n => n.type === 'text').length})</option>
+            <option value="voice">🎤 Voice ({notes.filter(n => n.type === 'voice' || n.type === 'voice-text').length})</option>
+            <option value="in-progress">⏳ In Progress ({notes.filter(n => n.status === 'in-progress').length})</option>
+          </select>
           <button
             onClick={toggleNotesDisplay}
             style={{
@@ -439,7 +498,7 @@ export function NotesSection() {
               e.target.style.color = 'rgba(255, 255, 255, 0.8)';
             }}
           >
-            {showAllNotes ? 'Recent' : `All (${notes.length})`}
+            {showAllNotes ? 'Recent' : `All (${filteredNotes.length})`}
           </button>
         </div>
       </div>
@@ -618,7 +677,7 @@ export function NotesSection() {
 
       {/* Apple Notes Style Note List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {notes.length === 0 && (
+        {filteredNotes.length === 0 && (
           <div style={{
             textAlign: 'center',
             color: 'rgba(255, 255, 255, 0.5)',
@@ -627,10 +686,10 @@ export function NotesSection() {
             padding: '40px 20px',
             fontStyle: 'italic'
           }}>
-            No notes yet
+            {notesFilter === 'all' ? 'No notes yet' : `No ${notesFilter} notes found`}
           </div>
         )}
-        {(showAllNotes ? notes : notes.slice(0, notesDisplayLimit)).map(n => (
+        {(showAllNotes ? filteredNotes : filteredNotes.slice(0, notesDisplayLimit)).map(n => (
           <div
             key={n.id}
             style={{
@@ -931,7 +990,7 @@ export function NotesSection() {
         ))}
         
         {/* Notes limit indicator */}
-        {!showAllNotes && notes.length > notesDisplayLimit && (
+        {!showAllNotes && filteredNotes.length > notesDisplayLimit && (
           <div style={{
             textAlign: 'center',
             marginTop: 12,
@@ -945,7 +1004,7 @@ export function NotesSection() {
               fontSize: 12,
               fontWeight: 400
             }}>
-              Showing {notesDisplayLimit} of {notes.length} notes
+              Showing {notesDisplayLimit} of {filteredNotes.length} notes
             </span>
             <button
               onClick={toggleNotesDisplay}

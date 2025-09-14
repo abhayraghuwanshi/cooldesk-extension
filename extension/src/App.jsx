@@ -14,6 +14,7 @@ import { WorkspaceFilters } from './components/WorkspaceFilters';
 import './search.css';
 
 import { ActivityPanel } from './components/default/ActivityPanel';
+import { PingsSection } from './components/default/PingsSection';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import categoryManager from './data/categories';
 import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType } from './db/index.js';
@@ -1312,7 +1313,7 @@ export default function App() {
   const shouldShowVertical = useVerticalLayout || windowWidth < 1200;
 
   return (
-    <div className="popup-wrap" style={{ 
+    <div className="popup-wrap" style={{
       paddingBottom: shouldShowVertical ? 0 : 64,
       marginLeft: shouldShowVertical ? (windowWidth < 1200 ? '60px' : '280px') : 0,
       transition: 'margin-left 0.3s ease'
@@ -1368,8 +1369,13 @@ export default function App() {
           );
         })()}
 
+        {/* Pins Section */}
+        <ErrorBoundary>
+          <PingsSection tabs={[]} />
+        </ErrorBoundary>
+
         {/* Filters */}
-        <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0' }}>
+        <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span> */}
             <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} />
@@ -1551,7 +1557,7 @@ export default function App() {
             setSearch={setSearch}
             populate={populate}
             setShowSettings={setShowSettings}
-            openSyncControls={() => {}} // Placeholder function
+            openSyncControls={() => { }} // Placeholder function
             progress={{ running: false }} // Placeholder progress object
             setShowCreateWorkspace={setShowCreateWorkspace}
             openInTab={openInTab}
@@ -1566,7 +1572,7 @@ export default function App() {
             setSearch={setSearch}
             populate={populate}
             setShowSettings={setShowSettings}
-            openSyncControls={() => {}} // Placeholder function
+            openSyncControls={() => { }} // Placeholder function
             progress={{ running: false }} // Placeholder progress object
             setShowCreateWorkspace={setShowCreateWorkspace}
             openInTab={openInTab}

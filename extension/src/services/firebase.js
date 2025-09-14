@@ -1,8 +1,25 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signOut, onAuthStateChanged, signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
-import { addDoc, collection, deleteDoc, doc, getDocs, getFirestore, onSnapshot, orderBy, query, updateDoc, connectFirestoreEmulator, enableNetwork, disableNetwork } from 'firebase/firestore';
+// firebase.js
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  linkWithCredential,
+  onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
+  signInAnonymously,
+  signInWithCredential
+} from "firebase/auth";
+import {
+  doc,
+  getDoc,
+  getFirestore,
+  setDoc
+} from "firebase/firestore";
 
-// Firebase configuration - you'll need to replace with your project's config
+// ------------------
+// Firebase Config
+// ------------------
 const firebaseConfig = {
   apiKey: "AIzaSyAoazHeLDGCFDXBQ0jE_LILgyzENYWl3Hw",
   authDomain: "cooldesk-896b9.firebaseapp.com",
@@ -11,89 +28,88 @@ const firebaseConfig = {
   appId: "1:256165123494:web:f8be723e74a5e4c3756b67",
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
-// Configure Firestore for better extension compatibility
-try {
-  // Suppress WebChannel connection warnings in development
-  if (process.env.NODE_ENV === 'development') {
-    console.log('Firestore: Running in development mode');
-  }
-  
-  // Add connection state monitoring
-  let isConnected = true;
-  
-  // Handle connection errors gracefully
-  const handleConnectionError = (error) => {
-    console.warn('Firestore connection issue (this is usually non-critical):', error.message);
-    isConnected = false;
-    
-    // Try to reconnect after a delay
-    setTimeout(async () => {
-      try {
-        await enableNetwork(db);
-        isConnected = true;
-        console.log('Firestore: Connection restored');
-      } catch (reconnectError) {
-        console.warn('Firestore: Reconnection failed', reconnectError);
-      }
-    }, 5000);
-  };
-  
-  // Global error handler for Firestore
-  window.addEventListener('unhandledrejection', (event) => {
-    if (event.reason && event.reason.message && event.reason.message.includes('WebChannelConnection')) {
-      handleConnectionError(event.reason);
-      event.preventDefault(); // Prevent the error from being logged to console
-    }
-  });
-  
-} catch (error) {
-  console.warn('Failed to configure Firestore connection handling:', error);
-}
+// Set persistence for auth state
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.warn("Could not enable auth persistence:", error);
+});
 
-// Anonymous authentication for user session
 let currentUser = null;
 
-export const initializeFirebase = async () => {
-  try {
-    const userCredential = await signInAnonymously(auth);
-    currentUser = userCredential.user;
-    console.log('Firebase initialized with user:', currentUser.uid);
-    return true;
-  } catch (error) {
-    console.error('Firebase initialization failed:', error);
+// ------------------
+// Auth Setup
+// ------------------
+const AUTH_STATE_KEY = 'firebase_auth_state';
+
+export const initAuth = () => {
+  return new Promise((resolve) => {
+    // Wait for auth state to be restored from persistence
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        currentUser = user;
+        console.log("Auth state restored:", user.uid, user.isAnonymous ? "(anonymous)" : "(signed in)");
+        unsubscribe(); // Stop listening after first auth state
+        resolve(user);
+      } else {
+        currentUser = null;
+        
+        // Check if user has explicitly signed out
+        const authState = localStorage.getItem(AUTH_STATE_KEY);
+        if (authState === 'signed_out') {
+          console.log("No user signed in (user signed out)");
+          unsubscribe();
+          resolve(null);
+          return;
+        }
+        
+        // Only auto-create anonymous user if never tried before
+        if (!authState || authState === 'anonymous_created') {
+          try {
+            localStorage.setItem(AUTH_STATE_KEY, 'anonymous_created');
+            const result = await signInAnonymously(auth);
+            currentUser = result.user;
+            console.log("Signed in anonymously:", currentUser.uid);
+            unsubscribe();
+            resolve(result.user);
+          } catch (error) {
+            console.error("Failed to create anonymous user:", error);
+            unsubscribe();
+            resolve(null);
+          }
+        } else {
+          console.log("No user signed in");
+          unsubscribe();
+          resolve(null);
+        }
+      }
+    });
     
-    // Provide specific error messages
-    if (error.code === 'auth/admin-restricted-operation') {
-      console.error('Anonymous authentication is disabled. Please enable it in Firebase Console > Authentication > Sign-in method');
-      throw new Error('Anonymous authentication is not enabled. Please enable it in Firebase Console.');
-    } else if (error.code === 'auth/operation-not-allowed') {
-      console.error('Anonymous authentication is not allowed for this project');
-      throw new Error('Anonymous authentication is not allowed for this project.');
-    } else if (error.code === 'auth/network-request-failed') {
-      console.error('Network error - check your internet connection');
-      throw new Error('Network error. Please check your internet connection.');
-    }
-    
-    throw error; // Re-throw other errors
-  }
+    // Set up persistent auth state listener after initial restore
+    setTimeout(() => {
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          currentUser = user;
+          console.log("Auth state changed:", user.uid, user.isAnonymous ? "(anonymous)" : "(signed in)");
+        } else {
+          currentUser = null;
+          console.log("User signed out");
+        }
+      });
+    }, 1000);
+  });
 };
 
-// Authentication functions
+// ------------------
+// Google Sign-In (Cross-browser Extension Support)
+// ------------------
 export const signInWithGoogle = async () => {
   try {
-    const provider = new GoogleAuthProvider();
-    provider.addScope('profile');
-    provider.addScope('email');
-    
-    // Check if we're in an extension environment and use Chrome Identity API if available
-    if (typeof chrome !== 'undefined' && chrome.identity && chrome.identity.getAuthToken) {
+    // Chrome Extension Identity API
+    if (typeof chrome !== "undefined" && chrome.identity?.getAuthToken) {
       try {
-        // Use Chrome Identity API for extensions
         const token = await new Promise((resolve, reject) => {
           chrome.identity.getAuthToken({ interactive: true }, (token) => {
             if (chrome.runtime.lastError) {
@@ -103,199 +119,291 @@ export const signInWithGoogle = async () => {
             }
           });
         });
-        
+
         if (token) {
-          // Sign in to Firebase with the token
           const credential = GoogleAuthProvider.credential(null, token);
           const result = await signInWithCredential(auth, credential);
           currentUser = result.user;
+          // Clear signed out state on successful sign-in
+          localStorage.removeItem(AUTH_STATE_KEY);
+          console.log("Signed in with Google (Chrome):", currentUser.uid);
           return { success: true, user: currentUser };
         }
-      } catch (identityError) {
-        console.log('Chrome Identity API failed, falling back to popup:', identityError);
+      } catch (chromeError) {
+        console.warn("Chrome Identity API failed:", chromeError.message);
       }
     }
-    
-    // Fallback to popup method
-    const result = await signInWithPopup(auth, provider);
-    currentUser = result.user;
-    return { success: true, user: currentUser };
-    
+
+    // Fallback: Extension popup window approach for Edge/Firefox
+    // Note: You need to set up OAuth client ID in Google Console for this domain
+    const authUrl = `https://accounts.google.com/oauth/v2/auth?` +
+      `client_id=${encodeURIComponent('256165123494-web-client-id.apps.googleusercontent.com')}&` +
+      `response_type=token&` +
+      `scope=${encodeURIComponent('profile email')}&` +
+      `redirect_uri=${encodeURIComponent(chrome.identity.getRedirectURL())}`;
+
+    return new Promise((resolve, reject) => {
+      chrome.identity.launchWebAuthFlow({
+        url: authUrl,
+        interactive: true
+      }, async (responseUrl) => {
+        if (chrome.runtime.lastError) {
+          resolve({ success: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+
+        try {
+          // Extract access token from URL
+          const urlParams = new URL(responseUrl).hash.substring(1);
+          const params = new URLSearchParams(urlParams);
+          const accessToken = params.get('access_token');
+
+          if (!accessToken) {
+            throw new Error('No access token received');
+          }
+
+          const credential = GoogleAuthProvider.credential(null, accessToken);
+          const result = await signInWithCredential(auth, credential);
+          currentUser = result.user;
+          // Clear signed out state on successful sign-in
+          localStorage.removeItem(AUTH_STATE_KEY);
+          console.log("Signed in with Google (fallback):", currentUser.uid);
+          resolve({ success: true, user: currentUser });
+
+        } catch (error) {
+          console.error("Fallback auth error:", error);
+          resolve({ success: false, error: error.message });
+        }
+      });
+    });
+
   } catch (error) {
-    console.error('Google sign-in error:', error);
-    
-    // Provide specific error messages
-    if (error.code === 'auth/popup-blocked') {
-      return { success: false, error: 'Popup was blocked. Please allow popups for this extension.' };
-    } else if (error.code === 'auth/popup-closed-by-user') {
-      return { success: false, error: 'Sign-in was cancelled.' };
-    } else if (error.code === 'auth/operation-not-allowed') {
-      return { success: false, error: 'Google Sign-In is not enabled. Please enable it in Firebase Console.' };
-    }
-    
+    console.error("Google sign-in error:", error);
     return { success: false, error: error.message };
   }
+};
+
+// ------------------
+// Upgrade Anonymous Account to Google
+// ------------------
+export const upgradeAnonymousWithGoogle = async () => {
+  try {
+    if (!auth.currentUser?.isAnonymous) {
+      return { success: false, error: "Current user is not anonymous" };
+    }
+
+    // Try Chrome Identity API first
+    if (typeof chrome !== "undefined" && chrome.identity?.getAuthToken) {
+      try {
+        const token = await new Promise((resolve, reject) => {
+          chrome.identity.getAuthToken({ interactive: true }, (token) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+            } else {
+              resolve(token);
+            }
+          });
+        });
+
+        if (token) {
+          const credential = GoogleAuthProvider.credential(null, token);
+          const linked = await linkWithCredential(auth.currentUser, credential);
+          currentUser = linked.user;
+          // Clear signed out state on successful upgrade
+          localStorage.removeItem(AUTH_STATE_KEY);
+          console.log("Anonymous account upgraded to Google (Chrome):", currentUser.uid);
+          return { success: true, user: currentUser };
+        }
+      } catch (chromeError) {
+        console.warn("Chrome Identity API failed for upgrade:", chromeError.message);
+      }
+    }
+
+    // Fallback for Edge/other browsers
+    const authUrl = `https://accounts.google.com/oauth/v2/auth?` +
+      `client_id=${encodeURIComponent('256165123494-web-client-id.apps.googleusercontent.com')}&` +
+      `response_type=token&` +
+      `scope=${encodeURIComponent('profile email')}&` +
+      `redirect_uri=${encodeURIComponent(chrome.identity.getRedirectURL())}`;
+
+    return new Promise((resolve) => {
+      chrome.identity.launchWebAuthFlow({
+        url: authUrl,
+        interactive: true
+      }, async (responseUrl) => {
+        if (chrome.runtime.lastError) {
+          resolve({ success: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+
+        try {
+          const urlParams = new URL(responseUrl).hash.substring(1);
+          const params = new URLSearchParams(urlParams);
+          const accessToken = params.get('access_token');
+
+          if (!accessToken) {
+            throw new Error('No access token received');
+          }
+
+          const credential = GoogleAuthProvider.credential(null, accessToken);
+          const linked = await linkWithCredential(auth.currentUser, credential);
+          currentUser = linked.user;
+          // Clear signed out state on successful upgrade
+          localStorage.removeItem(AUTH_STATE_KEY);
+          console.log("Anonymous account upgraded to Google (fallback):", currentUser.uid);
+          resolve({ success: true, user: currentUser });
+
+        } catch (error) {
+          console.error("Upgrade fallback error:", error);
+          resolve({ success: false, error: error.message });
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error("Upgrade anonymous error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ------------------
+// Firestore Helpers
+// ------------------
+export const addWorkspace = async (workspaceId, data) => {
+  if (!currentUser || currentUser.isAnonymous) {
+    console.log("Firestore add not available for anonymous users");
+    return false;
+  }
+  
+  try {
+    const docRef = doc(db, "users", currentUser.uid, "workspaces", workspaceId);
+    await setDoc(docRef, data, { merge: true });
+    return true;
+  } catch (error) {
+    console.error("Error adding workspace to Firestore:", error);
+    return false;
+  }
+};
+
+export const getWorkspace = async (workspaceId) => {
+  if (!currentUser || currentUser.isAnonymous) {
+    console.log("Firestore get not available for anonymous users");
+    return null;
+  }
+  
+  try {
+    const docRef = doc(db, "users", currentUser.uid, "workspaces", workspaceId);
+    const snap = await getDoc(docRef);
+    return snap.exists() ? snap.data() : null;
+  } catch (error) {
+    console.error("Error getting workspace from Firestore:", error);
+    return null;
+  }
+};
+
+// ------------------
+// Current User Getter
+// ------------------
+export const getCurrentUser = () => currentUser;
+
+// ------------------
+// Manual Anonymous Sign-In
+// ------------------
+export const createAnonymousUser = async () => {
+  try {
+    const result = await signInAnonymously(auth);
+    currentUser = result.user;
+    console.log("Created anonymous user:", currentUser.uid);
+    return { success: true, user: currentUser };
+  } catch (error) {
+    console.error("Anonymous sign-in error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ------------------
+// Additional Firebase Functions
+// ------------------
+export const initializeFirebase = async () => {
+  try {
+    await initAuth();
+    return true;
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
+    return false;
+  }
+};
+
+export const onAuthStateChange = (callback) => {
+  return onAuthStateChanged(auth, callback);
 };
 
 export const signOutUser = async () => {
   try {
-    await signOut(auth);
+    // Mark that user explicitly signed out
+    localStorage.setItem(AUTH_STATE_KEY, 'signed_out');
+    await auth.signOut();
     currentUser = null;
+    console.log("User signed out");
     return { success: true };
   } catch (error) {
+    console.error("Sign out error:", error);
     return { success: false, error: error.message };
   }
 };
 
-export const getCurrentUser = () => currentUser;
-
-export const onAuthStateChange = (callback) => {
-  return onAuthStateChanged(auth, (user) => {
-    currentUser = user;
-    callback(user);
-  });
-};
-
-// Get user-specific collection path
-const getUserCollection = (collectionName) => {
-  if (!currentUser) throw new Error('User not authenticated');
-  return `users/${currentUser.uid}/${collectionName}`;
-};
-
-// Workspaces operations
-export const saveWorkspace = async (workspace) => {
-  try {
-    const workspacesRef = collection(db, getUserCollection('workspaces'));
-    if (workspace.id) {
-      // Update existing
-      const docRef = doc(db, getUserCollection('workspaces'), workspace.id);
-      await updateDoc(docRef, {
-        ...workspace,
-        updatedAt: Date.now()
-      });
-    } else {
-      // Create new
-      const docRef = await addDoc(workspacesRef, {
-        ...workspace,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
-      workspace.id = docRef.id;
-    }
-    return workspace;
-  } catch (error) {
-    // Handle WebChannel and connection errors gracefully
-    if (error.message && error.message.includes('WebChannelConnection')) {
-      console.warn('Firestore write connection issue (retrying...):', error.message);
-      
-      // Retry the operation once after a short delay
-      try {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return await saveWorkspace(workspace); // Retry once
-      } catch (retryError) {
-        console.error('Retry failed for workspace save:', retryError);
-        throw new Error('Failed to save workspace due to connection issues. Please try again.');
-      }
-    }
-    
-    console.error('Error saving workspace:', error);
-    throw error;
-  }
-};
-
 export const listWorkspaces = async () => {
+  // Only allow for authenticated Google users, not anonymous users
+  if (!currentUser || currentUser.isAnonymous) {
+    console.log("Firestore operations not available for anonymous users");
+    return [];
+  }
+  
   try {
-    const workspacesRef = collection(db, getUserCollection('workspaces'));
-    const q = query(workspacesRef, orderBy('createdAt', 'desc'));
-    const querySnapshot = await getDocs(q);
-
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const { getDocs, collection } = await import("firebase/firestore");
+    const workspacesRef = collection(db, "users", currentUser.uid, "workspaces");
+    const snapshot = await getDocs(workspacesRef);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
-    console.error('Error listing workspaces:', error);
+    console.error("Error listing workspaces from Firestore:", error);
+    console.warn("Firestore may not be properly configured or user lacks permissions");
     return [];
   }
 };
 
-export const deleteWorkspaceById = async (id) => {
+export const deleteWorkspaceById = async (workspaceId) => {
+  if (!currentUser || currentUser.isAnonymous) {
+    console.log("Firestore delete not available for anonymous users");
+    return { success: false, error: "Authentication required" };
+  }
+  
   try {
-    const docRef = doc(db, getUserCollection('workspaces'), id);
+    const { deleteDoc } = await import("firebase/firestore");
+    const docRef = doc(db, "users", currentUser.uid, "workspaces", workspaceId);
     await deleteDoc(docRef);
+    return { success: true };
   } catch (error) {
-    console.error('Error deleting workspace:', error);
-    throw error;
+    console.error("Error deleting workspace from Firestore:", error);
+    return { success: false, error: error.message };
   }
 };
 
-export const subscribeWorkspaceChanges = (callback) => {
+export const subscribeWorkspaceChanges = async (callback) => {
+  // Only allow for authenticated Google users, not anonymous users
+  if (!currentUser || currentUser.isAnonymous) {
+    console.log("Firestore subscriptions not available for anonymous users");
+    return () => {};
+  }
+  
   try {
-    const workspacesRef = collection(db, getUserCollection('workspaces'));
-    const q = query(workspacesRef, orderBy('createdAt', 'desc'));
-
-    return onSnapshot(q, (snapshot) => {
-      callback();
-    }, (error) => {
-      // Handle WebChannel and connection errors gracefully
-      if (error.message && (error.message.includes('WebChannelConnection') || error.message.includes('Failed to get document'))) {
-        console.warn('Firestore subscription connection issue (non-critical):', error.message);
-        
-        // Try to re-establish subscription after a delay
-        setTimeout(() => {
-          try {
-            subscribeWorkspaceChanges(callback);
-          } catch (retryError) {
-            console.warn('Failed to re-establish Firestore subscription:', retryError);
-          }
-        }, 10000);
-      } else {
-        console.error('Error in workspace subscription:', error);
-      }
+    const { onSnapshot, collection } = await import("firebase/firestore");
+    const workspacesRef = collection(db, "users", currentUser.uid, "workspaces");
+    return onSnapshot(workspacesRef, callback, (error) => {
+      console.error("Firestore listener error:", error);
+      console.warn("Firestore subscription failed - check project configuration");
     });
   } catch (error) {
-    console.error('Error subscribing to workspace changes:', error);
-    return () => { }; // Return empty unsubscribe function
-  }
-};
-
-// Settings operations
-export const saveSettings = async (settings) => {
-  try {
-    const settingsRef = doc(db, getUserCollection('settings'), 'user-settings');
-    await updateDoc(settingsRef, {
-      ...settings,
-      updatedAt: Date.now()
-    }).catch(async (error) => {
-      // If document doesn't exist, create it
-      if (error.code === 'not-found') {
-        await addDoc(collection(db, getUserCollection('settings')), {
-          ...settings,
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        });
-      } else {
-        throw error;
-      }
-    });
-  } catch (error) {
-    console.error('Error saving settings:', error);
-    throw error;
-  }
-};
-
-export const getSettings = async () => {
-  try {
-    const settingsRef = collection(db, getUserCollection('settings'));
-    const querySnapshot = await getDocs(settingsRef);
-
-    if (!querySnapshot.empty) {
-      const doc = querySnapshot.docs[0];
-      return { id: doc.id, ...doc.data() };
-    }
-    return null;
-  } catch (error) {
-    console.error('Error getting settings:', error);
-    return null;
+    console.error("Error subscribing to workspace changes:", error);
+    return () => {};
   }
 };

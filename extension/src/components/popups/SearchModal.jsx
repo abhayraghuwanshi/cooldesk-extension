@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getUIState, saveUIState } from '../../db/index.js';
+import { getHostTabs } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils.js';
 
 export function SearchModal({
@@ -10,6 +11,8 @@ export function SearchModal({
     setSearch,
     openInSidePanel
 }) {
+    console.log('[SearchModal] Component rendered, isOpen:', isOpen);
+
     const [recent, setRecent] = useState([]);
     const [activeIndex, setActiveIndex] = useState(-1);
     const [contentMatches, setContentMatches] = useState([]);
@@ -42,9 +45,10 @@ export function SearchModal({
         })();
     }, [isOpen]);
 
-    // Load bookmark/history data
+    // Load bookmark/history data and current tabs
     useEffect(() => {
         if (!isOpen) return;
+        console.log('[SearchModal] Effect triggered - loading data');
         (async () => {
             try {
                 const { dashboardData } = await chrome.storage.local.get(['dashboardData']);
@@ -52,14 +56,80 @@ export function SearchModal({
                 const history = dashboardData?.history || [];
                 const all = [];
 
+                // Add bookmarks
                 for (const b of bookmarks) {
                     if (!b) continue;
                     all.push({ type: 'bookmark', title: b.title || b.name || b.url || '', url: b.url || '' });
                 }
+
+                // Add history
                 for (const h of history) {
                     if (!h) continue;
                     all.push({ type: 'history', title: h.title || h.url || '', url: h.url || '' });
                 }
+
+                console.log('[SearchModal] About to load current tabs');
+                console.log('[SearchModal] Chrome object available:', typeof chrome !== 'undefined');
+                console.log('[SearchModal] Chrome.tabs available:', typeof chrome !== 'undefined' && !!chrome?.tabs);
+                console.log('[SearchModal] Chrome.tabs.query available:', typeof chrome !== 'undefined' && !!chrome?.tabs?.query);
+
+                // Add current tabs
+                try {
+                    let currentTabs = [];
+                    const hasTabsQuery = typeof chrome !== 'undefined' && chrome?.tabs?.query;
+
+                    console.log('[SearchModal] Loading current tabs, hasTabsQuery:', hasTabsQuery);
+
+                    if (hasTabsQuery) {
+                        // Chrome extension context
+                        currentTabs = await new Promise((resolve, reject) => {
+                            chrome.tabs.query({}, (list) => {
+                                const lastErr = chrome.runtime?.lastError;
+                                if (lastErr) {
+                                    console.error('[SearchModal] Chrome tabs query error:', lastErr);
+                                    reject(new Error(lastErr.message));
+                                    return;
+                                }
+                                console.log('[SearchModal] Chrome tabs loaded:', list?.length || 0, 'tabs');
+                                resolve(Array.isArray(list) ? list : []);
+                            });
+                        });
+                    } else {
+                        // Electron/host context
+                        const res = await getHostTabs();
+                        console.log('[SearchModal] Host tabs response:', res);
+                        if (res.ok) {
+                            currentTabs = res.tabs || [];
+                            console.log('[SearchModal] Host tabs loaded:', currentTabs.length, 'tabs');
+                        }
+                    }
+
+                    console.log('[SearchModal] Processing', currentTabs.length, 'tabs for search');
+
+                    // Add current tabs to search data
+                    for (const tab of currentTabs) {
+                        if (!tab?.url) {
+                            console.log('[SearchModal] Skipping tab without URL:', tab);
+                            continue;
+                        }
+                        const tabItem = {
+                            type: 'tab',
+                            title: tab.title || tab.url || '',
+                            url: tab.url,
+                            tabId: tab.id,
+                            windowId: tab.windowId,
+                            favicon: tab.favIconUrl
+                        };
+                        all.push(tabItem);
+                        console.log('[SearchModal] Added tab to search:', tabItem.title, tabItem.url);
+                    }
+
+                    console.log('[SearchModal] Total search items after adding tabs:', all.length);
+                } catch (e) {
+                    // Ignore tab loading errors to keep search working
+                    console.error('[SearchModal] Failed to load current tabs for search:', e);
+                }
+
                 dataRef.current.list = all;
             } catch { }
         })();
@@ -73,15 +143,53 @@ export function SearchModal({
             setContentMatches([]);
             return;
         }
-        const out = [];
+
+        console.log('[SearchModal] Searching for:', q);
+        console.log('[SearchModal] Total items to search:', dataRef.current.list.length);
+
+        // Debug: Show breakdown of item types
+        const itemTypes = {};
+        dataRef.current.list.forEach(item => {
+            itemTypes[item.type] = (itemTypes[item.type] || 0) + 1;
+        });
+        console.log('[SearchModal] Item types in search data:', itemTypes);
+
+        // Debug: Show first few tabs if any exist
+        const tabItems = dataRef.current.list.filter(item => item.type === 'tab');
+        console.log('[SearchModal] Found', tabItems.length, 'tabs in search data');
+        if (tabItems.length > 0) {
+            console.log('[SearchModal] First few tabs:', tabItems.slice(0, 3).map(t => ({ title: t.title, url: t.url })));
+        }
+
+        // Separate matches by priority: tabs first, then others
+        const tabMatches = [];
+        const otherMatches = [];
+
         for (const item of dataRef.current.list) {
             const inTitle = (item.title || '').toLowerCase().includes(q);
             const inUrl = (item.url || '').toLowerCase().includes(q);
+
+            // Debug tab matching specifically
+            if (item.type === 'tab') {
+                console.log('[SearchModal] Checking tab:', item.title, '| URL:', item.url, '| Title match:', inTitle, '| URL match:', inUrl);
+            }
+
             if (inTitle || inUrl) {
-                out.push(item);
-                if (out.length >= 8) break;
+                console.log('[SearchModal] Match found:', item.type, item.title, item.url);
+
+                if (item.type === 'tab') {
+                    tabMatches.push(item);
+                } else {
+                    otherMatches.push(item);
+                }
             }
         }
+
+        // Combine results: tabs first, then others, limit to 12 total
+        const out = [...tabMatches, ...otherMatches].slice(0, 12);
+
+        console.log('[SearchModal] Total matches found:', out.length);
+        console.log('[SearchModal] Tab matches:', out.filter(item => item.type === 'tab').length);
         setContentMatches(out);
     }, [search, isOpen]);
 
@@ -182,7 +290,23 @@ export function SearchModal({
                         break;
                     case 'content':
                         try {
-                            if (chrome?.tabs?.create) chrome.tabs.create({ url: selectedItem.value.url });
+                            const item = selectedItem.value;
+                            if (item.type === 'tab' && item.tabId) {
+                                // Focus existing tab
+                                const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
+                                if (hasTabsUpdate) {
+                                    chrome.tabs.update(item.tabId, { active: true });
+                                    if (item.windowId != null && chrome?.windows?.update) {
+                                        chrome.windows.update(item.windowId, { focused: true });
+                                    }
+                                } else {
+                                    // Fallback: open URL
+                                    if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
+                                }
+                            } else {
+                                // Open bookmark/history item in new tab
+                                if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
+                            }
                         } catch { }
                         onClose();
                         break;
@@ -350,10 +474,10 @@ export function SearchModal({
                                 Search Engines
                             </div>
                             <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(2, 1fr)',
+                                display: 'flex',
                                 gap: '8px',
-                                paddingBottom: '16px'
+                                paddingBottom: '16px',
+                                flexWrap: 'wrap'
                             }}>
                                 {engines.map((e, idx) => {
                                     // Calculate this engine's position in the active index
@@ -369,13 +493,15 @@ export function SearchModal({
                                             style={{
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                gap: '12px',
-                                                padding: '12px',
+                                                justifyContent: 'center',
+                                                padding: '8px',
                                                 cursor: 'pointer',
                                                 background: isActive ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.02)',
                                                 borderRadius: '8px',
                                                 border: `1px solid ${isActive ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)'}`,
-                                                transition: 'all 0.1s ease'
+                                                transition: 'all 0.1s ease',
+                                                width: '40px',
+                                                height: '40px'
                                             }}
                                             onMouseEnter={(ev) => {
                                                 ev.target.style.background = 'rgba(255, 255, 255, 0.08)';
@@ -386,39 +512,34 @@ export function SearchModal({
                                                 ev.target.style.borderColor = isActive ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)';
                                             }}
                                         >
-                                            <div style={{
-                                                width: '24px',
-                                                height: '24px',
-                                                borderRadius: '6px',
-                                                background: e.color,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                fontSize: '12px',
-                                                color: 'white',
-                                                fontWeight: '600',
-                                                overflow: 'hidden'
-                                            }}>
-                                                <img
-                                                    src={e.favicon}
-                                                    alt={e.name}
-                                                    style={{
-                                                        width: '16px',
-                                                        height: '16px',
-                                                        objectFit: 'contain'
-                                                    }}
-                                                    onError={(ev) => {
-                                                        ev.target.style.display = 'none';
-                                                        ev.target.nextSibling.style.display = 'block';
-                                                    }}
-                                                />
-                                                <span style={{ display: 'none' }}>{e.icon}</span>
-                                            </div>
-                                            <div style={{
-                                                fontSize: '14px',
-                                                color: 'rgba(255, 255, 255, 0.8)',
-                                                fontWeight: '500'
-                                            }}>{e.name}</div>
+                                            <img
+                                                src={e.favicon}
+                                                alt={e.name}
+                                                style={{
+                                                    width: '24px',
+                                                    height: '24px',
+                                                    objectFit: 'contain',
+                                                    borderRadius: '4px'
+                                                }}
+                                                onError={(ev) => {
+                                                    // Fallback to colored background with icon text
+                                                    const fallback = document.createElement('div');
+                                                    fallback.style.cssText = `
+                                                        width: 24px;
+                                                        height: 24px;
+                                                        border-radius: 4px;
+                                                        background: ${e.color};
+                                                        display: flex;
+                                                        align-items: center;
+                                                        justify-content: center;
+                                                        font-size: 12px;
+                                                        color: white;
+                                                        font-weight: 600;
+                                                    `;
+                                                    fallback.textContent = e.icon;
+                                                    ev.target.parentNode.replaceChild(fallback, ev.target);
+                                                }}
+                                            />
                                         </div>
                                     );
                                 })}
@@ -480,7 +601,7 @@ export function SearchModal({
                                 textTransform: 'uppercase',
                                 letterSpacing: '1px'
                             }}>
-                                Bookmarks & History
+                                Tabs, Bookmarks & History
                             </div>
                             {contentMatches.map((m, i) => {
                                 // Calculate this item's position in the active index
@@ -496,7 +617,22 @@ export function SearchModal({
                                         onMouseDown={(e) => e.preventDefault()}
                                         onClick={() => {
                                             try {
-                                                if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
+                                                if (m.type === 'tab' && m.tabId) {
+                                                    // Focus existing tab
+                                                    const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
+                                                    if (hasTabsUpdate) {
+                                                        chrome.tabs.update(m.tabId, { active: true });
+                                                        if (m.windowId != null && chrome?.windows?.update) {
+                                                            chrome.windows.update(m.windowId, { focused: true });
+                                                        }
+                                                    } else {
+                                                        // Fallback: open URL
+                                                        if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
+                                                    }
+                                                } else {
+                                                    // Open bookmark/history item in new tab
+                                                    if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
+                                                }
                                             } catch { }
                                             onClose();
                                         }}
@@ -509,48 +645,77 @@ export function SearchModal({
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: '12px',
-                                            transition: 'background 0.1s ease',
-                                            background: isActive ? 'rgba(255, 255, 255, 0.05)' : 'transparent'
+                                            transition: 'all 0.1s ease',
+                                            background: isActive ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                                            // Visual styling based on type
+                                            border: m.type === 'tab' ? '1px solid rgba(0, 122, 255, 0.3)' :
+                                                   m.type === 'bookmark' ? '1px solid rgba(255, 149, 0, 0.3)' :
+                                                   '1px solid rgba(128, 128, 128, 0.2)',
+                                            borderLeft: m.type === 'tab' ? '3px solid #007AFF' :
+                                                      m.type === 'bookmark' ? '3px solid #FF9500' :
+                                                      '3px solid #8E8E93'
                                         }}
-                                        title={m.url}
-                                        onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.05)'}
-                                        onMouseLeave={(e) => e.target.style.background = isActive ? 'rgba(255, 255, 255, 0.05)' : 'transparent'}
+                                        title={`${m.type === 'tab' ? 'Switch to tab' : m.type === 'bookmark' ? 'Open bookmark' : 'Open from history'}: ${m.url}`}
+                                        onMouseEnter={(e) => {
+                                            e.target.style.background = m.type === 'tab' ? 'rgba(0, 122, 255, 0.08)' :
+                                                                       m.type === 'bookmark' ? 'rgba(255, 149, 0, 0.08)' :
+                                                                       'rgba(255, 255, 255, 0.05)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.target.style.background = isActive ? 'rgba(255, 255, 255, 0.05)' : 'transparent';
+                                        }}
                                     >
-                                        <div style={{
-                                            width: '24px',
-                                            height: '24px',
-                                            borderRadius: '6px',
-                                            background: 'rgba(255, 255, 255, 0.1)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '14px',
-                                            overflow: 'hidden'
-                                        }}>
-                                            <img
-                                                src={getFaviconUrl(m.url)}
-                                                alt="favicon"
-                                                style={{
-                                                    width: '16px',
-                                                    height: '16px',
-                                                    objectFit: 'contain'
-                                                }}
-                                                onError={(ev) => {
-                                                    ev.target.style.display = 'none';
-                                                    ev.target.nextSibling.style.display = 'block';
-                                                }}
-                                            />
-                                            <span style={{ display: 'none' }}>{m.type === 'bookmark' ? '🔖' : '🕘'}</span>
-                                        </div>
+                                        <img
+                                            src={m.favicon || getFaviconUrl(m.url)}
+                                            alt="favicon"
+                                            style={{
+                                                width: '24px',
+                                                height: '24px',
+                                                objectFit: 'contain',
+                                                borderRadius: '4px',
+                                                flexShrink: 0
+                                            }}
+                                            onError={(ev) => {
+                                                // Try fallback favicon from origin
+                                                try {
+                                                    const u = new URL(m.url);
+                                                    const originFavicon = `${u.origin}/favicon.ico`;
+                                                    if (ev.target.src !== originFavicon) {
+                                                        ev.target.src = originFavicon;
+                                                        return;
+                                                    }
+                                                } catch { }
+                                                // If all favicon attempts fail, hide the image
+                                                ev.target.style.opacity = '0.3';
+                                            }}
+                                        />
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{
                                                 overflow: 'hidden',
                                                 textOverflow: 'ellipsis',
                                                 whiteSpace: 'nowrap',
                                                 fontSize: '14px',
-                                                fontWeight: '500'
+                                                fontWeight: '500',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px'
                                             }}>
                                                 {m.title || m.url}
+                                                <span style={{
+                                                    fontSize: '10px',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    fontWeight: '600',
+                                                    textTransform: 'uppercase',
+                                                    background: m.type === 'tab' ? 'rgba(0, 122, 255, 0.2)' :
+                                                               m.type === 'bookmark' ? 'rgba(255, 149, 0, 0.2)' :
+                                                               'rgba(128, 128, 128, 0.2)',
+                                                    color: m.type === 'tab' ? '#007AFF' :
+                                                          m.type === 'bookmark' ? '#FF9500' :
+                                                          '#8E8E93'
+                                                }}>
+                                                    {m.type === 'tab' ? 'TAB' : m.type === 'bookmark' ? 'BOOKMARK' : 'HISTORY'}
+                                                </span>
                                             </div>
                                             <div style={{
                                                 overflow: 'hidden',

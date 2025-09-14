@@ -152,10 +152,48 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
                     Close
                   </button>
                 </div>
+
+                <!-- Filter Section -->
+                <div style="padding: 15px 20px; background: #1f2937; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 15px;">
+                  <label style="color: #9ca3af; font-size: 14px; font-weight: 500;">Filter:</label>
+                  <select id="notes-filter" style="
+                    background: #374151;
+                    border: 1px solid #4b5563;
+                    color: #e5e7eb;
+                    padding: 8px 12px;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    min-width: 150px;
+                    cursor: pointer;
+                  ">
+                    <option value="all">📋 All Notes</option>
+                    <option value="todo">✅ Todo Only</option>
+                    <option value="text">📝 Text Notes</option>
+                    <option value="voice">🎤 Voice Notes</option>
+                    <option value="screenshot">📸 Screenshots</option>
+                    <option value="completed">✔️ Completed</option>
+                    <option value="pending">⏳ Pending</option>
+                  </select>
+
+                  <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+                    <span id="notes-count" style="color: #9ca3af; font-size: 13px;">Loading...</span>
+                    <button id="add-todo-note" style="
+                      background: #10b981;
+                      border: none;
+                      color: white;
+                      padding: 6px 12px;
+                      border-radius: 4px;
+                      cursor: pointer;
+                      font-size: 12px;
+                      font-weight: 500;
+                    ">+ Add Todo</button>
+                  </div>
+                </div>
+
                 <div style="flex: 1; padding: 20px; overflow-y: auto; color: #e5e7eb;">
-                  <div style="text-align: center; color: #9ca3af; margin-top: 50px;">
-                    Loading full URL notes interface...<br>
-                    <small>This will show the complete UrlNotesSection component</small>
+                  <div id="notes-content" style="text-align: center; color: #9ca3af; margin-top: 50px;">
+                    Loading URL notes...<br>
+                    <small>Fetching notes for this URL</small>
                   </div>
                 </div>
               `;
@@ -175,6 +213,177 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
                 }
               };
               document.addEventListener('keydown', escapeHandler);
+
+              // Filter functionality
+              const filterSelect = panel.querySelector('#notes-filter');
+              const notesContent = panel.querySelector('#notes-content');
+              const notesCount = panel.querySelector('#notes-count');
+              const addTodoBtn = panel.querySelector('#add-todo-note');
+
+              // Load and display notes
+              const loadNotes = async (filter = 'all') => {
+                try {
+                  notesContent.innerHTML = '<div style="text-align: center; color: #9ca3af; margin-top: 50px;">Loading notes...</div>';
+
+                  // Request notes from background script
+                  const response = await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({ action: 'getUrlNotes', url: window.location.href }, resolve);
+                  });
+
+                  if (!response.success) {
+                    throw new Error(response.error || 'Failed to load notes');
+                  }
+
+                  let notes = response.notes || [];
+
+                  // Apply filter
+                  if (filter !== 'all') {
+                    notes = notes.filter(note => {
+                      switch (filter) {
+                        case 'todo':
+                          return note.type === 'todo' || (note.text && note.text.includes('TODO:')) || (note.text && note.text.includes('☐'));
+                        case 'text':
+                          return note.type === 'text' || (!note.type && note.text);
+                        case 'voice':
+                          return note.type === 'voice';
+                        case 'screenshot':
+                          return note.type === 'screenshot';
+                        case 'completed':
+                          return note.completed === true || (note.text && note.text.includes('☑'));
+                        case 'pending':
+                          return note.completed !== true && (note.type === 'todo' || (note.text && note.text.includes('☐')));
+                        default:
+                          return true;
+                      }
+                    });
+                  }
+
+                  // Update count
+                  notesCount.textContent = `${notes.length} note${notes.length !== 1 ? 's' : ''}`;
+
+                  // Display notes
+                  if (notes.length === 0) {
+                    notesContent.innerHTML = `
+                      <div style="text-align: center; color: #9ca3af; margin-top: 50px;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📝</div>
+                        <div>No ${filter === 'all' ? '' : filter + ' '}notes found for this URL</div>
+                        <small>Click "Add Todo" to create your first note</small>
+                      </div>
+                    `;
+                  } else {
+                    const notesHtml = notes.map((note, i) => {
+                      const isCompleted = note.completed || (note.text && note.text.includes('☑'));
+                      const isTodo = note.type === 'todo' || (note.text && (note.text.includes('TODO:') || note.text.includes('☐') || note.text.includes('☑')));
+
+                      return `
+                        <div style="
+                          background: #374151;
+                          border: 1px solid #4b5563;
+                          border-radius: 8px;
+                          padding: 15px;
+                          margin-bottom: 12px;
+                          position: relative;
+                        ">
+                          <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px;">
+                            <span style="font-size: 16px;">
+                              ${note.type === 'voice' ? '🎤' :
+                                note.type === 'screenshot' ? '📸' :
+                                isTodo ? (isCompleted ? '☑️' : '☐') : '📝'}
+                            </span>
+                            <div style="flex: 1;">
+                              <div style="color: #e5e7eb; line-height: 1.5; ${isCompleted ? 'text-decoration: line-through; opacity: 0.7;' : ''}">
+                                ${note.text || note.description || 'No content'}
+                              </div>
+                              ${note.selectedText ? `
+                                <div style="background: #1f2937; padding: 8px; border-radius: 4px; margin-top: 8px; border-left: 3px solid #10b981;">
+                                  <small style="color: #9ca3af;">Selected text:</small><br>
+                                  <span style="color: #d1d5db; font-style: italic;">"${note.selectedText}"</span>
+                                </div>
+                              ` : ''}
+                            </div>
+                            <button
+                              onclick="deleteNote('${note.id}')"
+                              style="
+                                background: #dc2626;
+                                border: none;
+                                color: white;
+                                padding: 4px 8px;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 12px;
+                              "
+                            >🗑️</button>
+                          </div>
+                          <div style="font-size: 12px; color: #9ca3af;">
+                            ${new Date(note.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                      `;
+                    }).join('');
+
+                    notesContent.innerHTML = notesHtml;
+                  }
+                } catch (error) {
+                  console.error('Failed to load notes:', error);
+                  notesContent.innerHTML = `
+                    <div style="text-align: center; color: #ef4444; margin-top: 50px;">
+                      <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+                      <div>Failed to load notes</div>
+                      <small>${error.message}</small>
+                    </div>
+                  `;
+                }
+              };
+
+              // Filter change handler
+              filterSelect.addEventListener('change', (e) => {
+                loadNotes(e.target.value);
+              });
+
+              // Add todo button handler
+              addTodoBtn.addEventListener('click', () => {
+                const todoText = prompt('Enter todo item:');
+                if (todoText && todoText.trim()) {
+                  const note = {
+                    id: 'note_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+                    url: window.location.href,
+                    text: '☐ TODO: ' + todoText.trim(),
+                    type: 'todo',
+                    createdAt: Date.now(),
+                    completed: false
+                  };
+
+                  chrome.runtime.sendMessage({
+                    action: 'saveUrlNote',
+                    note: note
+                  }, (response) => {
+                    if (response.success) {
+                      loadNotes(filterSelect.value);
+                    } else {
+                      alert('Failed to save todo: ' + (response.error || 'Unknown error'));
+                    }
+                  });
+                }
+              });
+
+              // Global delete function
+              window.deleteNote = (noteId) => {
+                if (confirm('Delete this note?')) {
+                  chrome.runtime.sendMessage({
+                    action: 'deleteUrlNote',
+                    noteId: noteId
+                  }, (response) => {
+                    if (response.success) {
+                      loadNotes(filterSelect.value);
+                    } else {
+                      alert('Failed to delete note: ' + (response.error || 'Unknown error'));
+                    }
+                  });
+                }
+              };
+
+              // Initial load
+              loadNotes('all');
             },
             args: [message.url, message.title]
           });
