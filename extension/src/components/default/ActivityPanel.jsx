@@ -3,6 +3,7 @@ import { ErrorBoundary } from '../ErrorBoundary';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { DailyNotesSection } from './DailyNotesSection';
 import { NotesSection } from './NotesSection';
+import VoiceNavigationChatGPT from '../toolbar/VoiceNavigationChatGPT';
 
 export function ActivityPanel({ activeSection = 0 }) {
   // State for preview modal
@@ -165,6 +166,7 @@ export function ActivityPanel({ activeSection = 0 }) {
   // Define sections array matching Header navigation
   const sections = [
     { name: 'Current Tabs', component: <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /> },
+    { name: 'Voice Navigation', component: <VoiceNavigationChatGPT /> },
     { name: 'Notes', component: <NotesSection /> },
     { name: 'Daily Notes', component: <DailyNotesSection /> }
   ];
@@ -172,8 +174,8 @@ export function ActivityPanel({ activeSection = 0 }) {
   // Check if we should show notes side-by-side
   const showNotesSideBySide = React.useMemo(() => {
     const isAllMode = activeSection === 0;
-    const notesIndex = 1; // Notes section index
-    const dailyNotesIndex = 2; // Daily Notes section index
+    const notesIndex = 2; // Notes section index (adjusted for VoiceNavigation)
+    const dailyNotesIndex = 3; // Daily Notes section index (adjusted for VoiceNavigation)
 
     // Show side-by-side only in "All" mode or when either Notes or Daily Notes is active
     return isAllMode || activeSection === (notesIndex + 1) || activeSection === (dailyNotesIndex + 1);
@@ -192,8 +194,8 @@ export function ActivityPanel({ activeSection = 0 }) {
         const isAllMode = activeSection === 0;
         const isCurrentSection = index === (activeSection - 1); // Adjust for "All" being index 0
         const isVisible = isAllMode || isCurrentSection;
-        const notesIndex = 1;
-        const dailyNotesIndex = 2;
+        const notesIndex = 2; // Notes section index (adjusted for VoiceNavigation)
+        const dailyNotesIndex = 3; // Daily Notes section index (adjusted for VoiceNavigation)
 
         // Handle side-by-side display for Notes and Daily Notes
         if (showNotesSideBySide && (index === notesIndex || index === dailyNotesIndex)) {

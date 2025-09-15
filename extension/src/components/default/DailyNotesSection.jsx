@@ -440,50 +440,25 @@ export function DailyNotesSection() {
             </span>
           )}
         </h2>
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => handleDateChange(e.target.value)}
+          style={{
+            padding: '6px 10px',
+            borderRadius: 8,
+            border: 'none',
+            background: 'rgba(255, 255, 255, 0.1)',
+            color: '#ffffff',
+            fontSize: 14,
+            fontWeight: 500,
+            fontFamily: 'inherit',
+            cursor: 'pointer'
+          }}
+        />
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Date selector - Apple Style */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          background: 'rgba(255, 255, 255, 0.05)',
-          borderRadius: 12,
-          padding: 12,
-          border: '1px solid rgba(255, 255, 255, 0.1)'
-        }}>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => handleDateChange(e.target.value)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: 'none',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#ffffff',
-              fontSize: 14,
-              fontWeight: 500,
-              fontFamily: 'inherit',
-              cursor: 'pointer'
-            }}
-          />
-          {dailyNotes && dailyNotes.metadata.lastUpdated > 0 && (
-            <span style={{
-              fontSize: 12,
-              color: 'rgba(255, 255, 255, 0.5)',
-              fontWeight: 400
-            }}>
-              Updated {new Date(dailyNotes.metadata.lastUpdated).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </span>
-          )}
-        </div>
 
         {/* Daily notes content - Apple Style */}
         <div style={{
