@@ -14,10 +14,11 @@ import { WorkspaceFilters } from './components/WorkspaceFilters';
 import './search.css';
 
 import { ActivityPanel } from './components/default/ActivityPanel';
+import { CoolFeedSection } from './components/default/CoolFeedSection.jsx';
 import { PingsSection } from './components/default/PingsSection';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import categoryManager from './data/categories';
-import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType } from './db/index.js';
+import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getFaviconUrl, getUrlParts } from './utils';
@@ -71,8 +72,6 @@ export default function App() {
   const [focusSearchTick, setFocusSearchTick] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' })
-  const [relatedProducts, setRelatedProducts] = useState([])
-  const [loadingRelated, setLoadingRelated] = useState(false)
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
   const [addingToWorkspace, setAddingToWorkspace] = useState(null);
 
@@ -82,7 +81,6 @@ export default function App() {
 
   const [currentTab, setCurrentTab] = useState(null)
   const [savedWorkspaces, setSavedWorkspaces] = useState([])
-  const [showSystemPrompt, setShowSystemPrompt] = useState(false)
   const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
@@ -693,15 +691,6 @@ export default function App() {
     }
   }, [showCreateWorkspace])
 
-  // Options for keyboard navigation (must be declared before effects that depend on them)
-  const workspaceOptions = useMemo(() => {
-    const set = new Set(['All'])
-    for (const it of data) {
-      const g = it.workspaceGroup
-      if (g) set.add(g)
-    }
-    return Array.from(set)
-  }, [data])
 
   // Items to build the workspace filter options: only saved workspaces + 'All'
   const filterItems = useMemo(() => {
@@ -978,22 +967,6 @@ export default function App() {
     }
   };
 
-  const clearRelatedProducts = () => {
-    setRelatedProducts([])
-  }
-
-  // Save updated workspace (including systemPrompt) and refresh list
-  const handleSaveWorkspacePrompt = async (updatedWorkspace) => {
-    try {
-      await saveWorkspace(updatedWorkspace);
-      const wsResult = await listWorkspaces();
-      const ws = wsResult?.success ? wsResult.data : [];
-      setSavedWorkspaces(Array.isArray(ws) ? ws : []);
-    } catch (e) {
-      console.error('Failed to save workspace prompt', e);
-    }
-  }
-
   // Delete the currently selected workspace entirely
   const handleDeleteWorkspace = async () => {
     try {
@@ -1201,19 +1174,6 @@ export default function App() {
     }
   }
 
-  // Handle grid type changes for a workspace
-  const handleGridTypeChange = async (workspaceId, newGridType) => {
-    try {
-      await updateWorkspaceGridType(workspaceId, newGridType);
-      // Refresh workspaces to get updated grid type
-      const refreshedResult = await listWorkspaces();
-      const refreshed = refreshedResult?.success ? refreshedResult.data : [];
-      setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
-      console.log(`[App] Updated grid type to ${newGridType} for workspace ${workspaceId}`);
-    } catch (error) {
-      console.error('Failed to update workspace grid type:', error);
-    }
-  };
 
   // Render the appropriate grid component based on workspace grid type
   const renderWorkspaceGrid = (workspaceObj, items) => {
@@ -1285,32 +1245,9 @@ export default function App() {
     }
   }
 
-  // (Removed) handleWorkspaceFilterChange: unused effect placeholder
-
-  // Open the extension side panel and pass the current query via storage
-  const openInSidePanel = async (overrideQuery) => {
-    try {
-      const q = (overrideQuery != null ? String(overrideQuery) : search || '').trim();
-      try { await chrome.storage.local.set({ pendingQuery: q }); } catch { }
-      if (chrome?.sidePanel?.setOptions) {
-        await chrome.sidePanel.setOptions({ path: 'index.html', enabled: true });
-      }
-      if (chrome?.windows?.getCurrent && chrome?.sidePanel?.open) {
-        const win = await chrome.windows.getCurrent();
-        await chrome.sidePanel.open({ windowId: win.id });
-      }
-    } catch (err) {
-      console.error('Open side panel failed:', err);
-      try {
-        const q = (overrideQuery != null ? String(overrideQuery) : search || '').trim();
-        try { await chrome.storage.local.set({ pendingQuery: q }); } catch { }
-        if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' });
-      } catch { }
-    }
-  };
 
   // Determine if we should show vertical header (responsive or user preference)
-  const shouldShowVertical = useVerticalLayout || windowWidth < 1200;
+  const shouldShowVertical = useVerticalLayout || windowWidth < 700;
 
   return (
     <div className="popup-wrap" style={{
@@ -1369,9 +1306,21 @@ export default function App() {
           );
         })()}
 
-        {/* Pins Section */}
+        {/* Pins and Cool Feed Side by Side */}
         <ErrorBoundary>
-          <PingsSection tabs={[]} />
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: windowWidth < 768 ? '1fr' : '1fr 1fr',
+            gap: windowWidth < 768 ? 24 : 16,
+            marginBottom: 16
+          }}>
+            <div style={{ minWidth: 0 }}>
+              <PingsSection tabs={[]} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <CoolFeedSection />
+            </div>
+          </div>
         </ErrorBoundary>
 
         {/* Filters */}

@@ -1,6 +1,5 @@
 import React from 'react';
 import { ErrorBoundary } from '../ErrorBoundary';
-import { CoolFeedSection } from './CoolFeedSection';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { DailyNotesSection } from './DailyNotesSection';
 import { NotesSection } from './NotesSection';
@@ -11,6 +10,9 @@ export function ActivityPanel({ activeSection = 0 }) {
   const [previewLoading, setPreviewLoading] = React.useState(false);
   const [previewError, setPreviewError] = React.useState('');
   const [previewData, setPreviewData] = React.useState(null);
+
+  // State for responsive layout
+  const [isNarrowScreen, setIsNarrowScreen] = React.useState(false);
 
   // Refs for section scrolling
   const sectionRefs = React.useRef([]);
@@ -92,6 +94,22 @@ export function ActivityPanel({ activeSection = 0 }) {
     }
   }, []);
 
+  // Handle responsive layout
+  React.useEffect(() => {
+    const handleResize = () => {
+      setIsNarrowScreen(window.innerWidth < 768);
+    };
+
+    // Set initial state
+    handleResize();
+
+    // Add event listener
+    window.addEventListener('resize', handleResize);
+
+    // Cleanup
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Auto-scroll to active section when it changes (skip for "All" mode)
   React.useEffect(() => {
     // Don't auto-scroll when in "All" mode (activeSection === 0)
@@ -148,9 +166,18 @@ export function ActivityPanel({ activeSection = 0 }) {
   const sections = [
     { name: 'Current Tabs', component: <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /> },
     { name: 'Notes', component: <NotesSection /> },
-    { name: 'Daily Notes', component: <DailyNotesSection /> },
-    { name: 'Cool Feed', component: <CoolFeedSection /> }
+    { name: 'Daily Notes', component: <DailyNotesSection /> }
   ];
+
+  // Check if we should show notes side-by-side
+  const showNotesSideBySide = React.useMemo(() => {
+    const isAllMode = activeSection === 0;
+    const notesIndex = 1; // Notes section index
+    const dailyNotesIndex = 2; // Daily Notes section index
+
+    // Show side-by-side only in "All" mode or when either Notes or Daily Notes is active
+    return isAllMode || activeSection === (notesIndex + 1) || activeSection === (dailyNotesIndex + 1);
+  }, [activeSection]);
 
   return (
     <section
@@ -165,7 +192,52 @@ export function ActivityPanel({ activeSection = 0 }) {
         const isAllMode = activeSection === 0;
         const isCurrentSection = index === (activeSection - 1); // Adjust for "All" being index 0
         const isVisible = isAllMode || isCurrentSection;
+        const notesIndex = 1;
+        const dailyNotesIndex = 2;
 
+        // Handle side-by-side display for Notes and Daily Notes
+        if (showNotesSideBySide && (index === notesIndex || index === dailyNotesIndex)) {
+          // Only render this container once for the first section (Notes)
+          if (index === notesIndex) {
+            return (
+              <ErrorBoundary key="notes-daily-container">
+                <div
+                  ref={el => {
+                    // Set refs for both sections to this container
+                    sectionRefs.current[notesIndex] = el;
+                    sectionRefs.current[dailyNotesIndex] = el;
+                  }}
+                  style={{
+                    marginTop: index === 0 ? 16 : 32,
+                    opacity: isAllMode ? 1 : (isCurrentSection || index === (activeSection - 1) ? 1 : 0.3),
+                    transform: isAllMode ? 'scale(1)' : (isCurrentSection || index === (activeSection - 1) ? 'scale(1)' : 'scale(0.98)'),
+                    transition: 'all 0.3s ease',
+                    filter: isAllMode ? 'none' : (isCurrentSection || index === (activeSection - 1) ? 'none' : 'blur(1px)'),
+                    pointerEvents: isAllMode ? 'auto' : (isCurrentSection || index === (activeSection - 1) ? 'auto' : 'none')
+                  }}
+                >
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: isNarrowScreen ? '1fr' : '1fr 1fr',
+                    gap: isNarrowScreen ? 24 : 16
+                  }}>
+                    <div style={{ minWidth: 0 }}>
+                      {sections[notesIndex].component}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      {sections[dailyNotesIndex].component}
+                    </div>
+                  </div>
+                </div>
+              </ErrorBoundary>
+            );
+          } else {
+            // Skip rendering Daily Notes separately since it's included in the container above
+            return null;
+          }
+        }
+
+        // Regular single-section display
         return (
           <ErrorBoundary key={section.name}>
             <div

@@ -1,4 +1,4 @@
-import { faCalendarDay, faExternalLinkAlt, faSave, faTimes, faTrash, faLink, faGlobe } from '@fortawesome/free-solid-svg-icons';
+import { faCalendarDay, faExternalLinkAlt, faGlobe, faLink, faSave, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { subscribeDailyNotesChanges } from '../../db/index.js';
@@ -125,7 +125,7 @@ export function DailyNotesSection() {
 
     // Split content into lines for processing
     const lines = content.split('\n');
-    
+
     // Group content by URL/source and separate manual notes
     const autoGroups = [];
     let currentGroup = null;
@@ -139,16 +139,16 @@ export function DailyNotesSection() {
       // Check if line is auto-captured (contains "From [domain](url):")
       const autoCaptureRegex = /^\[(\d{1,2}:\d{2})\]\s+From\s+\[([^\]]+)\]\(([^)]+)\):\s*$/;
       const autoCaptureMatch = line.match(autoCaptureRegex);
-      
+
       // Check if line contains quoted text (auto-captured selection)
       const isQuotedText = line.startsWith('"') && line.endsWith('"') && line.length > 2;
-      
+
       if (autoCaptureMatch) {
         // Save current auto-capture group if exists
         if (currentGroup) {
           autoGroups.push(currentGroup);
         }
-        
+
         // Start new auto-capture group
         const [, time, domain, url] = autoCaptureMatch;
         currentGroup = {
@@ -180,7 +180,7 @@ export function DailyNotesSection() {
 
     // Render grouped content
     const processedLines = [];
-    
+
     // 1. First render manual notes at the top
     if (manualNotes.length > 0) {
       manualNotes.forEach((line, lineIndex) => {
@@ -244,7 +244,7 @@ export function DailyNotesSection() {
           </div>
         );
       });
-      
+
       // Add separator between manual notes and auto-captured content
       if (autoGroups.length > 0) {
         processedLines.push(
@@ -256,11 +256,11 @@ export function DailyNotesSection() {
         );
       }
     }
-    
+
     // 2. Then render auto-captured groups sorted by time
     autoGroups.forEach((group, groupIndex) => {
       const faviconUrl = getFaviconUrl(group.url, 16);
-      
+
       // Group header with favicon
       processedLines.push(
         <div key={`auto-${groupIndex}`} style={{
@@ -270,22 +270,22 @@ export function DailyNotesSection() {
           border: '1px solid rgba(52, 199, 89, 0.1)',
           borderRadius: 8
         }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 6, 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
             marginBottom: 8,
             color: 'rgba(255, 255, 255, 0.7)',
             fontSize: '13px',
             fontWeight: 500
           }}>
-            <FontAwesomeIcon 
-              icon={faGlobe} 
-              style={{ 
-                color: '#34C759', 
+            <FontAwesomeIcon
+              icon={faGlobe}
+              style={{
+                color: '#34C759',
                 fontSize: '11px',
                 flexShrink: 0
-              }} 
+              }}
             />
             <span style={{ color: 'rgba(255, 255, 255, 0.6)' }}>[{group.time}]</span>
             <span>From</span>
@@ -315,7 +315,7 @@ export function DailyNotesSection() {
                   alt=""
                   width={14}
                   height={14}
-                  style={{ 
+                  style={{
                     borderRadius: 2,
                     flexShrink: 0,
                     opacity: 0.9
@@ -342,7 +342,7 @@ export function DailyNotesSection() {
               {group.selections.length} selection{group.selections.length !== 1 ? 's' : ''}
             </span>
           </div>
-          
+
           {/* Render selections */}
           {group.selections.map((selection, selIndex) => (
             <div key={selIndex} style={{
@@ -352,16 +352,16 @@ export function DailyNotesSection() {
               margin: '4px 0',
               paddingLeft: 8
             }}>
-              <FontAwesomeIcon 
-                icon={faLink} 
-                style={{ 
-                  color: '#FF9500', 
+              <FontAwesomeIcon
+                icon={faLink}
+                style={{
+                  color: '#FF9500',
                   fontSize: '10px',
                   marginTop: 3,
                   flexShrink: 0
-                }} 
+                }}
               />
-              <span style={{ 
+              <span style={{
                 fontStyle: 'italic',
                 color: 'rgba(255, 255, 255, 0.9)',
                 lineHeight: 1.4,
@@ -394,7 +394,7 @@ export function DailyNotesSection() {
         loadDailyNotes(selectedDate);
       }
     });
-    
+
     return () => {
       console.log('[DailyNotesSection] Cleaning up daily notes change subscription...');
       unsubscribe();
@@ -424,7 +424,7 @@ export function DailyNotesSection() {
           gap: 8
         }}>
           <FontAwesomeIcon icon={faCalendarDay} style={{ color: '#FF9500', fontSize: 18 }} />
-          Daily Notes
+          Thoughts
           {dailyNotes?.metadata?.selectionCount > 0 && (
             <span style={{
               fontSize: 12,

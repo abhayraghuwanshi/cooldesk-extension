@@ -1,4 +1,4 @@
-import { faArrowUpRightFromSquare, faClone, faRotateRight, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowUpRightFromSquare, faClone, faRotateRight, faThumbtack, faTrash, faCamera, faGlobe } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { enqueueOpenInChrome, getHostTabs } from '../../services/extensionApi';
@@ -553,9 +553,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: '16px'
+                          color: 'rgba(255, 255, 255, 0.8)'
                         }}>
-                          🌐
+                          <FontAwesomeIcon icon={faGlobe} style={{ fontSize: 16 }} />
                         </div>
                       );
                     })()}
@@ -636,7 +636,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                         }}
                         title={capturingTabIds.has(tab.id) ? "Capturing..." : "Capture screenshot"}
                       >
-                        📸
+                        <FontAwesomeIcon icon={faCamera} />
                       </button>
 
                       {/* Pin Button */}
@@ -660,7 +660,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                         }}
                         title="Pin tab"
                       >
-                        📌
+                        <FontAwesomeIcon icon={faThumbtack} />
                       </button>
 
                       {/* Close Button */}
@@ -680,12 +680,11 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
-                          fontSize: '12px',
-                          fontWeight: 'bold'
+                          fontSize: '10px'
                         }}
                         title="Close tab"
                       >
-                        ×
+                        <FontAwesomeIcon icon={faTrash} />
                       </button>
                     </div>
                   )}

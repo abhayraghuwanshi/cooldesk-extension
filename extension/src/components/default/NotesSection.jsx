@@ -1,4 +1,4 @@
-import { faEye, faMicrophone, faPause, faPlay, faStop, faTimes, faTrash, faSquareCheck, faSquare } from '@fortawesome/free-solid-svg-icons';
+import { faMicrophone, faPause, faPlay, faSquare, faSquareCheck, faStop, faTrash, faCheck, faListCheck } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
@@ -294,7 +294,7 @@ export function NotesSection() {
   const [previewNote, setPreviewNote] = React.useState(null);
   const [notesDisplayLimit, setNotesDisplayLimit] = React.useState(6);
   const [showAllNotes, setShowAllNotes] = React.useState(false);
-  const [notesFilter, setNotesFilter] = React.useState('all');
+  const [notesFilter, setNotesFilter] = React.useState('incomplete');
 
   const recordingTimerRef = React.useRef(null);
   const audioRefs = React.useRef({});
@@ -514,7 +514,6 @@ export function NotesSection() {
   // Calculate filter counts
   const filterCounts = React.useMemo(() => {
     const counts = {
-      all: notes.length,
       incomplete: 0,
       completed: 0
     };
@@ -543,8 +542,6 @@ export function NotesSection() {
 
   // Filter notes - all notes now have checkboxes
   const filteredNotes = React.useMemo(() => {
-    if (notesFilter === 'all') return notes;
-
     return notes.filter(note => {
       const text = note.text || '';
       const { lines } = parseCheckboxText(text);
@@ -600,16 +597,19 @@ export function NotesSection() {
           fontWeight: 600,
           margin: 0,
           color: '#ffffff',
-          letterSpacing: '-0.5px'
+          letterSpacing: '-0.5px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
         }}>
-          Actionable Notes ✓
+          <FontAwesomeIcon icon={faListCheck} style={{ color: '#34C759', fontSize: 18 }} />
+          Todos
         </h2>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <select
-            value={notesFilter}
-            onChange={(e) => setNotesFilter(e.target.value)}
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <button
+            onClick={() => setNotesFilter(notesFilter === 'incomplete' ? 'completed' : 'incomplete')}
             style={{
-              padding: '6px 24px 6px 10px',
+              padding: '6px 12px',
               borderRadius: 16,
               border: 'none',
               background: 'rgba(255, 255, 255, 0.1)',
@@ -617,13 +617,19 @@ export function NotesSection() {
               fontSize: 11,
               fontWeight: 500,
               cursor: 'pointer',
-              appearance: 'none'
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              transition: 'all 0.2s ease'
             }}
+            title={`Switch to ${notesFilter === 'incomplete' ? 'completed' : 'incomplete'} todos`}
           >
-            <option value="all">📋 All ({filterCounts.all})</option>
-            <option value="incomplete">☐ Incomplete ({filterCounts.incomplete})</option>
-            <option value="completed">✅ Completed ({filterCounts.completed})</option>
-          </select>
+            <FontAwesomeIcon
+              icon={notesFilter === 'incomplete' ? faSquare : faCheck}
+              style={{ fontSize: 10 }}
+            />
+            {notesFilter === 'incomplete' ? 'Todo' : 'Done'} ({filterCounts[notesFilter]})
+          </button>
         </div>
       </div>
 
@@ -644,7 +650,7 @@ export function NotesSection() {
               if (text.trim()) addNote();
             }
           }}
-          placeholder="Type your note or use voice recording with auto-transcription...\nAll notes become actionable checklist items automatically!"
+          placeholder="Add a todo item..."
           style={{
             width: '100%',
             minHeight: 40,
@@ -741,7 +747,7 @@ export function NotesSection() {
             padding: '40px 20px',
             fontStyle: 'italic'
           }}>
-            {notesFilter === 'all' ? 'No notes yet' : `No ${notesFilter} notes found`}
+            {`No ${notesFilter} todos found`}
           </div>
         )}
 
