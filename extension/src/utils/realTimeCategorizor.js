@@ -251,9 +251,26 @@ export function setupRealTimeCategorizor() {
     try {
       let enhancedTitle = title;
 
+      // Debug logging before enrichment
+      console.log('[realTimeCategorizor] Before enrichWithHistory:', {
+        url,
+        originalTitle: title,
+        enhancedTitle,
+        hasBrowserAPI: !!browserAPI,
+        hasHistoryAPI: !!browserAPI?.history
+      });
+
       // Enrich with history for *all* URLs, not just ChatGPT
       const enriched = await GenericUrlParser.enrichWithHistory(url, enhancedTitle, browserAPI);
       enhancedTitle = enriched.title;
+
+      // Debug logging after enrichment
+      console.log('[realTimeCategorizor] After enrichWithHistory:', {
+        url,
+        originalTitle: title,
+        enrichedTitle: enhancedTitle,
+        titleChanged: enhancedTitle !== title
+      });
 
       // Categorize URL using category manager
       const category = categoryManager.categorizeUrl(url);

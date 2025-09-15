@@ -103,14 +103,44 @@ export class GenericUrlParser {
           test: (paths, url) => url.pathname.includes('/c/') || (paths[0] === 'c' && paths[1]),
           extract: (paths, url, domTitle) => {
             const match = url.pathname.match(/\/c\/([a-f0-9-]{8,})/);
-            const chatId = match ? match[1].slice(0, 8) : (paths[1] ? paths[1].slice(0, 8) : 'unknown');
+            const chatId = match ? match[1] : (paths[1] || 'unknown');
 
-            // Try to extract conversation title from DOM, URL params, or use default
-            let title = `Chat ${chatId}`;
-            if (domTitle && domTitle !== 'ChatGPT' && !domTitle.includes('New chat')) {
-              title = domTitle;
-            } else if (url.searchParams.has('title')) {
-              title = decodeURIComponent(url.searchParams.get('title'));
+            // Generate better title - prioritize meaningful browser titles
+            let title = domTitle;
+
+            // Check if browser title is meaningful (not generic platform names)
+            const isGenericTitle = !title ||
+              title === 'ChatGPT' || title === 'Claude' || title === 'Gemini' ||
+              title === 'Perplexity' || title === 'Copilot' || title === 'Grok' ||
+              title === 'New Chat' || title === 'Untitled' ||
+              title.toLowerCase().includes('new chat') ||
+              title.toLowerCase().includes('untitled') ||
+              title.toLowerCase().includes('loading') ||
+              title === 'chat.openai.com';
+
+            // Debug logging to understand what's happening
+            console.log('[GenericUrlParser] ChatGPT title processing:', {
+              url: url.href,
+              inputTitle: title,
+              isGenericTitle,
+              chatId
+            });
+
+            // If browser title is meaningful, keep it; otherwise extract from URL
+            if (isGenericTitle || !title) {
+              // Try URL title parameter (shared conversations)
+              if (url.searchParams.has('title')) {
+                const urlTitle = decodeURIComponent(url.searchParams.get('title'));
+                if (urlTitle) {
+                  title = urlTitle;
+                } else {
+                  // Use fallback title generation like sample-working.js
+                  title = GenericUrlParser.generateFallbackTitle('ChatGPT', url, Date.now(), chatId);
+                }
+              } else {
+                // Use fallback title generation like sample-working.js
+                title = GenericUrlParser.generateFallbackTitle('ChatGPT', url, Date.now(), chatId);
+              }
             }
 
             return {
@@ -211,33 +241,44 @@ export class GenericUrlParser {
           test: (paths, url) => url.pathname.includes('/c/') || (paths[0] === 'c' && paths[1]),
           extract: (paths, url, domTitle) => {
             const match = url.pathname.match(/\/c\/([a-f0-9-]{8,})/);
-            const chatId = match ? match[1].slice(0, 8) : (paths[1] ? paths[1].slice(0, 8) : 'unknown');
+            const chatId = match ? match[1] : (paths[1] || 'unknown');
 
-            let title = null;
+            // Generate better title - prioritize meaningful browser titles
+            let title = domTitle;
 
-            // Prefer DOM / history extracted title
-            if (domTitle && domTitle.trim().length > 3) {
-              if (!['ChatGPT', 'New chat'].includes(domTitle.trim())) {
-                title = domTitle.trim();
+            // Check if browser title is meaningful (not generic platform names)
+            const isGenericTitle = !title ||
+              title === 'ChatGPT' || title === 'Claude' || title === 'Gemini' ||
+              title === 'Perplexity' || title === 'Copilot' || title === 'Grok' ||
+              title === 'New Chat' || title === 'Untitled' ||
+              title.toLowerCase().includes('new chat') ||
+              title.toLowerCase().includes('untitled') ||
+              title.toLowerCase().includes('loading') ||
+              title === 'chatgpt.com';
+
+            // Debug logging to understand what's happening
+            console.log('[GenericUrlParser] ChatGPT.com title processing:', {
+              url: url.href,
+              inputTitle: title,
+              isGenericTitle,
+              chatId
+            });
+
+            // If browser title is meaningful, keep it; otherwise extract from URL
+            if (isGenericTitle || !title) {
+              // Try URL title parameter (shared conversations)
+              if (url.searchParams.has('title')) {
+                const urlTitle = decodeURIComponent(url.searchParams.get('title'));
+                if (urlTitle) {
+                  title = urlTitle;
+                } else {
+                  // Use fallback title generation like sample-working.js
+                  title = GenericUrlParser.generateFallbackTitle('ChatGPT', url, Date.now(), chatId);
+                }
+              } else {
+                // Use fallback title generation like sample-working.js
+                title = GenericUrlParser.generateFallbackTitle('ChatGPT', url, Date.now(), chatId);
               }
-            }
-
-            // If ?title query param exists (shared conversation links)
-            if (!title && url.searchParams.has('title')) {
-              title = decodeURIComponent(url.searchParams.get('title'));
-            }
-
-            // Fallback to <title> tag
-            if (!title && typeof document !== 'undefined' && document.title) {
-              const pageTitle = document.title.trim();
-              if (pageTitle && !['ChatGPT', 'New chat'].includes(pageTitle)) {
-                title = pageTitle;
-              }
-            }
-
-            // Last resort → generic
-            if (!title) {
-              title = `Chat ${chatId}`;
             }
 
             return {
@@ -730,6 +771,35 @@ export class GenericUrlParser {
   };
 
   /**
+   * Generate fallback titles for AI chats (based on sample-working.js)
+   * @param {string} platform - Platform name
+   * @param {URL} url - URL object
+   * @param {number} timestamp - Timestamp for title generation
+   * @param {string} chatId - Chat ID if available
+   * @returns {string} - Generated title
+   */
+  static generateFallbackTitle(platform, url, timestamp, chatId = null) {
+    const date = new Date(timestamp);
+    const timeStr = date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    // Try to extract chat ID from URL first
+    const chatIdMatch = url.href.match(/([a-f0-9-]{8,})/);
+    if (chatIdMatch || chatId) {
+      const id = chatId || chatIdMatch[1];
+      return `${platform} Chat ${id.substring(0, 8)}`;
+    }
+
+    // Use fallback format with timestamp
+    return `${platform} Chat - ${timeStr}`;
+  }
+
+  /**
    * Parse a URL and return structured information
    * @param {string} url - URL to parse
    * @param {string} [domTitle] - Optional DOM title from the actual page
@@ -777,25 +847,88 @@ export class GenericUrlParser {
   }
 
   /**
+   * Check if a title is generic/meaningless
+   * @param {string} title - The title to check
+   * @returns {boolean} - True if the title is generic
+   */
+  static isGenericTitle(title) {
+    if (!title) return true;
+
+    const genericTitles = [
+      'ChatGPT', 'Claude', 'Gemini', 'Perplexity', 'Copilot', 'Grok',
+      'New Chat', 'Untitled', 'chat.openai.com', 'Loading'
+    ];
+
+    return genericTitles.some(generic =>
+      title === generic ||
+      title.toLowerCase().includes(generic.toLowerCase()) ||
+      title.toLowerCase().includes('new chat') ||
+      title.toLowerCase().includes('untitled') ||
+      title.toLowerCase().includes('loading')
+    );
+  }
+
+  /**
    * Parse multiple URLs and group them
-   * @param {Array} urls - Array of URLs to parse
+   * @param {Array} items - Array of URLs or items with url/title to parse
    * @returns {Object} - Grouped results with stats
    */
-  static parseMultiple(urls) {
-    if (!Array.isArray(urls)) return { groups: [], stats: { total: 0, parsed: 0 } };
+  static async parseMultiple(items) {
+    if (!Array.isArray(items)) return { groups: [], stats: { total: 0, parsed: 0 } };
 
     const groups = new Map();
     const stats = {
-      total: urls.length,
+      total: items.length,
       parsed: 0,
       byPlatform: {},
       byType: {},
       byWorkspace: {}
     };
 
-    urls.forEach(url => {
-      const parsed = this.parse(url);
-      if (!parsed) return;
+    // Process items with existing titles and optional history enrichment
+    const browserAPI = typeof chrome !== 'undefined' ? chrome : null;
+
+    for (const item of items) {
+      // Extract URL and title from item (support both string URLs and item objects)
+      const url = typeof item === 'string' ? item : item.url;
+      const existingTitle = typeof item === 'object' ? item.title : null;
+
+      let finalTitle = existingTitle;
+
+      // Always enrich ChatGPT URLs to get the best possible titles
+      const isChatGPT = url.includes('chatgpt.com') || url.includes('chat.openai.com');
+
+      if (browserAPI && isChatGPT) {
+        try {
+          console.log(`[GenericUrlParser] Enriching ChatGPT URL: ${url} (existing: "${existingTitle}")`);
+          const enriched = await this.enrichWithHistory(url, existingTitle, browserAPI);
+          if (enriched.title && !this.isGenericTitle(enriched.title)) {
+            console.log(`[GenericUrlParser] Using enriched title: "${enriched.title}"`);
+            finalTitle = enriched.title;
+          } else {
+            console.log(`[GenericUrlParser] Enriched title was generic or null: "${enriched.title}"`);
+          }
+        } catch (err) {
+          console.warn('History enrichment failed for:', url, err);
+        }
+      }
+
+      // Only log ChatGPT processing for debugging
+      if (isChatGPT) {
+        console.log(`[GenericUrlParser] Processing ChatGPT: ${url} with title: "${finalTitle}"`);
+      }
+
+      const parsed = this.parse(url, finalTitle);
+      if (!parsed) {
+        if (isChatGPT) {
+          console.log(`[GenericUrlParser] Failed to parse ChatGPT URL: ${url}`);
+        }
+        continue;
+      }
+
+      if (isChatGPT) {
+        console.log(`[GenericUrlParser] Successfully parsed ChatGPT:`, parsed);
+      }
 
       stats.parsed++;
 
@@ -831,12 +964,20 @@ export class GenericUrlParser {
         details: parsed.details,
         timestamp: parsed.timestamp
       });
-    });
+    }
 
-    return {
+    const result = {
       groups: Array.from(groups.values()).sort((a, b) => b.urls.length - a.urls.length),
       stats
     };
+
+    console.log(`[GenericUrlParser] parseMultiple result:`, {
+      totalGroups: result.groups.length,
+      chatgptGroups: result.groups.filter(g => g.platform?.name === 'ChatGPT').length,
+      stats: result.stats
+    });
+
+    return result;
   }
 
   /**
@@ -1121,14 +1262,22 @@ export class GenericUrlParser {
    * @param {Array} existingWorkspaces - Existing workspaces to check against
    * @returns {Array} - Array of workspace configurations to create
    */
-  static createWorkspacesFromUrls(urls, existingWorkspaces = []) {
+  static async createWorkspacesFromUrls(urls, existingWorkspaces = []) {
     if (!Array.isArray(urls)) return [];
     if (!Array.isArray(existingWorkspaces)) existingWorkspaces = [];
 
     // Filter out URLs that should be excluded (OAuth, login, settings, etc.)
     const filteredUrls = urls.filter(url => url && !this.shouldExclude(url));
 
-    const { groups } = this.parseMultiple(filteredUrls);
+    console.log('[GenericUrlParser] createWorkspacesFromUrls processing:', filteredUrls.length, 'URLs');
+    const { groups } = await GenericUrlParser.parseMultiple(filteredUrls);
+    console.log('[GenericUrlParser] createWorkspacesFromUrls got', groups?.length || 0, 'groups');
+
+    if (!Array.isArray(groups)) {
+      console.warn('[GenericUrlParser] createWorkspacesFromUrls: groups is not an array:', groups);
+      return [];
+    }
+
     const existingNames = new Set(existingWorkspaces.map(ws => ws.name?.toLowerCase()));
     const workspacesToCreate = [];
 
@@ -1218,15 +1367,35 @@ export class GenericUrlParser {
     if (!browserAPI?.history) return { url, title };
 
     try {
+      // Debug logging to see what we're searching for
+      console.log('[GenericUrlParser] enrichWithHistory searching for:', url);
+
       const historyItems = await browserAPI.history.search({
         text: url,
-        maxResults: 5,
+        maxResults: 10,
         startTime: Date.now() - (30 * 24 * 60 * 60 * 1000) // last 30 days
       });
 
+      console.log('[GenericUrlParser] enrichWithHistory found:', historyItems?.length || 0, 'items');
+
       if (historyItems?.length) {
-        const match = historyItems.find(h => h.url === url && h.title);
-        if (match && match.title && match.title !== title) {
+        // Find exact URL match first
+        let match = historyItems.find(h => h.url === url && h.title && h.title.trim().length > 0);
+
+        // If no exact match, try partial match for ChatGPT conversation IDs
+        if (!match && url.includes('/c/')) {
+          const conversationId = url.match(/\/c\/([a-f0-9-]+)/)?.[1];
+          if (conversationId) {
+            match = historyItems.find(h =>
+              h.url && h.url.includes(conversationId) &&
+              h.title && h.title.trim().length > 0 &&
+              h.title !== 'ChatGPT' && h.title !== 'New Chat'
+            );
+          }
+        }
+
+        if (match && match.title) {
+          console.log('[GenericUrlParser] enrichWithHistory found title:', match.title, 'for URL:', url);
           return { url, title: match.title };
         }
       }
@@ -1234,6 +1403,7 @@ export class GenericUrlParser {
       console.warn("History enrichment failed", err);
     }
 
+    console.log('[GenericUrlParser] enrichWithHistory no title found, using fallback for:', url);
     return { url, title };
   }
 }

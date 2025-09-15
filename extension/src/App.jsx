@@ -219,7 +219,7 @@ export default function App() {
         }
 
         // Create platform-specific workspaces (GitHub, ChatGPT, etc.)
-        const platformWorkspacesToCreate = GenericUrlParser.createWorkspacesFromUrls(urls, existingWorkspaces);
+        const platformWorkspacesToCreate = await GenericUrlParser.createWorkspacesFromUrls(urls, existingWorkspaces);
 
         // Create category-based workspaces (Social, Shopping, etc.)
         const categoryWorkspacesToCreate = createCategoryBasedWorkspaces(urls, existingWorkspaces);

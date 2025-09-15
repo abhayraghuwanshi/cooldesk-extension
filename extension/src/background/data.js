@@ -41,6 +41,19 @@ async function collectHistory() {
   const startTime = Date.now() - (1000 * 60 * 60 * 24 * days);
   const results = await chrome.history.search({ text: '', startTime, maxResults })
   console.log(`[AI][collect] History collected: ${results.length}`)
+
+  // Debug: Check for ChatGPT URLs in collected history
+  const chatgptUrls = results.filter(h =>
+    h.url && (h.url.includes('chatgpt.com') || h.url.includes('chat.openai.com'))
+  );
+  console.log(`[AI][collect] ChatGPT URLs found in history: ${chatgptUrls.length}`);
+  if (chatgptUrls.length > 0) {
+    console.log('[AI][collect] Sample ChatGPT URLs:', chatgptUrls.slice(0, 3).map(u => ({
+      url: u.url,
+      title: u.title
+    })));
+  }
+
   return results.map((h) => ({
     title: h.title || (h.url ? new URL(h.url).hostname : 'Untitled'),
     url: h.url,

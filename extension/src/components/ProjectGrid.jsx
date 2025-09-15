@@ -37,61 +37,122 @@ export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddR
   }, []);
 
   // Parse URLs and create hierarchical structure
-  const projectGroups = useMemo(() => {
-    const urls = items
-      .filter(item => item && typeof item.url === 'string' && item.url.length > 0)
-      .map(item => item.url);
+  const [projectGroups, setProjectGroups] = useState({ allGroups: [], categoryStats: new Map() });
+  const [workspaceOptions, setWorkspaceOptions] = useState([{ id: 'All', name: 'All', count: 0 }]);
 
-    const parseResult = GenericUrlParser.parseMultiple(urls);
+  useEffect(() => {
+    const processUrls = async () => {
+      const validItems = items
+        .filter(item => item && typeof item.url === 'string' && item.url.length > 0);
 
-    // Transform all groups to a unified format
-    const allGroups = [];
+      const chatgptItems = validItems.filter(item =>
+        item.url.includes('chatgpt.com') || item.url.includes('chat.openai.com')
+      );
+      console.log('[ProjectGrid] Processing items count:', validItems.length);
+      if (chatgptItems.length > 0) {
+        console.log('[ProjectGrid] ChatGPT items found:', chatgptItems.length);
+        console.log('[ProjectGrid] Sample ChatGPT items:', chatgptItems.slice(0, 3).map(item => ({
+          url: item.url,
+          title: item.title,
+          type: item.type
+        })));
+      } else {
+        console.log('[ProjectGrid] No ChatGPT items found in data');
+      }
 
-    parseResult.groups.forEach(group => {
-      const values = group.urls.map(urlData => {
-        const originalItem = items.find(item => item.url === urlData.url);
-        return {
-          ...originalItem,
-          title: urlData.title,
-          extractedData: urlData.details,
-          timestamp: urlData.timestamp
-        };
-      }).sort((a, b) => {
-        const at = (typeof a?.lastVisitTime === 'number' ? a.lastVisitTime : 0) ||
-          (typeof a?.dateAdded === 'number' ? a.dateAdded : 0);
-        const bt = (typeof b?.lastVisitTime === 'number' ? b.lastVisitTime : 0) ||
-          (typeof b?.dateAdded === 'number' ? b.dateAdded : 0);
-        return bt - at;
+      const parseResult = await GenericUrlParser.parseMultiple(validItems);
+
+      console.log('[ProjectGrid] Parse result:', {
+        totalGroups: parseResult.groups.length,
+        stats: parseResult.stats,
+        chatgptGroups: parseResult.groups.filter(g =>
+          g.platform?.name === 'ChatGPT' || g.workspace?.includes('ChatGPT')
+        ).length
       });
 
-      allGroups.push({
-        key: group.workspace,
-        info: {
-          category: group.platform.id,
-          platform: group.platform.name,
-          displayName: group.workspace,
-          type: group.type
-        },
-        values,
-        workspace: {
-          id: group.platform.id,
-          name: group.platform.name,
-          type: group.type,
+      // Transform all groups to a unified format
+      const allGroups = [];
+
+      if (!parseResult.groups || !Array.isArray(parseResult.groups)) {
+        console.error('[ProjectGrid] parseResult.groups is not an array:', parseResult);
+        setProjectGroups({ allGroups: [], categoryStats: new Map() });
+        setWorkspaceOptions([{ id: 'All', name: 'All', count: 0 }]);
+        return;
+      }
+
+      parseResult.groups.forEach(group => {
+        const values = group.urls.map(urlData => {
+          const originalItem = items.find(item => item.url === urlData.url);
+          return {
+            ...originalItem,
+            title: urlData.title,
+            extractedData: urlData.details,
+            timestamp: urlData.timestamp
+          };
+        }).sort((a, b) => {
+          const at = (typeof a?.lastVisitTime === 'number' ? a.lastVisitTime : 0) ||
+            (typeof a?.dateAdded === 'number' ? a.dateAdded : 0);
+          const bt = (typeof b?.lastVisitTime === 'number' ? b.lastVisitTime : 0) ||
+            (typeof b?.dateAdded === 'number' ? b.dateAdded : 0);
+          return bt - at;
+        });
+
+        allGroups.push({
+          key: group.workspace,
+          info: {
+            category: group.platform.id,
+            platform: group.platform.name,
+            displayName: group.workspace,
+            type: group.type
+          },
+          values,
+          workspace: {
+            id: group.platform.id,
+            name: group.platform.name,
+            type: group.type,
+            favicon: group.favicon
+          },
           favicon: group.favicon
-        },
-        favicon: group.favicon
+        });
       });
-    });
 
-    const categoryStats = new Map();
-    Object.entries(parseResult.stats.byPlatform).forEach(([platformId, count]) => {
-      categoryStats.set(platformId, count);
-    });
+      const categoryStats = new Map();
+      Object.entries(parseResult.stats.byPlatform).forEach(([platformId, count]) => {
+        categoryStats.set(platformId, count);
+      });
 
-    return {
-      allGroups,
-      categoryStats
+      setProjectGroups({
+        allGroups,
+        categoryStats
+      });
+
+      // Create workspace filter options
+      const options = [{ id: 'All', name: 'All', count: items.length }];
+
+      console.log('Parse result stats:', parseResult.stats); // Debug log
+
+      // Get categories from workspace patterns
+      const categories = GenericUrlParser.getAllPlatforms();
+
+      // Add platform-based options that have data
+      categories.forEach(category => {
+        const platformCount = parseResult.stats.byPlatform[category.name] || 0;
+
+        if (platformCount > 0) {
+          options.push({
+            id: category.id,
+            name: category.name,
+            count: platformCount,
+            color: category.color,
+            favicon: category.favicon
+          });
+        }
+      });
+
+      setWorkspaceOptions(options);
     };
+
+    processUrls();
   }, [items]);
 
   // Filter content by selected workspace
@@ -118,42 +179,6 @@ export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddR
     };
   }, [projectGroups, selectedWorkspace]);
 
-  // Create workspace filter options using categories from workspace patterns
-  const workspaceOptions = useMemo(() => {
-    const options = [{ id: 'All', name: 'All', count: items.length }];
-
-    // Get parse results with category stats
-    const urls = items.filter(item => item?.url).map(item => item.url);
-    const parseResult = GenericUrlParser.parseMultiple(urls);
-
-    console.log('Parse result stats:', parseResult.stats); // Debug log
-
-    // Get categories from workspace patterns
-    const categories = GenericUrlParser.getAllPlatforms();
-
-    // Add platform-based options that have data
-    categories.forEach(category => {
-      const platformCount = parseResult.stats.byPlatform[category.name] || 0;
-
-      if (platformCount > 0) {
-        options.push({
-          id: category.id,
-          name: category.name,
-          count: platformCount,
-          icon: category.icon,
-          color: '#666666'
-        });
-      }
-    });
-
-    console.log('Final workspace options:', options); // Debug log
-
-    return options.sort((a, b) => {
-      if (a.id === 'All') return -1;
-      if (b.id === 'All') return 1;
-      return b.count - a.count;
-    });
-  }, [items]);
 
 
   const onKeyDown = (e) => {
