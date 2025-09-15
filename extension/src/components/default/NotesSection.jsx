@@ -737,7 +737,19 @@ export function NotesSection() {
       </div>
 
       {/* Notes List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div
+        className="notes-scrollable-container"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          maxHeight: '350px',
+          overflowY: 'auto',
+          paddingRight: '4px',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(255, 255, 255, 0.3) transparent'
+        }}
+      >
         {filteredNotes.length === 0 && (
           <div style={{
             textAlign: 'center',
@@ -751,7 +763,7 @@ export function NotesSection() {
           </div>
         )}
 
-        {(showAllNotes ? filteredNotes : filteredNotes.slice(0, notesDisplayLimit)).map(note => (
+        {filteredNotes.map(note => (
           <NoteDisplay
             key={note.id}
             note={note}

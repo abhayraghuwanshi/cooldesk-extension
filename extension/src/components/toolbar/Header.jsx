@@ -3,16 +3,13 @@ import {
   faCalendarDays,
   faCircleQuestion,
   faEnvelope,
-  faMicrophone,
-  faPalette,
-  faPlus
+  faPalette
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useState } from 'react';
 import { getUIState, saveUIState } from '../../db/index.js';
 import MusicControls from './MusicControls';
 import { SearchBox } from './SearchBox.jsx';
-import VoiceNavigation from './VoiceNavigation';
 
 
 export function Header({
@@ -32,7 +29,6 @@ export function Header({
 }) {
   const [autoSync, setAutoSync] = useState(true);
   const [now, setNow] = useState(new Date());
-  const [showVoiceNavigation, setShowVoiceNavigation] = useState(false);
   // Load Auto Sync from UI state
   useEffect(() => {
     (async () => {
@@ -210,34 +206,7 @@ export function Header({
         })()}
         <MusicControls />
 
-        <button
-          className={`icon-btn ${showVoiceNavigation ? 'active' : ''}`}
-          onClick={() => setShowVoiceNavigation(!showVoiceNavigation)}
-          title={showVoiceNavigation ? "Hide Voice Navigation" : "Show Voice Navigation"}
-          aria-pressed={showVoiceNavigation}
-          style={{
-            background: showVoiceNavigation
-              ? 'linear-gradient(135deg, var(--accent-primary, #34C759), var(--accent-secondary, #30D158))'
-              : 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-            borderColor: showVoiceNavigation ? 'var(--accent-primary, #34C759)' : 'var(--border-primary, rgba(255, 255, 255, 0.1))',
-            color: showVoiceNavigation ? 'white' : 'var(--text, #e5e7eb)'
-          }}
-        >
-          <FontAwesomeIcon icon={faMicrophone} />
-        </button>
 
-        <button
-          className="icon-btn"
-          onClick={() => setShowCreateWorkspace(true)}
-          title="Create Workspace"
-          style={{
-            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
-            color: 'var(--text, #e5e7eb)'
-          }}
-        >
-          <FontAwesomeIcon icon={faPlus} />
-        </button>
         <button
           className="icon-btn"
           onClick={() => setShowSettings(true)}
@@ -324,20 +293,6 @@ export function Header({
           {timeStr}
         </div>
       </div>
-      {showVoiceNavigation && (
-        <div style={{
-          position: 'fixed',
-          top: isFooter ? 'auto' : '60px',
-          bottom: isFooter ? '60px' : 'auto',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 1999,
-          maxWidth: '600px',
-          width: '90%'
-        }}>
-          <VoiceNavigation />
-        </div>
-      )}
     </header>
   );
 }

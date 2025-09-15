@@ -465,10 +465,16 @@ export function DailyNotesSection() {
           background: 'rgba(255, 255, 255, 0.05)',
           borderRadius: 12,
           border: '1px solid rgba(255, 255, 255, 0.1)',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          maxHeight: '350px'
         }}>
           {editingDailyNotes ? (
-            <div style={{ padding: 16 }}>
+            <div style={{
+              padding: 16,
+              maxHeight: '350px',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
               <textarea
                 value={dailyNotesText}
                 onChange={(e) => setDailyNotesText(e.target.value)}
@@ -476,20 +482,19 @@ export function DailyNotesSection() {
                 autoFocus
                 style={{
                   width: '100%',
-                  minHeight: 120,
+                  height: '250px',
                   padding: 0,
                   border: 'none',
                   background: 'transparent',
                   color: '#ffffff',
                   fontSize: 16,
                   lineHeight: 1.4,
-                  resize: 'vertical',
+                  resize: 'none',
                   fontFamily: 'inherit',
-                  outline: 'none'
-                }}
-                onInput={(e) => {
-                  e.target.style.height = 'auto';
-                  e.target.style.height = Math.max(120, e.target.scrollHeight) + 'px';
+                  outline: 'none',
+                  overflowY: 'auto',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(255, 255, 255, 0.3) transparent'
                 }}
               />
               <div style={{
@@ -549,8 +554,10 @@ export function DailyNotesSection() {
           ) : (
             <div
               onClick={() => setEditingDailyNotes(true)}
+              className="daily-notes-scrollable-container"
               style={{
                 minHeight: 100,
+                maxHeight: '350px',
                 padding: 16,
                 color: '#ffffff',
                 fontSize: 16,
@@ -558,7 +565,10 @@ export function DailyNotesSection() {
                 cursor: 'pointer',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
-                transition: 'all 0.2s ease'
+                transition: 'all 0.2s ease',
+                overflowY: 'auto',
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'rgba(255, 255, 255, 0.3) transparent'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';

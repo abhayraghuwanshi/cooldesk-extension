@@ -290,6 +290,11 @@ export default function MusicControls() {
     }
   }, [activeApp?.id]);
 
+  // Don't render if no media apps are detected
+  if (mediaApps.length === 0) {
+    return null;
+  }
+
   return (
     <div className="music-controls" style={{ display: 'flex', gap: '4px', alignItems: 'center', marginRight: '8px' }}>
       {/* App selector dropdown */}

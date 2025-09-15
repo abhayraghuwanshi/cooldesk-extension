@@ -48,3 +48,4 @@ This is a Chrome Extension with:
 - URL parsing and auto-workspace creation
 - Activity tracking and analytics
 - Multiple content scripts for different functionality
+- @src\components\toolbar\Header.jsx remove the microphone from here
