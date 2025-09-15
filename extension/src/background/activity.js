@@ -270,7 +270,8 @@ export function initializeActivityTracking() {
         try {
             const { activityMirroredOnce } = await chrome.storage.local.get(['activityMirroredOnce']);
             if (activityMirroredOnce) return;
-            const rows = await getAllActivity();
+            const result = await getAllActivity();
+            const rows = result?.success ? result.data : [];
             const list = (Array.isArray(rows) ? rows : [])
                 .map(r => ({
                     url: String(r?.url || ''),
@@ -416,87 +417,144 @@ export function handleActivityMessage(msg, sender) {
 
 // Message handling functions for activity-related requests (called from main background script)
 export async function handleGetActivityData(msg, sender, sendResponse) {
+    const startTime = Date.now();
+    const timeoutMs = 5000; // 5 second internal timeout
+
     try {
+        console.log('[Activity Debug] Starting handleGetActivityData with', timeoutMs, 'ms timeout');
+
         // Allow overriding cutoff via chrome.storage.local: activityDays (number)
         const { activityDays } = await chrome.storage.local.get(['activityDays']);
-        const days = Number.isFinite(Number(activityDays)) && Number(activityDays) > 0 ? Number(activityDays) : 90;
+        const days = Number.isFinite(Number(activityDays)) && Number(activityDays) > 0 ? Number(activityDays) : 30;
         const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
 
         console.log('[Activity Debug] Getting activity data with cutoff:', new Date(cutoffMs).toISOString());
 
-        const rows = await getAllActivity();
+        const result = await getAllActivity();
+        console.log('[Activity Debug] getAllActivity completed in', Date.now() - startTime, 'ms');
+        console.log('[Activity Debug] getAllActivity result:', { success: result?.success, dataLength: result?.data?.length || 0 });
+
+        const rows = result?.success ? result.data : [];
         console.log('[Activity Debug] Raw activity rows:', rows?.length || 0);
 
+        if (!rows || rows.length === 0) {
+            console.log('[Activity Debug] No data found, sending empty response');
+            sendResponse({ ok: true, rows: [] });
+            return;
+        }
+
+        // Limit processing to avoid timeout - take most recent records first
+        const recentRows = rows.slice(0, 500); // Process max 500 records for last 30 days
+        console.log('[Activity Debug] Processing', recentRows.length, 'of', rows.length, 'total records');
+
         // Transform and filter recent activity data to handle both legacy and new time-series formats
-        const normalized = (Array.isArray(rows) ? rows : [])
-            .map(r => {
-                // Normalize the record format for frontend consumption
-                const result = {
-                    url: r.url,
-                    time: r.time || r.metrics?.timeSpent || 0,
-                    scroll: r.scroll || r.metrics?.scrollDepth || 0,
-                    clicks: r.clicks || r.metrics?.clicks || 0,
-                    forms: r.forms || r.metrics?.forms || 0,
-                    updatedAt: r.updatedAt || r.timestamp || 0,
-                    timestamp: r.timestamp || r.updatedAt || 0
-                };
-                
-                console.log('[Activity Debug] Normalized record:', {
+        const normalized = recentRows.map((r, index) => {
+            // Normalize the record format for frontend consumption
+            const result = {
+                url: r.url,
+                time: r.time || r.metrics?.timeSpent || 0,
+                scroll: r.scroll || r.metrics?.scrollDepth || 0,
+                clicks: r.clicks || r.metrics?.clicks || 0,
+                forms: r.forms || r.metrics?.forms || 0,
+                updatedAt: r.updatedAt || r.timestamp || 0,
+                timestamp: r.timestamp || r.updatedAt || 0
+            };
+
+            // Only log first 3 records to avoid spam
+            if (index < 3) {
+                console.log('[Activity Debug] Normalized record', index + 1, ':', {
                     url: result.url,
                     time: result.time,
                     timestamp: result.timestamp,
                     timestampDate: new Date(result.timestamp).toISOString()
                 });
-                
-                return result;
-            });
+            }
 
-        console.log('[Activity Debug] Normalized records:', normalized.length);
+            return result;
+        });
+
+        console.log('[Activity Debug] Normalized records:', normalized.length, 'in', Date.now() - startTime, 'ms');
+
+        let acceptedCount = 0;
+        let rejectedCount = 0;
 
         const filtered = normalized.filter(r => {
             // Skip URLs that are empty or problematic browser internals
             if (!r.url) {
-                console.log('[Activity Debug] Skipping empty URL');
+                if (rejectedCount < 2) console.log('[Activity Debug] Skipping empty URL');
+                rejectedCount++;
                 return false;
             }
 
             // Skip some browser internals but keep useful ones like new tab pages
-            if (r.url.startsWith('chrome-extension://') || 
-                r.url.startsWith('chrome://settings') || 
+            if (r.url.startsWith('chrome-extension://') ||
+                r.url.startsWith('chrome://settings') ||
                 r.url.startsWith('chrome://extensions') ||
                 r.url.startsWith('about:blank')) {
-                console.log('[Activity Debug] Skipping browser internal URL:', r.url);
+                if (rejectedCount < 2) console.log('[Activity Debug] Skipping browser internal URL:', r.url.substring(0, 50));
+                rejectedCount++;
                 return false;
             }
 
-            // Check recency using updatedAt/timestamp  
+            // Check recency using updatedAt/timestamp
             const timestamp = r.updatedAt || r.timestamp || 0;
             const isRecent = timestamp > 0 && timestamp >= cutoffMs;
             const hasActivity = (Number(r.time) || 0) > 0;
-            
-            const shouldKeep = isRecent || hasActivity;
-            
-            console.log('[Activity Debug] Filter decision for', r.url, {
-                timestamp,
-                timestampDate: timestamp ? new Date(timestamp).toISOString() : 'none',
-                isRecent,
-                hasActivity: hasActivity,
-                time: r.time,
-                shouldKeep
-            });
-            
+            const hasInteractions = (Number(r.clicks) || 0) > 0 || (Number(r.scroll) || 0) > 0 || (Number(r.forms) || 0) > 0;
+
+            // More lenient filtering: keep if has any activity/interaction OR is somewhat recent (30 days)
+            const recentThreshold = Date.now() - 30 * 24 * 60 * 60 * 1000; // 30 days
+            const isRecentlyActive = timestamp > recentThreshold;
+            const shouldKeep = isRecent || hasActivity || hasInteractions || isRecentlyActive;
+
+            if (shouldKeep) {
+                if (acceptedCount < 3) {
+                    console.log('[Activity Debug] ACCEPTED record for', r.url?.substring(0, 50), {
+                        time: r.time,
+                        clicks: r.clicks,
+                        scroll: r.scroll,
+                        timestampDate: timestamp ? new Date(timestamp).toISOString() : 'none'
+                    });
+                }
+                acceptedCount++;
+            } else {
+                if (rejectedCount < 3) {
+                    console.log('[Activity Debug] REJECTED record for', r.url?.substring(0, 50), {
+                        timestamp,
+                        hasActivity,
+                        hasInteractions,
+                        isRecentlyActive
+                    });
+                }
+                rejectedCount++;
+            }
+
             return shouldKeep;
         });
 
-        console.log('[Activity Debug] Filtered records:', filtered.length);
+        console.log(`[Activity Debug] Filtering completed: ${acceptedCount} accepted, ${rejectedCount} rejected, ${filtered.length} total`);
 
         // Sort by time descending to keep most relevant first
         const sorted = filtered.sort((a, b) => (Number(b.time) || 0) - (Number(a.time) || 0));
 
-        console.log('[Activity Debug] Final sorted records:', sorted.length);
-        sorted.slice(0, 5).forEach((r, i) => {
-            console.log(`[Activity Debug] Top ${i+1}:`, { url: r.url, time: r.time });
-        });
+        const totalTime = Date.now() - startTime;
+        console.log(`[Activity Debug] Processing completed in ${totalTime}ms: ${sorted.length} final records`);
+
+        // Check if we're approaching timeout
+        if (totalTime > timeoutMs - 500) {
+            console.warn(`[Activity Debug] Processing took ${totalTime}ms, close to ${timeoutMs}ms timeout`);
+        }
+
+        if (sorted.length > 0) {
+            sorted.slice(0, 3).forEach((r, i) => {
+                console.log(`[Activity Debug] Top ${i + 1}:`, {
+                    url: r.url?.substring(0, 50),
+                    time: r.time,
+                    clicks: r.clicks,
+                    scroll: r.scroll
+                });
+            });
+        }
 
         sendResponse({ ok: true, rows: sorted });
     } catch (e) {

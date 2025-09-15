@@ -417,7 +417,12 @@ export function CoolFeedSection({ tabs, pings }) {
             No activity recorded yet
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            paddingBottom: '16px',
+            flexWrap: 'wrap'
+          }}>
             {displayedSuggestions.map((r) => {
               let host = r.url;
               let originIco = '';
@@ -429,115 +434,100 @@ export function CoolFeedSection({ tabs, pings }) {
                 }
               } catch { }
               const firstSrc = getFaviconUrl(r.url, 64) || originIco || '';
+
+              // Create activity indicator based on score
+              const getActivityColor = (category) => {
+                switch (category) {
+                  case 'strong': return '#34C759'; // Green for high activity
+                  case 'medium': return '#FF9500'; // Orange for medium activity
+                  case 'low': return '#8E8E93';    // Gray for low activity
+                  default: return '#8E8E93';
+                }
+              };
+
+              const activityColor = getActivityColor(r.category);
+              const activityLevel = r.category === 'strong' ? 'High' : r.category === 'medium' ? 'Med' : 'Low';
+
               return (
                 <div
                   key={r.url}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openOrFocusUrl(r.url);
+                  }}
+                  title={`${host}\n${r.url}\nActivity: ${activityLevel} | Time: ${Math.round((r.time || 0) / 1000)}s | Clicks: ${r.clicks || 0}`}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    borderRadius: 12,
-                    padding: 16,
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    backdropFilter: 'blur(10px)',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                    e.currentTarget.style.boxShadow = `0 4px 16px rgba(52, 199, 89, 0.15)`;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  {/* Favicon */}
-                  <div style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 8,
-                    background: 'rgba(52, 199, 89, 0.1)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0,
-                    border: '1px solid rgba(52, 199, 89, 0.2)'
-                  }}>
-                    {firstSrc ? (
-                      <img
-                        src={firstSrc}
-                        alt=""
-                        width={18}
-                        height={18}
-                        style={{ borderRadius: 4 }}
-                        onError={(e) => {
-                          if (originIco && e.currentTarget.src !== originIco) { e.currentTarget.src = originIco; return; }
-                          if (e.currentTarget.src.indexOf('/default-favicon.svg') === -1) { e.currentTarget.src = '/default-favicon.svg'; return; }
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <FontAwesomeIcon
-                        icon={faGlobe}
-                        style={{ fontSize: 14, color: '#34C759' }}
-                      />
-                    )}
-                  </div>
-
-                  {/* Site Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                    padding: '8px',
+                    cursor: 'pointer',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    borderRadius: '8px',
+                    border: `1px solid rgba(255, 255, 255, 0.05)`,
+                    transition: 'all 0.2s ease',
+                    width: '48px',
+                    height: '48px',
+                    position: 'relative'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = `rgba(52, 199, 89, 0.08)`;
+                    e.currentTarget.style.border = `1px solid rgba(52, 199, 89, 0.3)`;
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                    e.currentTarget.style.border = `1px solid rgba(255, 255, 255, 0.05)`;
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  {firstSrc ? (
+                    <img
+                      src={firstSrc}
+                      alt={host}
+                      style={{
+                        width: '24px',
+                        height: '24px',
+                        objectFit: 'contain',
+                        borderRadius: '4px'
+                      }}
+                      onError={(e) => {
+                        if (originIco && e.target.src !== originIco) {
+                          e.target.src = originIco;
+                          return;
+                        }
+                        // If all favicon attempts fail, show globe icon
+                        const fallback = document.createElement('div');
+                        fallback.style.cssText = `
+                          width: 24px;
+                          height: 24px;
+                          border-radius: 4px;
+                          background: rgba(52, 199, 89, 0.2);
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          font-size: 12px;
+                          color: #34C759;
+                        `;
+                        fallback.innerHTML = '🌐';
+                        e.target.parentNode.replaceChild(fallback, e.target);
+                      }}
+                    />
+                  ) : (
                     <div style={{
-                      fontSize: 16,
-                      color: '#ffffff',
-                      lineHeight: 1.4,
-                      fontWeight: 400,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}>
-                      {host}
-                    </div>
-                    <div style={{
-                      fontSize: 13,
-                      color: 'rgba(255, 255, 255, 0.6)',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      marginTop: 2
-                    }}>
-                      Recent activity
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => openOrFocusUrl(r.url)}
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      border: 'none',
-                      background: 'rgba(52, 199, 89, 0.1)',
-                      color: '#34C759',
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '4px',
+                      background: 'rgba(52, 199, 89, 0.2)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    title="Open site"
-                    onMouseEnter={(e) => {
-                      e.target.style.background = '#34C759';
-                      e.target.style.color = 'white';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.background = 'rgba(52, 199, 89, 0.1)';
-                      e.target.style.color = '#34C759';
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 12 }} />
-                  </button>
+                      fontSize: '12px',
+                      color: '#34C759'
+                    }}>
+                      <FontAwesomeIcon icon={faGlobe} />
+                    </div>
+                  )}
                 </div>
               );
             })}
