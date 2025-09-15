@@ -232,12 +232,18 @@ export default function MusicControls() {
     const action = isPlaying ? 'pause' : 'play';
 
     try {
-      // Always send command to the selected app in dropdown
+      // Optimistically update state immediately for better UX
+      setIsPlaying(!isPlaying);
+
+      // Send command to the selected app in dropdown
       await sendMediaCommand(action, activeApp.id);
-      // Check state after command
-      setTimeout(() => checkMediaState(), 300);
+
+      // Verify state after a shorter delay
+      setTimeout(() => checkMediaState(), 100);
     } catch (e) {
       console.warn('Play/pause command failed:', e);
+      // Revert optimistic update on failure
+      setIsPlaying(isPlaying);
     }
   };
 
@@ -253,8 +259,8 @@ export default function MusicControls() {
 
   const handleAppSwitch = (app) => {
     setActiveApp(app);
-    // Check state of the new app immediately
-    setTimeout(() => checkMediaState(), 100);
+    // Check state of the new app immediately with faster response
+    setTimeout(() => checkMediaState(), 50);
   };
 
   // Listen for tab audio state changes
@@ -279,7 +285,7 @@ export default function MusicControls() {
     const interval = setInterval(() => {
       findMediaTabs();
       checkMediaState();
-    }, 2000); // Check every 2 seconds
+    }, 1000); // Check every 1 second for faster updates
     return () => clearInterval(interval);
   }, [activeApp?.id]);
 
