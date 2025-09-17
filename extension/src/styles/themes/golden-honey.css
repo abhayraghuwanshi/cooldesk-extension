@@ -24,6 +24,15 @@
   --glass-bg: rgba(255, 255, 255, 0.05);
   --glass-border: rgba(255, 255, 255, 0.1);
   --shadow-color: rgba(245, 158, 11, 0.4);
+
+  /* Font size variables */
+  --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);
+  --font-size-sm: calc(var(--base-font-size, 14px) * 0.875);
+  --font-size-base: var(--base-font-size, 14px);
+  --font-size-lg: calc(var(--base-font-size, 14px) * 1.125);
+  --font-size-xl: calc(var(--base-font-size, 14px) * 1.25);
+  --font-size-2xl: calc(var(--base-font-size, 14px) * 1.5);
+  --font-size-3xl: calc(var(--base-font-size, 14px) * 1.875);
 }
 
 /* Button styles */

@@ -48,7 +48,7 @@ export function NotesSection() {
               padding: 0,
               marginTop: 2,
               color: lineObj.checked ? '#34C759' : 'rgba(255, 255, 255, 0.6)',
-              fontSize: 16,
+              fontSize: 'var(--font-size-lg)',
               transition: 'color 0.2s ease'
             }}
             title={lineObj.checked ? 'Mark as incomplete' : 'Mark as complete'}
@@ -60,7 +60,7 @@ export function NotesSection() {
             textDecoration: lineObj.checked ? 'line-through' : 'none',
             flex: 1,
             lineHeight: 1.4,
-            fontSize: 16
+            fontSize: 'var(--font-size-lg)'
           }}>
             {lineObj.content}
           </span>
@@ -73,7 +73,7 @@ export function NotesSection() {
         marginBottom: 4,
         color: '#ffffff',
         lineHeight: 1.4,
-        fontSize: 16
+        fontSize: 'var(--font-size-lg)'
       }}>
         {lineObj.content}
       </div>
@@ -605,7 +605,7 @@ export function NotesSection() {
         padding: '0 4px'
       }}>
         <h2 style={{
-          fontSize: 22,
+          fontSize: 'var(--font-size-2xl)',
           fontWeight: 600,
           margin: 0,
           color: '#ffffff',
@@ -623,7 +623,7 @@ export function NotesSection() {
               border: 'none',
               background: 'rgba(255, 255, 255, 0.1)',
               color: 'rgba(255, 255, 255, 0.8)',
-              fontSize: 11,
+              fontSize: 'var(--font-size-xs)',
               fontWeight: 500,
               cursor: 'pointer',
               appearance: 'none',
@@ -658,7 +658,7 @@ export function NotesSection() {
               gap: 4,
               cursor: 'pointer',
               transition: 'all 0.2s ease',
-              fontSize: 11,
+              fontSize: 'var(--font-size-xs)',
               fontWeight: 500
             }}
             title={showAllNotes ? 'Show recent only' : 'Show all notes'}
@@ -706,7 +706,7 @@ export function NotesSection() {
             border: 'none',
             background: 'transparent',
             color: '#ffffff',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             lineHeight: 1.4,
             fontFamily: 'inherit',
             resize: 'none',
@@ -720,7 +720,7 @@ export function NotesSection() {
           }}
         />
         <div style={{
-          fontSize: 12,
+          fontSize: 'var(--font-size-sm)',
           color: 'rgba(255, 255, 255, 0.5)',
           marginTop: 8,
           display: 'flex',
@@ -728,7 +728,7 @@ export function NotesSection() {
           alignItems: 'center'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.6)' }}>
+            <span style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(255, 255, 255, 0.6)' }}>
               Use Cmd+Enter to save • Type '[ ]' for checkboxes
             </span>
           </div>
@@ -745,7 +745,7 @@ export function NotesSection() {
                   border: 'none',
                   background: 'rgba(255, 255, 255, 0.1)',
                   color: recordingMode === 'transcribe' ? '#34C759' : '#FF9500',
-                  fontSize: 11,
+                  fontSize: 'var(--font-size-xs)',
                   fontWeight: 500,
                   cursor: isRecording ? 'not-allowed' : 'pointer',
                   appearance: 'none',
@@ -765,7 +765,7 @@ export function NotesSection() {
                 <option value="audio">Audio Only</option>
               </select>
               <span style={{ 
-                fontSize: 10, 
+                fontSize: 'calc(var(--font-size-xs) * 0.85)', 
                 color: 'rgba(255, 255, 255, 0.5)',
                 fontWeight: 500
               }}>
@@ -788,13 +788,13 @@ export function NotesSection() {
                 gap: 4,
                 cursor: 'pointer',
                 transition: 'all 0.3s ease',
-                fontSize: 12,
+                fontSize: 'var(--font-size-sm)',
                 fontWeight: 500,
                 minWidth: isRecording ? 'auto' : '32px'
               }}
               title={isRecording ? 'Stop recording' : `Start ${recordingMode === 'transcribe' ? 'speech-to-text' : 'audio'} recording`}
             >
-              <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} style={{ fontSize: 10 }} />
+              <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} style={{ fontSize: 'calc(var(--font-size-xs) * 0.85)' }} />
               {isRecording && <span>{formatDuration(recordingTime)}</span>}
             </button>
 
@@ -824,7 +824,7 @@ export function NotesSection() {
                 gap: 4,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                fontSize: 11,
+                fontSize: 'var(--font-size-xs)',
                 fontWeight: 500
               }}
               title="Add checkbox item"
@@ -837,11 +837,11 @@ export function NotesSection() {
                 e.target.style.color = 'rgba(255, 255, 255, 0.8)';
               }}
             >
-              <FontAwesomeIcon icon={faSquare} style={{ fontSize: 10 }} />
+              <FontAwesomeIcon icon={faSquare} style={{ fontSize: 'calc(var(--font-size-xs) * 0.85)' }} />
               ✓
             </button>
 
-            <span style={{ opacity: 0.7, fontSize: 11 }}>
+            <span style={{ opacity: 0.7, fontSize: 'var(--font-size-xs)' }}>
               {text.length} chars {text.trim().length > 3 && !isRecording && '• auto-saving...'}
             </span>
           </div>
@@ -854,7 +854,7 @@ export function NotesSection() {
           <div style={{
             textAlign: 'center',
             color: 'rgba(255, 255, 255, 0.5)',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             fontWeight: 400,
             padding: '40px 20px',
             fontStyle: 'italic'
@@ -905,7 +905,7 @@ export function NotesSection() {
                     border: 'none',
                     background: 'transparent',
                     color: '#ffffff',
-                    fontSize: 16,
+                    fontSize: 'var(--font-size-lg)',
                     lineHeight: 1.4,
                     fontFamily: 'inherit',
                     resize: 'none',
@@ -925,7 +925,7 @@ export function NotesSection() {
                       border: 'none',
                       background: 'rgba(255, 255, 255, 0.1)',
                       color: '#ffffff',
-                      fontSize: 14,
+                      fontSize: 'var(--font-size-base)',
                       fontWeight: 500,
                       cursor: 'pointer',
                       transition: 'all 0.2s ease'
@@ -941,7 +941,7 @@ export function NotesSection() {
                       border: 'none',
                       background: '#007AFF',
                       color: 'white',
-                      fontSize: 14,
+                      fontSize: 'var(--font-size-base)',
                       fontWeight: 500,
                       cursor: 'pointer',
                       transition: 'all 0.2s ease'
@@ -971,13 +971,13 @@ export function NotesSection() {
                           alignItems: 'center',
                           justifyContent: 'center'
                         }}>
-                          <FontAwesomeIcon icon={faMicrophone} style={{ fontSize: 14, color: 'white' }} />
+                          <FontAwesomeIcon icon={faMicrophone} style={{ fontSize: 'var(--font-size-base)', color: 'white' }} />
                         </div>
                         <div>
-                          <div style={{ fontSize: 16, fontWeight: 500, color: '#ffffff' }}>
+                          <div style={{ fontSize: 'var(--font-size-lg)', fontWeight: 500, color: '#ffffff' }}>
                             {n.type === 'voice-text' ? 'Voice + Text Note' : 'Voice Note'}
                           </div>
-                          <div style={{ fontSize: 14, color: 'rgba(255, 255, 255, 0.6)' }}>
+                          <div style={{ fontSize: 'var(--font-size-base)', color: 'rgba(255, 255, 255, 0.6)' }}>
                             {formatDuration(n.duration || 0)}
                             {n.type === 'voice-text' && n.hasTranscription && (
                               <span style={{ marginLeft: 8, color: '#34C759' }}>✓ Transcribed</span>
@@ -989,7 +989,7 @@ export function NotesSection() {
                       {/* Show transcribed text for voice-text notes */}
                       {n.type === 'voice-text' && n.text && (
                         <div style={{
-                          fontSize: 14,
+                          fontSize: 'var(--font-size-base)',
                           color: '#e5e7eb',
                           lineHeight: 1.4,
                           marginBottom: 8,
@@ -1043,7 +1043,7 @@ export function NotesSection() {
                         </div>
                       )}
                       
-                      <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' }}>
+                      <div style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(255, 255, 255, 0.5)' }}>
                         {n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
@@ -1055,7 +1055,7 @@ export function NotesSection() {
                   ) : (
                     <>
                       <div style={{
-                        fontSize: 16,
+                        fontSize: 'var(--font-size-lg)',
                         color: '#ffffff',
                         lineHeight: 1.4,
                         marginBottom: 8,
@@ -1104,7 +1104,7 @@ export function NotesSection() {
                           return n.text;
                         })()}
                       </div>
-                      <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' }}>
+                      <div style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(255, 255, 255, 0.5)' }}>
                         {n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
@@ -1140,7 +1140,7 @@ export function NotesSection() {
                     >
                       <FontAwesomeIcon
                         icon={playingId === n.id ? faPause : faPlay}
-                        style={{ fontSize: 12 }}
+                        style={{ fontSize: 'var(--font-size-sm)' }}
                       />
                     </button>
                   )}
@@ -1176,7 +1176,7 @@ export function NotesSection() {
                       e.target.style.opacity = '0.7';
                     }}
                   >
-                    <FontAwesomeIcon icon={faTrash} style={{ fontSize: 12 }} />
+                    <FontAwesomeIcon icon={faTrash} style={{ fontSize: 'var(--font-size-sm)' }} />
                   </button>
                 </div>
               </div>
@@ -1196,7 +1196,7 @@ export function NotesSection() {
           }}>
             <span style={{
               color: 'rgba(255, 255, 255, 0.6)',
-              fontSize: 12,
+              fontSize: 'var(--font-size-sm)',
               fontWeight: 400
             }}>
               Showing {notesDisplayLimit} of {filteredNotes.length} notes
@@ -1210,7 +1210,7 @@ export function NotesSection() {
                 border: 'none',
                 background: 'rgba(255, 255, 255, 0.1)',
                 color: '#007AFF',
-                fontSize: 11,
+                fontSize: 'var(--font-size-xs)',
                 fontWeight: 500,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease'
@@ -1246,7 +1246,7 @@ export function NotesSection() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid #273043' }}>
-              <div style={{ fontSize: 14, color: '#e5e7eb' }}>
+              <div style={{ fontSize: 'var(--font-size-base)', color: '#e5e7eb' }}>
                 <FontAwesomeIcon icon={faEye} style={{ marginRight: 8, color: '#10b981' }} />
                 {previewNote.type === 'text' ? 'Text Note' : 'Note'}
               </div>

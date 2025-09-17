@@ -32,7 +32,7 @@ export function WorkspaceFilters({ items, active, onChange }) {
             borderRadius: '8px',
             padding: '8px 12px',
             color: ws === active ? '#ffffff' : 'rgba(255, 255, 255, 0.8)',
-            fontSize: '14px',
+            fontSize: 'var(--font-size-base)',
             fontWeight: '500',
             cursor: 'pointer',
             transition: 'all 0.2s ease',

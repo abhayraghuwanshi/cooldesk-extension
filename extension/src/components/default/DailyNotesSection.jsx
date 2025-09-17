@@ -221,7 +221,7 @@ export function DailyNotesSection() {
               {linkText}
               <FontAwesomeIcon
                 icon={faExternalLinkAlt}
-                style={{ marginLeft: 4, fontSize: '0.8em', opacity: 0.7 }}
+                style={{ marginLeft: 4, fontSize: 'calc(var(--font-size-base) * 0.8)', opacity: 0.7 }}
               />
             </button>
           );
@@ -276,14 +276,14 @@ export function DailyNotesSection() {
             gap: 6,
             marginBottom: 8,
             color: 'rgba(255, 255, 255, 0.7)',
-            fontSize: '13px',
+            fontSize: 'var(--font-size-sm)',
             fontWeight: 500
           }}>
             <FontAwesomeIcon
               icon={faGlobe}
               style={{
                 color: '#34C759',
-                fontSize: '11px',
+                fontSize: 'var(--font-size-xs)',
                 flexShrink: 0
               }}
             />
@@ -328,11 +328,11 @@ export function DailyNotesSection() {
               {group.domain}
               <FontAwesomeIcon
                 icon={faExternalLinkAlt}
-                style={{ fontSize: '9px', opacity: 0.7 }}
+                style={{ fontSize: 'calc(var(--font-size-xs) * 0.75)', opacity: 0.7 }}
               />
             </button>
             <span style={{
-              fontSize: '11px',
+              fontSize: 'var(--font-size-xs)',
               color: 'rgba(255, 255, 255, 0.5)',
               background: 'rgba(52, 199, 89, 0.1)',
               padding: '2px 6px',
@@ -356,7 +356,7 @@ export function DailyNotesSection() {
                 icon={faLink}
                 style={{
                   color: '#FF9500',
-                  fontSize: '10px',
+                  fontSize: 'calc(var(--font-size-xs) * 0.85)',
                   marginTop: 3,
                   flexShrink: 0
                 }}
@@ -365,7 +365,7 @@ export function DailyNotesSection() {
                 fontStyle: 'italic',
                 color: 'rgba(255, 255, 255, 0.9)',
                 lineHeight: 1.4,
-                fontSize: '14px'
+                fontSize: 'var(--font-size-base)'
               }}>
                 {selection}
               </span>
@@ -414,7 +414,7 @@ export function DailyNotesSection() {
         padding: '0 4px'
       }}>
         <h2 style={{
-          fontSize: 22,
+          fontSize: 'var(--font-size-2xl)',
           fontWeight: 600,
           margin: 0,
           color: '#ffffff',
@@ -423,11 +423,11 @@ export function DailyNotesSection() {
           alignItems: 'center',
           gap: 8
         }}>
-          <FontAwesomeIcon icon={faCalendarDay} style={{ color: '#FF9500', fontSize: 18 }} />
+          <FontAwesomeIcon icon={faCalendarDay} style={{ color: '#FF9500', fontSize: 'var(--font-size-xl)' }} />
           Thoughts
           {dailyNotes?.metadata?.selectionCount > 0 && (
             <span style={{
-              fontSize: 12,
+              fontSize: 'var(--font-size-sm)',
               color: '#ffffff',
               background: 'rgba(255, 149, 0, 0.2)',
               padding: '4px 8px',
@@ -450,7 +450,7 @@ export function DailyNotesSection() {
             border: 'none',
             background: 'rgba(255, 255, 255, 0.1)',
             color: '#ffffff',
-            fontSize: 14,
+            fontSize: 'var(--font-size-base)',
             fontWeight: 500,
             fontFamily: 'inherit',
             cursor: 'pointer'
@@ -487,7 +487,7 @@ export function DailyNotesSection() {
                   border: 'none',
                   background: 'transparent',
                   color: '#ffffff',
-                  fontSize: 16,
+                  fontSize: 'var(--font-size-lg)',
                   lineHeight: 1.4,
                   resize: 'none',
                   fontFamily: 'inherit',
@@ -516,7 +516,7 @@ export function DailyNotesSection() {
                     border: 'none',
                     background: 'rgba(255, 255, 255, 0.1)',
                     color: '#ffffff',
-                    fontSize: 14,
+                    fontSize: 'var(--font-size-base)',
                     fontWeight: 500,
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
@@ -525,7 +525,7 @@ export function DailyNotesSection() {
                     gap: 6
                   }}
                 >
-                  <FontAwesomeIcon icon={faTimes} style={{ fontSize: 12 }} />
+                  <FontAwesomeIcon icon={faTimes} style={{ fontSize: 'var(--font-size-sm)' }} />
                   Cancel
                 </button>
                 <button
@@ -536,7 +536,7 @@ export function DailyNotesSection() {
                     border: 'none',
                     background: '#007AFF',
                     color: 'white',
-                    fontSize: 14,
+                    fontSize: 'var(--font-size-base)',
                     fontWeight: 500,
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
@@ -546,7 +546,7 @@ export function DailyNotesSection() {
                     boxShadow: '0 2px 8px rgba(0, 122, 255, 0.3)'
                   }}
                 >
-                  <FontAwesomeIcon icon={faSave} style={{ fontSize: 12 }} />
+                  <FontAwesomeIcon icon={faSave} style={{ fontSize: 'var(--font-size-sm)' }} />
                   Save
                 </button>
               </div>
@@ -560,7 +560,7 @@ export function DailyNotesSection() {
                 maxHeight: '350px',
                 padding: 16,
                 color: '#ffffff',
-                fontSize: 16,
+                fontSize: 'var(--font-size-lg)',
                 lineHeight: 1.4,
                 cursor: 'pointer',
                 whiteSpace: 'pre-wrap',
@@ -579,7 +579,7 @@ export function DailyNotesSection() {
             >
               {dailyNotes?.content ?
                 renderContentWithLinks(dailyNotes.content) : (
-                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', fontSize: 15 }}>
+                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', fontSize: 'calc(var(--font-size-base) * 1.07)' }}>
                     Tap to add your daily notes... Selected text from web pages will appear here automatically.
                   </span>
                 )}

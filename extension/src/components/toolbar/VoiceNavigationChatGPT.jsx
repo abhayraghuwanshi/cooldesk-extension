@@ -462,7 +462,7 @@ const VoiceNavigationChatGPT = () => {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 10px;
+        font-size: calc(var(--font-size-xs) * 0.85);
         font-weight: bold;
         border: 2px solid white;
         z-index: 10000;
@@ -718,12 +718,12 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .section-icon {
-          font-size: 18px;
+          font-size: var(--font-size-xl);
           color: var(--accent-primary);
         }
 
         .section-title {
-          font-size: 18px;
+          font-size: var(--font-size-xl);
           font-weight: 600;
           color: var(--text-primary);
           margin: 0;
@@ -778,7 +778,7 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .microphone-icon {
-          font-size: 24px;
+          font-size: var(--font-size-3xl);
           color: white;
           text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
           display: flex;
@@ -823,7 +823,7 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .button-label {
-          font-size: 14px;
+          font-size: var(--font-size-base);
           font-weight: 500;
           color: var(--text-secondary);
           text-align: center;
@@ -841,7 +841,7 @@ const VoiceNavigationChatGPT = () => {
           gap: 8px;
           padding: 12px 16px;
           border-radius: 12px;
-          font-size: 14px;
+          font-size: var(--font-size-base);
           margin-bottom: 8px;
           background: var(--glass-bg);
           backdrop-filter: blur(10px);
@@ -867,7 +867,7 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .status-icon {
-          font-size: 16px;
+          font-size: var(--font-size-lg);
           flex-shrink: 0;
         }
 
@@ -888,12 +888,12 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .help-icon {
-          font-size: 14px;
+          font-size: var(--font-size-base);
           color: var(--accent-warning);
         }
 
         .help-title {
-          font-size: 14px;
+          font-size: var(--font-size-base);
           font-weight: 600;
           color: var(--text-primary);
         }
@@ -913,12 +913,12 @@ const VoiceNavigationChatGPT = () => {
           border: 1px solid var(--border-secondary);
           border-radius: 6px;
           transition: all 0.2s ease;
-          font-size: 11px;
+          font-size: var(--font-size-xs);
           line-height: 1.3;
         }
 
         .command-icon {
-          font-size: 10px;
+          font-size: calc(var(--font-size-xs) * 0.85);
           color: var(--accent-blue);
           flex-shrink: 0;
         }
@@ -947,7 +947,7 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .voice-level-label {
-          font-size: 11px;
+          font-size: var(--font-size-xs);
           color: var(--text-secondary);
           margin-bottom: 6px;
           text-align: center;
@@ -975,7 +975,7 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .waveform-label {
-          font-size: 11px;
+          font-size: var(--font-size-xs);
           color: var(--text-secondary);
           margin-bottom: 8px;
           text-align: center;
@@ -1013,14 +1013,14 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .preview-label {
-          font-size: 11px;
+          font-size: var(--font-size-xs);
           color: var(--text-secondary);
           margin-bottom: 6px;
           text-align: center;
         }
 
         .preview-text {
-          font-size: 13px;
+          font-size: var(--font-size-sm);
           text-align: center;
           line-height: 1.4;
         }
@@ -1060,7 +1060,7 @@ const VoiceNavigationChatGPT = () => {
           }
 
           .microphone-icon {
-            font-size: 20px;
+            font-size: calc(var(--font-size-xl) * 1.1);
           }
 
           .pulse-ring {

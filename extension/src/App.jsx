@@ -22,6 +22,7 @@ import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, g
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getFaviconUrl, getUrlParts } from './utils';
+import { getCurrentFontSize, initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
 // import './utils/debugUrlIndexing'; // Adds debug functions to window
@@ -88,6 +89,7 @@ export default function App() {
   const [processes, setProcesses] = useState([])
   const [useVerticalLayout, setUseVerticalLayout] = useState(false)
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
+  const [fontSize, setFontSize] = useState('medium')
 
 
   // Auto-reset active section after 5 seconds of inactivity
@@ -359,6 +361,12 @@ export default function App() {
     }
   };
 
+  // Handle font size changes
+  const handleFontSizeChange = (fontSizeId) => {
+    setFontSize(fontSizeId);
+    setAndSaveFontSize(fontSizeId);
+  };
+
 
   // Populate settings on load from host (Electron app API), then mirror locally
   useEffect(() => {
@@ -518,7 +526,6 @@ export default function App() {
       ; (async () => {
         try {
           const savedTheme = localStorage.getItem('cooldesk-theme');
-          const savedFontSize = localStorage.getItem('cooldesk-font-size');
           const savedFontFamily = localStorage.getItem('cooldesk-font-family');
 
           const body = document.body;
@@ -552,14 +559,11 @@ export default function App() {
           const themeClass = `bg-${themeToApply}`;
           body.classList.add(themeClass);
 
-          // Apply typography
-          const fontSizes = [
-            { id: 'small', size: '13px' },
-            { id: 'medium', size: '14px' },
-            { id: 'large', size: '16px' },
-            { id: 'extra-large', size: '18px' }
-          ];
+          // Initialize font size using utility
+          const initialFontSize = initializeFontSize();
+          setFontSize(initialFontSize);
 
+          // Apply font family
           const fontFamilies = [
             { id: 'system', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' },
             { id: 'inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' },
@@ -567,13 +571,6 @@ export default function App() {
             { id: 'poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif' },
             { id: 'jetbrains', family: 'JetBrains Mono, Consolas, Monaco, monospace' }
           ];
-
-          if (savedFontSize) {
-            const fontSizeObj = fontSizes.find(f => f.id === savedFontSize);
-            if (fontSizeObj) {
-              body.style.fontSize = fontSizeObj.size;
-            }
-          }
 
           if (savedFontFamily) {
             const fontFamilyObj = fontFamilies.find(f => f.id === savedFontFamily);
@@ -1596,6 +1593,8 @@ export default function App() {
           onSave={saveSettings}
           useVerticalLayout={useVerticalLayout}
           onLayoutToggle={handleLayoutToggle}
+          fontSize={fontSize}
+          onFontSizeChange={handleFontSizeChange}
         />
       </div>
     </div>

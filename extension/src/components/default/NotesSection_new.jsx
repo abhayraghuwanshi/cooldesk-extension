@@ -1,4 +1,4 @@
-import { faEye, faMicrophone, faPause, faPlay, faStop, faTimes, faTrash, faSquareCheck, faSquare } from '@fortawesome/free-solid-svg-icons';
+import { faMicrophone, faPause, faPlay, faSquare, faSquareCheck, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
@@ -60,7 +60,7 @@ const CheckboxLine = ({ line, lineIndex, onToggle }) => {
             padding: 0,
             marginTop: 2,
             color: line.checked ? '#34C759' : 'rgba(255, 255, 255, 0.6)',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             transition: 'color 0.2s ease'
           }}
           title={line.checked ? 'Mark as incomplete' : 'Mark as complete'}
@@ -72,7 +72,7 @@ const CheckboxLine = ({ line, lineIndex, onToggle }) => {
           textDecoration: line.checked ? 'line-through' : 'none',
           flex: 1,
           lineHeight: 1.4,
-          fontSize: 16
+          fontSize: 'var(--font-size-lg)'
         }}>
           {line.content}
         </span>
@@ -85,7 +85,7 @@ const CheckboxLine = ({ line, lineIndex, onToggle }) => {
       marginBottom: 4,
       color: '#ffffff',
       lineHeight: 1.4,
-      fontSize: 16
+      fontSize: 'var(--font-size-lg)'
     }}>
       {line.content}
     </div>
@@ -164,13 +164,13 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                  <FontAwesomeIcon icon={faMicrophone} style={{ fontSize: 14, color: 'white' }} />
+                  <FontAwesomeIcon icon={faMicrophone} style={{ fontSize: 'var(--font-size-base)', color: 'white' }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 500, color: '#ffffff' }}>
+                  <div style={{ fontSize: 'var(--font-size-lg)', fontWeight: 500, color: '#ffffff' }}>
                     {note.type === 'voice-text' ? 'Voice + Text Note' : 'Voice Note'}
                   </div>
-                  <div style={{ fontSize: 14, color: 'rgba(255, 255, 255, 0.6)' }}>
+                  <div style={{ fontSize: 'var(--font-size-base)', color: 'rgba(255, 255, 255, 0.6)' }}>
                     {Math.floor((note.duration || 0) / 60)}:{String((note.duration || 0) % 60).padStart(2, '0')}
                     {note.type === 'voice-text' && note.hasTranscription && (
                       <span style={{ marginLeft: 8, color: '#34C759' }}>✓ Transcribed</span>
@@ -181,20 +181,19 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
 
               {note.type === 'voice-text' && note.text && (
                 <div style={{
-                  fontSize: 14,
+                  fontSize: 'var(--font-size-base)',
                   color: '#e5e7eb',
                   lineHeight: 1.4,
                   marginBottom: 8,
                   padding: '8px 12px',
                   background: 'rgba(255, 255, 255, 0.05)',
                   borderRadius: 8,
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
                 }}>
                   {renderNoteContent()}
                 </div>
               )}
 
-              <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' }}>
+              <div style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(255, 255, 255, 0.5)' }}>
                 {note.createdAt ? new Date(note.createdAt).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
@@ -206,7 +205,7 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
           ) : (
             <>
               <div style={{
-                fontSize: 16,
+                fontSize: 'var(--font-size-lg)',
                 color: '#ffffff',
                 lineHeight: 1.4,
                 marginBottom: 8,
@@ -214,7 +213,7 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
               }}>
                 {renderNoteContent()}
               </div>
-              <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.5)' }}>
+              <div style={{ fontSize: 'var(--font-size-sm)', color: 'rgba(255, 255, 255, 0.5)' }}>
                 {note.createdAt ? new Date(note.createdAt).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
@@ -250,7 +249,7 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
             >
               <FontAwesomeIcon
                 icon={isPlaying ? faPause : faPlay}
-                style={{ fontSize: 12 }}
+                style={{ fontSize: 'var(--font-size-sm)' }}
               />
             </button>
           )}
@@ -286,7 +285,7 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
               e.target.style.opacity = '0.7';
             }}
           >
-            <FontAwesomeIcon icon={faTrash} style={{ fontSize: 12 }} />
+            <FontAwesomeIcon icon={faTrash} style={{ fontSize: 'var(--font-size-sm)' }} />
           </button>
         </div>
       </div>
@@ -462,7 +461,7 @@ export function NotesSection() {
         padding: '0 4px'
       }}>
         <h2 style={{
-          fontSize: 22,
+          fontSize: 'var(--font-size-2xl)',
           fontWeight: 600,
           margin: 0,
           color: '#ffffff',
@@ -480,7 +479,7 @@ export function NotesSection() {
               border: 'none',
               background: 'rgba(255, 255, 255, 0.1)',
               color: 'rgba(255, 255, 255, 0.8)',
-              fontSize: 11,
+              fontSize: 'var(--font-size-xs)',
               fontWeight: 500,
               cursor: 'pointer',
               appearance: 'none'
@@ -520,7 +519,7 @@ export function NotesSection() {
             border: 'none',
             background: 'transparent',
             color: '#ffffff',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             lineHeight: 1.4,
             fontFamily: 'inherit',
             resize: 'none',
@@ -534,7 +533,7 @@ export function NotesSection() {
         />
 
         <div style={{
-          fontSize: 12,
+          fontSize: 'var(--font-size-sm)',
           color: 'rgba(255, 255, 255, 0.5)',
           marginTop: 8,
           display: 'flex',
@@ -555,14 +554,14 @@ export function NotesSection() {
                 background: 'rgba(255, 255, 255, 0.1)',
                 color: 'rgba(255, 255, 255, 0.8)',
                 cursor: 'pointer',
-                fontSize: 11,
+                fontSize: 'var(--font-size-xs)',
                 fontWeight: 500
               }}
               title="Add checkbox item"
             >
-              <FontAwesomeIcon icon={faSquare} style={{ fontSize: 10 }} /> ✓
+              <FontAwesomeIcon icon={faSquare} style={{ fontSize: 'calc(var(--font-size-xs) * 0.85)' }} /> ✓
             </button>
-            <span style={{ opacity: 0.7, fontSize: 11 }}>
+            <span style={{ opacity: 0.7, fontSize: 'var(--font-size-xs)' }}>
               {text.length} chars {text.trim().length > 3 && !isRecording && '• auto-saving...'}
             </span>
           </div>
@@ -575,7 +574,7 @@ export function NotesSection() {
           <div style={{
             textAlign: 'center',
             color: 'rgba(255, 255, 255, 0.5)',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             fontWeight: 400,
             padding: '40px 20px',
             fontStyle: 'italic'

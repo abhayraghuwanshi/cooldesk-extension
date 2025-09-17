@@ -45,7 +45,7 @@ const AccountTab = ({ currentUser }) => {
         style={{
           margin: "0 0 12px 0",
           color: "#e5e7eb",
-          fontSize: "16px",
+          fontSize: "var(--font-size-lg)",
           fontWeight: "500",
         }}
       >
@@ -80,13 +80,13 @@ const AccountTab = ({ currentUser }) => {
                   borderRadius: "50%",
                 }}
               ></div>
-              <strong style={{ color: "#10b981", fontSize: "14px" }}>
+              <strong style={{ color: "#10b981", fontSize: "var(--font-size-base)" }}>
                 Signed In
               </strong>
             </div>
             <div
               style={{
-                fontSize: "13px",
+                fontSize: "var(--font-size-sm)",
                 color: "#9ca3af",
                 marginBottom: "4px",
               }}
@@ -96,7 +96,7 @@ const AccountTab = ({ currentUser }) => {
             </div>
             <div
               style={{
-                fontSize: "13px",
+                fontSize: "var(--font-size-sm)",
                 color: "#9ca3af",
                 marginBottom: "4px",
               }}

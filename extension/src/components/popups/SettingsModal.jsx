@@ -1,4 +1,4 @@
-import { faBullseye, faFolder, faPalette, faRocket, faUser } from '@fortawesome/free-solid-svg-icons';
+import { faBullseye, faFolder, faLayerGroup, faPalette, faRocket, faUser } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { getPersonaUrlCount, personas, validatePersona } from '../../data/personas';
@@ -7,13 +7,15 @@ import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet } from '../../services/extensionApi';
 import { deleteWorkspaceById, getCurrentUser, initializeFirebase, listWorkspaces as listWorkspacesFirebase, onAuthStateChange, signInWithGoogle, signOutUser, subscribeWorkspaceChanges } from '../../services/firebase';
 import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../../services/syncConfig';
+import { setAndSaveFontSize } from '../../utils/fontUtils';
 import AccountTab from '../settings/AccountTab';
+import LayoutTab from '../settings/LayoutTab';
 import PersonasTab from '../settings/PersonasTab';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
 import WorkspacesTab from '../settings/WorkspacesTab';
 
-export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayout, onLayoutToggle }) {
+export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayout, onLayoutToggle, fontSize, onFontSizeChange }) {
   const [localSettings, setLocalSettings] = useState(settings)
   const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState('')
@@ -28,7 +30,6 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
   const [currentUser, setCurrentUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(false)
   const [selectedTheme, setSelectedTheme] = useState('ai-midnight-nebula')
-  const [fontSize, setFontSize] = useState('medium')
   const [fontFamily, setFontFamily] = useState('system')
   const [syncConfig, setSyncConfig] = useState(null)
   const [syncStatus, setSyncStatus] = useState(null)
@@ -58,7 +59,7 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
   };
 
   const handleFontSizeChange = (sizeId) => {
-    setFontSize(sizeId);
+    onFontSizeChange(sizeId);
     applyTheme(selectedTheme, sizeId, fontFamily);
   };
 
@@ -94,21 +95,20 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
     body.classList.add(newThemeClass);
 
     // Apply typography settings
-    const selectedFontSize = fontSizes.find(f => f.id === fontSizeId);
     const selectedFontFamily = fontFamilies.find(f => f.id === fontFamilyId);
 
-    if (selectedFontSize) {
-      body.style.fontSize = selectedFontSize.size;
+    // Use font utility for font size (handles CSS variables properly)
+    if (fontSizeId) {
+      setAndSaveFontSize(fontSizeId);
     }
 
     if (selectedFontFamily) {
       body.style.fontFamily = selectedFontFamily.family;
     }
 
-    // Save preferences
+    // Save preferences (font size handled by font utility)
     try {
       localStorage.setItem('cooldesk-theme', themeId);
-      localStorage.setItem('cooldesk-font-size', fontSizeId);
       localStorage.setItem('cooldesk-font-family', fontFamilyId);
     } catch (e) {
       console.warn('Failed to save theme preferences:', e);
@@ -274,19 +274,53 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
   useEffect(() => {
     try {
       const savedTheme = localStorage.getItem('cooldesk-theme') || 'ai-midnight-nebula';
-      const savedFontSize = localStorage.getItem('cooldesk-font-size') || 'medium';
       const savedFontFamily = localStorage.getItem('cooldesk-font-family') || 'system';
 
       setSelectedTheme(savedTheme);
-      setFontSize(savedFontSize);
       setFontFamily(savedFontFamily);
 
-      // Apply theme immediately for new users
-      applyTheme(savedTheme, savedFontSize, savedFontFamily);
+      // Only apply theme without font size (font size is handled by App.jsx and fontUtils)
+      // Just apply theme class and font family
+      const body = document.body;
+      const themeClasses = [
+        'bg-ai-midnight-nebula',
+        'bg-cosmic-aurora',
+        'bg-sunset-horizon',
+        'bg-forest-depths',
+        'bg-minimal-dark',
+        'bg-ocean-depths',
+        'bg-cherry-blossom',
+        'bg-arctic-frost',
+        'bg-volcanic-ember',
+        'bg-neon-cyberpunk',
+        'bg-white-cred',
+        'bg-orange-warm',
+        'bg-brown-earth',
+        'bg-royal-purple',
+        'bg-golden-honey',
+        'bg-mint-sage',
+        'bg-crimson-fire'
+      ];
+
+      // Remove all theme classes and add the saved one
+      themeClasses.forEach(cls => body.classList.remove(cls));
+      body.classList.add(`bg-${savedTheme}`);
+
+      // Apply font family only
+      const fontFamilies = [
+        { id: 'system', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' },
+        { id: 'inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' },
+        { id: 'roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif' },
+        { id: 'poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif' },
+        { id: 'jetbrains', family: 'JetBrains Mono, Consolas, Monaco, monospace' }
+      ];
+
+      const selectedFontFamily = fontFamilies.find(f => f.id === savedFontFamily);
+      if (selectedFontFamily) {
+        body.style.fontFamily = selectedFontFamily.family;
+      }
     } catch (e) {
       console.warn('Failed to load theme preferences:', e);
-      // Apply default theme if loading fails
-      applyTheme('ai-midnight-nebula', 'medium', 'system');
     }
   }, []) // Only run once on mount
 
@@ -738,6 +772,14 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
               handleSaveWorkspaceRow={handleSaveWorkspaceRow}
               handleDeleteWorkspace={handleDeleteWorkspace}
               handleOpenCreateWorkspace={handleOpenCreateWorkspace}
+            />
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faLayerGroup} style={{ marginRight: '8px' }} />Layout</>}>
+            <LayoutTab
+              useVerticalLayout={useVerticalLayout}
+              onLayoutToggle={onLayoutToggle}
+              fontSize={fontSize}
+              onFontSizeChange={onFontSizeChange}
             />
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>

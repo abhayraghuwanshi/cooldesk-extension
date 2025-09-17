@@ -64,7 +64,7 @@ const CheckboxLine = ({ line, lineIndex, onToggle }) => {
             padding: 0,
             marginTop: 2,
             color: line.checked ? '#34C759' : 'rgba(255, 255, 255, 0.6)',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             transition: 'color 0.2s ease'
           }}
           title={line.checked ? 'Mark as incomplete' : 'Mark as complete'}
@@ -76,7 +76,7 @@ const CheckboxLine = ({ line, lineIndex, onToggle }) => {
           textDecoration: line.checked ? 'line-through' : 'none',
           flex: 1,
           lineHeight: 1.4,
-          fontSize: 16
+          fontSize: 'var(--font-size-lg)'
         }}>
           {line.content}
         </span>
@@ -89,7 +89,7 @@ const CheckboxLine = ({ line, lineIndex, onToggle }) => {
       marginBottom: 4,
       color: '#ffffff',
       lineHeight: 1.4,
-      fontSize: 16
+      fontSize: 'var(--font-size-lg)'
     }}>
       {line.content}
     </div>
@@ -188,7 +188,7 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* All notes show content the same way - just checkboxes */}
           <div style={{
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             color: '#ffffff',
             lineHeight: 1.4,
             fontWeight: 400
@@ -207,7 +207,7 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
         }}>
           {/* Date display inline with buttons */}
           <span style={{
-            fontSize: 10,
+            fontSize: 'calc(var(--font-size-xs) * 0.85)',
             color: 'rgba(255, 255, 255, 0.4)',
             fontWeight: 500,
             whiteSpace: 'nowrap'
@@ -237,7 +237,7 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
             >
               <FontAwesomeIcon
                 icon={isPlaying ? faPause : faPlay}
-                style={{ fontSize: 12 }}
+                style={{ fontSize: 'var(--font-size-sm)' }}
               />
             </button>
           )}
@@ -273,7 +273,7 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
               e.target.style.opacity = '0.7';
             }}
           >
-            <FontAwesomeIcon icon={faTrash} style={{ fontSize: 12 }} />
+            <FontAwesomeIcon icon={faTrash} style={{ fontSize: 'var(--font-size-sm)' }} />
           </button>
         </div>
       </div>
@@ -593,7 +593,7 @@ export function NotesSection() {
         padding: '0 4px'
       }}>
         <h2 style={{
-          fontSize: 22,
+          fontSize: 'var(--font-size-2xl)',
           fontWeight: 600,
           margin: 0,
           color: '#ffffff',
@@ -602,7 +602,7 @@ export function NotesSection() {
           alignItems: 'center',
           gap: 8
         }}>
-          <FontAwesomeIcon icon={faListCheck} style={{ color: '#34C759', fontSize: 18 }} />
+          <FontAwesomeIcon icon={faListCheck} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} />
           Todos
         </h2>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -614,7 +614,7 @@ export function NotesSection() {
               border: 'none',
               background: 'rgba(255, 255, 255, 0.1)',
               color: 'rgba(255, 255, 255, 0.8)',
-              fontSize: 11,
+              fontSize: 'var(--font-size-xs)',
               fontWeight: 500,
               cursor: 'pointer',
               display: 'flex',
@@ -626,7 +626,7 @@ export function NotesSection() {
           >
             <FontAwesomeIcon
               icon={notesFilter === 'incomplete' ? faSquare : faCheck}
-              style={{ fontSize: 10 }}
+              style={{ fontSize: 'calc(var(--font-size-xs) * 0.85)' }}
             />
             {notesFilter === 'incomplete' ? 'Todo' : 'Done'} ({filterCounts[notesFilter]})
           </button>
@@ -658,7 +658,7 @@ export function NotesSection() {
             border: 'none',
             background: 'transparent',
             color: '#ffffff',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             lineHeight: 1.4,
             fontFamily: 'inherit',
             resize: 'none',
@@ -672,7 +672,7 @@ export function NotesSection() {
         />
 
         <div style={{
-          fontSize: 12,
+          fontSize: 'var(--font-size-sm)',
           color: 'rgba(255, 255, 255, 0.5)',
           marginTop: 8,
           display: 'flex',
@@ -691,7 +691,7 @@ export function NotesSection() {
                 background: isRecording ? '#FF3B30' : 'rgba(255, 255, 255, 0.1)',
                 color: 'white',
                 cursor: 'pointer',
-                fontSize: 11,
+                fontSize: 'var(--font-size-xs)',
                 fontWeight: 500,
                 display: 'flex',
                 alignItems: 'center',
@@ -702,7 +702,7 @@ export function NotesSection() {
             >
               <FontAwesomeIcon
                 icon={isRecording ? faStop : faMicrophone}
-                style={{ fontSize: 10 }}
+                style={{ fontSize: 'calc(var(--font-size-xs) * 0.85)' }}
               />
               {isRecording ? `Stop ${formatRecordingTime(recordingTime)}` : 'Voice'}
             </button>
@@ -720,7 +720,7 @@ export function NotesSection() {
                 background: text.trim() ? '#34C759' : 'rgba(255, 255, 255, 0.05)',
                 color: text.trim() ? 'white' : 'rgba(255, 255, 255, 0.3)',
                 cursor: text.trim() ? 'pointer' : 'not-allowed',
-                fontSize: 11,
+                fontSize: 'var(--font-size-xs)',
                 fontWeight: 500,
                 transition: 'all 0.2s ease'
               }}
@@ -729,7 +729,7 @@ export function NotesSection() {
               Save
             </button>
 
-            <span style={{ opacity: 0.7, fontSize: 11 }}>
+            <span style={{ opacity: 0.7, fontSize: 'var(--font-size-xs)' }}>
               {text.length} chars
             </span>
           </div>
@@ -754,7 +754,7 @@ export function NotesSection() {
           <div style={{
             textAlign: 'center',
             color: 'rgba(255, 255, 255, 0.5)',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             fontWeight: 400,
             padding: '40px 20px',
             fontStyle: 'italic'

@@ -34,14 +34,14 @@ export class ErrorBoundary extends React.Component {
           backgroundColor: '#ffe0e0',
           color: '#d63031'
         }}>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold' }}>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: 'var(--font-size-base)', fontWeight: 'bold' }}>
             Something went wrong
           </h3>
-          <p style={{ margin: '0 0 8px 0', fontSize: '12px' }}>
+          <p style={{ margin: '0 0 8px 0', fontSize: 'var(--font-size-sm)' }}>
             This section encountered an error and couldn't load properly.
           </p>
           {this.state.error && (
-            <details style={{ fontSize: '11px', marginTop: '8px' }}>
+            <details style={{ fontSize: 'var(--font-size-xs)', marginTop: '8px' }}>
               <summary style={{ cursor: 'pointer', marginBottom: '4px' }}>
                 Error Details
               </summary>
@@ -50,7 +50,7 @@ export class ErrorBoundary extends React.Component {
                 padding: '8px',
                 borderRadius: '4px',
                 overflow: 'auto',
-                fontSize: '10px',
+                fontSize: 'calc(var(--font-size-xs) * 0.85)',
                 margin: '4px 0'
               }}>
                 {this.state.error.toString()}
@@ -63,7 +63,7 @@ export class ErrorBoundary extends React.Component {
             style={{
               marginTop: '8px',
               padding: '4px 8px',
-              fontSize: '11px',
+              fontSize: 'var(--font-size-xs)',
               backgroundColor: '#d63031',
               color: 'white',
               border: 'none',

@@ -125,7 +125,7 @@ export function PingsSection({ tabs }) {
         padding: '0 4px'
       }}>
         <h2 style={{
-          fontSize: 22,
+          fontSize: 'var(--font-size-2xl)',
           fontWeight: 600,
           margin: 0,
           color: '#ffffff',
@@ -134,10 +134,10 @@ export function PingsSection({ tabs }) {
           alignItems: 'center',
           gap: 8
         }}>
-          <FontAwesomeIcon icon={faThumbtack} style={{ color: '#FF9500', fontSize: 18 }} />
+          <FontAwesomeIcon icon={faThumbtack} style={{ color: '#FF9500', fontSize: 'var(--font-size-xl)' }} />
           Pins
           <span style={{
-            fontSize: 12,
+            fontSize: 'var(--font-size-sm)',
             color: '#ffffff',
             background: 'rgba(255, 149, 0, 0.2)',
             padding: '4px 8px',
@@ -155,7 +155,7 @@ export function PingsSection({ tabs }) {
           <div style={{
             textAlign: 'center',
             color: 'rgba(255, 255, 255, 0.5)',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             fontWeight: 400,
             padding: '40px 20px',
             fontStyle: 'italic',
@@ -261,7 +261,7 @@ export function PingsSection({ tabs }) {
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
-                      fontSize: '8px',
+                      fontSize: 'calc(var(--font-size-xs) * 0.65)',
                       fontWeight: 'bold'
                     }}
                     title="Remove pin"

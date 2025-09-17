@@ -9,6 +9,15 @@
   --text-dim: #a7f3d0;
   --border: #0d9488;
 
+  /* Font size variables */
+  --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);
+  --font-size-sm: calc(var(--base-font-size, 14px) * 0.875);
+  --font-size-base: var(--base-font-size, 14px);
+  --font-size-lg: calc(var(--base-font-size, 14px) * 1.125);
+  --font-size-xl: calc(var(--base-font-size, 14px) * 1.25);
+  --font-size-2xl: calc(var(--base-font-size, 14px) * 1.5);
+  --font-size-3xl: calc(var(--base-font-size, 14px) * 1.875);
+
   background-image:
     radial-gradient(40% 50% at 30% 20%, rgba(20, 184, 166, 0.08) 0%, rgba(0, 0, 0, 0) 70%),
     radial-gradient(60% 40% at 70% 80%, rgba(94, 234, 212, 0.08) 0%, rgba(0, 0, 0, 0) 60%),

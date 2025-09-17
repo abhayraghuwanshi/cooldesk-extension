@@ -274,7 +274,7 @@ export function CoolFeedSection({ tabs, pings }) {
         padding: '0 4px'
       }}>
         <h2 style={{
-          fontSize: 22,
+          fontSize: 'var(--font-size-2xl)',
           fontWeight: 600,
           margin: 0,
           color: '#ffffff',
@@ -283,10 +283,10 @@ export function CoolFeedSection({ tabs, pings }) {
           alignItems: 'center',
           gap: 8
         }}>
-          <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 18 }} />
+          <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} />
           Activity
           <span style={{
-            fontSize: 12,
+            fontSize: 'var(--font-size-sm)',
             color: '#ffffff',
             background: 'rgba(52, 199, 89, 0.2)',
             padding: '4px 8px',
@@ -326,7 +326,7 @@ export function CoolFeedSection({ tabs, pings }) {
             aria-label="Reload activity"
             title="Reload activity"
           >
-            <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 14 }} />
+            <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 'var(--font-size-base)' }} />
           </button>
 
           <select
@@ -338,7 +338,7 @@ export function CoolFeedSection({ tabs, pings }) {
               border: 'none',
               background: 'rgba(255, 255, 255, 0.1)',
               color: '#ffffff',
-              fontSize: 12,
+              fontSize: 'var(--font-size-sm)',
               cursor: 'pointer',
               fontFamily: 'inherit'
             }}
@@ -360,7 +360,7 @@ export function CoolFeedSection({ tabs, pings }) {
               border: 'none',
               background: 'rgba(255, 255, 255, 0.1)',
               color: '#ffffff',
-              fontSize: 12,
+              fontSize: 'var(--font-size-sm)',
               cursor: 'pointer',
               fontFamily: 'inherit'
             }}
@@ -379,7 +379,7 @@ export function CoolFeedSection({ tabs, pings }) {
           <div style={{
             textAlign: 'center',
             color: 'rgba(255, 255, 255, 0.5)',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             fontWeight: 400,
             padding: '40px 20px',
             fontStyle: 'italic',
@@ -393,7 +393,7 @@ export function CoolFeedSection({ tabs, pings }) {
           <div style={{
             textAlign: 'center',
             color: '#FF3B30',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             fontWeight: 400,
             padding: '40px 20px',
             background: 'rgba(255, 59, 48, 0.1)',
@@ -406,7 +406,7 @@ export function CoolFeedSection({ tabs, pings }) {
           <div style={{
             textAlign: 'center',
             color: 'rgba(255, 255, 255, 0.5)',
-            fontSize: 16,
+            fontSize: 'var(--font-size-lg)',
             fontWeight: 400,
             padding: '40px 20px',
             fontStyle: 'italic',
@@ -522,7 +522,7 @@ export function CoolFeedSection({ tabs, pings }) {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '12px',
+                      fontSize: 'var(--font-size-sm)',
                       color: '#34C759'
                     }}>
                       <FontAwesomeIcon icon={faGlobe} />

@@ -314,7 +314,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
         padding: '0 4px'
       }}>
         <h2 style={{
-          fontSize: 22,
+          fontSize: 'var(--font-size-2xl)',
           fontWeight: 600,
           margin: 0,
           color: '#ffffff',
@@ -323,10 +323,10 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           alignItems: 'center',
           gap: 8
         }}>
-          <FontAwesomeIcon icon={faClone} style={{ color: '#007AFF', fontSize: 18 }} />
+          <FontAwesomeIcon icon={faClone} style={{ color: '#007AFF', fontSize: 'var(--font-size-xl)' }} />
           Tabs
           <span style={{
-            fontSize: 12,
+            fontSize: 'var(--font-size-sm)',
             color: '#ffffff',
             background: 'rgba(0, 122, 255, 0.2)',
             padding: '4px 8px',
@@ -363,7 +363,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           aria-label="Reload"
           title="Reload tabs"
         >
-          <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 14 }} />
+          <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 'var(--font-size-base)' }} />
         </button>
       </div>
 
@@ -374,7 +374,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           borderRadius: 12,
           padding: 12,
           color: '#FF3B30',
-          fontSize: 14,
+          fontSize: 'var(--font-size-base)',
           marginBottom: 16
         }}>
           {String(tabsError)}
@@ -391,7 +391,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               gridColumn: 'span 4',
               textAlign: 'center',
               color: 'rgba(255, 255, 255, 0.5)',
-              fontSize: 16,
+              fontSize: 'var(--font-size-lg)',
               fontWeight: 400,
               padding: '40px 20px',
               fontStyle: 'italic'
@@ -466,7 +466,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                             justifyContent: 'center',
                             background: 'rgba(0, 0, 0, 0.3)',
                             color: 'white',
-                            fontSize: '12px'
+                            fontSize: 'var(--font-size-sm)'
                           }}>
                             <div style={{
                               display: 'flex',
@@ -555,7 +555,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           justifyContent: 'center',
                           color: 'rgba(255, 255, 255, 0.8)'
                         }}>
-                          <FontAwesomeIcon icon={faGlobe} style={{ fontSize: 16 }} />
+                          <FontAwesomeIcon icon={faGlobe} style={{ fontSize: 'var(--font-size-lg)' }} />
                         </div>
                       );
                     })()}
@@ -567,7 +567,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       right: '4px',
                       background: 'rgba(0, 0, 0, 0.6)',
                       color: 'white',
-                      fontSize: '10px',
+                      fontSize: 'calc(var(--font-size-xs) * 0.85)',
                       padding: '2px 6px',
                       borderRadius: '4px',
                       fontWeight: '500'
@@ -582,7 +582,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                     background: 'rgba(0, 0, 0, 0.2)'
                   }}>
                     <div style={{
-                      fontSize: '14px',
+                      fontSize: 'var(--font-size-base)',
                       color: '#ffffff',
                       fontWeight: '500',
                       whiteSpace: 'nowrap',
@@ -632,7 +632,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: capturingTabIds.has(tab.id) ? 'not-allowed' : 'pointer',
-                          fontSize: '10px'
+                          fontSize: 'calc(var(--font-size-xs) * 0.85)'
                         }}
                         title={capturingTabIds.has(tab.id) ? "Capturing..." : "Capture screenshot"}
                       >
@@ -656,7 +656,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
-                          fontSize: '10px'
+                          fontSize: 'calc(var(--font-size-xs) * 0.85)'
                         }}
                         title="Pin tab"
                       >
@@ -680,7 +680,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
-                          fontSize: '10px'
+                          fontSize: 'calc(var(--font-size-xs) * 0.85)'
                         }}
                         title="Close tab"
                       >
