@@ -86,8 +86,11 @@ export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddR
           return {
             ...originalItem,
             title: urlData.title,
+            subtitle: urlData.subtitle,
             extractedData: urlData.details,
-            timestamp: urlData.timestamp
+            timestamp: urlData.timestamp,
+            lastVisitTime: urlData.lastVisitTime,
+            visitCount: urlData.visitCount
           };
         }).sort((a, b) => {
           const at = (typeof a?.lastVisitTime === 'number' ? a.lastVisitTime : 0) ||

@@ -1,213 +1,247 @@
-[Background] Main function started
-background.js-Dv3_lXZI.js:142 [Background] Initializing database system...
-index-DcQ6uu86.js:1 [DB Setup] Initializing unified database system...
-index-DcQ6uu86.js:1  [DB Setup] ❌ Database setup failed: ReferenceError: window is not defined
-    at a (utils-VmaWFZN_.js:1:1080)
-    at async u (index-DcQ6uu86.js:1:566)
-    at async Ue (background.js-Dv3_lXZI.js:142:1134)
-u @ index-DcQ6uu86.js:1
-background.js-Dv3_lXZI.js:142  [Background] ❌ Database initialization failed: window is not defined
-Ue @ background.js-Dv3_lXZI.js:142
-background.js-Dv3_lXZI.js:1 [Background] Initializing data handlers...
-background.js-Dv3_lXZI.js:142 [Background] Main function executed successfully
-background.js-Dv3_lXZI.js:142 [Background] Service worker is ready for connections
-background.js-Dv3_lXZI.js:1 [Background] Extension installed - populating data
-background.js-Dv3_lXZI.js:1 [AI][collect] Collecting bookmarks...
-utils-VmaWFZN_.js:1 [Unified DB] Opening database: cooldesk-unified-db v1
-background.js-Dv3_lXZI.js:142 [Background] Extension installed - populating data
-background.js-Dv3_lXZI.js:1 [Background] Populate cooldown active in function, skipping...
-background.js-Dv3_lXZI.js:1 [AI][collect] Bookmarks collected: 165
-background.js-Dv3_lXZI.js:142 [Background] Side panel enabled globally on install
-background.js-Dv3_lXZI.js:142 [Background] Panel behavior set to open on action click
-utils-VmaWFZN_.js:1 [DB Debug] getAllActivity called
-background.js-Dv3_lXZI.js:142 [Background] Storage ready
-utils-VmaWFZN_.js:1 [Unified DB] Upgrading database from v0 to v1
-utils-VmaWFZN_.js:1 [Unified DB] Running migration v1: Initial unified database schema
-utils-VmaWFZN_.js:1 [Migration v1] Creating unified database schema...
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: workspaces
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: workspace_urls
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: notes
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: url_notes
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: pins
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: time_tracking
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: activity_series
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: settings
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: ui_state
-utils-VmaWFZN_.js:1 [Migration v1] Creating store: metadata
-utils-VmaWFZN_.js:1 [Unified DB] Successfully upgraded to v1
-utils-VmaWFZN_.js:1 [Unified DB] Successfully opened database
-utils-VmaWFZN_.js:1 [DB Debug] Database obtained: true
-utils-VmaWFZN_.js:1 [DB Debug] Transaction and store created for: activity_series
-background.js-Dv3_lXZI.js:1 [AI][collect] Collecting history (last 30 days, max 1000)... Object
-utils-VmaWFZN_.js:1 [DB Debug] Total records in activity_series store: 0
-utils-VmaWFZN_.js:1 [DB Debug] Retrieved records: 0
-utils-VmaWFZN_.js:1 [DB Debug] Returning sorted results: 0
-background.js-Dv3_lXZI.js:1 [AI][collect] History collected: 1000
-background.js-Dv3_lXZI.js:1 [AI][collect] ChatGPT URLs found in history: 18
-background.js-Dv3_lXZI.js:1 [AI][collect] Sample ChatGPT URLs: Array(3)
-background.js-Dv3_lXZI.js:1 [AI][populate] Stored counts: Object
-background.js-Dv3_lXZI.js:1 [AI][populate] populateAndStore: 52.633056640625 ms
-service-worker-loader.js:1  Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.
-index.html-EpTq07eX.js:4740 Using Chrome WebExtensions API
-index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-index.html-EpTq07eX.js:3700 [SettingsModal] Creating editableWorkspaces from: Array(0)
-index.html-EpTq07eX.js:3700 [SettingsModal] editableWorkspaces result: Array(0)
-index.html-EpTq07eX.js:4729 [PingsSection] Loading pings...
-utils-VmaWFZN_.js:1 [Unified DB] Opening database: cooldesk-unified-db v1
-index.html-EpTq07eX.js:4729 [PingsSection] Setting up pins change subscription...
-index.html-EpTq07eX.js:4308 [DailyNotesSection] Setting up daily notes change subscription...
-background.js-Dv3_lXZI.js:142 [Background Debug] Received message: Object
-background.js-Dv3_lXZI.js:142 [Background Debug] Message sender: Object
-background.js-Dv3_lXZI.js:142 [Background Debug] Handling getActivityData
-background.js-Dv3_lXZI.js:1 [Activity Debug] Starting handleGetActivityData with 5000 ms timeout
-background.js-Dv3_lXZI.js:142 [Background Debug] Received message: Object
-background.js-Dv3_lXZI.js:142 [Background Debug] Message sender: Object
-background.js-Dv3_lXZI.js:142 [Background Debug] Potential activity message: Object
-background.js-Dv3_lXZI.js:142 [Background] Getting daily notes: Object
-utils-VmaWFZN_.js:1  [DB Error Handler] saveUIState: Object
-H @ utils-VmaWFZN_.js:1
-utils-VmaWFZN_.js:1  [DB Error Handler] saveUIState: Object
-H @ utils-VmaWFZN_.js:1
-utils-VmaWFZN_.js:1 [Unified DB] Successfully opened database
-index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-background.js-Dv3_lXZI.js:1 [Activity Debug] Getting activity data with cutoff: 2025-08-16T14:03:44.776Z
-utils-VmaWFZN_.js:1 [DB Debug] getAllActivity called
-utils-VmaWFZN_.js:1 [DB Debug] Database obtained: true
-utils-VmaWFZN_.js:1 [DB Debug] Transaction and store created for: activity_series
-utils-VmaWFZN_.js:1 [DB Debug] Total records in activity_series store: 0
-utils-VmaWFZN_.js:1 [DB Debug] Retrieved records: 0
-utils-VmaWFZN_.js:1 [DB Debug] Returning sorted results: 0
-background.js-Dv3_lXZI.js:1 [Activity Debug] getAllActivity completed in 17 ms
-background.js-Dv3_lXZI.js:1 [Activity Debug] getAllActivity result: Object
-background.js-Dv3_lXZI.js:1 [Activity Debug] Raw activity rows: 0
-background.js-Dv3_lXZI.js:1 [Activity Debug] No data found, sending empty response
-index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-index.html-EpTq07eX.js:4729 [PingsSection] Pings result: Object
-index.html-EpTq07eX.js:4729 [PingsSection] Extracted pings data: Array(0)
-utils-VmaWFZN_.js:1  [DB Error Handler] saveUIState: Object
-H @ utils-VmaWFZN_.js:1
-index.html-EpTq07eX.js:4740 Loading UI state: Object
-index.html-EpTq07eX.js:4740 No vertical layout preference found, using default (false)
-2index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-index.html-EpTq07eX.js:4302  Content script screenshot failed: Could not establish connection. Receiving end does not exist.
-(anonymous) @ index.html-EpTq07eX.js:4302
-index.html-EpTq07eX.js:4302  Screenshot capture failed: Could not establish connection. Receiving end does not exist.
-(anonymous) @ index.html-EpTq07eX.js:4302
-index.html-EpTq07eX.js:4740 Real-time URL categorization enabled
-2index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-index.html-EpTq07eX.js:4740 [synthesizeFromWorkspaces] loaded workspaces: 0 Object
-index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-utils-VmaWFZN_.js:1 [DB Debug] putActivityTimeSeriesEvent called with: Object
-utils-VmaWFZN_.js:1 [DB Debug] Event after validation: Object
-utils-VmaWFZN_.js:1 [DB Debug] About to store event in: activity_series
-utils-VmaWFZN_.js:1 [DB Debug] Successfully stored activity event: 2cf75e44-dfc1-47e9-9480-908e6d89c8b4
-utils-VmaWFZN_.js:1 [DB Debug] putActivityTimeSeriesEvent called with: Object
-utils-VmaWFZN_.js:1 [DB Debug] Event after validation: Object
-utils-VmaWFZN_.js:1 [DB Debug] About to store event in: activity_series
-utils-VmaWFZN_.js:1 [DB Debug] Successfully stored activity event: d2ed9b0f-1fcf-4854-8bad-746d1b4e86fe
-index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/
-index.html-EpTq07eX.js:4740  Failed to auto-create platform workspaces: TypeError: Cannot read properties of undefined (reading 'forEach')
-    at Zn.createWorkspacesFromUrls (index.html-EpTq07eX.js:3700:78794)
-    at z (index.html-EpTq07eX.js:4740:18272)
-z @ index.html-EpTq07eX.js:4740
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 10 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: ChatGPT for URL: https://chatgpt.com/
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/ with title: "null"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Chrome ERR_TIMED_OUT fix for URL: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155 with title: "Chrome ERR_TIMED_OUT fix"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Search in chat tools for URL: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c with title: "Search in chat tools"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Chrome speech-to-text API for URL: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a with title: "Chrome speech-to-text API"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: ChatGPT - Writing for URL: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project with title: "null"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Fix ChatGPT title extraction for URL: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f with title: "null"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Prime number algorithm speed for URL: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8 with title: "Prime number algorithm speed"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Create yt to spotify service for URL: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250 with title: "Create yt to spotify service"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: ChatGPT for URL: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef with title: "null"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Building voice search for URL: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59 with title: "Building voice search"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Popular job personas tools for URL: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272 with title: "Popular job personas tools"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: ChatGPT for URL: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc with title: "null"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68ad9a39-20e8-8328-893d-408f890713d1
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Cool desk extension features for URL: https://chatgpt.com/c/68ad9a39-20e8-8328-893d-408f890713d1
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68ad9a39-20e8-8328-893d-408f890713d1 with title: "Cool desk extension features"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68af5d0a-9730-8328-a4ba-4aca900c412c
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Email transaction summary for URL: https://chatgpt.com/c/68af5d0a-9730-8328-a4ba-4aca900c412c
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68af5d0a-9730-8328-a4ba-4aca900c412c with title: "Email transaction summary"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68ae31ce-c1d4-8332-a4be-e08398daab54
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found title: Setting project requirements for URL: https://chatgpt.com/c/68ae31ce-c1d4-8332-a4be-e08398daab54
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68ae31ce-c1d4-8332-a4be-e08398daab54 with title: "Setting project requirements"
-index.html-EpTq07eX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chat.openai.com/
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory found: 0 items
-index.html-EpTq07eX.js:3700 [GenericUrlParser] enrichWithHistory no title found, using fallback for: https://chat.openai.com/
-index.html-EpTq07eX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chat.openai.com/ with title: "null"
-index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-index.html-EpTq07eX.js:4740 [synthesizeFromWorkspaces] url docs: 0
-index.html-EpTq07eX.js:4740 [synthesizeFromWorkspaces] generated bookmarks: 0 Array(0)
-8index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-utils-VmaWFZN_.js:1 [DB Debug] putActivityTimeSeriesEvent called with: Object
-utils-VmaWFZN_.js:1 [DB Debug] Event after validation: Object
-utils-VmaWFZN_.js:1 [DB Debug] About to store event in: activity_series
-utils-VmaWFZN_.js:1 [DB Debug] Successfully stored activity event: fdc3bfc0-b811-4244-bc7d-8c92480f41cd
-5index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-index.html-EpTq07eX.js:4302  Content script screenshot failed: Could not establish connection. Receiving end does not exist.
-(anonymous) @ index.html-EpTq07eX.js:4302
-index.html-EpTq07eX.js:4302  Screenshot capture failed: Could not establish connection. Receiving end does not exist.
-(anonymous) @ index.html-EpTq07eX.js:4302
-4index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-2index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
-utils-VmaWFZN_.js:1 [DB Debug] putActivityTimeSeriesEvent called with: {id: undefined, url: 'edge://extensions', timestamp: undefined, hasMetrics: false}
-utils-VmaWFZN_.js:1 [DB Debug] Event after validation: {id: '5f909661-bdb3-4720-8777-28e1139b717c', url: 'edge://extensions', timestamp: 1757945046895, sessionId: 'session_1757945046895', time: 8728, …}
-utils-VmaWFZN_.js:1 [DB Debug] About to store event in: activity_series
-utils-VmaWFZN_.js:1 [DB Debug] Successfully stored activity event: 5f909661-bdb3-4720-8777-28e1139b717c
-utils-VmaWFZN_.js:1 [DB Debug] putActivityTimeSeriesEvent called with: {id: undefined, url: 'edge://newtab', timestamp: undefined, hasMetrics: false}
-utils-VmaWFZN_.js:1 [DB Debug] Event after validation: {id: '5025d034-c773-456e-9bce-a0f8a5917107', url: 'edge://newtab', timestamp: 1757945046896, sessionId: 'session_1757945046896', time: 1797, …}
-utils-VmaWFZN_.js:1 [DB Debug] About to store event in: activity_series
-utils-VmaWFZN_.js:1 [DB Debug] Successfully stored activity event: 5025d034-c773-456e-9bce-a0f8a5917107
-7index.html-EpTq07eX.js:3700 [SearchModal] Component rendered, isOpen: false
+GenericUrlParser] createWorkspacesFromUrls processing: 928 URLs
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Access Claude chat history for URL: https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "Access Claude chat history"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Create project workspace for URL: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Create project workspace"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc with title: "Create project workspace"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching Claude URL: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Bulk Category Processing Strategy - Claude for URL: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "Bulk Category Processing Strategy - Claude"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing Claude: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84 with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Parsing Claude URL: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat test: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat extract: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude final result: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude parse result: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed Claude: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching Claude URL: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Improving website copywriting - Claude for URL: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "Improving website copywriting - Claude"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing Claude: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499 with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Parsing Claude URL: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat test: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat extract: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude final result: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude parse result: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed Claude: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c82d86-19a8-8328-91eb-f7aa325b7021 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c82d86-19a8-8328-91eb-f7aa325b7021
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Fixing website copy for URL: https://chatgpt.com/c/68c82d86-19a8-8328-91eb-f7aa325b7021
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Fixing website copy"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68c82d86-19a8-8328-91eb-f7aa325b7021 with title: "Fixing website copy"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/ (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 10 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: ChatGPT for URL: https://chatgpt.com/
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "ChatGPT"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/ with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c8232f-3cd8-8320-8861-a6a7c6425115 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c8232f-3cd8-8320-8861-a6a7c6425115
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Trick Beat setup help for URL: https://chatgpt.com/c/68c8232f-3cd8-8320-8861-a6a7c6425115
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Trick Beat setup help"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68c8232f-3cd8-8320-8861-a6a7c6425115 with title: "Trick Beat setup help"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Chrome ERR_TIMED_OUT fix for URL: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Chrome ERR_TIMED_OUT fix"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155 with title: "Chrome ERR_TIMED_OUT fix"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Search in chat tools for URL: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Search in chat tools"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c with title: "Search in chat tools"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Chrome speech-to-text API for URL: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Chrome speech-to-text API"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a with title: "Chrome speech-to-text API"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: ChatGPT - Writing for URL: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "ChatGPT - Writing"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Fix ChatGPT title extraction for URL: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "Fix ChatGPT title extraction"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Prime number algorithm speed for URL: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Prime number algorithm speed"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8 with title: "Prime number algorithm speed"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Create yt to spotify service for URL: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Create yt to spotify service"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250 with title: "Create yt to spotify service"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: Object
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: ChatGPT for URL: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "ChatGPT"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: {url: 'https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef', inputTitle: null, isGenericTitle: true, chatId: '68ab4f43-617c-832e-aef2-a77f2d764cef'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: {url: 'https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef', platform: {…}, workspace: 'ChatGPT', title: 'ChatGPT Chat 68ab4f43', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Building voice search for URL: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Building voice search"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59 with title: "Building voice search"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: {url: 'https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59', inputTitle: 'Building voice search', isGenericTitle: false, chatId: '68b4966a-41f0-8323-9164-6cc85373da59'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: {url: 'https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59', platform: {…}, workspace: 'ChatGPT', title: 'Building voice search', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Popular job personas tools for URL: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Popular job personas tools"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272 with title: "Popular job personas tools"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: {url: 'https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272', inputTitle: 'Popular job personas tools', isGenericTitle: false, chatId: '68b5d0b0-1574-832e-907b-4d2ad23c7272'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: {url: 'https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272', platform: {…}, workspace: 'ChatGPT', title: 'Popular job personas tools', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching Claude URL: https://claude.ai/ (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 10 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory no title found, using fallback for: https://claude.ai/
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing Claude: https://claude.ai/ with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Parsing Claude URL: {url: 'https://claude.ai/', domain: 'claude.ai', pathname: '/', domTitle: null, hasConfig: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat test: {url: 'https://claude.ai/', pathname: '/', paths: Array(0), includesChat: false}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude parse result: {url: 'https://claude.ai/', platform: {…}, workspace: 'Claude', title: 'Claude', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed Claude: {url: 'https://claude.ai/', platform: {…}, workspace: 'Claude', title: 'Claude', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching Claude URL: https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Claude for URL: https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "Claude"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing Claude: https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Parsing Claude URL: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', domain: 'claude.ai', pathname: '/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', domTitle: null, hasConfig: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat test: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', pathname: '/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', paths: Array(2), includesChat: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat extract: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', pathname: '/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', match: Array(2), chatId: 'b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', domTitle: null}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude title processing: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', inputTitle: null, isGenericTitle: true, chatId: 'b0b6e1b2-f2df-43be-ba97-3674e2f05f3e'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude final result: {workspace: 'Claude', title: 'Claude Chat b0b6e1b2', chatId: 'b0b6e1b2-f2df-43be-ba97-3674e2f05f3e'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude parse result: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', platform: {…}, workspace: 'Claude', title: 'Claude Chat b0b6e1b2', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed Claude: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', platform: {…}, workspace: 'Claude', title: 'Claude Chat b0b6e1b2', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68ad9a39-20e8-8328-893d-408f890713d1 (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68ad9a39-20e8-8328-893d-408f890713d1
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Cool desk extension features for URL: https://chatgpt.com/c/68ad9a39-20e8-8328-893d-408f890713d1
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Cool desk extension features"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68ad9a39-20e8-8328-893d-408f890713d1 with title: "Cool desk extension features"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: {url: 'https://chatgpt.com/c/68ad9a39-20e8-8328-893d-408f890713d1', inputTitle: 'Cool desk extension features', isGenericTitle: false, chatId: '68ad9a39-20e8-8328-893d-408f890713d1'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: {url: 'https://chatgpt.com/c/68ad9a39-20e8-8328-893d-408f890713d1', platform: {…}, workspace: 'ChatGPT', title: 'Cool desk extension features', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68af5d0a-9730-8328-a4ba-4aca900c412c (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68af5d0a-9730-8328-a4ba-4aca900c412c
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Email transaction summary for URL: https://chatgpt.com/c/68af5d0a-9730-8328-a4ba-4aca900c412c
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Using enriched title: "Email transaction summary"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chatgpt.com/c/68af5d0a-9730-8328-a4ba-4aca900c412c with title: "Email transaction summary"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: {url: 'https://chatgpt.com/c/68af5d0a-9730-8328-a4ba-4aca900c412c', inputTitle: 'Email transaction summary', isGenericTitle: false, chatId: '68af5d0a-9730-8328-a4ba-4aca900c412c'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: {url: 'https://chatgpt.com/c/68af5d0a-9730-8328-a4ba-4aca900c412c', platform: {…}, workspace: 'ChatGPT', title: 'Email transaction summary', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching ChatGPT URL: https://chat.openai.com/ (existing: "null")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chat.openai.com/
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 0 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory no title found, using fallback for: https://chat.openai.com/
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing ChatGPT: https://chat.openai.com/ with title: "null"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed ChatGPT: {url: 'https://chat.openai.com/', platform: {…}, workspace: 'ChatGPT', title: 'ChatGPT', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] parseMultiple result: {totalGroups: 8, chatgptGroups: 1, stats: {…}}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] createWorkspacesFromUrls got 8 groups
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching Claude URL: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84 (existing: "Claude Chat 36e933a2")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Bulk Category Processing Strategy - Claude for URL: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "Bulk Category Processing Strategy - Claude"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing Claude: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84 with title: "Claude Chat 36e933a2"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Parsing Claude URL: {url: 'https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84', domain: 'claude.ai', pathname: '/chat/36e933a2-8935-4f0e-9f61-226d42bebb84', domTitle: 'Claude Chat 36e933a2', hasConfig: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat test: {url: 'https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84', pathname: '/chat/36e933a2-8935-4f0e-9f61-226d42bebb84', paths: Array(2), includesChat: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat extract: {url: 'https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84', pathname: '/chat/36e933a2-8935-4f0e-9f61-226d42bebb84', match: Array(2), chatId: '36e933a2-8935-4f0e-9f61-226d42bebb84', domTitle: 'Claude Chat 36e933a2'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude title processing: {url: 'https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84', inputTitle: 'Claude Chat 36e933a2', isGenericTitle: false, chatId: '36e933a2-8935-4f0e-9f61-226d42bebb84'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude final result: {workspace: 'Claude', title: 'Claude Chat 36e933a2', chatId: '36e933a2-8935-4f0e-9f61-226d42bebb84'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude parse result: {url: 'https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84', platform: {…}, workspace: 'Claude', title: 'Claude Chat 36e933a2', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed Claude: {url: 'https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84', platform: {…}, workspace: 'Claude', title: 'Claude Chat 36e933a2', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching Claude URL: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499 (existing: "Claude Chat a9b45142")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Improving website copywriting - Claude for URL: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "Improving website copywriting - Claude"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing Claude: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499 with title: "Claude Chat a9b45142"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Parsing Claude URL: {url: 'https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499', domain: 'claude.ai', pathname: '/chat/a9b45142-7381-4914-a6b1-cb95d75a7499', domTitle: 'Claude Chat a9b45142', hasConfig: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat test: {url: 'https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499', pathname: '/chat/a9b45142-7381-4914-a6b1-cb95d75a7499', paths: Array(2), includesChat: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat extract: {url: 'https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499', pathname: '/chat/a9b45142-7381-4914-a6b1-cb95d75a7499', match: Array(2), chatId: 'a9b45142-7381-4914-a6b1-cb95d75a7499', domTitle: 'Claude Chat a9b45142'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude title processing: {url: 'https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499', inputTitle: 'Claude Chat a9b45142', isGenericTitle: false, chatId: 'a9b45142-7381-4914-a6b1-cb95d75a7499'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude final result: {workspace: 'Claude', title: 'Claude Chat a9b45142', chatId: 'a9b45142-7381-4914-a6b1-cb95d75a7499'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude parse result: {url: 'https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499', platform: {…}, workspace: 'Claude', title: 'Claude Chat a9b45142', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed Claude: {url: 'https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499', platform: {…}, workspace: 'Claude', title: 'Claude Chat a9b45142', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching Claude URL: https://claude.ai/ (existing: "Claude")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 10 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory no title found, using fallback for: https://claude.ai/
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "Claude"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing Claude: https://claude.ai/ with title: "Claude"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Parsing Claude URL: {url: 'https://claude.ai/', domain: 'claude.ai', pathname: '/', domTitle: 'Claude', hasConfig: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat test: {url: 'https://claude.ai/', pathname: '/', paths: Array(0), includesChat: false}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude parse result: {url: 'https://claude.ai/', platform: {…}, workspace: 'Claude', title: 'Claude', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed Claude: {url: 'https://claude.ai/', platform: {…}, workspace: 'Claude', title: 'Claude', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriching Claude URL: https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e (existing: "Claude Chat b0b6e1b2")
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Claude for URL: https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Enriched title was generic or null: "Claude"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Processing Claude: https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e with title: "Claude Chat b0b6e1b2"
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Parsing Claude URL: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', domain: 'claude.ai', pathname: '/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', domTitle: 'Claude Chat b0b6e1b2', hasConfig: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat test: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', pathname: '/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', paths: Array(2), includesChat: true}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude chat extract: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', pathname: '/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', match: Array(2), chatId: 'b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', domTitle: 'Claude Chat b0b6e1b2'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude title processing: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', inputTitle: 'Claude Chat b0b6e1b2', isGenericTitle: false, chatId: 'b0b6e1b2-f2df-43be-ba97-3674e2f05f3e'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude final result: {workspace: 'Claude', title: 'Claude Chat b0b6e1b2', chatId: 'b0b6e1b2-f2df-43be-ba97-3674e2f05f3e'}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Claude parse result: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', platform: {…}, workspace: 'Claude', title: 'Claude Chat b0b6e1b2', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] Successfully parsed Claude: {url: 'https://claude.ai/chat/b0b6e1b2-f2df-43be-ba97-3674e2f05f3e', platform: {…}, workspace: 'Claude', title: 'Claude Chat b0b6e1b2', details: {…}, …}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] parseMultiple result: {totalGroups: 1, chatgptGroups: 0, stats: {…}}
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] enrichWithHistory found title: Access Claude chat history for URL: https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe
+index.html-CPKYOOMX.js:3700 [GenericUrlParser] ChatGPT.com title processing: {url: 'https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe', inputTitle: 'Access Claude chat history', isGenericTitle: false, chatId: '68c9ba6b-29e4-8324-8943-516ad85af5fe'}

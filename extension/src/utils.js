@@ -19,9 +19,12 @@ const getBaseDomain = (host) => {
   if (!host) return '';
   try {
     // Check for window in a way that works in both browser and non-browser environments
-    const maybePsl = (typeof window !== 'undefined' && window.psl)
-      ? window.psl
-      : (pslLib || null);
+    let maybePsl = pslLib || null;
+
+    // Only check window if we're in a browser context (not service worker)
+    if (typeof window !== 'undefined' && typeof window.psl !== 'undefined') {
+      maybePsl = window.psl;
+    }
 
     if (maybePsl && typeof maybePsl.parse === 'function') {
       const res = maybePsl.parse(host);

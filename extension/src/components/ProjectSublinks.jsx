@@ -5,27 +5,33 @@ import { getDomainFromUrl, getFaviconUrl } from '../utils';
 
 export function ProjectSublinks({ values = [], onDelete }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
+
+  // Utility function to truncate long titles
+  const truncateTitle = (title, maxLength = 35) => {
+    if (!title || title.length <= maxLength) return title;
+    return title.slice(0, maxLength).trim() + '…';
+  };
+
   if (!values || values.length === 0) {
     return null;
   }
 
   return (
     <div style={{
-      borderTop: '1px solid var(--border, rgba(255, 255, 255, 0.1))',
       display: 'grid',
       gridTemplateColumns: 'repeat(4, 1fr)',
       gap: '12px'
     }}>
       {values.map((item, index) => {
         const domain = getDomainFromUrl(item.url);
-        const title = item.title || item.extractedData?.title || domain || 'Untitled';
+        const originalTitle = item.title || item.extractedData?.title || domain || 'Untitled';
+        const title = truncateTitle(originalTitle);
 
         return (
           <div
             key={index}
             style={{
               background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
-              border: '1px solid var(--glass-border, rgba(255, 255, 255, 0.1))',
               borderRadius: '8px',
               backdropFilter: 'blur(10px)',
               cursor: 'pointer',
@@ -52,7 +58,6 @@ export function ProjectSublinks({ values = [], onDelete }) {
                 width: 48,
                 height: 48,
                 borderRadius: 10,
-                background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -67,18 +72,34 @@ export function ProjectSublinks({ values = [], onDelete }) {
                 />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 14,
-                  color: 'var(--text, #ffffff)',
-                  lineHeight: 1.4,
-                  marginBottom: 2,
-                  fontWeight: 500,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    color: 'var(--text, #ffffff)',
+                    lineHeight: 1.4,
+                    marginBottom: 2,
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                  title={originalTitle}
+                >
                   {title}
                 </div>
+                {/* Show timing information if available */}
+                {item.subtitle && (
+                  <div style={{
+                    fontSize: 12,
+                    color: 'var(--text-secondary, rgba(255, 255, 255, 0.6))',
+                    lineHeight: 1.3,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    {item.subtitle}
+                  </div>
+                )}
               </div>
             </div>
 

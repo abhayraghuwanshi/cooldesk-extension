@@ -18,7 +18,7 @@
 - `src/components/toolbar/Header.jsx` - Horizontal header for wide screens (≥1200px)
 - `src/components/toolbar/VerticalHeader.jsx` - Responsive vertical sidebar with unified theming
 - `src/db/index.js` - Unified database API for all storage operations
-- `src/utils/GenericUrlParser.js` - URL parsing and workspace auto-creation (1200+ lines)
+- `src/utils/GenericUrlParser.js` - URL parsing and workspace auto-creation (1500+ lines with Claude/ChatGPT title handling)
 - `src/data/personas.js` - Persona-based workspace templates
 
 ### Important Patterns
@@ -28,6 +28,8 @@
 - **Storage Keys**: Follow existing patterns in storage key naming
 - **Responsive Headers**: Auto-switch Header/VerticalHeader at 1200px width breakpoint
 - **CSS Theming**: Use CSS variables (--glass-bg, --border-color, --text-primary) with fallbacks
+- **AI Chat Title Handling**: Claude and ChatGPT URLs use sophisticated title extraction from browser history with fallbacks
+- **Default Theme**: Crimson Fire theme is set as application default in App.jsx
 
 ## ⚠️ Critical Rules
 1. NEVER modify activity.js exclusions without understanding impact

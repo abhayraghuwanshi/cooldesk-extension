@@ -364,6 +364,15 @@ export const VALIDATION_SCHEMAS = {
         lastActiveTab: {
             [ValidationRules.TYPE]: 'string'
         },
+        lastAutoCreateHash: {
+            [ValidationRules.TYPE]: 'string'
+        },
+        lastWorkspace: {
+            [ValidationRules.TYPE]: 'string'
+        },
+        autoSync: {
+            [ValidationRules.TYPE]: 'boolean'
+        },
         success: {
             [ValidationRules.TYPE]: 'boolean'
         },

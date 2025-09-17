@@ -524,34 +524,33 @@ export default function App() {
           const body = document.body;
 
           // Apply theme
-          if (savedTheme) {
-            const themeClasses = [
-              'bg-ai-midnight-nebula',
-              'bg-cosmic-aurora',
-              'bg-sunset-horizon',
-              'bg-forest-depths',
-              'bg-minimal-dark',
-              'bg-ocean-depths',
-              'bg-cherry-blossom',
-              'bg-arctic-frost',
-              'bg-volcanic-ember',
-              'bg-neon-cyberpunk',
-              'bg-white-cred',
-              'bg-orange-warm',
-              'bg-brown-earth',
-              'bg-royal-purple',
-              'bg-golden-honey',
-              'bg-mint-sage',
-              'bg-crimson-fire'
-            ];
+          const themeClasses = [
+            'bg-ai-midnight-nebula',
+            'bg-cosmic-aurora',
+            'bg-sunset-horizon',
+            'bg-forest-depths',
+            'bg-minimal-dark',
+            'bg-ocean-depths',
+            'bg-cherry-blossom',
+            'bg-arctic-frost',
+            'bg-volcanic-ember',
+            'bg-neon-cyberpunk',
+            'bg-white-cred',
+            'bg-orange-warm',
+            'bg-brown-earth',
+            'bg-royal-purple',
+            'bg-golden-honey',
+            'bg-mint-sage',
+            'bg-crimson-fire'
+          ];
 
-            // Remove all theme classes
-            themeClasses.forEach(cls => body.classList.remove(cls));
+          // Remove all theme classes
+          themeClasses.forEach(cls => body.classList.remove(cls));
 
-            // Add the saved theme class
-            const themeClass = `bg-${savedTheme}`;
-            body.classList.add(themeClass);
-          }
+          // Apply saved theme or default to Crimson Fire
+          const themeToApply = savedTheme || 'crimson-fire';
+          const themeClass = `bg-${themeToApply}`;
+          body.classList.add(themeClass);
 
           // Apply typography
           const fontSizes = [
@@ -656,15 +655,52 @@ export default function App() {
     (async () => {
       try {
         const ui = await getUIState();
-        if (ui?.lastActiveTab === 'workspace' || ui?.lastActiveTab === 'saved') {
-          setActiveTab(ui.lastActiveTab);
+        const uiData = ui?.data || ui;
+        console.log('[App] Initial restoration, UI data:', uiData);
+
+        if (uiData?.lastActiveTab === 'workspace' || uiData?.lastActiveTab === 'saved') {
+          setActiveTab(uiData.lastActiveTab);
         }
-        if (typeof ui?.lastWorkspace === 'string' && ui.lastWorkspace) {
-          setWorkspace(ui.lastWorkspace);
+        if (typeof uiData?.lastWorkspace === 'string' && uiData.lastWorkspace) {
+          setWorkspace(uiData.lastWorkspace);
         }
       } catch { }
     })();
   }, [])
+
+  // Restore workspace selection after savedWorkspaces are loaded
+  useEffect(() => {
+    if (savedWorkspaces.length === 0) return; // Wait for workspaces to load
+
+    (async () => {
+      try {
+        const ui = await getUIState();
+        console.log('[App] Full UI state:', ui);
+
+        // Handle nested data structure
+        const uiData = ui?.data || ui;
+        console.log('[App] UI data:', uiData);
+        console.log('[App] Workspace restoration check:', {
+          currentWorkspace: workspace,
+          savedLastWorkspace: uiData?.lastWorkspace,
+          availableWorkspaces: savedWorkspaces.map(ws => ws?.name)
+        });
+
+        if (typeof uiData?.lastWorkspace === 'string' && uiData.lastWorkspace && uiData.lastWorkspace !== 'All') {
+          // Check if the saved workspace still exists
+          const exists = savedWorkspaces.some(ws => (ws?.name || '').trim().toLowerCase() === (uiData.lastWorkspace || '').trim().toLowerCase());
+          console.log('[App] Workspace exists check:', { exists, lastWorkspace: uiData.lastWorkspace });
+
+          if (exists) {
+            console.log('[App] Restoring workspace:', uiData.lastWorkspace);
+            setWorkspace(uiData.lastWorkspace);
+          }
+        }
+      } catch (error) {
+        console.error('[App] Workspace restoration error:', error);
+      }
+    })();
+  }, [savedWorkspaces])
 
   // Persist activeTab whenever it changes (IndexedDB)
   useEffect(() => {
@@ -677,10 +713,14 @@ export default function App() {
 
   // Persist selected workspace whenever it changes (IndexedDB)
   useEffect(() => {
+    console.log('[App] Persisting workspace change:', { activeTab, workspace });
     (async () => {
       try {
         await saveUIState({ lastActiveTab: activeTab, lastWorkspace: workspace });
-      } catch { }
+        console.log('[App] Workspace persisted successfully');
+      } catch (error) {
+        console.error('[App] Failed to persist workspace:', error);
+      }
     })();
   }, [workspace])
 

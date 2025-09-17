@@ -355,15 +355,28 @@ export class GenericUrlParser {
         {
           name: 'chat',
           test: (paths, url) => url.pathname.includes('/chat/'),
-          extract: (paths, url) => {
-            const match = url.pathname.match(/\/chat\/([a-f0-9-]{8,})/);
-            const chatId = match ? match[1].slice(0, 8) : 'unknown';
+          extract: (paths, url, domTitle) => {
+            const match = url.pathname.match(/\/chat\/([a-f0-9-]+)/);
+            const chatId = match ? match[1] : 'unknown';
+
+            // Generate better title - prioritize meaningful browser titles
+            let title = domTitle;
+
+            // Check if browser title is meaningful (not generic platform names)
+            const isGenericTitle = !title || GenericUrlParser.isGenericTitle(title);
+
+            // If browser title is meaningful, keep it; otherwise extract from URL
+            if (isGenericTitle || !title) {
+              // Use fallback title generation like sample-working.js
+              title = GenericUrlParser.generateFallbackTitle('Claude', url, Date.now(), chatId);
+            }
+
             return {
               workspace: 'Claude',
-              title: `Claude ${chatId}`,
+              title: title,
               details: {
                 primary: 'Claude',
-                secondary: chatId,
+                secondary: title,
                 path: null,
                 id: chatId,
                 type: 'conversation'
@@ -382,9 +395,9 @@ export class GenericUrlParser {
           },
           extract: () => ({
             workspace: 'Claude',
-            title: 'Chats',
+            title: 'Claude',
             details: {
-              primary: 'Chats',
+              primary: 'Claude',
               secondary: null,
               path: null,
               id: 'claude',
@@ -854,18 +867,55 @@ export class GenericUrlParser {
   static isGenericTitle(title) {
     if (!title) return true;
 
-    const genericTitles = [
+    const exactGenericTitles = [
       'ChatGPT', 'Claude', 'Gemini', 'Perplexity', 'Copilot', 'Grok',
-      'New Chat', 'Untitled', 'chat.openai.com', 'Loading'
+      'New Chat', 'Untitled', 'chat.openai.com', 'chatgpt.com', 'claude.ai', 'Loading'
     ];
 
-    return genericTitles.some(generic =>
-      title === generic ||
-      title.toLowerCase().includes(generic.toLowerCase()) ||
-      title.toLowerCase().includes('new chat') ||
-      title.toLowerCase().includes('untitled') ||
-      title.toLowerCase().includes('loading')
-    );
+    const containsGenericPhrases = [
+      'new chat', 'untitled', 'loading'
+    ];
+
+    // Check for exact matches (case insensitive)
+    if (exactGenericTitles.some(generic => title.toLowerCase() === generic.toLowerCase())) {
+      return true;
+    }
+
+    // Check for generic phrases (but not platform names in meaningful titles)
+    if (containsGenericPhrases.some(phrase => title.toLowerCase().includes(phrase))) {
+      return true;
+    }
+
+    // Special case: If title is just "Platform - Platform" format, it's generic
+    const platformOnlyPattern = /^(ChatGPT|Claude|Gemini|Perplexity|Copilot|Grok)\s*-\s*(ChatGPT|Claude|Gemini|Perplexity|Copilot|Grok)$/i;
+    if (platformOnlyPattern.test(title)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Format timestamp into human-readable "time ago" format
+   * @param {number} timestamp - Timestamp in milliseconds
+   * @returns {string} - Formatted time ago string
+   */
+  static formatTimeAgo(timestamp) {
+    if (!timestamp) return 'unknown time';
+
+    const now = Date.now();
+    const diffMs = now - timestamp;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMinutes < 1) return 'just now';
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+    return `${Math.floor(diffDays / 365)}y ago`;
   }
 
   /**
@@ -889,18 +939,22 @@ export class GenericUrlParser {
     const browserAPI = typeof chrome !== 'undefined' ? chrome : null;
 
     for (const item of items) {
-      // Extract URL and title from item (support both string URLs and item objects)
+      // Extract URL, title, and timing info from item (support both string URLs and item objects)
       const url = typeof item === 'string' ? item : item.url;
       const existingTitle = typeof item === 'object' ? item.title : null;
+      const lastVisitTime = typeof item === 'object' ? item.lastVisitTime : null;
+      const visitCount = typeof item === 'object' ? item.visitCount : null;
 
       let finalTitle = existingTitle;
 
-      // Always enrich ChatGPT URLs to get the best possible titles
+      // Always enrich ChatGPT and Claude URLs to get the best possible titles
       const isChatGPT = url.includes('chatgpt.com') || url.includes('chat.openai.com');
+      const isClaude = url.includes('claude.ai');
 
-      if (browserAPI && isChatGPT) {
+      if (browserAPI && (isChatGPT || isClaude)) {
         try {
-          console.log(`[GenericUrlParser] Enriching ChatGPT URL: ${url} (existing: "${existingTitle}")`);
+          const platform = isChatGPT ? 'ChatGPT' : 'Claude';
+          console.log(`[GenericUrlParser] Enriching ${platform} URL: ${url} (existing: "${existingTitle}")`);
           const enriched = await this.enrichWithHistory(url, existingTitle, browserAPI);
           if (enriched.title && !this.isGenericTitle(enriched.title)) {
             console.log(`[GenericUrlParser] Using enriched title: "${enriched.title}"`);
@@ -913,21 +967,19 @@ export class GenericUrlParser {
         }
       }
 
-      // Only log ChatGPT processing for debugging
-      if (isChatGPT) {
-        console.log(`[GenericUrlParser] Processing ChatGPT: ${url} with title: "${finalTitle}"`);
-      }
-
       const parsed = this.parse(url, finalTitle);
       if (!parsed) {
-        if (isChatGPT) {
-          console.log(`[GenericUrlParser] Failed to parse ChatGPT URL: ${url}`);
-        }
         continue;
       }
 
-      if (isChatGPT) {
-        console.log(`[GenericUrlParser] Successfully parsed ChatGPT:`, parsed);
+      // Enhance ChatGPT and Claude titles with timing information
+      if ((isChatGPT || isClaude) && lastVisitTime) {
+        const timeAgo = this.formatTimeAgo(lastVisitTime);
+
+        // Add timing info as subtitle/metadata but keep original title clean
+        parsed.subtitle = `Last accessed ${timeAgo}`;
+        parsed.lastVisitTime = lastVisitTime;
+        parsed.visitCount = visitCount || 1;
       }
 
       stats.parsed++;
@@ -961,8 +1013,11 @@ export class GenericUrlParser {
       groups.get(workspaceKey).urls.push({
         url: parsed.url,
         title: parsed.title,
+        subtitle: parsed.subtitle,
         details: parsed.details,
-        timestamp: parsed.timestamp
+        timestamp: parsed.timestamp,
+        lastVisitTime: parsed.lastVisitTime,
+        visitCount: parsed.visitCount
       });
     }
 
@@ -1390,6 +1445,18 @@ export class GenericUrlParser {
               h.url && h.url.includes(conversationId) &&
               h.title && h.title.trim().length > 0 &&
               h.title !== 'ChatGPT' && h.title !== 'New Chat'
+            );
+          }
+        }
+
+        // If no exact match, try partial match for Claude conversation IDs
+        if (!match && url.includes('/chat/')) {
+          const conversationId = url.match(/\/chat\/([a-f0-9-]+)/)?.[1];
+          if (conversationId) {
+            match = historyItems.find(h =>
+              h.url && h.url.includes(conversationId) &&
+              h.title && h.title.trim().length > 0 &&
+              h.title !== 'Claude' && h.title !== 'New Chat'
             );
           }
         }
