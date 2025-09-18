@@ -623,54 +623,64 @@ export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData) =>
 export const putActivityRow = putActivityTimeSeriesEvent
 
 /**
- * Get all activity data
+ * Get all activity data (ultra-fast version for small datasets)
  */
-export const getAllActivity = withErrorHandling(async () => {
-    console.log('[DB Debug] getAllActivity called')
-    
-    const db = await getUnifiedDB()
-    console.log('[DB Debug] Database obtained:', !!db)
-    
-    const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readonly')
-    const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
-    
-    console.log('[DB Debug] Transaction and store created for:', DB_CONFIG.STORES.ACTIVITY_SERIES)
-    
-    // First check how many records are in the store
-    const countRequest = store.count()
-    const count = await new Promise((resolve, reject) => {
-        countRequest.onsuccess = () => resolve(countRequest.result)
-        countRequest.onerror = () => reject(countRequest.error)
-    })
-    
-    console.log('[DB Debug] Total records in activity_series store:', count)
-    
-    const request = store.getAll()
-    const results = await new Promise((resolve, reject) => {
-        request.onsuccess = () => {
-            const data = request.result || []
-            console.log('[DB Debug] Retrieved records:', data.length)
-            if (data.length > 0) {
-                console.log('[DB Debug] Sample record:', data[0])
+export const getAllActivity = withErrorHandling(async (options = {}) => {
+    const startTime = Date.now()
+    const { limit = 100 } = options // Much smaller limit for speed
+
+    console.log('[DB Debug] getAllActivity called - ultra-fast mode')
+
+    try {
+        const db = await getUnifiedDB()
+
+        // Use the fastest possible approach - direct getAll with immediate resolve
+        const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readonly')
+        const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
+
+        // Set a 2-second timeout on the entire operation
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Database operation timeout')), 2000)
+        })
+
+        const dataPromise = new Promise((resolve, reject) => {
+            const request = store.getAll()
+
+            request.onsuccess = () => {
+                const data = request.result || []
+                console.log('[DB Debug] Fast retrieval:', data.length, 'records in', Date.now() - startTime, 'ms')
+
+                // Quick sort and limit - no complex operations
+                const sorted = data
+                    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                    .slice(0, limit)
+
+                resolve(sorted)
             }
-            resolve(data)
-        }
-        request.onerror = () => {
-            console.error('[DB Debug] Error getting all activity:', request.error)
-            reject(request.error)
-        }
-    })
-    
-    const sorted = results.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-    console.log('[DB Debug] Returning sorted results:', sorted.length)
-    
-    return sorted
+
+            request.onerror = () => {
+                console.error('[DB Debug] Fast retrieval error:', request.error)
+                reject(request.error)
+            }
+        })
+
+        // Race between data retrieval and timeout
+        const results = await Promise.race([dataPromise, timeoutPromise])
+
+        console.log('[DB Debug] getAllActivity completed in', Date.now() - startTime, 'ms, returning', results.length, 'records')
+        return results
+
+    } catch (error) {
+        console.error('[DB Debug] getAllActivity failed:', error)
+        // Return empty array immediately on any error
+        return []
+    }
 }, {
     operation: 'getAllActivity',
     severity: ErrorSeverity.LOW,
     strategy: ErrorStrategy.FALLBACK,
     fallbackFunction: () => {
-        console.log('[DB Debug] Using fallback function - returning empty array')
+        console.log('[DB Debug] Using fallback - returning empty array')
         return []
     }
 })

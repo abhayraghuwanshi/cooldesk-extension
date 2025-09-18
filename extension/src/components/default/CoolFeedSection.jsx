@@ -1,7 +1,7 @@
 import { faArrowUpRightFromSquare, faGlobe, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../../services/extensionApi';
+import { enqueueOpenInChrome, getHostActivity, getHostDashboard, sendMessage } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils';
 
 export function CoolFeedSection({ tabs, pings }) {
@@ -69,20 +69,9 @@ export function CoolFeedSection({ tabs, pings }) {
       }
 
       // Chrome extension mode: ask background for IndexedDB-backed activity
-      const resp = await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Timed out waiting for background response')), 6000);
-        try {
-          chrome.runtime.sendMessage({ action: 'getActivityData' }, (res) => {
-            clearTimeout(timer);
-            const lastErr = chrome.runtime?.lastError;
-            if (lastErr) return reject(new Error(lastErr.message || 'Service worker unavailable'));
-            resolve(res);
-          });
-        } catch (e) {
-          clearTimeout(timer);
-          reject(e);
-        }
-      });
+      console.log('[CoolFeed Debug] About to send getActivityData message');
+      const resp = await sendMessage({ action: 'getActivityData' }, { timeoutMs: 12000 });
+      console.log('[CoolFeed Debug] Received response:', resp);
       if (!mounted) return;
       if (resp && resp.ok) {
         const arr = Array.isArray(resp.rows) ? resp.rows : [];
@@ -100,6 +89,7 @@ export function CoolFeedSection({ tabs, pings }) {
             forms: Number(r.forms) || 0,
           })).sort((a, b) => b.time - a.time);
         setRows(norm);
+        setError('');
       } else {
         setError((resp && resp.error) ? String(resp.error) : 'Failed to load activity data');
       }

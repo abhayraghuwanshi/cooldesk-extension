@@ -1,4 +1,4 @@
-import { faBullseye, faFolder, faLayerGroup, faPalette, faRocket, faUser } from '@fortawesome/free-solid-svg-icons';
+import { faBullseye, faFolder, faPalette, faRocket, faUser } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { getPersonaUrlCount, personas, validatePersona } from '../../data/personas';
@@ -9,13 +9,12 @@ import { deleteWorkspaceById, getCurrentUser, initializeFirebase, listWorkspaces
 import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontSize } from '../../utils/fontUtils';
 import AccountTab from '../settings/AccountTab';
-import LayoutTab from '../settings/LayoutTab';
 import PersonasTab from '../settings/PersonasTab';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
 import WorkspacesTab from '../settings/WorkspacesTab';
 
-export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayout, onLayoutToggle, fontSize, onFontSizeChange }) {
+export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFontSizeChange }) {
   const [localSettings, setLocalSettings] = useState(settings)
   const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState('')
@@ -53,8 +52,31 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
   ];
 
 
+  // Theme definitions with font family mappings
+  const themes = [
+    { id: 'ai-midnight-nebula', fontFamily: 'inter' },
+    { id: 'cosmic-aurora', fontFamily: 'poppins' },
+    { id: 'sunset-horizon', fontFamily: 'roboto' },
+    { id: 'forest-depths', fontFamily: 'system' },
+    { id: 'minimal-dark', fontFamily: 'inter' },
+    { id: 'ocean-depths', fontFamily: 'poppins' },
+    { id: 'cherry-blossom', fontFamily: 'poppins' },
+    { id: 'arctic-frost', fontFamily: 'inter' },
+    { id: 'volcanic-ember', fontFamily: 'roboto' },
+    { id: 'neon-cyberpunk', fontFamily: 'jetbrains' },
+    { id: 'white-cred', fontFamily: 'system' },
+    { id: 'orange-warm', fontFamily: 'roboto' },
+    { id: 'brown-earth', fontFamily: 'system' },
+    { id: 'royal-purple', fontFamily: 'poppins' },
+    { id: 'golden-honey', fontFamily: 'roboto' },
+    { id: 'mint-sage', fontFamily: 'inter' },
+    { id: 'crimson-fire', fontFamily: 'roboto' }
+  ];
+
   const handleThemeChange = (themeId) => {
     setSelectedTheme(themeId);
+
+    // Keep the current font family selection when changing themes
     applyTheme(themeId, fontSize, fontFamily);
   };
 
@@ -65,6 +87,14 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
 
   const handleFontFamilyChange = (familyId) => {
     setFontFamily(familyId);
+
+    // Save font family preference to localStorage
+    try {
+      localStorage.setItem('cooldesk-font-family', familyId);
+    } catch (e) {
+      console.warn('Failed to save font family preference:', e);
+    }
+
     applyTheme(selectedTheme, fontSize, familyId);
   };
 
@@ -273,11 +303,19 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
   // Load and apply saved theme preferences on component mount
   useEffect(() => {
     try {
-      const savedTheme = localStorage.getItem('cooldesk-theme') || 'ai-midnight-nebula';
-      const savedFontFamily = localStorage.getItem('cooldesk-font-family') || 'system';
+      const savedTheme = localStorage.getItem('cooldesk-theme') || 'crimson-fire';
+      const savedFontFamily = localStorage.getItem('cooldesk-font-family');
 
       setSelectedTheme(savedTheme);
-      setFontFamily(savedFontFamily);
+
+      // Use saved font family if available, otherwise use theme's default
+      if (savedFontFamily) {
+        setFontFamily(savedFontFamily);
+      } else {
+        const selectedThemeData = themes.find(t => t.id === savedTheme);
+        const themeFontFamily = selectedThemeData?.fontFamily || 'system';
+        setFontFamily(themeFontFamily);
+      }
 
       // Only apply theme without font size (font size is handled by App.jsx and fontUtils)
       // Just apply theme class and font family
@@ -315,7 +353,7 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
         { id: 'jetbrains', family: 'JetBrains Mono, Consolas, Monaco, monospace' }
       ];
 
-      const selectedFontFamily = fontFamilies.find(f => f.id === savedFontFamily);
+      const selectedFontFamily = fontFamilies.find(f => f.id === themeFontFamily);
       if (selectedFontFamily) {
         body.style.fontFamily = selectedFontFamily.family;
       }
@@ -772,14 +810,6 @@ export function SettingsModal({ show, onClose, settings, onSave, useVerticalLayo
               handleSaveWorkspaceRow={handleSaveWorkspaceRow}
               handleDeleteWorkspace={handleDeleteWorkspace}
               handleOpenCreateWorkspace={handleOpenCreateWorkspace}
-            />
-          </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faLayerGroup} style={{ marginRight: '8px' }} />Layout</>}>
-            <LayoutTab
-              useVerticalLayout={useVerticalLayout}
-              onLayoutToggle={onLayoutToggle}
-              fontSize={fontSize}
-              onFontSizeChange={onFontSizeChange}
             />
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>

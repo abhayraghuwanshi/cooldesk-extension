@@ -87,7 +87,6 @@ export default function App() {
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
   const activeSectionTimeoutRef = useRef(null)
   const [processes, setProcesses] = useState([])
-  const [useVerticalLayout, setUseVerticalLayout] = useState(false)
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [fontSize, setFontSize] = useState('medium')
 
@@ -304,62 +303,7 @@ export default function App() {
     }
   }, [])
 
-  // Load layout preference from UI state
-  useEffect(() => {
-    (async () => {
-      try {
-        const ui = await getUIState();
-        console.log('Loading UI state:', ui);
-        if (typeof ui?.useVerticalLayout === 'boolean') {
-          console.log('Setting vertical layout to:', ui.useVerticalLayout);
-          setUseVerticalLayout(ui.useVerticalLayout);
-        } else {
-          // Fallback to localStorage
-          const savedLayout = localStorage.getItem('cooldesk-vertical-layout');
-          if (savedLayout === 'true') {
-            console.log('Setting vertical layout from localStorage: true');
-            setUseVerticalLayout(true);
-          } else {
-            console.log('No vertical layout preference found, using default (false)');
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load layout preference:', e);
-        // Final fallback to localStorage
-        try {
-          const savedLayout = localStorage.getItem('cooldesk-vertical-layout');
-          if (savedLayout === 'true') {
-            setUseVerticalLayout(true);
-          }
-        } catch (localStorageError) {
-          console.error('Failed to load from localStorage as well:', localStorageError);
-        }
-      }
-    })();
-  }, []);
 
-  // Save layout preference to UI state when changed
-  const handleLayoutToggle = async (vertical) => {
-    try {
-      console.log('Toggling layout to vertical:', vertical);
-      setUseVerticalLayout(vertical);
-      const ui = await getUIState();
-      console.log('Current UI state:', ui);
-      await saveUIState({ ...ui, useVerticalLayout: vertical });
-      console.log('Layout preference saved successfully');
-
-      // Also save to localStorage as backup
-      localStorage.setItem('cooldesk-vertical-layout', vertical.toString());
-    } catch (e) {
-      console.error('Failed to save layout preference:', e);
-      // Try to save to localStorage at least
-      try {
-        localStorage.setItem('cooldesk-vertical-layout', vertical.toString());
-      } catch (localStorageError) {
-        console.error('Failed to save to localStorage as well:', localStorageError);
-      }
-    }
-  };
 
   // Handle font size changes
   const handleFontSizeChange = (fontSizeId) => {
@@ -1284,7 +1228,7 @@ export default function App() {
 
 
   // Determine if we should show vertical header (responsive or user preference)
-  const shouldShowVertical = useVerticalLayout || windowWidth < 700;
+  const shouldShowVertical = windowWidth < 700;
 
   return (
     <div className="popup-wrap" style={{
@@ -1591,8 +1535,6 @@ export default function App() {
           onClose={() => setShowSettings(false)}
           settings={settings}
           onSave={saveSettings}
-          useVerticalLayout={useVerticalLayout}
-          onLayoutToggle={handleLayoutToggle}
           fontSize={fontSize}
           onFontSizeChange={handleFontSizeChange}
         />
