@@ -22,7 +22,13 @@ export function CoolFeedSection({ tabs, pings }) {
         const act = await getHostActivity(0);
         if (!mounted) return;
         if (act?.ok && Array.isArray(act.rows) && act.rows.length) {
-          const norm = act.rows.map(r => ({
+          const norm = act.rows
+          .filter(r => {
+            const url = r.url || '';
+            // Filter out edge system tabs
+            return !url.startsWith('edge://newtab') && !url.startsWith('edge://extensions');
+          })
+          .map(r => ({
             url: r.url,
             time: Number(r.time) || 0,
             scroll: Number(r.scroll) || 0,
@@ -38,14 +44,20 @@ export function CoolFeedSection({ tabs, pings }) {
         const host = await getHostDashboard();
         if (!mounted) return;
         if (host.ok && host.dashboard && Array.isArray(host.dashboard.history)) {
-          const norm = host.dashboard.history.map(h => ({
-            url: h.url,
-            // Approximate time using visitCount to drive ranking visuals
-            time: Number(h.visitCount || 0) * 60000,
-            scroll: 0,
-            clicks: 0,
-            forms: 0,
-          })).sort((a, b) => b.time - a.time);
+          const norm = host.dashboard.history
+            .filter(h => {
+              const url = h.url || '';
+              // Filter out edge system tabs
+              return !url.startsWith('edge://newtab') && !url.startsWith('edge://extensions');
+            })
+            .map(h => ({
+              url: h.url,
+              // Approximate time using visitCount to drive ranking visuals
+              time: Number(h.visitCount || 0) * 60000,
+              scroll: 0,
+              clicks: 0,
+              forms: 0,
+            })).sort((a, b) => b.time - a.time);
           setRows(norm);
           setError('');
         } else {
@@ -74,13 +86,19 @@ export function CoolFeedSection({ tabs, pings }) {
       if (!mounted) return;
       if (resp && resp.ok) {
         const arr = Array.isArray(resp.rows) ? resp.rows : [];
-        const norm = arr.map(r => ({
-          url: r.url,
-          time: Number(r.time) || 0,
-          scroll: Number(r.scroll) || 0,
-          clicks: Number(r.clicks) || 0,
-          forms: Number(r.forms) || 0,
-        })).sort((a, b) => b.time - a.time);
+        const norm = arr
+          .filter(r => {
+            const url = r.url || '';
+            // Filter out edge system tabs
+            return !url.startsWith('edge://newtab') && !url.startsWith('edge://extensions');
+          })
+          .map(r => ({
+            url: r.url,
+            time: Number(r.time) || 0,
+            scroll: Number(r.scroll) || 0,
+            clicks: Number(r.clicks) || 0,
+            forms: Number(r.forms) || 0,
+          })).sort((a, b) => b.time - a.time);
         setRows(norm);
       } else {
         setError((resp && resp.error) ? String(resp.error) : 'Failed to load activity data');

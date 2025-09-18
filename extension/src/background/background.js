@@ -3,13 +3,14 @@ import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats, setupDatabase } fr
 import { storageGetWithTTL } from '../services/extensionApi.js';
 import { populateAndStore } from './data.js';
 // Modular background pieces - these initialize their own message handlers
-import { 
-  initializeActivity, 
-  handleGetActivityData, 
-  handleGetTimeSeriesStats, 
+import {
+  initializeActivity,
+  handleGetActivityData,
+  handleGetTimeSeriesStats,
   handleCleanupTimeSeriesData,
-  handleActivityContentScriptMessage 
+  handleActivityContentScriptMessage
 } from './activity.js';
+import { initializeTabCleanup, handleSetAutoCleanup } from './tabCleanup.js';
 import { initializeData } from './data.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
@@ -177,6 +178,9 @@ async function main() {
 
   // Initialize Workspaces module
   initializeWorkspaces();
+
+  // Initialize Tab Cleanup module
+  initializeTabCleanup();
 
   chrome.runtime.onInstalled.addListener(async () => {
     console.log('[Background] Extension installed - populating data')
@@ -448,6 +452,22 @@ async function main() {
           await handleCleanupTimeSeriesData(msg, sender, sendResponse);
         } catch (e) {
           console.error('[Background] Error in cleanupTimeSeriesData:', e);
+          sendResponse({ ok: false, error: String(e) });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Handle auto-cleanup settings
+    if (msg?.action === 'setAutoCleanup') {
+      console.log('[Background Debug] Handling setAutoCleanup');
+      (async () => {
+        try {
+          await handleSetAutoCleanup(msg, sender, sendResponse);
+        } catch (e) {
+          console.error('[Background] Error in setAutoCleanup:', e);
           sendResponse({ ok: false, error: String(e) });
         } finally {
           cleanup();

@@ -1,4 +1,4 @@
-import { faArrowUpRightFromSquare, faClone, faRotateRight, faThumbtack, faTrash, faCamera, faGlobe } from '@fortawesome/free-solid-svg-icons';
+import { faBroom, faClone, faGlobe, faHistory, faRotateRight, faThumbtack, faTrash, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { enqueueOpenInChrome, getHostTabs } from '../../services/extensionApi';
@@ -9,73 +9,11 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const [tabsError, setTabsError] = React.useState(null);
   const [hoveredTabId, setHoveredTabId] = React.useState(null);
   const [removingTabIds, setRemovingTabIds] = React.useState(new Set());
-  const [tabScreenshots, setTabScreenshots] = React.useState(new Map());
-  const [capturingTabIds, setCapturingTabIds] = React.useState(new Set());
+  const [autoCleanupEnabled, setAutoCleanupEnabled] = React.useState(false);
+  const [recentlyClosed, setRecentlyClosed] = React.useState([]);
+  const [showRecentlyClosed, setShowRecentlyClosed] = React.useState(false);
 
-  // Capture screenshot for a specific tab using content script
-  const captureTabScreenshot = React.useCallback(async (tab) => {
-    if (!tab || !tab.id) return null;
 
-    try {
-      // Mark as capturing
-      setCapturingTabIds(prev => new Set(prev).add(tab.id));
-
-      // Send message to content script to capture screenshot
-      const response = await new Promise((resolve) => {
-        if (typeof chrome !== 'undefined' && chrome?.tabs?.sendMessage) {
-          chrome.tabs.sendMessage(
-            tab.id,
-            { action: 'captureScreenshot' },
-            (response) => {
-              if (chrome.runtime.lastError) {
-                console.warn('Content script screenshot failed:', chrome.runtime.lastError.message);
-                resolve({ ok: false, error: chrome.runtime.lastError.message });
-              } else {
-                resolve(response || { ok: false, error: 'No response' });
-              }
-            }
-          );
-        } else {
-          resolve({ ok: false, error: 'Chrome tabs API not available' });
-        }
-      });
-
-      if (response.ok && response.screenshot) {
-        setTabScreenshots(prev => new Map(prev).set(tab.id, response.screenshot));
-        return response.screenshot;
-      } else {
-        console.warn('Screenshot capture failed:', response.error);
-        return null;
-      }
-    } catch (e) {
-      console.warn('Failed to capture tab screenshot:', e);
-      return null;
-    } finally {
-      // Remove from capturing set
-      setCapturingTabIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(tab.id);
-        return newSet;
-      });
-    }
-  }, []);
-
-  // Capture screenshot for the currently active tab only
-  const captureActiveTabScreenshot = React.useCallback(async (tabList) => {
-    if (!Array.isArray(tabList) || tabList.length === 0) return;
-
-    try {
-      // Find the currently active tab in the current window
-      const activeTab = tabList.find(tab => tab.active && !tab.hidden);
-
-      if (activeTab && !tabScreenshots.has(activeTab.id)) {
-        // Capture screenshot for active tab without switching
-        await captureTabScreenshot(activeTab);
-      }
-    } catch (e) {
-      console.warn('Failed to capture active tab screenshot:', e);
-    }
-  }, [captureTabScreenshot, tabScreenshots]);
 
   const refreshTabs = React.useCallback(() => {
     setTabsError(null);
@@ -91,11 +29,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           }
           const tabList = Array.isArray(list) ? list : [];
           setTabs(tabList);
-
-          // Capture screenshot for active tab only (async, don't wait)
-          if (tabList.length > 0) {
-            setTimeout(() => captureActiveTabScreenshot(tabList), 500);
-          }
         });
       } else {
         // Fallback: fetch tabs mirrored by the extension to the host (Electron mode)
@@ -118,11 +51,94 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     }
   }, []);
 
+  // Load auto-cleanup setting from storage
+  React.useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        if (typeof chrome !== 'undefined' && chrome?.storage?.local?.get) {
+          const result = await chrome.storage.local.get(['autoCleanupEnabled']);
+          setAutoCleanupEnabled(result.autoCleanupEnabled || false);
+        }
+      } catch (e) {
+        console.warn('Failed to load auto-cleanup setting:', e);
+      }
+    };
+    loadSettings();
+  }, []);
+
   React.useEffect(() => {
     refreshTabs();
     const id = setInterval(refreshTabs, 15000);
     return () => clearInterval(id);
   }, [refreshTabs]);
+
+  // Toggle auto-cleanup and save to storage
+  const toggleAutoCleanup = React.useCallback(async () => {
+    const newValue = !autoCleanupEnabled;
+    setAutoCleanupEnabled(newValue);
+
+    try {
+      if (typeof chrome !== 'undefined' && chrome?.storage?.local?.set) {
+        await chrome.storage.local.set({ autoCleanupEnabled: newValue });
+
+        // Send message to background script to update cleanup state
+        if (chrome?.runtime?.sendMessage) {
+          chrome.runtime.sendMessage({
+            action: 'setAutoCleanup',
+            enabled: newValue
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to save auto-cleanup setting:', e);
+    }
+  }, [autoCleanupEnabled]);
+
+  // Fetch recently closed tabs
+  const fetchRecentlyClosed = React.useCallback(async () => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome?.sessions?.getRecentlyClosed) {
+        const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 10 });
+        const closedTabs = sessions
+          .filter(session => session.tab) // Only include tabs, not windows
+          .map(session => session.tab)
+          .filter(tab => {
+            // Filter out system/extension tabs
+            const url = tab.url || '';
+            return !url.startsWith('chrome://') &&
+              !url.startsWith('chrome-extension://') &&
+              !url.startsWith('edge://') &&
+              !url.startsWith('moz-extension://');
+          });
+        setRecentlyClosed(closedTabs);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch recently closed tabs:', e);
+      setRecentlyClosed([]);
+    }
+  }, []);
+
+  // Restore a recently closed tab
+  const restoreTab = React.useCallback(async (sessionId) => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome?.sessions?.restore) {
+        await chrome.sessions.restore(sessionId);
+        // Refresh the recently closed list after restoration
+        setTimeout(fetchRecentlyClosed, 500);
+        // Also refresh current tabs
+        setTimeout(refreshTabs, 500);
+      }
+    } catch (e) {
+      console.warn('Failed to restore tab:', e);
+    }
+  }, [fetchRecentlyClosed, refreshTabs]);
+
+  // Load recently closed tabs when component mounts or when toggled
+  React.useEffect(() => {
+    if (showRecentlyClosed) {
+      fetchRecentlyClosed();
+    }
+  }, [showRecentlyClosed, fetchRecentlyClosed]);
 
   // Dynamic gradient generation based on domain
   const getDomainColor = React.useCallback((url) => {
@@ -137,16 +153,16 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
       };
     }
 
-    // Accent colors for variety
+    // Accent colors for variety - warmer theme-aligned colors
     const accentColors = [
-      '#3b82f6', // Blue
-      '#6b7280', // Gray  
+      '#8b5a3c', // Warm brown
+      '#6b7280', // Gray
       '#4b5563', // Slate
       '#22c55e', // Green
       '#ea580c', // Orange
       '#a855f7', // Purple
       '#f43f5e', // Rose
-      '#0891b2', // Cyan
+      '#d97706', // Amber
     ];
 
     // Simple hash function for consistent color selection
@@ -337,34 +353,91 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
             {tabs.length}
           </span>
         </h2>
-        <button
-          onClick={refreshTabs}
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            border: 'none',
-            background: 'rgba(255, 255, 255, 0.1)',
-            color: '#ffffff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-            e.target.style.transform = 'scale(1.05)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-            e.target.style.transform = 'scale(1)';
-          }}
-          aria-label="Reload"
-          title="Reload tabs"
-        >
-          <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 'var(--font-size-base)' }} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Recently closed toggle */}
+          <button
+            onClick={() => setShowRecentlyClosed(!showRecentlyClosed)}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              border: 'none',
+              background: showRecentlyClosed
+                ? 'rgba(255, 149, 0, 0.2)'
+                : 'rgba(255, 255, 255, 0.1)',
+              color: showRecentlyClosed ? '#FF9500' : '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              border: showRecentlyClosed
+                ? '1px solid rgba(255, 149, 0, 0.3)'
+                : '1px solid transparent'
+            }}
+            aria-label="Recently closed"
+            title={`Recently closed tabs ${showRecentlyClosed ? 'shown' : 'hidden'}`}
+          >
+            <FontAwesomeIcon icon={faHistory} style={{ fontSize: 'var(--font-size-base)' }} />
+          </button>
+
+          {/* Auto-cleanup toggle */}
+          <button
+            onClick={toggleAutoCleanup}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              border: 'none',
+              background: autoCleanupEnabled
+                ? 'rgba(52, 199, 89, 0.2)'
+                : 'rgba(255, 255, 255, 0.1)',
+              color: autoCleanupEnabled ? '#34C759' : '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              border: autoCleanupEnabled
+                ? '1px solid rgba(52, 199, 89, 0.3)'
+                : '1px solid transparent'
+            }}
+            aria-label="Auto-cleanup"
+            title={`Auto-cleanup ${autoCleanupEnabled ? 'enabled' : 'disabled'}`}
+          >
+            <FontAwesomeIcon icon={faBroom} style={{ fontSize: 'var(--font-size-base)' }} />
+          </button>
+
+          {/* Reload button */}
+          <button
+            onClick={refreshTabs}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              border: 'none',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+              e.target.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+              e.target.style.transform = 'scale(1)';
+            }}
+            aria-label="Reload"
+            title="Reload tabs"
+          >
+            <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 'var(--font-size-base)' }} />
+          </button>
+        </div>
       </div>
 
       {tabsError ? (
@@ -438,7 +511,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                     setHoveredTabId(null);
                   }}
                 >
-                  {/* Screenshot/Preview Area */}
+                  {/* Preview Area */}
                   <div style={{
                     width: '100%',
                     height: '120px',
@@ -450,68 +523,8 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                     position: 'relative',
                     overflow: 'hidden'
                   }}>
-                    {/* Screenshot or Favicon */}
+                    {/* Favicon */}
                     {(() => {
-                      const screenshot = tabScreenshots.get(tab.id);
-                      const isCapturing = capturingTabIds.has(tab.id);
-
-                      // Show capturing indicator
-                      if (isCapturing) {
-                        return (
-                          <div style={{
-                            width: '100%',
-                            height: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: 'rgba(0, 0, 0, 0.3)',
-                            color: 'white',
-                            fontSize: 'var(--font-size-sm)'
-                          }}>
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px'
-                            }}>
-                              <div style={{
-                                width: '12px',
-                                height: '12px',
-                                border: '2px solid rgba(255, 255, 255, 0.3)',
-                                borderTop: '2px solid white',
-                                borderRadius: '50%',
-                                animation: 'spin 1s linear infinite'
-                              }} />
-                              Capturing...
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      // Show actual screenshot if available
-                      if (screenshot) {
-                        return (
-                          <img
-                            src={screenshot}
-                            alt={`Screenshot of ${tab.title}`}
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover',
-                              objectPosition: 'top left'
-                            }}
-                            onError={() => {
-                              // Remove failed screenshot from cache
-                              setTabScreenshots(prev => {
-                                const newMap = new Map(prev);
-                                newMap.delete(tab.id);
-                                return newMap;
-                              });
-                            }}
-                          />
-                        );
-                      }
-
-                      // Fallback to favicon
                       const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
                       const primaryRaw = (tab.favIconUrl && safeHttp(tab.favIconUrl)) ? tab.favIconUrl : getFaviconUrl(tab.url, 64);
                       let originIco = '';
@@ -600,7 +613,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                     </div>
                   </div>
 
-                  {/* Action Buttons - Positioned over screenshot on hover */}
+                  {/* Action Buttons - Positioned over preview area on hover */}
                   {hoveredTabId === tab.id && (
                     <div style={{
                       position: 'absolute',
@@ -612,33 +625,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       borderRadius: '6px',
                       padding: '4px'
                     }}>
-                      {/* Screenshot Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          captureTabScreenshot(tab);
-                        }}
-                        disabled={capturingTabIds.has(tab.id)}
-                        style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: 4,
-                          border: 'none',
-                          background: capturingTabIds.has(tab.id)
-                            ? 'rgba(128, 128, 128, 0.9)'
-                            : 'rgba(0, 122, 255, 0.9)',
-                          color: 'white',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: capturingTabIds.has(tab.id) ? 'not-allowed' : 'pointer',
-                          fontSize: 'calc(var(--font-size-xs) * 0.85)'
-                        }}
-                        title={capturingTabIds.has(tab.id) ? "Capturing..." : "Capture screenshot"}
-                      >
-                        <FontAwesomeIcon icon={faCamera} />
-                      </button>
-
                       {/* Pin Button */}
                       <button
                         onClick={(e) => {
@@ -691,6 +677,207 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                 </div>
               );
             })
+          )}
+        </div>
+      )}
+
+      {/* Recently Closed Tabs Section */}
+      {showRecentlyClosed && (
+        <div style={{ marginTop: 24 }}>
+          <h3 style={{
+            fontSize: 'var(--font-size-lg)',
+            fontWeight: 600,
+            margin: '0 0 12px 0',
+            color: '#ffffff',
+            letterSpacing: '-0.3px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            <FontAwesomeIcon icon={faHistory} style={{ color: '#FF9500', fontSize: 'var(--font-size-base)' }} />
+            Recently Closed
+            <span style={{
+              fontSize: 'var(--font-size-xs)',
+              color: '#ffffff',
+              background: 'rgba(255, 149, 0, 0.2)',
+              padding: '2px 6px',
+              borderRadius: 8,
+              fontWeight: 500,
+              border: '1px solid rgba(255, 149, 0, 0.3)'
+            }}>
+              {recentlyClosed.length}
+            </span>
+          </h3>
+
+          {recentlyClosed.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              color: 'rgba(255, 255, 255, 0.5)',
+              fontSize: 'var(--font-size-base)',
+              fontWeight: 400,
+              padding: '20px',
+              fontStyle: 'italic',
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: 8,
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              No recently closed tabs
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: '8px',
+              width: '100%'
+            }}>
+              {recentlyClosed.map((tab, index) => {
+                const colors = getDomainColor(tab.url);
+                return (
+                  <div
+                    key={`${tab.sessionId || index}-${tab.url}`}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      borderRadius: 6,
+                      border: '1px solid rgba(255, 149, 0, 0.2)',
+                      backdropFilter: 'blur(10px)',
+                      transition: 'all 0.2s ease',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      position: 'relative'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      restoreTab(tab.sessionId);
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 149, 0, 0.08)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = `0 4px 12px rgba(255, 149, 0, 0.2)`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    {/* Favicon and Title */}
+                    <div style={{
+                      padding: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      {(() => {
+                        const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
+                        const primaryRaw = (tab.favIconUrl && safeHttp(tab.favIconUrl)) ? tab.favIconUrl : getFaviconUrl(tab.url, 32);
+                        let originIco = '';
+                        try {
+                          const u = new URL(tab.url || '');
+                          if (u.protocol === 'http:' || u.protocol === 'https:') {
+                            originIco = `${u.origin}/favicon.ico`;
+                          }
+                        } catch { }
+                        const src = primaryRaw || originIco || '';
+                        return src ? (
+                          <img
+                            src={src}
+                            alt=""
+                            width={16}
+                            height={16}
+                            style={{
+                              borderRadius: 3,
+                              opacity: 0.8,
+                              flexShrink: 0
+                            }}
+                            onError={(e) => {
+                              if (originIco && e.currentTarget.src !== originIco) {
+                                e.currentTarget.src = originIco;
+                                return;
+                              }
+                              if (e.currentTarget.src.indexOf('/default-favicon.svg') === -1) {
+                                e.currentTarget.src = '/default-favicon.svg';
+                                return;
+                              }
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: 3,
+                            background: 'rgba(255, 149, 0, 0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#FF9500',
+                            fontSize: '10px',
+                            flexShrink: 0
+                          }}>
+                            <FontAwesomeIcon icon={faGlobe} />
+                          </div>
+                        );
+                      })()}
+
+                      <div style={{
+                        flex: 1,
+                        minWidth: 0
+                      }}>
+                        <div style={{
+                          fontSize: 'var(--font-size-sm)',
+                          color: '#ffffff',
+                          fontWeight: '500',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          lineHeight: 1.2
+                        }}>
+                          {tab.title || (() => {
+                            try {
+                              return new URL(tab?.url || '').hostname;
+                            } catch {
+                              return tab?.url || 'Unknown';
+                            }
+                          })()}
+                        </div>
+                        <div style={{
+                          fontSize: 'calc(var(--font-size-xs) * 0.9)',
+                          color: 'rgba(255, 255, 255, 0.6)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          marginTop: '2px'
+                        }}>
+                          {(() => {
+                            try {
+                              return new URL(tab?.url || '').hostname;
+                            } catch {
+                              return 'Invalid URL';
+                            }
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Restore icon */}
+                      <div style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 3,
+                        background: 'rgba(255, 149, 0, 0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#FF9500',
+                        fontSize: 'calc(var(--font-size-xs) * 0.8)',
+                        flexShrink: 0
+                      }}>
+                        <FontAwesomeIcon icon={faUndo} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}

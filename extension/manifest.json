@@ -28,7 +28,8 @@
     "idle",
     "activeTab",
     "contextMenus",
-    "identity"
+    "identity",
+    "sessions"
   ],
   "host_permissions": [
     "<all_urls>",

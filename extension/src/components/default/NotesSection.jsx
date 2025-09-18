@@ -1,4 +1,4 @@
-import { faMicrophone, faPause, faPlay, faSquare, faSquareCheck, faStop, faTrash, faCheck, faListCheck } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faListCheck, faMicrophone, faPause, faPlay, faSquare, faSquareCheck, faStop, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
@@ -290,6 +290,8 @@ export function NotesSection() {
   const [recordingMode, setRecordingMode] = React.useState('transcribe');
   const [mediaRecorder, setMediaRecorder] = React.useState(null);
   const [recordingTime, setRecordingTime] = React.useState(0);
+  const [transcribedText, setTranscribedText] = React.useState('');
+  const [speechRecognition, setSpeechRecognition] = React.useState(null);
   const [playingId, setPlayingId] = React.useState(null);
   const [previewNote, setPreviewNote] = React.useState(null);
   const [notesDisplayLimit, setNotesDisplayLimit] = React.useState(6);
@@ -353,6 +355,15 @@ export function NotesSection() {
     setText(newText);
   };
 
+  // Auto-resize textarea when text changes (including transcription)
+  React.useEffect(() => {
+    const textarea = document.querySelector('.notes-textarea');
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.max(40, textarea.scrollHeight) + 'px';
+    }
+  }, [text]);
+
   const handleToggleCheckbox = async (noteId, updatedText) => {
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
@@ -407,7 +418,10 @@ export function NotesSection() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const chunks = [];
       let recognition = null;
-      let transcribedText = '';
+      let capturedTranscript = ''; // Local variable to capture transcript
+
+      // Clear previous transcription
+      setTranscribedText('');
 
       // Set up speech recognition for transcription
       if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -418,28 +432,45 @@ export function NotesSection() {
         recognition.lang = 'en-US';
 
         recognition.onresult = (event) => {
-          let interim = '';
-          let final = '';
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              final += transcript + ' ';
-            } else {
-              interim += transcript;
-            }
+          // Build complete transcript from all results
+          let completeTranscript = '';
+          for (let i = 0; i < event.results.length; i++) {
+            completeTranscript += event.results[i][0].transcript + ' ';
           }
 
-          transcribedText = final + interim;
+          const currentTranscript = completeTranscript.trim();
+          capturedTranscript = currentTranscript; // Store in local variable
+          setTranscribedText(currentTranscript);
           // Update text field in real-time during recording
-          setText(transcribedText.trim());
+          setText(currentTranscript);
         };
 
         recognition.onerror = (event) => {
           console.warn('[NotesSection] Speech recognition error:', event.error);
+          // Don't fail the recording if speech recognition fails
         };
 
-        recognition.start();
+        recognition.onstart = () => {
+          console.log('[NotesSection] Speech recognition started');
+        };
+
+        recognition.onend = () => {
+          console.log('[NotesSection] Speech recognition ended');
+          console.log('[NotesSection] Final captured transcript:', capturedTranscript);
+          // Ensure final transcript is captured
+          if (capturedTranscript.trim()) {
+            setText(capturedTranscript.trim());
+          }
+        };
+
+        try {
+          recognition.start();
+          setSpeechRecognition(recognition);
+        } catch (error) {
+          console.warn('[NotesSection] Failed to start speech recognition:', error);
+        }
+      } else {
+        console.warn('[NotesSection] Speech recognition not supported in this browser');
       }
 
       const recorder = new MediaRecorder(stream, {
@@ -458,20 +489,33 @@ export function NotesSection() {
         const blob = new Blob(chunks, { type: 'audio/webm' });
         const reader = new FileReader();
 
-        // Stop speech recognition
-        if (recognition) {
-          recognition.stop();
+        // Stop speech recognition and wait a bit for final processing
+        if (speechRecognition) {
+          try {
+            speechRecognition.stop();
+          } catch (error) {
+            console.warn('[NotesSection] Error stopping speech recognition:', error);
+          }
+          setSpeechRecognition(null);
         }
 
         reader.onloadend = async () => {
           const base64data = reader.result.split(',')[1];
 
-          // Use transcribed text if available, otherwise fallback
-          const finalText = transcribedText.trim() || text.trim() || 'Voice note';
+          // Wait a bit for speech recognition to finish processing
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Use captured transcript, current text field, or fallback
+          const finalText = capturedTranscript.trim() || text.trim() || transcribedText.trim() || 'Voice note';
+
+          console.log('[NotesSection] Saving voice note with final text:', finalText);
+          console.log('[NotesSection] capturedTranscript:', capturedTranscript);
+          console.log('[NotesSection] text state:', text);
 
           // Create voice note with both audio and transcribed text
           await addNote(finalText, false, 'voice', base64data);
           setText('');
+          setTranscribedText('');
         };
 
         reader.readAsDataURL(blob);
@@ -495,13 +539,34 @@ export function NotesSection() {
       recorder.start();
     } catch (error) {
       console.error('[NotesSection] Recording error:', error);
-      alert('Could not access microphone. Please check permissions.');
+      setIsRecording(false);
+      setRecordingTime(0);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+
+      const errorMessage = error.name === 'NotAllowedError'
+        ? 'Microphone access denied. Please allow microphone permissions and try again.'
+        : error.name === 'NotFoundError'
+        ? 'No microphone found. Please check your audio devices.'
+        : 'Could not access microphone. Please check permissions and try again.';
+
+      alert(errorMessage);
     }
   };
 
   const stopRecording = () => {
     if (mediaRecorder && isRecording) {
       mediaRecorder.stop();
+    }
+
+    // Also stop speech recognition if it's running
+    if (speechRecognition) {
+      try {
+        speechRecognition.stop();
+      } catch (error) {
+        console.warn('[NotesSection] Error stopping speech recognition in stopRecording:', error);
+      }
     }
   };
 
@@ -576,8 +641,16 @@ export function NotesSection() {
       if (isRecording && mediaRecorder) {
         mediaRecorder.stop();
       }
+      // Stop speech recognition if component unmounts
+      if (speechRecognition) {
+        try {
+          speechRecognition.stop();
+        } catch (error) {
+          console.warn('[NotesSection] Error stopping speech recognition during cleanup:', error);
+        }
+      }
     };
-  }, [isRecording, mediaRecorder]);
+  }, [isRecording, mediaRecorder, speechRecognition]);
 
   return (
     <div style={{
@@ -642,6 +715,7 @@ export function NotesSection() {
         border: '1px solid rgba(255, 255, 255, 0.1)'
       }}>
         <textarea
+          className="notes-textarea"
           value={text}
           onChange={(e) => handleTextChange(e.target.value)}
           onKeyDown={(e) => {
@@ -671,66 +745,96 @@ export function NotesSection() {
           }}
         />
 
+        {/* Bottom Controls Row */}
         <div style={{
-          fontSize: 'var(--font-size-sm)',
-          color: 'rgba(255, 255, 255, 0.5)',
           marginTop: 8,
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
+          flexDirection: 'column',
+          gap: 8
         }}>
-          <span>Use Cmd+Enter to save • All notes become checkboxes automatically</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* Voice Recording Button */}
+          {/* Help Text / Recording Status */}
+          <div style={{
+            fontSize: 'var(--font-size-sm)',
+            color: isRecording ? '#FF3B30' : 'rgba(255, 255, 255, 0.5)',
+            textAlign: 'center',
+            fontWeight: isRecording ? 600 : 400
+          }}>
+            {isRecording ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                🔴 Recording {formatRecordingTime(recordingTime)}
+                {transcribedText && (
+                  <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontWeight: 400 }}>
+                    • Transcribing...
+                  </span>
+                )}
+              </span>
+            ) : (
+              'Cmd+Enter to save'
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 12
+          }}>
+            {/* Recording Button */}
             <button
               onClick={isRecording ? stopRecording : startRecording}
               style={{
-                padding: '6px 8px',
-                borderRadius: 6,
+                width: 40,
+                height: 40,
+                borderRadius: 20,
                 border: 'none',
-                background: isRecording ? '#FF3B30' : 'rgba(255, 255, 255, 0.1)',
+                background: isRecording ? '#FF3B30' : '#007AFF',
                 color: 'white',
-                cursor: 'pointer',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 500,
                 display: 'flex',
                 alignItems: 'center',
-                gap: 4,
-                transition: 'all 0.2s ease'
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: 'var(--font-size-base)',
+                transition: 'all 0.2s ease',
+                boxShadow: isRecording ? '0 0 20px rgba(255, 59, 48, 0.4)' : 'none'
               }}
-              title={isRecording ? 'Stop recording and transcribe' : 'Start voice recording with auto-transcription'}
+              title={isRecording ? `Stop recording ${formatRecordingTime(recordingTime)}` : "Start voice recording"}
             >
-              <FontAwesomeIcon
-                icon={isRecording ? faStop : faMicrophone}
-                style={{ fontSize: 'calc(var(--font-size-xs) * 0.85)' }}
-              />
-              {isRecording ? `Stop ${formatRecordingTime(recordingTime)}` : 'Voice'}
+              <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} />
             </button>
 
-            {/* Save Button */}
-            <button
-              onClick={() => {
-                if (text.trim()) addNote();
-              }}
-              disabled={!text.trim()}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 6,
-                border: 'none',
-                background: text.trim() ? '#34C759' : 'rgba(255, 255, 255, 0.05)',
-                color: text.trim() ? 'white' : 'rgba(255, 255, 255, 0.3)',
-                cursor: text.trim() ? 'pointer' : 'not-allowed',
-                fontSize: 'var(--font-size-xs)',
-                fontWeight: 500,
-                transition: 'all 0.2s ease'
-              }}
-              title="Save note as checklist"
-            >
-              Save
-            </button>
+            {/* Save Button - Primary Action */}
+            {!isRecording && (
+              <button
+                onClick={() => {
+                  if (text.trim()) addNote();
+                }}
+                disabled={!text.trim()}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: text.trim() ? '#34C759' : 'rgba(255, 255, 255, 0.05)',
+                  color: text.trim() ? 'white' : 'rgba(255, 255, 255, 0.3)',
+                  cursor: text.trim() ? 'pointer' : 'not-allowed',
+                  fontSize: 'var(--font-size-xs)',
+                  fontWeight: 500,
+                  transition: 'all 0.2s ease'
+                }}
+                title="Save note as checklist"
+              >
+                Save
+              </button>
+            )}
 
             <span style={{ opacity: 0.7, fontSize: 'var(--font-size-xs)' }}>
-              {text.length} chars
+              {isRecording ? (
+                transcribedText ?
+                  `${text.length} chars (transcribing...)` :
+                  `${text.length} chars (listening...)`
+              ) : (
+                `${text.length} chars`
+              )}
             </span>
           </div>
         </div>
