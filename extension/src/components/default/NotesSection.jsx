@@ -419,6 +419,7 @@ export function NotesSection() {
       const chunks = [];
       let recognition = null;
       let capturedTranscript = ''; // Local variable to capture transcript
+      const existingText = text.trim(); // Capture existing text before recording
 
       // Clear previous transcription
       setTranscribedText('');
@@ -441,8 +442,12 @@ export function NotesSection() {
           const currentTranscript = completeTranscript.trim();
           capturedTranscript = currentTranscript; // Store in local variable
           setTranscribedText(currentTranscript);
-          // Update text field in real-time during recording
-          setText(currentTranscript);
+
+          // Append transcribed text to existing text
+          const combinedText = existingText
+            ? `${existingText}\n${currentTranscript}`
+            : currentTranscript;
+          setText(combinedText);
         };
 
         recognition.onerror = (event) => {
@@ -456,10 +461,12 @@ export function NotesSection() {
 
         recognition.onend = () => {
           console.log('[NotesSection] Speech recognition ended');
-          console.log('[NotesSection] Final captured transcript:', capturedTranscript);
-          // Ensure final transcript is captured
+          // Ensure final transcript is captured and appended
           if (capturedTranscript.trim()) {
-            setText(capturedTranscript.trim());
+            const combinedText = existingText
+              ? `${existingText}\n${capturedTranscript.trim()}`
+              : capturedTranscript.trim();
+            setText(combinedText);
           }
         };
 
@@ -508,20 +515,16 @@ export function NotesSection() {
           // Use captured transcript, current text field, or fallback
           const finalText = capturedTranscript.trim() || text.trim() || transcribedText.trim() || 'Voice note';
 
-          console.log('[NotesSection] Saving voice note with final text:', finalText);
-          console.log('[NotesSection] capturedTranscript:', capturedTranscript);
-          console.log('[NotesSection] text state:', text);
-
-          // Create voice note with both audio and transcribed text
-          await addNote(finalText, false, 'voice', base64data);
-          setText('');
-          setTranscribedText('');
+          // Don't auto-save - just keep the transcribed text in the input field
+          // User can manually save with the Save button
+          // The audio data is discarded if not saved manually
         };
 
         reader.readAsDataURL(blob);
         stream.getTracks().forEach(track => track.stop());
         setIsRecording(false);
         setRecordingTime(0);
+        setTranscribedText(''); // Clear transcribed text state but keep text in input
         if (recordingTimerRef.current) {
           clearInterval(recordingTimerRef.current);
         }
