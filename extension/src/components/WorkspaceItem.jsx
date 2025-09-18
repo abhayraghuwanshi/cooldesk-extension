@@ -1,8 +1,7 @@
+import { faExternalLinkAlt, faTag, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrash, faMinus, faPlus, faExternalLinkAlt, faClock, faTag } from '@fortawesome/free-solid-svg-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatTime, getDomainFromUrl, getFaviconUrl, getUrlParts } from '../utils';
-import { ProjectSublinks } from './ProjectSublinks';
 
 export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLink, onDelete }, ref) {
   const [showDetails, setShowDetails] = useState(false);
@@ -141,7 +140,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
               }
             })()}
           </div>
-          
+
           {/* URL Count and Platform Info */}
           <div style={{
             fontSize: 13,
@@ -156,12 +155,12 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             {(() => {
               if (values && values.length > 1) {
                 // Check if this is an AI chat workspace with conversations
-                const hasConversations = values.some(item => 
+                const hasConversations = values.some(item =>
                   item.extractedData?.details?.type === 'conversation'
                 );
-                
+
                 if (hasConversations) {
-                  const conversationCount = values.filter(item => 
+                  const conversationCount = values.filter(item =>
                     item.extractedData?.details?.type === 'conversation'
                   ).length;
                   return `${conversationCount} conversation${conversationCount !== 1 ? 's' : ''}`;
@@ -179,7 +178,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
               }
             })()}
           </div>
-          
+
           {/* Tags display */}
           {tags.length > 0 && (
             <div style={{
@@ -189,8 +188,8 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
               marginTop: '6px',
               alignItems: 'center'
             }}>
-              <FontAwesomeIcon 
-                icon={faTag} 
+              <FontAwesomeIcon
+                icon={faTag}
                 style={{
                   fontSize: '10px',
                   color: 'var(--text-dim, rgba(255, 255, 255, 0.5))',
@@ -235,41 +234,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           }}>
             <FontAwesomeIcon icon={faExternalLinkAlt} />
           </div>
-          
-          {values && values.length > 1 && (
-            <button
-              className="expand-btn"
-              title={showDetails ? "Hide details" : "Show all URLs"}
-              onClick={toggleDetails}
-              style={{
-                background: 'var(--primary, rgba(0, 122, 255, 0.1))',
-                border: '1px solid var(--primary, rgba(0, 122, 255, 0.3))',
-                borderRadius: '6px',
-                padding: '4px 8px',
-                color: 'var(--primary, #007AFF)',
-                cursor: 'pointer',
-                fontSize: '12px',
-                marginRight: 8,
-                transition: 'all 0.2s ease',
-                opacity: 0.8
-              }}
-            >
-              {showDetails ? <FontAwesomeIcon icon={faMinus} /> : `${values.length}`}
-            </button>
-          )}
-          {timeString && (
-            <span className="time-spent-badge" style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '12px',
-              color: 'var(--text-dim, rgba(255, 255, 255, 0.7))',
-              marginRight: '8px'
-            }}>
-              <FontAwesomeIcon icon={faClock} />
-              {timeString}
-            </span>
-          )}
           {onDelete && (
             <button
               className="delete-btn"
@@ -310,8 +274,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         </div>
       </div>
 
-      {/* Expanded Details - Show all URLs when there are multiple */}
-      {showDetails && <ProjectSublinks values={values} onDelete={onDelete} />}
 
     </li>
   );

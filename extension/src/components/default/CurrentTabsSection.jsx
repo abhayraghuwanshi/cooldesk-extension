@@ -398,9 +398,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               justifyContent: 'center',
               cursor: 'pointer',
               transition: 'all 0.2s ease',
-              border: autoCleanupEnabled
-                ? '1px solid rgba(52, 199, 89, 0.3)'
-                : '1px solid transparent'
             }}
             aria-label="Auto-cleanup"
             title={`Auto-cleanup ${autoCleanupEnabled ? 'enabled' : 'disabled'}`}
