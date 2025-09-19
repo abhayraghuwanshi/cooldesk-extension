@@ -275,24 +275,53 @@ async function main() {
 
     // Keep service worker alive during message processing with enhanced error handling
     let keepAlivePort;
+    let keepAliveInterval;
+    let isPortConnected = false;
+
     try {
       if (chrome && chrome.runtime && typeof chrome.runtime.connect === 'function') {
         keepAlivePort = chrome.runtime.connect({ name: 'keepalive' });
+        isPortConnected = true;
+
+        // Handle port disconnection
+        keepAlivePort.onDisconnect.addListener(() => {
+          console.log('[Background Debug] Keepalive port disconnected');
+          isPortConnected = false;
+          if (keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+            keepAliveInterval = null;
+          }
+        });
+
         // Send periodic pings to keep the connection alive
-        const keepAliveInterval = setInterval(() => {
+        keepAliveInterval = setInterval(() => {
           try {
-            if (keepAlivePort) {
+            if (keepAlivePort && isPortConnected) {
               keepAlivePort.postMessage({ ping: true });
               console.log('[Background Debug] Sent keepalive ping');
+            } else {
+              console.log('[Background Debug] Port disconnected, stopping pings');
+              if (keepAliveInterval) {
+                clearInterval(keepAliveInterval);
+                keepAliveInterval = null;
+              }
             }
           } catch (e) {
             console.warn('[Background Debug] Keepalive ping failed:', e);
+            isPortConnected = false;
+            if (keepAliveInterval) {
+              clearInterval(keepAliveInterval);
+              keepAliveInterval = null;
+            }
           }
         }, 1000); // Ping every second
 
         // Set a timeout to clean up the interval after a reasonable time
         setTimeout(() => {
-          clearInterval(keepAliveInterval);
+          if (keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+            keepAliveInterval = null;
+          }
           console.log('[Background Debug] Keepalive interval cleared after timeout');
         }, 30000); // Stop after 30 seconds
       } else {
@@ -302,10 +331,16 @@ async function main() {
       console.warn('[Background] Failed to create keepalive connection:', e);
       // Continue processing the message even if keepalive fails
     }
+
     const cleanup = () => {
       try {
-        if (keepAlivePort) {
+        if (keepAliveInterval) {
+          clearInterval(keepAliveInterval);
+          keepAliveInterval = null;
+        }
+        if (keepAlivePort && isPortConnected) {
           keepAlivePort.disconnect();
+          isPortConnected = false;
         }
       } catch { }
     };
