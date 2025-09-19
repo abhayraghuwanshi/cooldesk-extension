@@ -15,18 +15,37 @@ export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddR
     const fetchTimeSpent = async () => {
       try {
         const hasRuntime = typeof chrome !== 'undefined' && chrome?.runtime?.sendMessage;
-        if (!hasRuntime) return;
+        if (!hasRuntime) {
+          console.log('[ProjectGrid] Chrome runtime not available, skipping time spent fetch');
+          return;
+        }
+
+        // Add a timeout to prevent hanging if background script doesn't respond
+        const timeoutMs = 5000; // 5 second timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+          console.warn('[ProjectGrid] Timeout waiting for time spent data from background script');
+        }, timeoutMs);
+
         const response = await new Promise((resolve) => {
           try {
             chrome.runtime.sendMessage({ action: 'getTimeSpent' }, (res) => {
+              clearTimeout(timeoutId);
               const lastErr = chrome.runtime?.lastError;
               if (lastErr) return resolve({ ok: false, error: lastErr.message });
               resolve(res);
             });
-          } catch (e) { resolve({ ok: false, error: String(e) }); }
+          } catch (e) {
+            clearTimeout(timeoutId);
+            resolve({ ok: false, error: String(e) });
+          }
         });
+
         if (response?.ok) {
           setTimeSpent(response.timeSpent || {});
+        } else if (response?.error) {
+          console.warn('[ProjectGrid] Failed to get time spent data:', response.error);
         }
       } catch (error) {
         console.error('Error getting time spent:', error);

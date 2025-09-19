@@ -361,7 +361,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               width: 32,
               height: 32,
               borderRadius: 16,
-              border: 'none',
+              border: showRecentlyClosed
+                ? '1px solid rgba(255, 149, 0, 0.3)'
+                : '1px solid transparent',
               background: showRecentlyClosed
                 ? 'rgba(255, 149, 0, 0.2)'
                 : 'rgba(255, 255, 255, 0.1)',
@@ -370,10 +372,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              border: showRecentlyClosed
-                ? '1px solid rgba(255, 149, 0, 0.3)'
-                : '1px solid transparent'
+              transition: 'all 0.2s ease'
             }}
             aria-label="Recently closed"
             title={`Recently closed tabs ${showRecentlyClosed ? 'shown' : 'hidden'}`}

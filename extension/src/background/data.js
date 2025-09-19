@@ -137,6 +137,8 @@ export function initializeDataCollection() {
       populateAndStore().then((res) => sendResponse(res))
       return true
     }
+    // Return false for messages this handler doesn't process
+    return false;
   });
 }
 

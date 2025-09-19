@@ -308,12 +308,15 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
 
       setSelectedTheme(savedTheme);
 
-      // Use saved font family if available, otherwise use theme's default
+      // Determine which font family to use
+      let fontFamilyToUse = 'system';
       if (savedFontFamily) {
+        fontFamilyToUse = savedFontFamily;
         setFontFamily(savedFontFamily);
       } else {
         const selectedThemeData = themes.find(t => t.id === savedTheme);
         const themeFontFamily = selectedThemeData?.fontFamily || 'system';
+        fontFamilyToUse = themeFontFamily;
         setFontFamily(themeFontFamily);
       }
 
@@ -353,7 +356,7 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
         { id: 'jetbrains', family: 'JetBrains Mono, Consolas, Monaco, monospace' }
       ];
 
-      const selectedFontFamily = fontFamilies.find(f => f.id === themeFontFamily);
+      const selectedFontFamily = fontFamilies.find(f => f.id === fontFamilyToUse);
       if (selectedFontFamily) {
         body.style.fontFamily = selectedFontFamily.family;
       }

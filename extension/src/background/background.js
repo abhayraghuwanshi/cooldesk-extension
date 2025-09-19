@@ -1,17 +1,17 @@
 // MV3 background service worker (type: module)
-import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats, setupDatabase } from '../db/index.js';
+import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats } from '../db/index.js';
 import { storageGetWithTTL } from '../services/extensionApi.js';
 import { populateAndStore } from './data.js';
 // Modular background pieces - these initialize their own message handlers
 import {
-  initializeActivity,
+  handleActivityContentScriptMessage,
+  handleCleanupTimeSeriesData,
   handleGetActivityData,
   handleGetTimeSeriesStats,
-  handleCleanupTimeSeriesData,
-  handleActivityContentScriptMessage
+  initializeActivity
 } from './activity.js';
-import { initializeTabCleanup, handleSetAutoCleanup } from './tabCleanup.js';
 import { initializeData } from './data.js';
+import { handleSetAutoCleanup, initializeTabCleanup } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
 
@@ -154,17 +154,31 @@ async function main() {
   // Initialize AI module
   // initializeAI();
 
-  // Initialize unified database system first
+  // Initialize unified database system first with safety check for DOM APIs
   console.log('[Background] Initializing database system...');
   try {
-    const dbResult = await setupDatabase();
-    if (dbResult.success) {
-      console.log('[Background] ✅ Database system ready');
-      if (dbResult.migrated) {
-        console.log('[Background] ✅ Legacy data migrated successfully');
+    // Ensure no DOM-related code is executed in service worker context
+    if (typeof document === 'undefined') {
+      console.log('[Background] Running in service worker context, avoiding DOM APIs');
+    }
+    const dbModule = await import('../db/index.js');
+    if (dbModule && dbModule.setupDatabase) {
+      const result = await dbModule.setupDatabase({
+        autoMigrate: true,
+        cleanupLegacy: true,
+        enableErrorTracking: true
+      });
+
+      if (result.success) {
+        console.log('[Background] ✅ Database system ready');
+        if (result.migrated) {
+          console.log('[Background] ✅ Legacy data migrated successfully');
+        }
+      } else {
+        console.error('[Background] ❌ Database setup failed:', result.error);
       }
     } else {
-      console.error('[Background] ❌ Database initialization failed:', dbResult.error);
+      console.warn('[Background] Database module or setupDatabase function not available');
     }
   } catch (error) {
     console.error('[Background] ❌ Database setup error:', error);
@@ -173,14 +187,26 @@ async function main() {
   // Initialize Data module
   initializeData();
 
-  // Initialize Activity module
-  initializeActivity();
+  // Initialize Activity module with safety check
+  try {
+    initializeActivity();
+  } catch (e) {
+    console.error('[Background] Error initializing Activity module:', e);
+  }
 
-  // Initialize Workspaces module
-  initializeWorkspaces();
+  // Initialize Workspaces module with safety check
+  try {
+    initializeWorkspaces();
+  } catch (e) {
+    console.error('[Background] Error initializing Workspaces module:', e);
+  }
 
-  // Initialize Tab Cleanup module
-  initializeTabCleanup();
+  // Initialize Tab Cleanup module with safety check for 'clear'
+  try {
+    initializeTabCleanup();
+  } catch (e) {
+    console.error('[Background] Error initializing Tab Cleanup module:', e);
+  }
 
   chrome.runtime.onInstalled.addListener(async () => {
     console.log('[Background] Extension installed - populating data')
@@ -247,11 +273,40 @@ async function main() {
     console.log('[Background Debug] Received message:', msg);
     console.log('[Background Debug] Message sender:', sender);
 
-    // Keep service worker alive during message processing
-    const keepAlivePort = chrome.runtime.connect({ name: 'keepalive' });
+    // Keep service worker alive during message processing with enhanced error handling
+    let keepAlivePort;
+    try {
+      if (chrome && chrome.runtime && typeof chrome.runtime.connect === 'function') {
+        keepAlivePort = chrome.runtime.connect({ name: 'keepalive' });
+        // Send periodic pings to keep the connection alive
+        const keepAliveInterval = setInterval(() => {
+          try {
+            if (keepAlivePort) {
+              keepAlivePort.postMessage({ ping: true });
+              console.log('[Background Debug] Sent keepalive ping');
+            }
+          } catch (e) {
+            console.warn('[Background Debug] Keepalive ping failed:', e);
+          }
+        }, 1000); // Ping every second
+
+        // Set a timeout to clean up the interval after a reasonable time
+        setTimeout(() => {
+          clearInterval(keepAliveInterval);
+          console.log('[Background Debug] Keepalive interval cleared after timeout');
+        }, 30000); // Stop after 30 seconds
+      } else {
+        console.warn('[Background] chrome.runtime.connect is not available');
+      }
+    } catch (e) {
+      console.warn('[Background] Failed to create keepalive connection:', e);
+      // Continue processing the message even if keepalive fails
+    }
     const cleanup = () => {
       try {
-        keepAlivePort.disconnect();
+        if (keepAlivePort) {
+          keepAlivePort.disconnect();
+        }
       } catch { }
     };
 
@@ -480,7 +535,7 @@ async function main() {
     if (msg.type && sender.tab) {
       console.log('[Background Debug] Potential activity message:', { type: msg.type, url: sender.tab?.url });
     }
-    
+
     const activityHandled = handleActivityContentScriptMessage(msg, sender);
     if (activityHandled) {
       console.log('[Background Debug] Message handled by activity content script handler');
@@ -555,7 +610,7 @@ async function main() {
     if (msg?.type === 'getDailyNotes') {
       console.log('[Background] Getting daily notes:', msg);
 
-      (async () => {
+      const handleGetDailyNotes = async () => {
         try {
           const { date, limit = 7 } = msg;
 
@@ -569,11 +624,11 @@ async function main() {
               selections: [],
               metadata: { created: 0, lastUpdated: 0, selectionCount: 0 }
             };
-            sendResponse({
+            return {
               ok: true,
               dailyNotes: dailyData,
               date
-            });
+            };
           } else {
             // Get recent daily notes from last N days
             const recentNotes = [];
@@ -588,25 +643,34 @@ async function main() {
               const result = await chrome.storage.local.get([storageKey]);
               const dailyData = result[storageKey];
 
-              if (dailyData && dailyData.selections.length > 0) {
+              if (dailyData && (dailyData.selections?.length > 0 || dailyData.content?.trim())) {
                 recentNotes.push(dailyData);
               }
             }
 
-            sendResponse({
+            return {
               ok: true,
               recentNotes,
               count: recentNotes.length
-            });
+            };
           }
-        } catch (e) {
-          console.error('[Background] Error getting daily notes:', e);
-          sendResponse({ ok: false, error: e?.message || 'Failed to get daily notes' });
-        } finally {
-          cleanup();
+        } catch (error) {
+          console.error('[Background] Error in handleGetDailyNotes:', error);
+          throw error;
         }
-      })();
-      return true;
+      };
+
+      handleGetDailyNotes()
+        .then(response => {
+          console.log('[Background] Sending getDailyNotes response:', response);
+          sendResponse(response);
+        })
+        .catch(error => {
+          console.error('[Background] Error getting daily notes:', error);
+          sendResponse({ ok: false, error: error?.message || 'Failed to get daily notes' });
+        });
+
+      return true; // Keep message channel open for async response
     }
 
     // Get daily notes summary
@@ -628,13 +692,18 @@ async function main() {
 
     // Update daily notes content (manual editing)
     if (msg?.type === 'updateDailyNotes') {
-      console.log('[Background] Updating daily notes content:', msg.date);
+      console.log('[Background] Updating daily notes content:', msg);
 
-      (async () => {
+      // Use .then() pattern instead of async/await to avoid message port issues
+      const handleUpdate = async () => {
         try {
           const { date, content } = msg;
-          if (!date) throw new Error('Date is required');
+          if (!date) {
+            console.error('[Background] updateDailyNotes: Date is required');
+            return { ok: false, error: 'Date is required' };
+          }
 
+          console.log('[Background] Processing daily notes update for date:', date);
           const storageKey = `dailyNotes_${date}`;
           const result = await chrome.storage.local.get([storageKey]);
           const dailyData = result[storageKey] || {
@@ -649,7 +718,8 @@ async function main() {
           dailyData.metadata.lastUpdated = Date.now();
 
           await chrome.storage.local.set({ [storageKey]: dailyData });
-          
+          console.log('[Background] Daily notes saved successfully');
+
           // Notify listeners about daily notes update
           try {
             const bc = new BroadcastChannel('ws_db_changes');
@@ -658,18 +728,28 @@ async function main() {
           } catch (e) {
             console.debug('[Background] BroadcastChannel not available for manual daily notes sync');
           }
-          
-          sendResponse({ ok: true, updated: true });
-        } catch (e) {
-          console.error('[Background] Error updating daily notes:', e);
-          sendResponse({ ok: false, error: e?.message || 'Failed to update daily notes' });
-        } finally {
-          cleanup();
+
+          return { ok: true, updated: true };
+        } catch (error) {
+          console.error('[Background] Error in handleUpdate for daily notes:', error);
+          throw error;
         }
-      })();
-      return true;
+      };
+
+      // Handle async operation with proper error handling
+      handleUpdate()
+        .then(response => {
+          console.log('[Background] Sending response:', response);
+          sendResponse(response);
+        })
+        .catch(error => {
+          console.error('[Background] Error updating daily notes:', error);
+          sendResponse({ ok: false, error: error?.message || 'Failed to update daily notes' });
+        });
+
+      return true; // Keep message channel open for async response
     }
-    
+
     // Delete a specific selection from daily notes
     if (msg?.type === 'deleteSelection') {
       console.log('[Background] Deleting selection:', msg.selectionId, 'from', msg.date);
@@ -677,32 +757,32 @@ async function main() {
         try {
           const { date, selectionId } = msg;
           if (!date || !selectionId) throw new Error('Date and selectionId are required');
-          
+
           const storageKey = `dailyNotes_${date}`;
           const result = await chrome.storage.local.get([storageKey]);
           const dailyData = result[storageKey];
-          
+
           if (!dailyData || !dailyData.selections) {
             sendResponse({ ok: false, error: 'Daily notes not found' });
             return;
           }
-          
+
           // Remove the selection with matching ID
           const originalLength = dailyData.selections.length;
           dailyData.selections = dailyData.selections.filter(selection => selection.id !== selectionId);
-          
+
           if (dailyData.selections.length === originalLength) {
             sendResponse({ ok: false, error: 'Selection not found' });
             return;
           }
-          
+
           // Update metadata
           dailyData.metadata.lastUpdated = Date.now();
           dailyData.metadata.selectionCount = dailyData.selections.length;
-          
+
           // Save updated data
           await chrome.storage.local.set({ [storageKey]: dailyData });
-          
+
           // Notify listeners about daily notes update
           try {
             const bc = new BroadcastChannel('ws_db_changes');
@@ -711,7 +791,7 @@ async function main() {
           } catch (e) {
             console.debug('[Background] BroadcastChannel not available for delete selection sync');
           }
-          
+
           sendResponse({ ok: true, deleted: true });
         } catch (e) {
           console.error('[Background] Error deleting selection:', e);
@@ -910,18 +990,21 @@ async function main() {
         if (keepAliveTimer) clearTimeout(keepAliveTimer);
         keepAliveTimer = setTimeout(() => {
           try {
-            port.disconnect();
-          } catch { }
+            port.postMessage({ ping: true });
+            console.log('[Background Debug] Sent keepalive ping');
+          } catch (e) {
+            console.warn('[Background Debug] Keepalive ping failed:', e);
+          }
         }, 25000); // Disconnect after 25 seconds of inactivity
       };
 
       port.onMessage.addListener((msg) => {
-        console.log('[Background] Keepalive message:', msg);
+        console.log('[Background Debug] Keepalive message:', msg);
         resetTimer();
       });
 
       port.onDisconnect.addListener(() => {
-        console.log('[Background] Keepalive disconnected');
+        console.log('[Background Debug] Keepalive disconnected');
         if (keepAliveTimer) clearTimeout(keepAliveTimer);
       });
 

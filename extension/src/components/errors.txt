@@ -1,0 +1,17 @@
+[CoolFeed] Runtime error: The message port closed before a response was received.
+
+
+
+Failed to load daily notes: Error: The message port closed before a response was received.
+
+
+
+[Background] Main function failed: TypeError: Cannot read properties of undefined (reading 'clear')
+
+
+
+[Background] Stack trace: TypeError: Cannot read properties of undefined (reading 'clear') at V (chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/assets/background.js-Bx3Y87vu.js:1:12386) at ke (chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/assets/background.js-Bx3Y87vu.js:1:11701) at $e (chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/assets/background.js-Bx3Y87vu.js:142:1214) at chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/assets/background.js-Bx3Y87vu.js:142:17631
+
+
+
+Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.

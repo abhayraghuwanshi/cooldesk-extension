@@ -70,7 +70,32 @@ export function CoolFeedSection({ tabs, pings }) {
 
       // Chrome extension mode: ask background for IndexedDB-backed activity
       console.log('[CoolFeed Debug] About to send getActivityData message');
-      const resp = await sendMessage({ action: 'getActivityData' }, { timeoutMs: 12000 });
+      const resp = await new Promise((resolve) => {
+        let resolved = false;
+
+        // Set timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            console.warn('[CoolFeed] Request timeout after 5 seconds');
+            resolve({ ok: false, error: 'Request timeout' });
+          }
+        }, 5000);
+
+        chrome.runtime.sendMessage({ action: 'getActivityData' }, (response) => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutId);
+
+            if (chrome.runtime.lastError) {
+              console.warn('[CoolFeed] Runtime error:', chrome.runtime.lastError.message);
+              resolve({ ok: false, error: chrome.runtime.lastError.message });
+            } else {
+              resolve(response || { ok: false, error: 'No response received' });
+            }
+          }
+        });
+      });
       console.log('[CoolFeed Debug] Received response:', resp);
       if (!mounted) return;
       if (resp && resp.ok) {

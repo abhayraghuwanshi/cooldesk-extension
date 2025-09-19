@@ -162,15 +162,27 @@ let dbPromise = null
  * Get IndexedDB instance that works in both service worker and window contexts
  */
 export function getIndexedDBInstance() {
+    // Check for global indexedDB first (works in both contexts)
     if (typeof indexedDB !== 'undefined') {
         return indexedDB;
-    } else if (typeof self !== 'undefined' && self.indexedDB) {
-        return self.indexedDB;
-    } else if (typeof window !== 'undefined' && window.indexedDB) {
-        return window.indexedDB;
-    } else {
-        throw new Error('IndexedDB is not available in this context');
     }
+
+    // In service worker context, try self
+    if (typeof self !== 'undefined' && self.indexedDB) {
+        return self.indexedDB;
+    }
+
+    // In window context, try window (but safely check if window exists)
+    try {
+        if (typeof window !== 'undefined' && window.indexedDB) {
+            return window.indexedDB;
+        }
+    } catch (e) {
+        // window is not defined in service worker, which is expected
+        console.debug('[DB] Window not available in service worker context');
+    }
+
+    throw new Error('IndexedDB is not available in this context');
 }
 
 /**

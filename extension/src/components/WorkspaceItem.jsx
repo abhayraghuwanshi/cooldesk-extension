@@ -273,8 +273,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           )}
         </div>
       </div>
-
-
     </li>
   );
 });

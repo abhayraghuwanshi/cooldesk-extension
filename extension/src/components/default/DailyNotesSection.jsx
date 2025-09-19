@@ -14,37 +14,81 @@ export function DailyNotesSection() {
   // Daily notes functions
   const loadDailyNotes = React.useCallback(async (date) => {
     try {
-      const response = await new Promise((resolve, reject) => {
-        chrome.runtime.sendMessage({ type: 'getDailyNotes', date }, (response) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve(response);
-          }
-        });
-      });
+      const timeoutMs = 5000; // 5 second timeout
+      const maxRetries = 1; // Retry once if it fails
+      let retries = 0;
+      let lastError = null;
 
-      if (response?.ok) {
-        setDailyNotes(response.dailyNotes);
-        setDailyNotesText(response.dailyNotes.content || '');
-      } else {
-        setDailyNotes({
-          date,
-          content: '',
-          selections: [],
-          metadata: { created: 0, lastUpdated: 0, selectionCount: 0 }
+      while (retries <= maxRetries) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+          console.warn('[DailyNotesSection] Timeout waiting for daily notes data from background script');
+        }, timeoutMs);
+
+        const response = await new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage({ type: 'getDailyNotes', date }, (response) => {
+            clearTimeout(timeoutId);
+            if (chrome.runtime.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+            } else {
+              resolve(response);
+            }
+          });
+        }).catch(error => {
+          clearTimeout(timeoutId);
+          return { ok: false, error: error.message };
         });
-        setDailyNotesText('');
+
+        if (response?.ok) {
+          setDailyNotes(response.dailyNotes);
+          setDailyNotesText(response.dailyNotes.content || '');
+          return; // Success, exit the loop
+        } else if (response?.error) {
+          console.warn('[DailyNotesSection] Failed to load daily notes (attempt ' + (retries + 1) + ' of ' + (maxRetries + 1) + '):', response.error);
+          lastError = response.error;
+          retries++;
+          // Wait a bit before retrying
+          await new Promise(resolve => setTimeout(resolve, 500 * retries));
+        } else {
+          console.warn('[DailyNotesSection] Unexpected response format:', response);
+          lastError = 'Unexpected response format';
+          break; // Don't retry on unexpected response
+        }
       }
+
+      console.error('[DailyNotesSection] Failed to load daily notes after ' + retries + ' retries:', lastError);
+      setDailyNotes({
+        date,
+        content: '',
+        selections: [],
+        metadata: { created: 0, lastUpdated: 0, selectionCount: 0 }
+      });
+      setDailyNotesText('');
     } catch (e) {
       console.error('Failed to load daily notes:', e);
+      setDailyNotes({
+        date,
+        content: '',
+        selections: [],
+        metadata: { created: 0, lastUpdated: 0, selectionCount: 0 }
+      });
+      setDailyNotesText('');
     }
   }, []);
 
   const saveDailyNotes = React.useCallback(async () => {
-    if (!selectedDate) return;
+    console.log('[DailyNotesSection] Save button clicked');
+    console.log('[DailyNotesSection] selectedDate:', selectedDate);
+    console.log('[DailyNotesSection] dailyNotesText:', dailyNotesText);
+
+    if (!selectedDate) {
+      console.error('[DailyNotesSection] No selected date');
+      return;
+    }
 
     try {
+      console.log('[DailyNotesSection] Sending updateDailyNotes message...');
       const response = await new Promise((resolve, reject) => {
         chrome.runtime.sendMessage({
           type: 'updateDailyNotes',
@@ -52,21 +96,25 @@ export function DailyNotesSection() {
           content: dailyNotesText
         }, (response) => {
           if (chrome.runtime.lastError) {
+            console.error('[DailyNotesSection] Chrome runtime error:', chrome.runtime.lastError);
             reject(new Error(chrome.runtime.lastError.message));
           } else {
+            console.log('[DailyNotesSection] Response received:', response);
             resolve(response);
           }
         });
       });
 
       if (response?.ok) {
+        console.log('[DailyNotesSection] Save successful, reloading notes...');
         await loadDailyNotes(selectedDate);
         setEditingDailyNotes(false);
+        console.log('[DailyNotesSection] Save process completed');
       } else {
-        console.error('Failed to save daily notes:', response?.error);
+        console.error('[DailyNotesSection] Failed to save daily notes:', response?.error);
       }
     } catch (e) {
-      console.error('Failed to save daily notes:', e);
+      console.error('[DailyNotesSection] Exception during save:', e);
     }
   }, [selectedDate, dailyNotesText, loadDailyNotes]);
 
