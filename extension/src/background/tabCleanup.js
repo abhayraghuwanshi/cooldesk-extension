@@ -94,21 +94,33 @@ function trackTabActivity(tabId) {
 
 // Set up periodic cleanup alarm
 function setupCleanupAlarm() {
-  // Clear existing alarm
-  chrome.alarms.clear(cleanupAlarmName);
+  // Clear existing alarm with safety check
+  if (chrome && chrome.alarms && typeof chrome.alarms.clear === 'function') {
+    chrome.alarms.clear(cleanupAlarmName);
+  } else {
+    console.warn('[TabCleanup] chrome.alarms.clear is not available');
+  }
 
   // Create new alarm that triggers every minute
-  chrome.alarms.create(cleanupAlarmName, {
-    delayInMinutes: CONFIG.CHECK_INTERVAL_MINUTES,
-    periodInMinutes: CONFIG.CHECK_INTERVAL_MINUTES
-  });
+  if (chrome && chrome.alarms && typeof chrome.alarms.create === 'function') {
+    chrome.alarms.create(cleanupAlarmName, {
+      delayInMinutes: CONFIG.CHECK_INTERVAL_MINUTES,
+      periodInMinutes: CONFIG.CHECK_INTERVAL_MINUTES
+    });
+  } else {
+    console.warn('[TabCleanup] chrome.alarms.create is not available');
+  }
 
   // Listen for alarm events
-  chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === cleanupAlarmName && isCleanupEnabled) {
-      performCleanup();
-    }
-  });
+  if (chrome && chrome.alarms && typeof chrome.alarms.onAlarm === 'object') {
+    chrome.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name === cleanupAlarmName && isCleanupEnabled) {
+        performCleanup();
+      }
+    });
+  } else {
+    console.warn('[TabCleanup] chrome.alarms.onAlarm is not available');
+  }
 }
 
 // Main cleanup function
@@ -267,7 +279,11 @@ export async function handleSetAutoCleanup(msg, sender, sendResponse) {
     if (enabled) {
       setupCleanupAlarm();
     } else {
-      chrome.alarms.clear(cleanupAlarmName);
+      if (chrome && chrome.alarms && typeof chrome.alarms.clear === 'function') {
+        chrome.alarms.clear(cleanupAlarmName);
+      } else {
+        console.warn('[TabCleanup] chrome.alarms.clear is not available');
+      }
     }
 
     console.log('[TabCleanup] Auto-cleanup', enabled ? 'enabled' : 'disabled');

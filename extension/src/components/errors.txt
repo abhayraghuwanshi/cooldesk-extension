@@ -1,17 +1,310 @@
-[CoolFeed] Runtime error: The message port closed before a response was received.
-
-
-
-Failed to load daily notes: Error: The message port closed before a response was received.
-
-
-
-[Background] Main function failed: TypeError: Cannot read properties of undefined (reading 'clear')
-
-
-
-[Background] Stack trace: TypeError: Cannot read properties of undefined (reading 'clear') at V (chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/assets/background.js-Bx3Y87vu.js:1:12386) at ke (chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/assets/background.js-Bx3Y87vu.js:1:11701) at $e (chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/assets/background.js-Bx3Y87vu.js:142:1214) at chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/assets/background.js-Bx3Y87vu.js:142:17631
-
-
-
-Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.
+background.js-Cp754huF.js:142 [Background] Main function started
+background.js-Cp754huF.js:142 [Background] ⚠️ Database initialization temporarily bypassed to avoid DOM error
+background.js-Cp754huF.js:142 [Background] Using simplified storage for now
+background.js-Cp754huF.js:1 [Background] Initializing data handlers...
+background.js-Cp754huF.js:1 [TabCleanup] Initializing tab cleanup module
+background.js-Cp754huF.js:1  [TabCleanup] chrome.alarms.clear is not available
+Y @ background.js-Cp754huF.js:1
+xe @ background.js-Cp754huF.js:1
+He @ background.js-Cp754huF.js:142
+(anonymous) @ background.js-Cp754huF.js:142
+background.js-Cp754huF.js:1  [TabCleanup] chrome.alarms.create is not available
+Y @ background.js-Cp754huF.js:1
+xe @ background.js-Cp754huF.js:1
+He @ background.js-Cp754huF.js:142
+(anonymous) @ background.js-Cp754huF.js:142
+background.js-Cp754huF.js:1  [TabCleanup] chrome.alarms.onAlarm is not available
+Y @ background.js-Cp754huF.js:1
+xe @ background.js-Cp754huF.js:1
+He @ background.js-Cp754huF.js:142
+(anonymous) @ background.js-Cp754huF.js:142
+background.js-Cp754huF.js:142 [Background] Main function executed successfully
+background.js-Cp754huF.js:142 [Background] Service worker is ready for connections
+background.js-Cp754huF.js:1 [TabCleanup] Tracked activity for tab: 167426942
+utils-BtNqYW66.js:1 [Unified DB] Opening database: cooldesk-unified-db v1
+background.js-Cp754huF.js:1 [TabCleanup] Loaded settings: Object
+utils-BtNqYW66.js:1 [Unified DB] Successfully opened database
+background.js-Cp754huF.js:1 [Background] Extension installed - populating data
+background.js-Cp754huF.js:1 [AI][collect] Collecting bookmarks...
+background.js-Cp754huF.js:142 [Background] Extension installed - populating data
+background.js-Cp754huF.js:1 [Background] Populate cooldown active in function, skipping...
+background.js-Cp754huF.js:1 [AI][collect] Bookmarks collected: 165
+background.js-Cp754huF.js:142 [Background] Storage ready
+background.js-Cp754huF.js:1 [AI][collect] Collecting history (last 30 days, max 1000)... Object
+background.js-Cp754huF.js:142 [Background] Side panel enabled globally on install
+background.js-Cp754huF.js:142 [Background] Panel behavior set to open on action click
+background.js-Cp754huF.js:1 [AI][collect] History collected: 1000
+background.js-Cp754huF.js:1 [AI][collect] ChatGPT URLs found in history: 17
+background.js-Cp754huF.js:1 [AI][collect] Sample ChatGPT URLs: Array(3)
+background.js-Cp754huF.js:1 [AI][populate] Stored counts: Object
+background.js-Cp754huF.js:1 [AI][populate] populateAndStore: 61.376953125 ms
+service-worker-loader.js:1  Uncaught (in promise) Error: Could not establish connection. Receiving end does not exist.
+background.js-Cp754huF.js:1 [TabCleanup] Tracked activity for tab: 167427025
+background.js-Cp754huF.js:1 [TabCleanup] Tracked activity for tab: 167426942
+background.js-Cp754huF.js:1 [TabCleanup] Tracked activity for tab: 167426942
+background.js-Cp754huF.js:1 [TabCleanup] Tracked activity for tab: 167427031
+background.js-Cp754huF.js:1 [TabCleanup] Tracked activity for tab: 167427031
+index.html-n7RpcNP2.js:4741 Using Chrome WebExtensions API
+background.js-Cp754huF.js:1 [TabCleanup] Tracked activity for tab: 167427031
+index.html-n7RpcNP2.js:3699 [SettingsModal] Creating editableWorkspaces from: Array(0)
+index.html-n7RpcNP2.js:3699 [SettingsModal] editableWorkspaces result: Array(0)
+index.html-n7RpcNP2.js:4730 [PingsSection] Loading pings...
+utils-BtNqYW66.js:1 [Unified DB] Opening database: cooldesk-unified-db v1
+index.html-n7RpcNP2.js:4730 [PingsSection] Setting up pins change subscription...
+index.html-n7RpcNP2.js:4718 [CoolFeed Debug] About to send getActivityData message
+index.html-n7RpcNP2.js:4307 [DailyNotesSection] Setting up daily notes change subscription...
+background.js-Cp754huF.js:142 [Background Debug] Received message: Object
+background.js-Cp754huF.js:142 [Background Debug] Message sender: Object
+background.js-Cp754huF.js:142 [Background Debug] Handling getActivityData
+background.js-Cp754huF.js:1 [Activity Debug] HANDLER ENTRY - handleGetActivityData called
+background.js-Cp754huF.js:1 [Activity Debug] Sending mock data response
+background.js-Cp754huF.js:142 [Background Debug] Received message: Object
+background.js-Cp754huF.js:142 [Background Debug] Message sender: Object
+background.js-Cp754huF.js:142 [Background Debug] Potential activity message: Object
+background.js-Cp754huF.js:142 [Background] Getting daily notes: Object
+index.html-n7RpcNP2.js:3699 Applied base font size: 13px
+index.html-n7RpcNP2.js:4741 [App] Persisting workspace change: Object
+utils-BtNqYW66.js:1 [Unified DB] Successfully opened database
+background.js-Cp754huF.js:142 [Background] Sending getDailyNotes response: Object
+index.html-n7RpcNP2.js:4718 [CoolFeed Debug] Received response: Object
+index.html-n7RpcNP2.js:4730 [PingsSection] Pings result: Object
+index.html-n7RpcNP2.js:4730 [PingsSection] Extracted pings data: Array(5)
+index.html-n7RpcNP2.js:4741 [App] Initial restoration, UI data: Object
+index.html-n7RpcNP2.js:4741 [App] Workspace persisted successfully
+index.html-n7RpcNP2.js:4741 [App] Full UI state: Object
+index.html-n7RpcNP2.js:4741 [App] UI data: Object
+index.html-n7RpcNP2.js:4741 [App] Workspace restoration check: Object
+background.js-Cp754huF.js:1 [TabCleanup] Tracked activity for tab: 167426942
+index.html-n7RpcNP2.js:4741 Real-time URL categorization enabled
+background.js-Cp754huF.js:142 [Background Debug] Successfully established keepalive connection
+background.js-Cp754huF.js:142 [Background Debug] Successfully established keepalive connection
+background.js-Cp754huF.js:142 [Background Debug] Keepalive port disconnected
+background.js-Cp754huF.js:142 [Background Debug] Retrying connection (attempt 1 of 3)
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.
+background.js-Cp754huF.js:142 [Background Debug] Keepalive port disconnected
+background.js-Cp754huF.js:142 [Background Debug] Retrying connection (attempt 1 of 3)
+index.html-n7RpcNP2.js:4741 [synthesizeFromWorkspaces] loaded workspaces: 0 Object
+background.js-Cp754huF.js:142 [Background Debug] Successfully established keepalive connection
+background.js-Cp754huF.js:142 [Background Debug] Successfully established keepalive connection
+background.js-Cp754huF.js:142 [Background Debug] Keepalive port disconnected
+background.js-Cp754huF.js:142 [Background Debug] Retrying connection (attempt 2 of 3)
+background.js-Cp754huF.js:142 [Background Debug] Keepalive port disconnected
+background.js-Cp754huF.js:142 [Background Debug] Retrying connection (attempt 2 of 3)
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] createWorkspacesFromUrls processing: 921 URLs
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68cb0b40-8bfc-832e-8baf-1b63b9897264 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68cb0b40-8bfc-832e-8baf-1b63b9897264
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Auto-close browser tabs for URL: https://chatgpt.com/c/68cb0b40-8bfc-832e-8baf-1b63b9897264
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Auto-close browser tabs"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/ (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 10 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: ChatGPT for URL: https://chatgpt.com/
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriched title was generic or null: "ChatGPT"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Access Claude chat history for URL: https://chatgpt.com/c/68c9ba6b-29e4-8324-8943-516ad85af5fe
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Access Claude chat history"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Create project workspace for URL: https://chatgpt.com/c/68b3463b-279c-8331-ad62-3beb7b5b11fc
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Create project workspace"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching Claude URL: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Bulk Category Processing Strategy - Claude for URL: https://claude.ai/chat/36e933a2-8935-4f0e-9f61-226d42bebb84
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Bulk Category Processing Strategy - Claude"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching Claude URL: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Improving website copywriting - Claude for URL: https://claude.ai/chat/a9b45142-7381-4914-a6b1-cb95d75a7499
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Improving website copywriting - Claude"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c82d86-19a8-8328-91eb-f7aa325b7021 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c82d86-19a8-8328-91eb-f7aa325b7021
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Fixing website copy for URL: https://chatgpt.com/c/68c82d86-19a8-8328-91eb-f7aa325b7021
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Fixing website copy"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c8232f-3cd8-8320-8861-a6a7c6425115 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c8232f-3cd8-8320-8861-a6a7c6425115
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Trick Beat setup help for URL: https://chatgpt.com/c/68c8232f-3cd8-8320-8861-a6a7c6425115
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Trick Beat setup help"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Chrome ERR_TIMED_OUT fix for URL: https://chatgpt.com/c/68c460d1-79a4-8329-aaaa-7baf43aaf155
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Chrome ERR_TIMED_OUT fix"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Search in chat tools for URL: https://chatgpt.com/c/68c3a30d-0c88-8331-99bd-0fca3d03e71c
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Search in chat tools"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Chrome speech-to-text API for URL: https://chatgpt.com/c/68c447d2-5b44-832f-9f97-bcf0be9c280a
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Chrome speech-to-text API"
+background.js-Cp754huF.js:1 [TabCleanup] Tracked activity for tab: 167427031
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: ChatGPT - Writing for URL: https://chatgpt.com/g/g-p-68c3b923ceb48191911be7209846fafc/project
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "ChatGPT - Writing"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Fix ChatGPT title extraction for URL: https://chatgpt.com/c/68be62f2-2988-8329-b592-04c377d0ba8f
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Fix ChatGPT title extraction"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Prime number algorithm speed for URL: https://chatgpt.com/c/68be5612-347c-8332-b326-3b4038a77bf8
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Prime number algorithm speed"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Create yt to spotify service for URL: https://chatgpt.com/c/68b53779-9fb0-8325-b9e3-ee9361afc250
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Create yt to spotify service"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: ChatGPT for URL: https://chatgpt.com/c/68ab4f43-617c-832e-aef2-a77f2d764cef
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriched title was generic or null: "ChatGPT"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Building voice search for URL: https://chatgpt.com/c/68b4966a-41f0-8323-9164-6cc85373da59
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Building voice search"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272 (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 1 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found title: Popular job personas tools for URL: https://chatgpt.com/c/68b5d0b0-1574-832e-907b-4d2ad23c7272
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Using enriched title: "Popular job personas tools"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] ChatGPT.com title processing: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriching ChatGPT URL: https://chat.openai.com/ (existing: "null")
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory searching for: https://chat.openai.com/
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory found: 0 items
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] enrichWithHistory no title found, using fallback for: https://chat.openai.com/
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] Enriched title was generic or null: "null"
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] parseMultiple result: Object
+index.html-n7RpcNP2.js:3699 [GenericUrlParser] createWorkspacesFromUrls got 8 groups
+index.html-n7RpcNP2.js:4741 [synthesizeFromWorkspaces] url docs: 0
+index.html-n7RpcNP2.js:4741 [synthesizeFromWorkspaces] generated bookmarks: 0 Array(0)
+utils-BtNqYW66.js:1 [DB Debug] putActivityTimeSeriesEvent called with: Object
+utils-BtNqYW66.js:1 [DB Debug] Event after validation: Object
+utils-BtNqYW66.js:1 [DB Debug] About to store event in: activity_series
+utils-BtNqYW66.js:1 [DB Debug] Successfully stored activity event: 6e840d91-94f3-4c49-9bfc-6550b505c782
+utils-BtNqYW66.js:1 [DB Debug] putActivityTimeSeriesEvent called with: Object
+utils-BtNqYW66.js:1 [DB Debug] Event after validation: Object
+utils-BtNqYW66.js:1 [DB Debug] About to store event in: activity_series
+utils-BtNqYW66.js:1 [DB Debug] Successfully stored activity event: cf4ba066-66ad-483e-ba50-0e7eccb6c962
+background.js-Cp754huF.js:142 [Background Debug] Successfully established keepalive connection
+background.js-Cp754huF.js:142 [Background Debug] Successfully established keepalive connection
+background.js-Cp754huF.js:142 [Background Debug] Keepalive port disconnected
+background.js-Cp754huF.js:142 [Background Debug] Retrying connection (attempt 3 of 3)
+background.js-Cp754huF.js:142 [Background Debug] Keepalive port disconnected
+background.js-Cp754huF.js:142 [Background Debug] Retrying connection (attempt 3 of 3)
+background.js-Cp754huF.js:142 [Background Debug] Successfully established keepalive connection
+background.js-Cp754huF.js:142 [Background Debug] Successfully established keepalive connection
+background.js-Cp754huF.js:142 [Background Debug] Keepalive port disconnected
+background.js-Cp754huF.js:142  [Background Debug] Max retries reached for keepalive connection
+(anonymous) @ background.js-Cp754huF.js:142
+background.js-Cp754huF.js:142 [Background Debug] Keepalive port disconnected
+background.js-Cp754huF.js:142  [Background Debug] Max retries reached for keepalive connection
+(anonymous) @ background.js-Cp754huF.js:142
+utils-BtNqYW66.js:1 [DB Debug] putActivityTimeSeriesEvent called with: {id: undefined, url: 'edge://newtab', timestamp: undefined, hasMetrics: false}
+utils-BtNqYW66.js:1 [DB Debug] Event after validation: {id: 'fe3e6373-4799-4fb8-b76e-400dff6ba3ee', url: 'edge://newtab', timestamp: 1758263243798, sessionId: 'session_1758263243798', time: 859, …}
+utils-BtNqYW66.js:1 [DB Debug] About to store event in: activity_series
+utils-BtNqYW66.js:1 [DB Debug] Successfully stored activity event: fe3e6373-4799-4fb8-b76e-400dff6ba3ee
+ [CoolFeed Debug] About to send getActivityData message
+ [Background Debug] Received message: {action: 'getActivityData'}
+ [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: '1D4E2A73F03BC141E6BD272A4D5335E2', …}
+ [Background Debug] Handling getActivityData
+ [Activity Debug] HANDLER ENTRY - handleGetActivityData called
+ [Activity Debug] Sending mock data response
+ [CoolFeed Debug] Received response: {ok: true, rows: Array(2), mock: true}
+ [Background Debug] Successfully established keepalive connection
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Keepalive port disconnected
+ [Background Debug] Retrying connection (attempt 1 of 3)
+ [TabCleanup] Tracked activity for tab: 167426942
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Successfully established keepalive connection
+ [Background Debug] Keepalive port disconnected
+ [Background Debug] Retrying connection (attempt 2 of 3)
+ [DB Debug] putActivityTimeSeriesEvent called with: {id: undefined, url: 'edge://newtab', timestamp: undefined, hasMetrics: false}
+ [DB Debug] Event after validation: {id: '2e2b3be4-facf-4d47-a3b9-7da663bce8f8', url: 'edge://newtab', timestamp: 1758263258800, sessionId: 'session_1758263258800', time: 877, …}
+ [DB Debug] About to store event in: activity_series
+ [DB Debug] Successfully stored activity event: 2e2b3be4-facf-4d47-a3b9-7da663bce8f8
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Successfully established keepalive connection
+ [Background Debug] Keepalive port disconnected
+ [Background Debug] Retrying connection (attempt 3 of 3)
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Successfully established keepalive connection
+ [Background Debug] Keepalive port disconnected
+  [Background Debug] Max retries reached for keepalive connection
+(anonymous) @ background.js-Cp754huF.js:142
+ [CoolFeed Debug] About to send getActivityData message
+ [Background Debug] Received message: {action: 'getActivityData'}
+ [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: '1D4E2A73F03BC141E6BD272A4D5335E2', …}
+ [Background Debug] Handling getActivityData
+ [Activity Debug] HANDLER ENTRY - handleGetActivityData called
+ [Activity Debug] Sending mock data response
+ [CoolFeed Debug] Received response: {ok: true, rows: Array(2), mock: true}
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Successfully established keepalive connection
+ [Background Debug] Keepalive port disconnected
+ [Background Debug] Retrying connection (attempt 1 of 3)
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Successfully established keepalive connection
+ [Background Debug] Keepalive port disconnected
+ [Background Debug] Retrying connection (attempt 2 of 3)
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Successfully established keepalive connection
+ [Background Debug] Keepalive port disconnected
+ [Background Debug] Retrying connection (attempt 3 of 3)
+ [TabCleanup] Tracked activity for tab: 167427031
+ [Background Debug] Keepalive interval cleared after timeout
+ [Background Debug] Successfully established keepalive connection
+ [Background Debug] Keepalive port disconnected
+  [Background Debug] Max retries reached for keepalive connection
+(anonymous) @ background.js-Cp754huF.js:142
+ [DB Debug] putActivityTimeSeriesEvent called with: {id: undefined, url: 'edge://extensions', timestamp: undefined, hasMetrics: false}
+ [DB Debug] Event after validation: {id: '9fb64f2c-365d-4125-b535-9ab2f9c6ca79', url: 'edge://extensions', timestamp: 1758263293797, sessionId: 'session_1758263293797', time: 36435, …}
+ [DB Debug] About to store event in: activity_series
+ [DB Debug] Successfully stored activity event: 9fb64f2c-365d-4125-b535-9ab2f9c6ca79

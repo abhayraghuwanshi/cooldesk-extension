@@ -154,35 +154,9 @@ async function main() {
   // Initialize AI module
   // initializeAI();
 
-  // Initialize unified database system first with safety check for DOM APIs
-  console.log('[Background] Initializing database system...');
-  try {
-    // Ensure no DOM-related code is executed in service worker context
-    if (typeof document === 'undefined') {
-      console.log('[Background] Running in service worker context, avoiding DOM APIs');
-    }
-    const dbModule = await import('../db/index.js');
-    if (dbModule && dbModule.setupDatabase) {
-      const result = await dbModule.setupDatabase({
-        autoMigrate: true,
-        cleanupLegacy: true,
-        enableErrorTracking: true
-      });
-
-      if (result.success) {
-        console.log('[Background] ✅ Database system ready');
-        if (result.migrated) {
-          console.log('[Background] ✅ Legacy data migrated successfully');
-        }
-      } else {
-        console.error('[Background] ❌ Database setup failed:', result.error);
-      }
-    } else {
-      console.warn('[Background] Database module or setupDatabase function not available');
-    }
-  } catch (error) {
-    console.error('[Background] ❌ Database setup error:', error);
-  }
+  // Temporarily bypass database initialization to avoid 'document is not defined' error
+  console.log('[Background] ⚠️ Database initialization temporarily bypassed to avoid DOM error');
+  console.log('[Background] Using simplified storage for now');
 
   // Initialize Data module
   initializeData();
@@ -273,75 +247,11 @@ async function main() {
     console.log('[Background Debug] Received message:', msg);
     console.log('[Background Debug] Message sender:', sender);
 
-    // Keep service worker alive during message processing with enhanced error handling
-    let keepAlivePort;
-    let keepAliveInterval;
-    let isPortConnected = false;
-
-    try {
-      if (chrome && chrome.runtime && typeof chrome.runtime.connect === 'function') {
-        keepAlivePort = chrome.runtime.connect({ name: 'keepalive' });
-        isPortConnected = true;
-
-        // Handle port disconnection
-        keepAlivePort.onDisconnect.addListener(() => {
-          console.log('[Background Debug] Keepalive port disconnected');
-          isPortConnected = false;
-          if (keepAliveInterval) {
-            clearInterval(keepAliveInterval);
-            keepAliveInterval = null;
-          }
-        });
-
-        // Send periodic pings to keep the connection alive
-        keepAliveInterval = setInterval(() => {
-          try {
-            if (keepAlivePort && isPortConnected) {
-              keepAlivePort.postMessage({ ping: true });
-              console.log('[Background Debug] Sent keepalive ping');
-            } else {
-              console.log('[Background Debug] Port disconnected, stopping pings');
-              if (keepAliveInterval) {
-                clearInterval(keepAliveInterval);
-                keepAliveInterval = null;
-              }
-            }
-          } catch (e) {
-            console.warn('[Background Debug] Keepalive ping failed:', e);
-            isPortConnected = false;
-            if (keepAliveInterval) {
-              clearInterval(keepAliveInterval);
-              keepAliveInterval = null;
-            }
-          }
-        }, 1000); // Ping every second
-
-        // Set a timeout to clean up the interval after a reasonable time
-        setTimeout(() => {
-          if (keepAliveInterval) {
-            clearInterval(keepAliveInterval);
-            keepAliveInterval = null;
-          }
-          console.log('[Background Debug] Keepalive interval cleared after timeout');
-        }, 30000); // Stop after 30 seconds
-      } else {
-        console.warn('[Background] chrome.runtime.connect is not available');
-      }
-    } catch (e) {
-      console.warn('[Background] Failed to create keepalive connection:', e);
-      // Continue processing the message even if keepalive fails
-    }
+    // Temporarily disable keepalive connection mechanism to prevent connection errors
+    console.log('[Background Debug] Keepalive connection mechanism disabled to prevent connection errors');
 
     const cleanup = () => {
       try {
-        if (keepAliveInterval) {
-          clearInterval(keepAliveInterval);
-          keepAliveInterval = null;
-        }
-        if (keepAlivePort && isPortConnected) {
-          keepAlivePort.disconnect();
-          isPortConnected = false;
-        }
       } catch { }
     };
 
