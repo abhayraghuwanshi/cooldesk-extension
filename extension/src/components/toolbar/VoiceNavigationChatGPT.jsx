@@ -1068,6 +1068,154 @@ const VoiceNavigationChatGPT = () => {
             height: 90px;
           }
         }
+
+        @media (max-width: 600px) {
+          .voice-navigation-chatgpt {
+            flex-direction: column;
+            padding: 16px 12px;
+            gap: 16px;
+            margin: 12px 0;
+          }
+
+          .voice-content {
+            min-width: auto;
+            width: 100%;
+          }
+
+          .command-help {
+            padding-left: 0;
+            border-left: none;
+            border-top: 1px solid var(--border-primary);
+            padding-top: 12px;
+            width: 100%;
+          }
+
+          .voice-button {
+            width: 60px;
+            height: 60px;
+          }
+
+          .microphone-icon {
+            font-size: calc(var(--font-size-lg) * 1.2);
+          }
+
+          .pulse-ring {
+            width: 80px;
+            height: 80px;
+          }
+
+          .section-header {
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+          }
+
+          .section-title {
+            font-size: var(--font-size-lg);
+          }
+
+          .voice-level-container,
+          .waveform-container {
+            max-width: 180px;
+            margin-top: 12px;
+          }
+
+          .voice-preview {
+            max-width: 220px;
+            margin-top: 12px;
+            padding: 10px;
+          }
+
+          .status-display {
+            margin-top: 12px;
+            max-width: 280px;
+          }
+
+          .status-message {
+            padding: 10px 12px;
+            font-size: var(--font-size-sm);
+          }
+
+          .command-list {
+            gap: 4px;
+          }
+
+          .command-item {
+            padding: 4px 6px;
+            font-size: calc(var(--font-size-xs) * 0.9);
+            flex-wrap: wrap;
+            line-height: 1.2;
+          }
+
+          .command-text {
+            font-size: calc(var(--font-size-xs) * 0.85);
+          }
+
+          .command-desc {
+            font-size: calc(var(--font-size-xs) * 0.8);
+            margin-left: 2px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .voice-navigation-chatgpt {
+            padding: 12px 8px;
+            gap: 12px;
+            margin: 8px 0;
+          }
+
+          .voice-button {
+            width: 50px;
+            height: 50px;
+          }
+
+          .microphone-icon {
+            font-size: var(--font-size-lg);
+          }
+
+          .pulse-ring {
+            width: 70px;
+            height: 70px;
+          }
+
+          .section-title {
+            font-size: var(--font-size-base);
+          }
+
+          .voice-level-container,
+          .waveform-container {
+            max-width: 160px;
+          }
+
+          .voice-preview {
+            max-width: 200px;
+            padding: 8px;
+          }
+
+          .status-display {
+            max-width: 250px;
+          }
+
+          .command-item {
+            padding: 3px 4px;
+            font-size: calc(var(--font-size-xs) * 0.8);
+          }
+
+          .command-text {
+            font-size: calc(var(--font-size-xs) * 0.75);
+          }
+
+          .command-desc {
+            font-size: calc(var(--font-size-xs) * 0.7);
+            display: block;
+            width: 100%;
+            margin-left: 0;
+            margin-top: 2px;
+          }
+
+          .help-title {
+            font-size: var(--font-size-sm);
+          }
+        }
       `}</style>
     </div>
   );

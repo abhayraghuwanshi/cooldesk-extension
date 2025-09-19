@@ -205,7 +205,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
                     borderRadius: '10px',
                     background: 'var(--tag-bg, rgba(255, 255, 255, 0.1))',
                     color: 'var(--text-dim, rgba(255, 255, 255, 0.7))',
-                    border: '1px solid var(--tag-border, rgba(255, 255, 255, 0.2))'
                   }}
                 >
                   {tag}
@@ -246,7 +245,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
                 display: hovered ? 'inline-flex' : 'none',
                 marginLeft: 8,
                 background: 'rgba(255, 59, 48, 0.1)',
-                border: '1px solid rgba(255, 59, 48, 0.3)',
                 borderRadius: '6px',
                 padding: '4px 8px',
                 color: '#FF3B30',
@@ -256,16 +254,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
                 justifyContent: 'center',
                 transition: 'all 0.2s ease',
                 zIndex: 10
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = '#FF3B30';
-                e.target.style.color = 'white';
-                e.target.style.transform = 'scale(1.05)';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'rgba(255, 59, 48, 0.1)';
-                e.target.style.color = '#FF3B30';
-                e.target.style.transform = 'scale(1)';
               }}
             >
               <FontAwesomeIcon icon={faTrash} />

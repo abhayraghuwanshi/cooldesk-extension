@@ -173,7 +173,9 @@ export function VerticalHeader({
     }
   };
 
-  const sidebarWidth = effectiveCollapsed ? '60px' : '280px';
+  const sidebarWidth = effectiveCollapsed
+    ? (windowWidth < 600 ? '50px' : '60px')
+    : '280px';
 
   return (
     <div className="vertical-sidebar ai-sidebar" style={{

@@ -49,6 +49,7 @@
       "resources": [
         "assets/*",
         "index.html",
+        "logo.png",
         "src/footerBar.js",
         "src/contentInteractions.js"
       ],

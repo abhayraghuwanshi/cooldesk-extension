@@ -99,6 +99,27 @@ export function Header({
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
       <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', flex: 1, flexWrap: 'nowrap' }}>
+        {/* Logo */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          marginRight: '16px',
+          flexShrink: 0
+        }}>
+
+          <img
+            src={chrome.runtime.getURL('logo.png')}
+            alt="Logo"
+            style={{
+              width: '70px',
+              height: '70px',
+              borderRadius: '6px',
+              objectFit: 'contain',
+              filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))'
+            }}
+          />
+        </div>
+
         <div style={{ position: 'relative', flex: 1, marginRight: '10vw' }}>
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
         </div>

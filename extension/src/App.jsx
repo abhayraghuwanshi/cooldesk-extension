@@ -1233,7 +1233,11 @@ export default function App() {
   return (
     <div className="popup-wrap" style={{
       paddingBottom: shouldShowVertical ? 0 : 64,
-      marginLeft: shouldShowVertical ? (windowWidth < 1200 ? '60px' : '280px') : 0,
+      marginLeft: shouldShowVertical ? (
+        windowWidth < 600 ? '50px' :
+        windowWidth < 1200 ? '60px' :
+        '280px'
+      ) : 0,
       transition: 'margin-left 0.3s ease'
     }}>
 
