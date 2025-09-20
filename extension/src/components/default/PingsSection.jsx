@@ -45,6 +45,7 @@ export function PingsSection({ tabs }) {
         createdAt: Date.now(),
       };
       console.log('[PingsSection] Creating ping:', ping);
+      console.log('[PingsSection] All existing pings before save:', pings.map(p => ({ id: p.id, url: p.url })));
       const result = await dbUpsertPing(ping);
       console.log('[PingsSection] Ping creation result:', result);
       await loadPings();
@@ -149,7 +150,7 @@ export function PingsSection({ tabs }) {
             fontWeight: 500,
             border: '1px solid rgba(255, 149, 0, 0.3)'
           }}>
-            {Math.min(pings.length, 6)}
+{pings.length}
           </span>
         </h2>
       </div>
@@ -171,12 +172,12 @@ export function PingsSection({ tabs }) {
           </div>
         ) : (
           <div style={{
-            display: 'flex',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, 1fr)',
             gap: '8px',
-            paddingBottom: '16px',
-            flexWrap: 'wrap'
+            paddingBottom: '16px'
           }}>
-            {pings.slice(0, 12).map(p => (
+            {pings.map(p => (
               <div
                 key={p.url}
                 onClick={(e) => {

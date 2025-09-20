@@ -146,6 +146,19 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Auto-focus document on load to enable keyboard shortcuts
+  useEffect(() => {
+    // Ensure the document can receive keyboard events immediately
+    if (document.body && !document.activeElement || document.activeElement === document.body) {
+      // Focus the body or a focusable element to enable keyboard shortcuts
+      document.body.focus();
+      // Also set tabindex to make body focusable if needed
+      if (!document.body.hasAttribute('tabindex')) {
+        document.body.setAttribute('tabindex', '-1');
+      }
+    }
+  }, []);
+
   // UI state: dismissible settings warning
   const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)
 

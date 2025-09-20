@@ -916,39 +916,18 @@ export const upsertPing = withErrorHandling(async (pingData) => {
     const store = tx.objectStore(DB_CONFIG.STORES.PINS)
     
     return new Promise((resolve, reject) => {
-        // Enforce cap of 6 by cleaning oldest - do this within the transaction
-        const getAllRequest = store.getAll()
-        
-        getAllRequest.onsuccess = () => {
-            const allPins = getAllRequest.result || []
-            
-            // If we have too many pins, delete the oldest ones
-            if (allPins.length >= 6) {
-                // Sort by creation time (oldest first)
-                allPins.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
-                const toDelete = allPins.slice(0, allPins.length - 5) // Keep 5, delete rest
-                
-                // Delete old pins within the same transaction
-                toDelete.forEach(oldPin => {
-                    store.delete(oldPin.id)
-                })
-            }
-            
-            // Now save the new pin
-            const putRequest = store.put(pin)
-            putRequest.onsuccess = () => {
-                // Notify listeners
-                try {
-                    const bc = new BroadcastChannel('ws_db_changes')
-                    bc.postMessage({ type: 'pinsChanged' })
-                    bc.close()
-                } catch {}
-                resolve(pin)
-            }
-            putRequest.onerror = () => reject(putRequest.error)
+        // Save the new pin directly without enforcing any limit
+        const putRequest = store.put(pin)
+        putRequest.onsuccess = () => {
+            // Notify listeners
+            try {
+                const bc = new BroadcastChannel('ws_db_changes')
+                bc.postMessage({ type: 'pinsChanged' })
+                bc.close()
+            } catch {}
+            resolve(pin)
         }
-        
-        getAllRequest.onerror = () => reject(getAllRequest.error)
+        putRequest.onerror = () => reject(putRequest.error)
     })
 }, {
     operation: 'upsertPing',

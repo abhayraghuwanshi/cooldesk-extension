@@ -717,96 +717,92 @@ export function NotesSection() {
         marginBottom: 16,
         border: '1px solid rgba(255, 255, 255, 0.1)'
       }}>
-        <textarea
-          className="notes-textarea"
-          value={text}
-          onChange={(e) => handleTextChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              if (text.trim()) addNote();
-            }
-          }}
-          placeholder="Add a todo item..."
-          style={{
-            width: '100%',
-            minHeight: 40,
-            padding: 0,
-            border: 'none',
-            background: 'transparent',
-            color: '#ffffff',
-            fontSize: 'var(--font-size-lg)',
-            lineHeight: 1.4,
-            fontFamily: 'inherit',
-            resize: 'none',
-            outline: 'none'
-          }}
-          rows={1}
-          onInput={(e) => {
-            e.target.style.height = 'auto';
-            e.target.style.height = Math.max(40, e.target.scrollHeight) + 'px';
-          }}
-        />
-
-        {/* Bottom Controls Row */}
         <div style={{
-          marginTop: 8,
           display: 'flex',
-          flexDirection: 'column',
+          alignItems: 'flex-end',
           gap: 8
         }}>
-          {/* Help Text / Recording Status */}
-          <div style={{
-            fontSize: 'var(--font-size-sm)',
-            color: isRecording ? '#FF3B30' : 'rgba(255, 255, 255, 0.5)',
-            textAlign: 'center',
-            fontWeight: isRecording ? 600 : 400
-          }}>
-            {isRecording ? (
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                🔴 Recording {formatRecordingTime(recordingTime)}
-                {transcribedText && (
-                  <span style={{ color: 'rgba(255, 255, 255, 0.7)', fontWeight: 400 }}>
-                    • Transcribing...
-                  </span>
-                )}
-              </span>
-            ) : (
-              'Cmd+Enter to save'
-            )}
-          </div>
+          <textarea
+            className="notes-textarea"
+            value={text}
+            onChange={(e) => handleTextChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                if (text.trim()) addNote();
+              }
+            }}
+            placeholder="Add a todo item..."
+            style={{
+              flex: 1,
+              minHeight: 40,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: '#ffffff',
+              fontSize: 'var(--font-size-lg)',
+              lineHeight: 1.4,
+              fontFamily: 'inherit',
+              resize: 'none',
+              outline: 'none'
+            }}
+            rows={1}
+            onInput={(e) => {
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.max(40, e.target.scrollHeight) + 'px';
+            }}
+          />
 
-          {/* Action Buttons */}
+          {/* Inline Action Buttons */}
           <div style={{
             display: 'flex',
-            justifyContent: 'center',
             alignItems: 'center',
-            gap: 12
+            gap: 8,
+            flexShrink: 0
           }}>
             {/* Recording Button */}
             <button
               onClick={isRecording ? stopRecording : startRecording}
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                border: 'none',
-                background: isRecording ? '#FF3B30' : '#007AFF',
-                color: 'white',
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                border: '1px solid',
+                borderColor: isRecording ? '#FF3B30' : 'var(--border-color, rgba(255, 255, 255, 0.2))',
+                background: isRecording
+                  ? 'linear-gradient(135deg, #FF3B30, #FF6B60)'
+                  : 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+                color: isRecording ? 'white' : 'var(--text-primary, #ffffff)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                fontSize: 'var(--font-size-base)',
+                fontSize: '16px',
                 transition: 'all 0.2s ease',
-                boxShadow: isRecording ? '0 0 20px rgba(255, 59, 48, 0.4)' : 'none'
+                backdropFilter: 'blur(10px)',
+                boxShadow: isRecording ? '0 0 20px rgba(255, 59, 48, 0.4)' : '0 2px 8px rgba(0, 0, 0, 0.1)'
               }}
               title={isRecording ? `Stop recording ${formatRecordingTime(recordingTime)}` : "Start voice recording"}
+              onMouseEnter={(e) => {
+                if (!isRecording) {
+                  e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.15))';
+                  e.target.style.borderColor = 'var(--primary, #60a5fa)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isRecording) {
+                  e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.1))';
+                  e.target.style.borderColor = 'var(--border-color, rgba(255, 255, 255, 0.2))';
+                }
+              }}
             >
-              <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} />
+              <FontAwesomeIcon
+                icon={isRecording ? faStop : faMicrophone}
+                style={{ color: 'currentColor' }}
+              />
             </button>
 
-            {/* Save Button - Primary Action */}
+            {/* Save Button */}
             {!isRecording && (
               <button
                 onClick={() => {
@@ -814,33 +810,73 @@ export function NotesSection() {
                 }}
                 disabled={!text.trim()}
                 style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: text.trim() ? '#34C759' : 'rgba(255, 255, 255, 0.05)',
-                  color: text.trim() ? 'white' : 'rgba(255, 255, 255, 0.3)',
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  border: '1px solid',
+                  borderColor: text.trim() ? '#34C759' : 'var(--border-color, rgba(255, 255, 255, 0.1))',
+                  background: text.trim()
+                    ? 'linear-gradient(135deg, #34C759, #4CD964)'
+                    : 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
+                  color: text.trim() ? 'white' : 'var(--text-dim, rgba(255, 255, 255, 0.4))',
                   cursor: text.trim() ? 'pointer' : 'not-allowed',
-                  fontSize: 'var(--font-size-xs)',
+                  fontSize: '16px',
                   fontWeight: 500,
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: text.trim() ? '0 2px 8px rgba(52, 199, 89, 0.2)' : '0 1px 4px rgba(0, 0, 0, 0.1)'
                 }}
                 title="Save note as checklist"
+                onMouseEnter={(e) => {
+                  if (text.trim()) {
+                    e.target.style.background = 'linear-gradient(135deg, #4CD964, #5DE75A)';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (text.trim()) {
+                    e.target.style.background = 'linear-gradient(135deg, #34C759, #4CD964)';
+                    e.target.style.transform = 'translateY(0)';
+                  }
+                }}
               >
-                Save
+                <FontAwesomeIcon
+                  icon={faCheck}
+                  style={{ color: 'currentColor' }}
+                />
               </button>
             )}
-
-            <span style={{ opacity: 0.7, fontSize: 'var(--font-size-xs)' }}>
-              {isRecording ? (
-                transcribedText ?
-                  `${text.length} chars (transcribing...)` :
-                  `${text.length} chars (listening...)`
-              ) : (
-                `${text.length} chars`
-              )}
-            </span>
           </div>
         </div>
+
+        {/* Status Row */}
+        {(isRecording || text.length > 0) && (
+          <div style={{
+            marginTop: 8,
+            fontSize: 'var(--font-size-xs)',
+            color: 'rgba(255, 255, 255, 0.5)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>
+              {isRecording ? (
+                <span style={{ color: '#FF3B30', fontWeight: 600 }}>
+                  🔴 Recording {formatRecordingTime(recordingTime)}
+                  {transcribedText && ' • Transcribing...'}
+                </span>
+              ) : (
+                'Cmd+Enter to save'
+              )}
+            </span>
+            <span style={{ opacity: 0.7 }}>
+              {text.length} chars
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Notes List */}

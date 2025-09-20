@@ -37,7 +37,13 @@ const SearchModalComponent = function SearchModal({
     // Focus input when modal opens
     useEffect(() => {
         if (isOpen && inputRef.current) {
-            setTimeout(() => inputRef.current.focus(), 100);
+            // Force immediate focus without delay, then retry with delay for safety
+            inputRef.current.focus();
+            setTimeout(() => {
+                if (inputRef.current) {
+                    inputRef.current.focus();
+                }
+            }, 200);
         }
     }, [isOpen]);
 

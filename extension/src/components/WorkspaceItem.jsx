@@ -50,7 +50,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
   }, [values]);
 
   const handleItemClick = () => {
-    window.open(base, '_blank');
+    window.location.href = base;
   };
 
   const toggleDetails = (e) => {
