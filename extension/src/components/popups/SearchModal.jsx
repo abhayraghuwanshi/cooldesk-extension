@@ -407,17 +407,17 @@ const SearchModalComponent = function SearchModal({
             setRecent(next);
         } catch { }
 
-        // Open in extension side panel
+        // Default to Google search in current tab
         try {
-            await openInSidePanel(query);
+            if (chrome?.tabs?.update) {
+                // Navigate current tab to Google search
+                chrome.tabs.update({ url: `https://www.google.com/search?q=${encodeURIComponent(query)}` });
+            } else if (chrome?.tabs?.create) {
+                // Fallback to new tab if update isn't available
+                chrome.tabs.create({ url: `https://www.google.com/search?q=${encodeURIComponent(query)}` });
+            }
         } catch (err) {
-            console.error('Open in side panel failed:', err);
-            // Fallback to Google
-            try {
-                if (chrome?.tabs?.create) {
-                    chrome.tabs.create({ url: `https://www.google.com/search?q=${encodeURIComponent(query)}` });
-                }
-            } catch { }
+            console.error('Failed to open Google search:', err);
         }
         onClose();
     };
@@ -433,7 +433,13 @@ const SearchModalComponent = function SearchModal({
         }
         const url = engine.supportsQuery ? engine.buildUrl(query) : engine.buildUrl();
         try {
-            if (chrome?.tabs?.create) chrome.tabs.create({ url });
+            if (chrome?.tabs?.update) {
+                // Navigate current tab to search engine
+                chrome.tabs.update({ url });
+            } else if (chrome?.tabs?.create) {
+                // Fallback to new tab if update isn't available
+                chrome.tabs.create({ url });
+            }
         } catch { }
         onClose();
     };

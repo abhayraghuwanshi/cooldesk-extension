@@ -84,7 +84,11 @@ export function PingsSection({ tabs }) {
         return;
       }
       if (hasTabsApi) {
-        chrome.tabs.create({ url });
+        if (chrome?.tabs?.update) {
+          chrome.tabs.update({ url });
+        } else if (chrome?.tabs?.create) {
+          chrome.tabs.create({ url });
+        }
       } else {
         // Electron: use extension bridge only to avoid duplicate opens
         enqueueOpenInChrome(url).catch(() => { });

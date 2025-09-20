@@ -1,6 +1,31 @@
-import { faPlus, faTrash, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
-
+import { library } from '@fortawesome/fontawesome-svg-core';
+import {
+  faPlus,
+  faTrash,
+  faTriangleExclamation,
+  faBroom,
+  faClone,
+  faGlobe,
+  faHistory,
+  faRotateRight,
+  faThumbtack,
+  faUndo
+} from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+
+// Add icons to the library
+library.add(
+  faPlus,
+  faTrash,
+  faTriangleExclamation,
+  faBroom,
+  faClone,
+  faGlobe,
+  faHistory,
+  faRotateRight,
+  faThumbtack,
+  faUndo
+);
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { ItemGrid } from './components/ItemGrid';

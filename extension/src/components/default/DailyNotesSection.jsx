@@ -158,9 +158,11 @@ export function DailyNotesSection() {
     return hours * 60 + minutes;
   }, []);
 
-  // Function to open URL in new tab
+  // Function to open URL in current tab
   const openUrl = React.useCallback((url) => {
-    if (chrome?.tabs?.create) {
+    if (chrome?.tabs?.update) {
+      chrome.tabs.update({ url, active: true });
+    } else if (chrome?.tabs?.create) {
       chrome.tabs.create({ url, active: true });
     } else {
       window.open(url, '_blank');

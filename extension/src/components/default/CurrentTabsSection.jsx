@@ -289,14 +289,20 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
         chrome.tabs.duplicate(tab.id, (newTab) => {
           const lastErr = chrome.runtime?.lastError;
           if (lastErr) {
-            // Fallback to create with URL if duplicate fails
-            if (tab.url && chrome?.tabs?.create) chrome.tabs.create({ url: tab.url });
+            // Fallback to navigate current tab if duplicate fails
+            if (tab.url && chrome?.tabs?.update) {
+              chrome.tabs.update({ url: tab.url });
+            } else if (tab.url && chrome?.tabs?.create) {
+              chrome.tabs.create({ url: tab.url });
+            }
           }
         });
         return;
       }
-      // Fallbacks: create or enqueue open via host bridge
-      if (tab?.url && typeof chrome !== 'undefined' && chrome?.tabs?.create) {
+      // Fallbacks: update current tab or enqueue open via host bridge
+      if (tab?.url && typeof chrome !== 'undefined' && chrome?.tabs?.update) {
+        chrome.tabs.update({ url: tab.url });
+      } else if (tab?.url && typeof chrome !== 'undefined' && chrome?.tabs?.create) {
         chrome.tabs.create({ url: tab.url });
       } else if (tab?.url) {
         enqueueOpenInChrome(tab.url).catch(() => { });
