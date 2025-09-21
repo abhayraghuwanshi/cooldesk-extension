@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { getDomainFromUrl, getUrlParts } from '../utils';
+import { getUrlParts } from '../utils';
 import { WorkspaceItem } from './WorkspaceItem';
-import categoryManager from '../data/categories.js';
+import { AddLinkFlow } from './popups/AddLinkFlow';
 
-export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDelete }) {
+export function ItemGrid({ items, workspaces = [], onAddRelated, onDelete, onAddDefault, allItems = [], savedItems = [], currentWorkspace = 'All', onAddItem, onAddSavedItem }) {
   const [timeSpent, setTimeSpent] = useState({});
   const itemRefs = useRef([]);
   const columns = 4; // matches .workspace-grid.fixed-four
   const rootRef = useRef(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   // Keyboard navigation handler
   const onKeyDown = (e) => {
@@ -143,14 +144,107 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onAddLink, onDe
                 values={values}
                 onAddRelated={onAddRelated}
                 timeSpentMs={timeSpent[cleanedKey]}
-                onAddLink={onAddLink && workspace ? () => onAddLink(workspace) : undefined}
                 onDelete={onDelete}
               />
             );
           })()
         ))}
+
+        {/* Add Item button at the end */}
+        <li
+          className="workspace-item add-item-card"
+          tabIndex={0}
+          ref={el => itemRefs.current[displayGroups.length] = el}
+          onClick={() => setShowAddModal(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setShowAddModal(true);
+            }
+          }}
+          style={{
+            borderRadius: '12px',
+            marginBottom: '6px',
+            backdropFilter: 'blur(10px)',
+            transition: 'all 0.2s ease',
+            cursor: 'pointer',
+            transform: 'translateY(0)',
+            background: 'rgba(255, 255, 255, 0.05)',
+            border: '2px dashed rgba(255, 255, 255, 0.2)',
+            minHeight: '80px',
+            maxWidth: '40px',
+            width: '40px',
+            gridColumn: 'span 1',
+            justifySelf: 'start'
+          }}
+        >
+          <div className="item-header" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            height: '100%'
+          }}>
+            <span style={{
+              fontSize: 14,
+              color: 'var(--text, #ffffff)',
+              lineHeight: 1.4,
+              fontWeight: 500,
+              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+            }}>
+              +
+            </span>
+          </div>
+        </li>
       </ul>
 
+      {/* Add Item Modal */}
+      {showAddModal && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowAddModal(false) }}>
+          <div className="modal" style={{ maxWidth: '600px', width: '90%' }}>
+            <div
+              className="modal-header"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                paddingBottom: 8,
+                borderBottom: '1px solid #273043',
+                marginBottom: 10,
+              }}
+            >
+              <h3 style={{ margin: 0 }}>Add Item to {currentWorkspace}</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="cancel-btn"
+                aria-label="Close"
+                title="Close"
+                style={{ padding: '4px 8px' }}
+              >
+                ×
+              </button>
+            </div>
+
+            <AddLinkFlow
+              allItems={allItems || []}
+              savedItems={savedItems || []}
+              currentWorkspace={currentWorkspace || 'All'}
+              onAdd={(item, workspace) => {
+                console.log('[ItemGrid] AddLinkFlow onAdd called', { item, workspace });
+                onAddItem && onAddItem(item, workspace);
+                setShowAddModal(false);
+              }}
+              onAddSaved={(url, workspace) => {
+                console.log('[ItemGrid] AddLinkFlow onAddSaved called', { url, workspace });
+                onAddSavedItem && onAddSavedItem(url, workspace);
+                setShowAddModal(false);
+              }}
+              onCancel={() => setShowAddModal(false)}
+            />
+          </div>
+        </div>
+      )}
 
     </div >
   )

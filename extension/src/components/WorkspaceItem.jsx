@@ -1,12 +1,20 @@
-import { faExternalLinkAlt, faTag, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faTag, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatTime, getDomainFromUrl, getFaviconUrl, getUrlParts } from '../utils';
+import { createLinkActionHandlers, isUrlPinned } from '../utils/linkActionHandlers.js';
+import { ContextMenu } from './common/ContextMenu.jsx';
+import { QuickLinkActions } from './common/LinkActions.jsx';
+import { WorkspaceSelectionModal } from './popups/WorkspaceSelectionModal.jsx';
 
-export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onAddLink, onDelete }, ref) {
+export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onDelete, onAddToWorkspace, tabs = [] }, ref) {
   const [showDetails, setShowDetails] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [fallbackTimeMs, setFallbackTimeMs] = useState(0);
+  const [isPinned, setIsPinned] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const favicon = getFaviconUrl(base);
   const cleanedBase = getUrlParts(base).key;
   const timeString = formatTime(timeSpentMs || fallbackTimeMs);
@@ -43,14 +51,85 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
     return () => { mounted = false; clearTimeout(timer); };
   }, [cleanedBase, timeSpentMs, showDetails, hovered]);
 
+  // Load pin status
+  useEffect(() => {
+    const loadPinStatus = async () => {
+      try {
+        const pinned = await isUrlPinned(base);
+        setIsPinned(pinned);
+      } catch (error) {
+        console.warn('Failed to check pin status:', error);
+      }
+    };
+    loadPinStatus();
+  }, [base]);
+
+  // Create action handlers
+  const actionHandlers = useMemo(() => {
+    return createLinkActionHandlers({
+      tabs,
+      onWorkspaceModalOpen: (url, title) => {
+        setShowWorkspaceModal(true);
+      },
+      onDeleteConfirm: (url) => {
+        try {
+          const hostname = new URL(url).hostname;
+          return confirm(`Remove ${hostname} from this workspace?`);
+        } catch {
+          return confirm('Remove this item from workspace?');
+        }
+      },
+      onDeleteAction: async (url) => {
+        if (onDelete) {
+          await onDelete(base, values);
+        }
+      },
+      onSuccess: (result) => {
+        if (result.action === 'pinned') {
+          setIsPinned(true);
+        } else if (result.action === 'unpinned') {
+          setIsPinned(false);
+        }
+      },
+      onError: (error) => {
+        console.error('Action error:', error);
+      }
+    });
+  }, [tabs, onDelete, base, values]);
+
   // Get unique tags from all items in the workspace
   const tags = useMemo(() => {
     const allTags = values.flatMap(item => item.tags || []);
     return [...new Set(allTags)];
   }, [values]);
 
+  // Get workspace title
+  const workspaceTitle = useMemo(() => {
+    if (values && values.length > 0 && values[0].extractedData && values[0].extractedData.workspace) {
+      return values[0].extractedData.workspace;
+    }
+    try {
+      return new URL(base).hostname;
+    } catch {
+      return base.length > 40 ? base.slice(0, 37) + '…' : base;
+    }
+  }, [base, values]);
+
   const handleItemClick = () => {
     window.location.href = base;
+  };
+
+  const handleRightClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Get click position for context menu placement
+    setContextMenuPosition({
+      x: e.clientX,
+      y: e.clientY
+    });
+
+    setShowContextMenu(true);
   };
 
   const toggleDetails = (e) => {
@@ -63,10 +142,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
     onAddRelated(base, getDomainFromUrl(base));
   };
 
-  const handleAddLinkClick = (e) => {
-    e.stopPropagation();
-    onAddLink();
-  };
 
   return (
     <li
@@ -75,6 +150,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
       ref={ref}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onContextMenu={handleRightClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -87,8 +163,10 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         backdropFilter: 'blur(10px)',
         transition: 'all 0.2s ease',
         cursor: 'pointer',
-        transform: hovered ? 'translateY(-1px)' : 'translateY(0)'
+        transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
+        position: 'relative'
       }}
+      title="Right-click for options"
     >
       <div className="item-header" onClick={handleItemClick} style={{
         padding: '16px',
@@ -128,17 +206,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             overflow: 'hidden',
             textOverflow: 'ellipsis'
           }}>
-            {(() => {
-              // Try to get workspace name from extracted data, fallback to hostname
-              if (values && values.length > 0 && values[0].extractedData && values[0].extractedData.workspace) {
-                return values[0].extractedData.workspace;
-              }
-              try {
-                return new URL(base).hostname;
-              } catch {
-                return base.length > 40 ? base.slice(0, 37) + '…' : base;
-              }
-            })()}
+            {workspaceTitle}
           </div>
 
           {/* URL Count and Platform Info */}
@@ -221,46 +289,49 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             </div>
           )}
         </div>
-        <div className="item-actions">
-          {/* External link icon - shows on hover */}
+        <div className="item-actions" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: '8px'
+        }}>
+          {/* Three-dot button for full menu */}
           <div style={{
-            display: hovered ? 'flex' : 'none',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginRight: '8px',
-            color: 'var(--text-dim, rgba(255, 255, 255, 0.7))',
-            fontSize: '12px'
+            display: hovered ? 'block' : 'none'
           }}>
-            <FontAwesomeIcon icon={faExternalLinkAlt} />
+            <QuickLinkActions
+              url={base}
+              title={workspaceTitle}
+              onPin={actionHandlers.handlePin}
+              onAddToWorkspace={actionHandlers.handleAddToWorkspace}
+              onDelete={actionHandlers.handleDelete}
+              isPinned={isPinned}
+            />
           </div>
-          {onDelete && (
-            <button
-              className="delete-btn"
-              title="Delete from workspace"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(base, values);
-              }}
-              style={{
-                display: hovered ? 'inline-flex' : 'none',
-                marginLeft: 8,
-                background: 'rgba(255, 59, 48, 0.1)',
-                borderRadius: '6px',
-                padding: '4px 8px',
-                color: '#FF3B30',
-                cursor: 'pointer',
-                fontSize: '12px',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease',
-                zIndex: 10
-              }}
-            >
-              <FontAwesomeIcon icon={faTrash} />
-            </button>
-          )}
         </div>
       </div>
+
+      {/* Context Menu - Right-click (Pin + Workspace only) */}
+      <ContextMenu
+        show={showContextMenu}
+        onClose={() => setShowContextMenu(false)}
+        url={base}
+        title={workspaceTitle}
+        onPin={actionHandlers.handlePin}
+        onDelete={actionHandlers.handleDelete}
+        onOpen={actionHandlers.handleOpen}
+        onAddToBookmarks={actionHandlers.handleAddToBookmarks}
+        isPinned={isPinned}
+        position={contextMenuPosition}
+      />
+
+      {/* Workspace Selection Modal - From three-dot menu */}
+      <WorkspaceSelectionModal
+        show={showWorkspaceModal}
+        onClose={() => setShowWorkspaceModal(false)}
+        url={base}
+        title={workspaceTitle}
+      />
     </li>
   );
 });

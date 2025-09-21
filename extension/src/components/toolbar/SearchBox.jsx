@@ -94,7 +94,7 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
                         flex: 1,
                         textAlign: 'left'
                     }}>
-                        {search || 'Portal..'}
+                        {search || 'Almighty Search..'}
                     </span>
                     <div style={{
                         background: 'var(--surface-2, rgba(255, 255, 255, 0.1))',

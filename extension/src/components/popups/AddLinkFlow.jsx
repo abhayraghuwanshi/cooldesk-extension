@@ -10,7 +10,17 @@ export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd
     try {
       console.log('[AddLinkFlow] mount', {
         allItems: Array.isArray(allItems) ? allItems.length : 0,
+        allItemsSample: Array.isArray(allItems) ? allItems.slice(0, 3).map(item => ({
+          title: item?.title,
+          url: item?.url,
+          workspaceGroup: item?.workspaceGroup
+        })) : [],
         savedItems: Array.isArray(savedItems) ? savedItems.length : 0,
+        savedItemsSample: Array.isArray(savedItems) ? savedItems.slice(0, 3).map(item => ({
+          title: item?.title,
+          url: item?.url,
+          workspaceGroup: item?.workspaceGroup
+        })) : [],
         workspace: currentWorkspace,
       });
     } catch { }
@@ -39,10 +49,15 @@ export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd
 
   const filteredItems = React.useMemo(() => {
     const q = debouncedSearch;
+    console.log('[AddLinkFlow] filtering with query:', q);
+
     // Build source list: history/bookmarks items not yet categorized + all saved items from DB
     const baseItems = allItems.filter(item => !item.workspaceGroup);
+    console.log('[AddLinkFlow] baseItems after filtering workspaceGroup:', baseItems.length);
+
     // Insert saved first so they are retained on dedupe and appear first when no query
     const merged = [...savedItems, ...baseItems];
+    console.log('[AddLinkFlow] merged items:', merged.length);
 
     // Dedupe by URL, prefer saved item for metadata if present
     const byUrl = new Map();
@@ -53,8 +68,12 @@ export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd
       if (!byUrl.has(url)) byUrl.set(url, it);
     }
     const items = Array.from(byUrl.values());
+    console.log('[AddLinkFlow] items after deduplication:', items.length);
 
-    if (!q) return items.slice(0, 200);
+    if (!q) {
+      console.log('[AddLinkFlow] no query, returning first 200 items');
+      return items.slice(0, 200);
+    }
 
     const tokens = q.split(/\s+/).filter(Boolean);
 
@@ -115,107 +134,293 @@ export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd
       return score;
     };
 
-    return items
-      .map(it => ({ it, score: scoreItem(it) }))
-      .filter(x => x.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 200)
-      .map(x => x.it);
+    const scored = items.map(it => ({ it, score: scoreItem(it) }));
+    const filtered = scored.filter(x => x.score > 0);
+    const sorted = filtered.sort((a, b) => b.score - a.score);
+    const final = sorted.slice(0, 200).map(x => x.it);
+
+    console.log('[AddLinkFlow] search results:', {
+      query: q,
+      totalItems: items.length,
+      scoredItems: scored.length,
+      filteredItems: filtered.length,
+      finalResults: final.length,
+      sampleResults: final.slice(0, 3).map(item => ({
+        title: item?.title,
+        url: item?.url,
+        score: scored.find(s => s.it === item)?.score
+      }))
+    });
+
+    return final;
   }, [allItems, savedItems, debouncedSearch]);
 
   return (
-    <div className="add-link-flow">
-      <input
-        type="text"
-        placeholder="Search existing items or paste a new link..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="search-input"
-        style={{
-          width: '100%',
-          padding: '8px 12px',
-          borderRadius: 10,
-          border: '1px solid #273043',
-          background: '#1b2331',
-          color: '#e5e7eb',
-          outline: 'none',
-          marginBottom: 8,
-        }}
-      />
-      {filteredItems.length === 0 && (
-        <div style={{ color: '#9aa4b2', fontSize: 12, marginBottom: 8 }}>
-          No matches. Saved URLs available: {Array.isArray(savedItems) ? savedItems.length : 0}
-        </div>
-      )}
-      {looksLikeUrl && (
-        <div style={{ marginBottom: 8 }}>
-          <button
-            className="details-btn"
-            onClick={() => {
-              try { console.log('[AddLinkFlow] onAddSaved click', { url: looksLikeUrl, workspace: currentWorkspace }); } catch { }
-              onAddSaved && onAddSaved(looksLikeUrl, currentWorkspace)
-            }}
-            title={`Add ${looksLikeUrl} to ${currentWorkspace}`}
-          >
-            Add this URL → {currentWorkspace}
-          </button>
-        </div>
-      )}
-      <ul className="workspace-grid">
-        {filteredItems.map((item) => {
-          const base = item.url;
-          const favicon = getFaviconUrl(base);
-          return (
-            <li key={item.id} className="workspace-item">
-              <div
-                className="item-header"
-                onClick={() => window.open(base, '_blank')}
-                title={base}
-              >
-                <div className="item-info">
-                  {favicon && <img className="favicon" src={favicon} alt="" />}
-                  <div className="domain-info">
-                    <span className="url-key">
-                      {base.length > 40 ? base.slice(0, 37) + '…' : base}
-                    </span>
-                    {item.workspaceGroup && (
-                      <span style={{
-                        marginLeft: 8,
-                        padding: '2px 6px',
-                        borderRadius: 8,
-                        background: '#21314a',
-                        color: '#9ec1ff',
-                        fontSize: 11,
-                      }} title={`From workspace DB: ${item.workspaceGroup}`}>
-                        Saved
-                      </span>
-                    )}
+    <div style={{
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      {/* Search Input */}
+      <div style={{
+        padding: '20px',
+        borderBottom: '1px solid var(--border-primary)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        background: 'var(--surface-0)'
+      }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--text-secondary)">
+          <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+        </svg>
+        <input
+          type="text"
+          placeholder="Search existing items or paste a new link..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            flex: 1,
+            background: 'transparent',
+            border: 'transparent',
+            outline: 'none',
+            fontSize: '16px',
+            color: 'var(--text)',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+            fontWeight: '400'
+          }}
+        />
+      </div>
+
+      {/* Content */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        background: 'var(--surface-1)'
+      }}>
+        {/* No matches message */}
+        {filteredItems.length === 0 && !looksLikeUrl && (
+          <div style={{
+            padding: '40px 20px',
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            fontSize: '16px'
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔗</div>
+            <div>No matches found</div>
+            <div style={{ fontSize: '14px', marginTop: '8px' }}>
+              Saved URLs available: {Array.isArray(savedItems) ? savedItems.length : 0}
+            </div>
+          </div>
+        )}
+
+        {/* Add URL Button */}
+        {looksLikeUrl && (
+          <div style={{ padding: '20px', borderBottom: '1px solid var(--border-primary)' }}>
+            <button
+              onClick={() => {
+                try { console.log('[AddLinkFlow] onAddSaved click', { url: looksLikeUrl, workspace: currentWorkspace }); } catch { }
+                onAddSaved && onAddSaved(looksLikeUrl, currentWorkspace)
+              }}
+              style={{
+                width: '100%',
+                padding: '16px 20px',
+                borderRadius: '12px',
+                border: '1px solid var(--accent-primary)',
+                background: 'rgba(52, 199, 89, 0.1)',
+                color: 'var(--accent-primary)',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(52, 199, 89, 0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'rgba(52, 199, 89, 0.1)';
+              }}
+              title={`Add ${looksLikeUrl} to ${currentWorkspace}`}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+              </svg>
+              Add this URL → {currentWorkspace}
+            </button>
+          </div>
+        )}
+
+        {/* Items List */}
+        {filteredItems.length > 0 && (
+          <div style={{ padding: '0 20px' }}>
+            <div style={{
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+              padding: '16px 0 12px 0',
+              fontWeight: '600',
+              textTransform: 'uppercase',
+              letterSpacing: '1px'
+            }}>
+              Available Items ({filteredItems.length})
+            </div>
+
+            {filteredItems.map((item) => {
+              const base = item.url;
+              const favicon = getFaviconUrl(base);
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: '12px',
+                    marginBottom: '8px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-secondary)',
+                    background: 'var(--surface-2)',
+                    transition: 'all 0.2s ease',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'var(--interactive-hover)';
+                    e.target.style.borderColor = 'var(--border-primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'var(--surface-2)';
+                    e.target.style.borderColor = 'var(--border-secondary)';
+                  }}
+                >
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    marginBottom: '8px'
+                  }}>
+                    <img
+                      src={favicon}
+                      alt=""
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '4px',
+                        flexShrink: 0
+                      }}
+                      onError={(e) => {
+                        e.target.style.opacity = '0.3';
+                      }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: 'var(--text)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        {item.title || base}
+                        {item.workspaceGroup && (
+                          <span style={{
+                            fontSize: '10px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontWeight: '600',
+                            textTransform: 'uppercase',
+                            background: 'rgba(52, 199, 89, 0.2)',
+                            color: 'var(--accent-primary)'
+                          }}>
+                            SAVED
+                          </span>
+                        )}
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: 'var(--text-muted)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        marginTop: '2px'
+                      }}>
+                        {base}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    justifyContent: 'flex-end'
+                  }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(base, '_blank');
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-secondary)',
+                        background: 'var(--surface-3)',
+                        color: 'var(--text-secondary)',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = 'var(--surface-4)';
+                        e.target.style.borderColor = 'var(--border-primary)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = 'var(--surface-3)';
+                        e.target.style.borderColor = 'var(--border-secondary)';
+                      }}
+                    >
+                      Open
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        try { console.log('[AddLinkFlow] onAdd item click', { itemId: item.id, url: item.url, workspace: currentWorkspace, isSaved: !!item.workspaceGroup }); } catch { }
+                        if (item.workspaceGroup) {
+                          onAddSaved && onAddSaved(item.url, currentWorkspace);
+                        } else {
+                          handleAddItem(item);
+                        }
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--accent-primary)',
+                        background: 'var(--accent-primary)',
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.opacity = '0.9';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.opacity = '1';
+                      }}
+                      title="Add this link to the workspace"
+                    >
+                      Add to {currentWorkspace}
+                    </button>
                   </div>
                 </div>
-                <div className="item-actions">
-                  <button
-                    className="details-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      try { console.log('[AddLinkFlow] onAdd item click', { itemId: item.id, url: item.url, workspace: currentWorkspace, isSaved: !!item.workspaceGroup }); } catch { }
-                      if (item.workspaceGroup) {
-                        // Saved workspace URL: add by URL string
-                        onAddSaved && onAddSaved(item.url, currentWorkspace);
-                      } else {
-                        // History/bookmark item: add via item object
-                        handleAddItem(item);
-                      }
-                    }}
-                    title="Add this link to the workspace"
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

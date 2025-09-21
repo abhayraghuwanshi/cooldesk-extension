@@ -120,7 +120,7 @@ export function Header({
           />
         </div>
 
-        <div style={{ position: 'relative', flex: 1, marginRight: '10vw' }}>
+        <div style={{ position: 'relative', flex: 1, marginRight: '16px', maxWidth: '600px' }}>
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
         </div>
         {/* Navigation Arrows */}

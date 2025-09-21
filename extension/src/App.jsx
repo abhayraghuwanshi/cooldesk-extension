@@ -1,17 +1,28 @@
 import { library } from '@fortawesome/fontawesome-svg-core';
 import {
-  faPlus,
-  faTrash,
-  faTriangleExclamation,
   faBroom,
   faClone,
   faGlobe,
   faHistory,
+  faPlus,
   faRotateRight,
   faThumbtack,
+  faTrash,
+  faTriangleExclamation,
   faUndo
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import './App.css';
+import { ItemGrid } from './components/ItemGrid';
+import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
+import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
+import { SettingsModal } from './components/popups/SettingsModal';
+import { ProjectGrid } from './components/ProjectGrid';
+import { Header } from './components/toolbar/Header';
+import { VerticalHeader } from './components/toolbar/VerticalHeader';
+import { WorkspaceFilters } from './components/WorkspaceFilters';
+import './search.css';
 
 // Add icons to the library
 library.add(
@@ -26,17 +37,6 @@ library.add(
   faThumbtack,
   faUndo
 );
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import './App.css';
-import { ItemGrid } from './components/ItemGrid';
-import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
-import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
-import { SettingsModal } from './components/popups/SettingsModal';
-import { ProjectGrid } from './components/ProjectGrid';
-import { Header } from './components/toolbar/Header';
-import { VerticalHeader } from './components/toolbar/VerticalHeader';
-import { WorkspaceFilters } from './components/WorkspaceFilters';
-import './search.css';
 
 import { ActivityPanel } from './components/default/ActivityPanel';
 import { CoolFeedSection } from './components/default/CoolFeedSection.jsx';
@@ -47,7 +47,7 @@ import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, g
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getFaviconUrl, getUrlParts } from './utils';
-import { getCurrentFontSize, initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
+import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
 // import './utils/debugUrlIndexing'; // Adds debug functions to window
@@ -483,7 +483,17 @@ export default function App() {
         const { pendingQuery } = await storageGet(['pendingQuery'])
         const q = (pendingQuery || '').trim()
         if (q) {
-          setSearch(q)
+          // Check if this is a workspace command
+          if (q.startsWith('workspace:')) {
+            const workspaceName = q.replace('workspace:', '').trim();
+            if (workspaceName) {
+              setWorkspace(workspaceName);
+              console.log('[App] Switching to workspace from search:', workspaceName);
+            }
+          } else {
+            // Regular search query
+            setSearch(q)
+          }
           // Clear after consumption
           try { await storageRemove('pendingQuery') } catch { }
         }
@@ -1066,6 +1076,7 @@ export default function App() {
     setWorkspaceForLinkAdd(null);
   };
 
+
   const handleSaveLink = async (workspaceId, newUrl) => {
     try {
       const workspacesResult = await listWorkspaces();
@@ -1221,6 +1232,11 @@ export default function App() {
             onAddRelated={handleAddRelated}
             onAddLink={() => handleOpenAddLinkModal(workspace)}
             onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+            allItems={data}
+            savedItems={savedUrlsFlat}
+            currentWorkspace={workspace}
+            onAddItem={handleAddItemToWorkspace}
+            onAddSavedItem={handleAddSavedUrlToWorkspace}
           />
         );
     }
@@ -1273,8 +1289,8 @@ export default function App() {
       paddingBottom: shouldShowVertical ? 0 : 64,
       marginLeft: shouldShowVertical ? (
         windowWidth < 600 ? '50px' :
-        windowWidth < 1200 ? '60px' :
-        '280px'
+          windowWidth < 1200 ? '60px' :
+            '280px'
       ) : 0,
       transition: 'margin-left 0.3s ease'
     }}>
@@ -1350,10 +1366,7 @@ export default function App() {
         <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span> */}
-            <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} />
-            <button className="icon-btn" onClick={() => setShowCreateWorkspace(true)} title="Create Workspace">
-              <FontAwesomeIcon icon={faPlus} />
-            </button>
+            <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} onWorkspaceCreated={createWorkspace} />
           </div>
         </div>
 
@@ -1362,35 +1375,6 @@ export default function App() {
         {/* Workspace section (only when a specific workspace is selected) */}
         {workspace !== 'All' && (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '6px 0 8px' }}>
-              <span style={{ opacity: 0.85, fontSize: 12 }}> {workspace} ({mergedWorkspaceItems.length})</span>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-
-
-
-
-
-                <button
-                  onClick={() => handleOpenAddLinkModal(workspace)}
-                  className="add-link-btn ai-button"
-                  aria-label="Add link"
-                  title="Add link"
-                  style={{ padding: '4px 8px' }}
-                >
-                  <FontAwesomeIcon icon={faPlus} />
-                </button>
-                <button
-                  onClick={handleDeleteWorkspace}
-                  className="add-link-btn ai-button"
-                  aria-label="Delete workspace (irreversible)"
-                  title="Delete workspace (irreversible)"
-                  style={{ padding: '4px 8px' }}
-                  disabled={!workspace || workspace.toLowerCase() === 'all'}
-                >
-                  <FontAwesomeIcon icon={faTrash} />
-                </button>
-              </div>
-            </div>
             {showCurrentWorkspace && (
               <>
                 {workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
