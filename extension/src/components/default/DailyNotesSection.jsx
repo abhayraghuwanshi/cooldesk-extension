@@ -1,4 +1,4 @@
-import { faCalendarDay, faExternalLinkAlt, faGlobe, faLink, faSave, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faExternalLinkAlt, faGlobe, faLink, faSave, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { subscribeDailyNotesChanges } from '../../db/index.js';
@@ -473,22 +473,8 @@ export function DailyNotesSection() {
           alignItems: 'center',
           gap: 8
         }}>
-          <FontAwesomeIcon icon={faCalendarDay} style={{ color: '#FF9500', fontSize: 'var(--font-size-xl)' }} />
+          {/* <FontAwesomeIcon icon={faCalendarDay} style={{ color: '#FF9500', fontSize: 'var(--font-size-xl)' }} /> */}
           Thoughts
-          {dailyNotes?.metadata?.selectionCount > 0 && (
-            <span style={{
-              fontSize: 'var(--font-size-sm)',
-              color: '#ffffff',
-              background: 'rgba(255, 149, 0, 0.2)',
-              padding: '4px 8px',
-              borderRadius: 12,
-              marginLeft: 4,
-              fontWeight: 500,
-              border: '1px solid rgba(255, 149, 0, 0.3)'
-            }}>
-              {dailyNotes.metadata.selectionCount}
-            </span>
-          )}
         </h2>
         <input
           type="date"

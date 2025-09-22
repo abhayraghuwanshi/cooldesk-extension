@@ -231,12 +231,10 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onDelete, onAdd
               savedItems={savedItems || []}
               currentWorkspace={currentWorkspace || 'All'}
               onAdd={(item, workspace) => {
-                console.log('[ItemGrid] AddLinkFlow onAdd called', { item, workspace });
                 onAddItem && onAddItem(item, workspace);
                 setShowAddModal(false);
               }}
               onAddSaved={(url, workspace) => {
-                console.log('[ItemGrid] AddLinkFlow onAddSaved called', { url, workspace });
                 onAddSavedItem && onAddSavedItem(url, workspace);
                 setShowAddModal(false);
               }}

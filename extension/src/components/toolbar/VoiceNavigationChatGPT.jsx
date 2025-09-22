@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { faArrowDown, faExchangeAlt, faHashtag, faLightbulb, faMicrophone, faPlus, faQuestionCircle, faSearch, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLightbulb, faMicrophone, faArrowDown, faArrowUp, faArrowLeft, faRotateRight, faHashtag, faSearch, faExchangeAlt, faPlus, faTimes } from '@fortawesome/free-solid-svg-icons';
+import annyang from 'annyang';
+import React, { useEffect, useRef, useState } from 'react';
+import aiSpiralGif from '../../ai-spiral.gif';
 
 const VoiceNavigationChatGPT = () => {
   const [isListening, setIsListening] = useState(false);
@@ -10,6 +12,8 @@ const VoiceNavigationChatGPT = () => {
   const [interimTranscript, setInterimTranscript] = useState('');
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [waveformData, setWaveformData] = useState(Array(5).fill(0));
+  const [showEnergyWave, setShowEnergyWave] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const recognitionRef = useRef(null);
   const feedbackTimeoutRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -17,63 +21,133 @@ const VoiceNavigationChatGPT = () => {
   const microphoneRef = useRef(null);
   const animationFrameRef = useRef(null);
 
+  // Trigger energy wave effect
+  const triggerEnergyWave = () => {
+    setShowEnergyWave(true);
+    setTimeout(() => setShowEnergyWave(false), 1000);
+  };
+
   // Initialize speech recognition
   useEffect(() => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'en-US';
+    if (annyang) {
+      // Define voice commands using annyang
+      const commands = {
+        'switch to tab :num': (num) => {
+          switchToTabByIndex(parseInt(num) - 1);
+        },
+        'go to tab :num': (num) => {
+          switchToTabByIndex(parseInt(num) - 1);
+        },
+        'next tab': switchToNextTab,
+        'previous tab': switchToPreviousTab,
+        'prev tab': switchToPreviousTab,
+        'close tab': closeCurrentTab,
+        'new tab': createNewTab,
+        'find tab *term': findTab,
+        'search tab *term': findTab,
+        'search for *term': performWebSearch,
+        'google search *term': performWebSearch,
+        'search *term': performWebSearch,
+        'show numbers': showElementNumbers,
+        'number elements': showElementNumbers,
+        'hide numbers': hideElementNumbers,
+        'clear numbers': hideElementNumbers,
+        'click :num': (num) => {
+          clickByNumber(`click ${num}`);
+        },
+        'click number :num': (num) => {
+          clickByNumber(`click number ${num}`);
+        },
+        'click *text': clickLink,
+        'click on *text': clickLink,
+        'scroll down': () => {
+          window.scrollBy(0, 500);
+          setFeedback('Scrolled down');
+        },
+        'scroll up': () => {
+          window.scrollBy(0, -500);
+          setFeedback('Scrolled up');
+        },
+        'go back': () => {
+          window.history.back();
+          setFeedback('Going back');
+        },
+        'reload': () => {
+          window.location.reload();
+          setFeedback('Reloading page');
+        },
+        'refresh': () => {
+          window.location.reload();
+          setFeedback('Reloading page');
+        }
+      };
 
-      recognitionRef.current.onstart = () => {
+      // Add commands to annyang
+      annyang.addCommands(commands);
+
+      // Set language
+      annyang.setLanguage('en-US');
+
+      // Handle results and errors
+      annyang.addCallback('result', (phrases) => {
+        if (phrases.length > 0) {
+          const command = phrases[0];
+          setTranscript(command);
+          setInterimTranscript('');
+          // Feedback is set by the command action
+        }
+      });
+
+      annyang.addCallback('resultNoMatch', (phrases) => {
+        if (phrases.length > 0) {
+          const command = phrases[0];
+          setTranscript(command);
+          setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", or "switch to tab 2"`);
+          // Clear feedback after 3 seconds
+          if (feedbackTimeoutRef.current) {
+            clearTimeout(feedbackTimeoutRef.current);
+          }
+          feedbackTimeoutRef.current = setTimeout(() => {
+            setFeedback('');
+            setTranscript('');
+          }, 3000);
+        }
+      });
+
+      annyang.addCallback('error', (error) => {
+        setIsListening(false);
+        setError(`Speech recognition error: ${error.error}`);
+        setFeedback('');
+        setInterimTranscript('');
+        stopAudioAnalysis();
+      });
+
+      annyang.addCallback('start', () => {
         setIsListening(true);
         setError('');
         setFeedback('Listening...');
         startAudioAnalysis();
-      };
+      });
 
-      recognitionRef.current.onresult = (event) => {
-        let finalTranscript = '';
-        let interimText = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimText += event.results[i][0].transcript;
-          }
-        }
-
-        if (finalTranscript) {
-          setTranscript(finalTranscript);
-          setInterimTranscript('');
-          handleVoiceCommand(finalTranscript);
-        } else {
-          setInterimTranscript(interimText);
-        }
-      };
-
-      recognitionRef.current.onend = () => {
+      annyang.addCallback('end', () => {
         setIsListening(false);
         setInterimTranscript('');
         stopAudioAnalysis();
-      };
+      });
 
-      recognitionRef.current.onerror = (event) => {
-        setIsListening(false);
-        setError(`Speech recognition error: ${event.error}`);
-        setFeedback('');
-        setInterimTranscript('');
-        stopAudioAnalysis();
-      };
     } else {
       setError('Speech recognition not supported in this browser');
     }
 
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
+      if (annyang) {
+        annyang.removeCommands();
+        annyang.removeCallback('result');
+        annyang.removeCallback('resultNoMatch');
+        annyang.removeCallback('error');
+        annyang.removeCallback('start');
+        annyang.removeCallback('end');
+        annyang.abort();
       }
       if (feedbackTimeoutRef.current) {
         clearTimeout(feedbackTimeoutRef.current);
@@ -145,95 +219,25 @@ const VoiceNavigationChatGPT = () => {
   };
 
   const startListening = () => {
-    if (recognitionRef.current && !isListening) {
-      recognitionRef.current.start();
+    if (annyang && !isListening) {
+      annyang.start({ autoRestart: true, continuous: true });
     }
   };
 
   const stopListening = () => {
-    if (recognitionRef.current && isListening) {
-      recognitionRef.current.stop();
+    if (annyang && isListening) {
+      annyang.abort();
     }
-  };
-
-  const handleVoiceCommand = async (command) => {
-    const lowerCommand = command.toLowerCase();
-
-    try {
-      // Tab management
-      if (lowerCommand.includes('switch to tab') || lowerCommand.includes('go to tab')) {
-        await handleTabSwitch(command);
-      } else if (lowerCommand.includes('next tab')) {
-        await switchToNextTab();
-      } else if (lowerCommand.includes('previous tab') || lowerCommand.includes('prev tab')) {
-        await switchToPreviousTab();
-      } else if (lowerCommand.includes('close tab')) {
-        await closeCurrentTab();
-      } else if (lowerCommand.includes('new tab')) {
-        await createNewTab();
-      } else if (lowerCommand.includes('find tab') || lowerCommand.includes('search tab')) {
-        await findTab(command);
-      }
-      // Search commands
-      else if (lowerCommand.includes('search for') || lowerCommand.includes('google search')) {
-        await performWebSearch(command);
-      }
-      // Element interaction
-      else if (lowerCommand.includes('show numbers') || lowerCommand.includes('number elements')) {
-        await showElementNumbers();
-      } else if (lowerCommand.includes('hide numbers') || lowerCommand.includes('clear numbers')) {
-        await hideElementNumbers();
-      } else if (lowerCommand.match(/click (\d+)/) || lowerCommand.match(/click number (\d+)/)) {
-        await clickByNumber(command);
-      } else if (lowerCommand.includes('click')) {
-        await clickLink(command);
-      }
-      // Basic navigation
-      else if (lowerCommand.includes('scroll down')) {
-        window.scrollBy(0, 500);
-        setFeedback('Scrolled down');
-      } else if (lowerCommand.includes('scroll up')) {
-        window.scrollBy(0, -500);
-        setFeedback('Scrolled up');
-      } else if (lowerCommand.includes('go back')) {
-        window.history.back();
-        setFeedback('Going back');
-      } else if (lowerCommand.includes('reload') || lowerCommand.includes('refresh')) {
-        window.location.reload();
-        setFeedback('Reloading page');
-      } else {
-        setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", or "switch to tab 2"`);
-      }
-    } catch (error) {
-      console.error('Error processing voice command:', error);
-      setFeedback(`Error: ${error.message}`);
-    }
-
-    // Clear feedback after 3 seconds
-    if (feedbackTimeoutRef.current) {
-      clearTimeout(feedbackTimeoutRef.current);
-    }
-    feedbackTimeoutRef.current = setTimeout(() => {
-      setFeedback('');
-      setTranscript('');
-    }, 3000);
   };
 
   // Tab management functions
-  const handleTabSwitch = async (command) => {
-    const numberMatch = command.match(/tab (\d+)/);
-    if (numberMatch) {
-      const tabIndex = parseInt(numberMatch[1]) - 1;
-      await switchToTabByIndex(tabIndex);
-    }
-  };
-
   const switchToTabByIndex = async (index) => {
     try {
       const tabs = await chrome.tabs.query({ currentWindow: true });
       if (index >= 0 && index < tabs.length) {
         await chrome.tabs.update(tabs[index].id, { active: true });
         setFeedback(`Switched to tab ${index + 1}: ${tabs[index].title}`);
+        triggerEnergyWave();
       } else {
         setFeedback(`Tab ${index + 1} not found. Available tabs: 1-${tabs.length}`);
       }
@@ -293,15 +297,15 @@ const VoiceNavigationChatGPT = () => {
       if (searchMatch) {
         const searchTerm = searchMatch[1].trim();
         const tabs = await chrome.tabs.query({});
-        const matchingTab = tabs.find(tab =>
-          tab.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          tab.url.toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        // Use fuzzy search to find matching tabs
+        const matchingTabs = fuzzySearch(tabs, searchTerm.toLowerCase(), ['title', 'url'], { threshold: 0.3 });
 
-        if (matchingTab) {
+        if (matchingTabs.length > 0) {
+          const matchingTab = matchingTabs[0]; // Take the best match
           await chrome.tabs.update(matchingTab.id, { active: true });
           await chrome.windows.update(matchingTab.windowId, { focused: true });
           setFeedback(`Switched to: ${matchingTab.title}`);
+          triggerEnergyWave();
         } else {
           setFeedback(`No tab found matching "${searchTerm}"`);
         }
@@ -428,6 +432,34 @@ const VoiceNavigationChatGPT = () => {
     }
   };
 
+  const findAndClickLink = (searchText) => {
+    const elements = document.querySelectorAll('a, button, [role="button"], [onclick]');
+    const searchLower = searchText.toLowerCase();
+
+    // Create an array of elements with their text content for fuzzy search
+    const elementList = Array.from(elements).map((el, index) => ({
+      index,
+      text: el.textContent?.toLowerCase() || '',
+      title: el.getAttribute('title')?.toLowerCase() || '',
+      label: el.getAttribute('aria-label')?.toLowerCase() || ''
+    }));
+
+    // Use fuzzy search to find the best match
+    const results = fuzzySearch(elementList, searchLower, ['text', 'title', 'label'], { threshold: 0.3 });
+
+    if (results.length > 0) {
+      const bestMatch = elements[results[0].index];
+      bestMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => bestMatch.click(), 200);
+      return {
+        success: true,
+        elementText: bestMatch.textContent?.trim() || bestMatch.getAttribute('title') || 'Link'
+      };
+    }
+
+    return { success: false };
+  };
+
   // Helper functions for injection
   const addNumbersToElements = () => {
     const existingNumbers = document.querySelectorAll('.voice-nav-number');
@@ -444,8 +476,8 @@ const VoiceNavigationChatGPT = () => {
       const style = window.getComputedStyle(el);
       const rect = el.getBoundingClientRect();
       return style.display !== 'none' && style.visibility !== 'hidden' &&
-             rect.width > 5 && rect.height > 5 &&
-             rect.top < window.innerHeight && rect.bottom > 0;
+        rect.width > 5 && rect.height > 5 &&
+        rect.top < window.innerHeight && rect.bottom > 0;
     });
 
     visibleElements.slice(0, 15).forEach((element, index) => {
@@ -500,28 +532,6 @@ const VoiceNavigationChatGPT = () => {
     };
   };
 
-  const findAndClickLink = (searchText) => {
-    const elements = document.querySelectorAll('a, button, [role="button"], [onclick]');
-    const searchLower = searchText.toLowerCase();
-
-    for (const element of elements) {
-      const text = element.textContent?.toLowerCase() || '';
-      const title = element.getAttribute('title')?.toLowerCase() || '';
-      const label = element.getAttribute('aria-label')?.toLowerCase() || '';
-
-      if (text.includes(searchLower) || title.includes(searchLower) || label.includes(searchLower)) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => element.click(), 200);
-        return {
-          success: true,
-          elementText: element.textContent?.trim() || element.getAttribute('title') || 'Link'
-        };
-      }
-    }
-
-    return { success: false };
-  };
-
   return (
     <div className="voice-navigation-chatgpt">
       <div className="voice-content">
@@ -529,165 +539,174 @@ const VoiceNavigationChatGPT = () => {
         <div className="section-header">
           <FontAwesomeIcon icon={faMicrophone} className="section-icon" />
           <h3 className="section-title">Voice Navigation</h3>
+          <button
+            className="help-toggle-btn"
+            onClick={() => setShowHelp(!showHelp)}
+            title="Toggle command help"
+          >
+            <FontAwesomeIcon icon={faQuestionCircle} />
+          </button>
         </div>
         <div className="voice-button-container">
           <button
-            className={`voice-button ${isListening ? 'listening' : ''}`}
+            className={`voice-sphere ${isListening ? 'listening' : ''}`}
             onClick={isListening ? stopListening : startListening}
             disabled={!!error}
           >
-            <div className="button-content">
-              {isListening ? (
-                <div className="listening-animation">
-                  <div className="pulse-ring" style={{ opacity: voiceLevel }}></div>
-                  <div className="microphone-icon pulsing">
-                    <FontAwesomeIcon icon={faMicrophone} />
+            {!isListening ? (
+              /* Simple Microphone Button */
+              <div className="mic-button-container">
+                <FontAwesomeIcon icon={faMicrophone} className="mic-button-icon" />
+              </div>
+            ) : (
+              /* Celestial Orb Animation */
+              <div className="sphere-container">
+                <div className="celestial-orb-container">
+                  {/* Celestial Rings */}
+                  <div className="celestial-ring"
+                    style={{
+                      width: '200px',
+                      height: '200px',
+                      transform: 'translate(-50%, -50%) rotateX(70deg)'
+                    }}>
+                  </div>
+                  <div className="celestial-ring"
+                    style={{
+                      width: '150px',
+                      height: '150px',
+                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(60deg)'
+                    }}>
+                  </div>
+                  {/* Ring with Particle Trail */}
+                  <div className="celestial-ring"
+                    style={{
+                      width: '170px',
+                      height: '170px',
+                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(120deg)'
+                    }}>
+                    <div className="particle-orbit"></div>
+                  </div>
+                  {/* Central Orb */}
+                  <div className="sphere-core" style={{
+                    transform: `translate(-50%, -50%) scale(${1 + voiceLevel * 0.4})`,
+                    filter: `brightness(${1 + voiceLevel * 0.5})`,
+                    animationDuration: `${Math.max(2, 4 - voiceLevel * 2)}s`
+                  }}>
                   </div>
                 </div>
-              ) : (
-                <div className="microphone-icon">
-                  <FontAwesomeIcon icon={faMicrophone} />
+                {/* Energy Wave Effect */}
+                {showEnergyWave && (
+                  <div className="energy-wave-container">
+                    <div className="energy-wave energy-wave-1"></div>
+                    <div className="energy-wave energy-wave-2"></div>
+                    <div className="energy-wave energy-wave-3"></div>
+                  </div>
+                )}
+                <div className="particle-field">
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <div
+                      key={i}
+                      className="particle"
+                      style={{
+                        animationDelay: `${i * 0.2}s`,
+                        animationDuration: `${2 + Math.random() * 2}s`
+                      }}
+                    />
+                  ))}
                 </div>
-              )}
-            </div>
+                <div className="microphone-icon">
+                  <div className="spiral-container active">
+                    <img
+                      src={aiSpiralGif}
+                      alt="Listening..."
+                      className="ai-spiral-animation"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </button>
 
           <div className="button-label">
             {isListening ? 'Listening...' : 'Voice Navigation'}
           </div>
 
-          {/* Voice Level Indicator */}
-          {isListening && (
-            <div className="voice-level-container">
-              <div className="voice-level-label">Voice Level</div>
-              <div className="voice-level-bar">
-                <div
-                  className="voice-level-fill"
-                  style={{ width: `${voiceLevel * 100}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
-
-          {/* Waveform Animation */}
-          {isListening && (
-            <div className="waveform-container">
-              <div className="waveform-label">Audio Waveform</div>
-              <div className="waveform">
-                {waveformData.map((height, index) => (
-                  <div
-                    key={index}
-                    className="waveform-bar"
-                    style={{
-                      height: `${Math.max(height * 100, 5)}%`,
-                      animationDelay: `${index * 50}ms`
-                    }}
-                  ></div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Real-time Voice Command Preview */}
-          {(interimTranscript || transcript) && (
-            <div className="voice-preview">
-              <div className="preview-label">Voice Input</div>
-              <div className="preview-text">
-                {transcript && <span className="final-text">"{transcript}"</span>}
-                {interimTranscript && <span className="interim-text">"{interimTranscript}"</span>}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Status Display */}
-        {(transcript || feedback || error) && (
+
+        {/* Minimal Status Display */}
+        {feedback && (
           <div className="status-display">
-            {error && (
-              <div className="status-message error">
-                <span className="status-icon">⚠️</span>
-                <span>{error}</span>
-              </div>
-            )}
-
-            {transcript && (
-              <div className="status-message transcript">
-                <span className="status-icon">💬</span>
-                <span>"{transcript}"</span>
-              </div>
-            )}
-
-            {feedback && !error && (
-              <div className="status-message feedback">
-                <span className="status-icon">✅</span>
-                <span>{feedback}</span>
-              </div>
-            )}
+            <div className="status-message feedback">
+              <span>{feedback}</span>
+            </div>
           </div>
         )}
       </div>
 
       {/* Command Help Sidebar */}
-      <div className="command-help">
-        <div className="help-header">
-          <FontAwesomeIcon icon={faLightbulb} className="help-icon" />
-          <span className="help-title">Commands</span>
+      {showHelp && (
+        <div className="command-help">
+          <div className="help-header">
+            <FontAwesomeIcon icon={faLightbulb} className="help-icon" />
+            <span className="help-title">Commands</span>
+          </div>
+
+          <div className="command-list">
+            <div className="command-item">
+              <FontAwesomeIcon icon={faHashtag} className="command-icon" />
+              <span className="command-text">"show numbers"</span> → <span className="command-desc">mark clickable elements</span>
+            </div>
+
+            <div className="command-item">
+              <FontAwesomeIcon icon={faHashtag} className="command-icon" />
+              <span className="command-text">"click 3"</span> → <span className="command-desc">click numbered element</span>
+            </div>
+
+            <div className="command-item">
+              <FontAwesomeIcon icon={faExchangeAlt} className="command-icon" />
+              <span className="command-text">"switch to tab 2"</span> → <span className="command-desc">switch tabs</span>
+            </div>
+
+            <div className="command-item">
+              <FontAwesomeIcon icon={faSearch} className="command-icon" />
+              <span className="command-text">"search for cats"</span> → <span className="command-desc">google search</span>
+            </div>
+
+            <div className="command-item">
+              <FontAwesomeIcon icon={faSearch} className="command-icon" />
+              <span className="command-text">"find tab gmail"</span> → <span className="command-desc">search tabs</span>
+            </div>
+
+            <div className="command-item">
+              <FontAwesomeIcon icon={faArrowDown} className="command-icon" />
+              <span className="command-text">"scroll down"</span> → <span className="command-desc">scroll page</span>
+            </div>
+
+            <div className="command-item">
+              <FontAwesomeIcon icon={faPlus} className="command-icon" />
+              <span className="command-text">"new tab"</span> → <span className="command-desc">create new tab</span>
+            </div>
+
+            <div className="command-item">
+              <FontAwesomeIcon icon={faTimes} className="command-icon" />
+              <span className="command-text">"close tab"</span> → <span className="command-desc">close current tab</span>
+            </div>
+          </div>
         </div>
-
-        <div className="command-list">
-          <div className="command-item">
-            <FontAwesomeIcon icon={faHashtag} className="command-icon" />
-            <span className="command-text">"show numbers"</span> → <span className="command-desc">mark clickable elements</span>
-          </div>
-
-          <div className="command-item">
-            <FontAwesomeIcon icon={faHashtag} className="command-icon" />
-            <span className="command-text">"click 3"</span> → <span className="command-desc">click numbered element</span>
-          </div>
-
-          <div className="command-item">
-            <FontAwesomeIcon icon={faExchangeAlt} className="command-icon" />
-            <span className="command-text">"switch to tab 2"</span> → <span className="command-desc">switch tabs</span>
-          </div>
-
-          <div className="command-item">
-            <FontAwesomeIcon icon={faSearch} className="command-icon" />
-            <span className="command-text">"search for cats"</span> → <span className="command-desc">google search</span>
-          </div>
-
-          <div className="command-item">
-            <FontAwesomeIcon icon={faSearch} className="command-icon" />
-            <span className="command-text">"find tab gmail"</span> → <span className="command-desc">search tabs</span>
-          </div>
-
-          <div className="command-item">
-            <FontAwesomeIcon icon={faArrowDown} className="command-icon" />
-            <span className="command-text">"scroll down"</span> → <span className="command-desc">scroll page</span>
-          </div>
-
-          <div className="command-item">
-            <FontAwesomeIcon icon={faPlus} className="command-icon" />
-            <span className="command-text">"new tab"</span> → <span className="command-desc">create new tab</span>
-          </div>
-
-          <div className="command-item">
-            <FontAwesomeIcon icon={faTimes} className="command-icon" />
-            <span className="command-text">"close tab"</span> → <span className="command-desc">close current tab</span>
-          </div>
-        </div>
-      </div>
+      )}
 
       <style jsx>{`
         .voice-navigation-chatgpt {
           display: flex;
-          gap: 24px;
-          padding: 24px;
+          gap: 16px;
+          padding: 16px;
           background: var(--glass-bg);
           backdrop-filter: var(--glass-backdrop);
-          border-radius: 16px;
+          border-radius: 12px;
           border: 1px solid var(--glass-border);
           box-shadow: var(--shadow-md);
-          margin: 16px 0;
+          margin: 12px 0;
           transition: all 0.3s ease;
         }
 
@@ -709,12 +728,13 @@ const VoiceNavigationChatGPT = () => {
         .section-header {
           display: flex;
           align-items: center;
-          gap: 12px;
-          margin-bottom: 20px;
-          padding-bottom: 12px;
+          gap: 8px;
+          margin-bottom: 12px;
+          padding-bottom: 8px;
           border-bottom: 1px solid var(--border-secondary);
           width: 100%;
           justify-content: center;
+          position: relative;
         }
 
         .section-icon {
@@ -733,92 +753,667 @@ const VoiceNavigationChatGPT = () => {
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 12px;
+          gap: 8px;
         }
 
-        .voice-button {
-          width: 80px;
-          height: 80px;
-          border-radius: 50%;
+        .voice-sphere {
+          width: 90px;
+          height: 90px;
           border: none;
-          background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-          box-shadow: 0 8px 25px rgba(52, 199, 89, 0.3);
+          background: transparent;
           cursor: pointer;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
           display: flex;
           align-items: center;
           justify-content: center;
+          padding: 0;
         }
 
-        .voice-button:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 12px 30px rgba(52, 199, 89, 0.4);
+        .voice-sphere:hover:not(:disabled) {
+          transform: translateY(-3px);
         }
 
-        .voice-button:active:not(:disabled) {
+        .voice-sphere:active:not(:disabled) {
           transform: translateY(0);
         }
 
-        .voice-button:disabled {
+        .voice-sphere:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
 
-        .voice-button.listening {
-          background: linear-gradient(135deg, var(--accent-error), #dc2626);
-          box-shadow: 0 8px 25px rgba(239, 68, 68, 0.3);
-        }
-
-        .button-content {
-          position: relative;
+        .mic-button-container {
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          background: radial-gradient(circle at 30% 30%, #ec4899, #7c3aed, #2563eb);
+          box-shadow:
+            inset 0 0 20px rgba(255, 255, 255, 0.2),
+            0 0 30px 5px rgba(124, 58, 237, 0.4);
           display: flex;
           align-items: center;
           justify-content: center;
+          transition: all 0.3s ease;
+          transform-style: preserve-3d;
+        }
+
+        .mic-button-container::before {
+          content: '';
+          position: absolute;
+          top: 5%;
+          left: 10%;
+          width: 80%;
+          height: 80%;
+          background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 60%);
+          border-radius: 50%;
+        }
+
+        .mic-button-container::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          border-radius: 50%;
+          box-shadow: inset -15px -8px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .mic-button-icon {
+        
+          color: rgba(255, 255, 255, 0.9);
+          text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+          z-index: 2;
+          position: relative;
+        }
+
+        .voice-sphere:hover .mic-button-container {
+          transform: scale(1.05);
+          box-shadow:
+            inset 0 0 20px rgba(255, 255, 255, 0.3),
+            0 0 40px 8px rgba(124, 58, 237, 0.6);
+        }
+
+        .sphere-container {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transform-style: preserve-3d;
+          perspective: 800px;
+        }
+
+        .celestial-orb-container {
+          transform-style: preserve-3d;
+          perspective: 800px;
+          animation: container-wobble 20s infinite ease-in-out alternate;
+          position: absolute;
+          width: 100%;
+          height: 100%;
+        }
+
+        @keyframes container-wobble {
+          from {
+            transform: rotateY(-20deg) rotateX(10deg);
+          }
+          to {
+            transform: rotateY(20deg) rotateX(-10deg);
+          }
+        }
+
+        .sphere-core {
+          position: absolute;
+          width: 80px;
+          height: 80px;
+          top: 50%;
+          left: 50%;
+          border-radius: 50%;
+          background: radial-gradient(circle at 30% 30%, #ec4899, #7c3aed, #2563eb);
+          box-shadow:
+            inset 0 0 20px rgba(255, 255, 255, 0.2),
+            0 0 50px 10px rgba(124, 58, 237, 0.4);
+          transition: all 0.3s ease;
+          overflow: hidden;
+          transform-style: preserve-3d;
+          animation: orbBreathing 4s ease-in-out infinite;
+        }
+
+        @keyframes orbBreathing {
+          0%, 100% {
+            transform: translate(-50%, -50%) scale(1);
+            box-shadow:
+              inset 0 0 20px rgba(255, 255, 255, 0.2),
+              0 0 50px 10px rgba(124, 58, 237, 0.4);
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.05);
+            box-shadow:
+              inset 0 0 25px rgba(255, 255, 255, 0.3),
+              0 0 60px 15px rgba(124, 58, 237, 0.6);
+          }
+        }
+
+        .voice-sphere.listening .sphere-core {
+          background: radial-gradient(circle at 30% 30%, #ff4444, #cc2200, #660000);
+          box-shadow:
+            inset 0 0 20px rgba(255, 255, 255, 0.2),
+            0 0 50px 10px rgba(255, 68, 68, 0.6);
+        }
+
+        .sphere-core::before {
+          content: '';
+          position: absolute;
+          top: 5%;
+          left: 10%;
+          width: 80%;
+          height: 80%;
+          background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 60%);
+          border-radius: 50%;
+        }
+
+        .sphere-core::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          border-radius: 50%;
+          box-shadow: inset -20px -10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .celestial-ring {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          border-radius: 50%;
+          transform-style: preserve-3d;
+          transform-origin: center center;
+        }
+
+        .voice-sphere.listening .celestial-ring {
+          border-color: rgba(255, 68, 68, 0.4);
+          box-shadow: 0 0 10px rgba(255, 68, 68, 0.3);
+        }
+
+        .particle-orbit {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          animation: particle-spin 10s infinite linear;
+          transform-style: preserve-3d;
+        }
+
+        @keyframes particle-spin {
+          from {
+            transform: rotateZ(0deg);
+          }
+          to {
+            transform: rotateZ(360deg);
+          }
+        }
+
+        .particle-orbit::after {
+          content: '';
+          position: absolute;
+          top: -2px;
+          left: 50%;
+          width: 4px;
+          height: 4px;
+          background: #fff;
+          border-radius: 50%;
+          box-shadow: 0 0 5px #fff;
+          transform: translateX(-50%);
+        }
+
+        .energy-wave-container {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          pointer-events: none;
+          z-index: 1;
+        }
+
+        .energy-wave {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          border: 2px solid rgba(52, 199, 89, 0.8);
+          border-radius: 50%;
+          transform: translate(-50%, -50%);
+          animation: energyWaveExpand 1s ease-out forwards;
+        }
+
+        .energy-wave-1 {
+          animation-delay: 0s;
+        }
+
+        .energy-wave-2 {
+          animation-delay: 0.2s;
+        }
+
+        .energy-wave-3 {
+          animation-delay: 0.4s;
+        }
+
+        @keyframes energyWaveExpand {
+          0% {
+            width: 80px;
+            height: 80px;
+            opacity: 1;
+            border-width: 3px;
+          }
+          100% {
+            width: 200px;
+            height: 200px;
+            opacity: 0;
+            border-width: 1px;
+          }
+        }
+
+        .sphere-grid {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          grid-template-rows: repeat(5, 1fr);
+          gap: 2px;
+          padding: 8px;
+          z-index: 2;
+        }
+
+        .grid-dot {
+          width: 3px;
+          height: 3px;
+          background: rgba(255, 255, 255, 0.8);
+          border-radius: 50%;
+          animation: pixelPulse 2s ease-in-out infinite;
+          box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+        }
+
+        @keyframes pixelPulse {
+          0%, 100% {
+            opacity: 0.3;
+            transform: scale(0.8);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.2);
+          }
+        }
+
+        .sphere-glow {
+          position: absolute;
+          top: -10px;
+          left: -10px;
+          width: calc(100% + 20px);
+          height: calc(100% + 20px);
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(0, 191, 255, 0.3), transparent 70%);
+          animation: sphereGlow 3s ease-in-out infinite;
+          z-index: 1;
+        }
+
+        .voice-sphere.listening .sphere-glow {
+          background: radial-gradient(circle, rgba(255, 68, 68, 0.4), transparent 70%);
+        }
+
+        @keyframes sphereGlow {
+          0%, 100% {
+            transform: scale(0.9);
+            opacity: 0.5;
+          }
+          50% {
+            transform: scale(1.1);
+            opacity: 0.8;
+          }
+        }
+
+        .particle-field {
+          position: absolute;
+          width: 200px;
+          height: 200px;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .particle {
+          position: absolute;
+          width: 2px;
+          height: 2px;
+          background: rgba(0, 191, 255, 0.8);
+          border-radius: 50%;
+          animation: particleFloat linear infinite;
+          box-shadow: 0 0 6px rgba(0, 191, 255, 0.6);
+        }
+
+        .voice-sphere.listening .particle {
+          background: rgba(255, 68, 68, 0.8);
+          box-shadow: 0 0 6px rgba(255, 68, 68, 0.6);
+        }
+
+        @keyframes particleFloat {
+          0% {
+            transform: translateY(75px) translateX(0) scale(0);
+            opacity: 0;
+          }
+          10% {
+            opacity: 1;
+            transform: translateY(60px) translateX(5px) scale(1);
+          }
+          90% {
+            opacity: 1;
+            transform: translateY(-60px) translateX(-10px) scale(1);
+          }
+          100% {
+            transform: translateY(-75px) translateX(-15px) scale(0);
+            opacity: 0;
+          }
+        }
+
+        .particle:nth-child(odd) {
+          left: 45%;
+          animation-direction: reverse;
+        }
+
+        .particle:nth-child(even) {
+          right: 45%;
+        }
+
+        .particle:nth-child(3n) {
+          left: 50%;
+          animation-duration: 3s;
+        }
+
+        .orbital-actions {
+          position: absolute;
+          width: 200px;
+          height: 200px;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          pointer-events: none;
+          z-index: 4;
+        }
+
+        .orbital-btn {
+          position: absolute;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          border: none;
+          background: rgba(255, 255, 255, 0.15);
+          backdrop-filter: blur(10px);
+          color: rgba(255, 255, 255, 0.9);
+          cursor: pointer;
+          pointer-events: auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow:
+            0 4px 15px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.3);
+          animation: orbitalEntrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          transform-origin: center;
+          opacity: 0;
+          scale: 0;
+        }
+
+        .orbital-btn:hover {
+          background: rgba(255, 255, 255, 0.25);
+          transform: scale(1.1);
+          box-shadow:
+            0 6px 20px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.4),
+            0 0 15px rgba(255, 255, 255, 0.3);
+        }
+
+        .orbital-btn:active {
+          transform: scale(0.95);
+        }
+
+        @keyframes orbitalEntrance {
+          0% {
+            opacity: 0;
+            scale: 0;
+            transform: rotate(-180deg);
+          }
+          60% {
+            opacity: 1;
+            scale: 1.2;
+          }
+          100% {
+            opacity: 1;
+            scale: 1;
+            transform: rotate(0deg);
+          }
+        }
+
+        /* Position orbital buttons in circle */
+        .orbital-btn-1 {
+          top: 10px;
+          left: 50%;
+          transform: translateX(-50%);
+          animation-delay: 0.1s;
+        }
+
+        .orbital-btn-2 {
+          bottom: 10px;
+          left: 50%;
+          transform: translateX(-50%);
+          animation-delay: 0.2s;
+        }
+
+        .orbital-btn-3 {
+          top: 50%;
+          right: 10px;
+          transform: translateY(-50%);
+          animation-delay: 0.3s;
+        }
+
+        .orbital-btn-4 {
+          top: 50%;
+          left: 10px;
+          transform: translateY(-50%);
+          animation-delay: 0.4s;
+        }
+
+        .orbital-btn-5 {
+          top: 30px;
+          right: 30px;
+          animation-delay: 0.5s;
+        }
+
+        .orbital-btn-6 {
+          bottom: 30px;
+          left: 30px;
+          animation-delay: 0.6s;
+        }
+
+        .voice-shortcuts-overlay {
+          position: absolute;
+          top: -20px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0, 0, 0, 0.85);
+          backdrop-filter: blur(15px);
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 12px;
+          min-width: 280px;
+          box-shadow:
+            0 8px 25px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          animation: shortcutsSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+          z-index: 10;
+        }
+
+        @keyframes shortcutsSlideIn {
+          0% {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-10px) scale(0.95);
+          }
+          100% {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0) scale(1);
+          }
+        }
+
+        .shortcuts-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          font-size: var(--font-size-sm);
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .shortcuts-icon {
+          color: var(--accent-warning);
+          font-size: var(--font-size-sm);
+        }
+
+        .shortcuts-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 6px;
+        }
+
+        .shortcut-item {
+          display: flex;
+          flex-direction: column;
+          padding: 8px 10px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          text-align: center;
+        }
+
+        .shortcut-item:hover {
+          background: rgba(255, 255, 255, 0.1);
+          border-color: var(--accent-primary);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(52, 199, 89, 0.2);
+        }
+
+        .shortcut-voice {
+          font-size: var(--font-size-xs);
+          font-weight: 600;
+          color: var(--accent-primary);
+          font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+          margin-bottom: 2px;
+        }
+
+        .shortcut-desc {
+          font-size: calc(var(--font-size-xs) * 0.85);
+          color: var(--text-secondary);
+          line-height: 1.2;
         }
 
         .microphone-icon {
-          font-size: var(--font-size-3xl);
-          color: white;
-          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          position: absolute;
+          font-size: var(--font-size-xl);
+          color: rgba(255, 255, 255, 0.9);
+          text-shadow:
+            0 0 10px rgba(255, 255, 255, 0.8),
+            0 2px 4px rgba(0, 0, 0, 0.3);
           display: flex;
           align-items: center;
           justify-content: center;
+          z-index: 3;
+          transition: all 0.3s ease;
         }
 
-        .microphone-icon.pulsing {
+        .voice-sphere.listening .microphone-icon {
           animation: microphonePulse 1.5s ease-in-out infinite;
+          color: rgba(255, 255, 255, 1);
+          text-shadow:
+            0 0 15px rgba(255, 255, 255, 1),
+            0 0 25px rgba(255, 68, 68, 0.8);
+        }
+
+        .mic-icon-container,
+        .spiral-container {
+          position: absolute;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          height: 100%;
+          opacity: 0;
+          transform: scale(0.8);
+          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .mic-icon-container.active,
+        .spiral-container.active {
+          opacity: 1;
+          transform: scale(1);
+        }
+
+        .mic-icon-container.active {
+          transition-delay: 0.1s;
+        }
+
+        .spiral-container.active {
+          transition-delay: 0.2s;
+        }
+
+        .ai-spiral-animation {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          object-fit: cover;
+          filter: brightness(1.2) contrast(1.1);
+          box-shadow:
+            0 0 20px rgba(255, 20, 147, 0.6),
+            0 0 40px rgba(255, 20, 147, 0.3);
+          transition: all 0.3s ease;
+          animation: spiralGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes spiralGlow {
+          0%, 100% {
+            filter: brightness(1.2) contrast(1.1) saturate(1.2);
+            box-shadow:
+              0 0 20px rgba(255, 20, 147, 0.6),
+              0 0 40px rgba(255, 20, 147, 0.3);
+          }
+          50% {
+            filter: brightness(1.5) contrast(1.3) saturate(1.5);
+            box-shadow:
+              0 0 30px rgba(255, 20, 147, 0.8),
+              0 0 60px rgba(255, 20, 147, 0.5);
+          }
         }
 
         @keyframes microphonePulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.1); }
-        }
-
-        .listening-animation {
-          position: relative;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .pulse-ring {
-          position: absolute;
-          width: 100px;
-          height: 100px;
-          border: 2px solid rgba(255, 255, 255, 0.4);
-          border-radius: 50%;
-          animation: pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-          0% {
-            transform: scale(0.8);
-            opacity: 1;
+          0%, 100% {
+            transform: scale(1);
+            filter: brightness(1);
           }
-          100% {
-            transform: scale(1.2);
-            opacity: 0;
+          50% {
+            transform: scale(1.1);
+            filter: brightness(1.3);
           }
         }
 
@@ -829,61 +1424,59 @@ const VoiceNavigationChatGPT = () => {
           text-align: center;
         }
 
+        .help-toggle-btn {
+          background: transparent;
+          border-radius: 50%;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          color: var(--text-secondary);
+          transition: all 0.3s ease;
+          position: absolute;
+          right: 0;
+          top: 50%;
+          transform: translateY(-50%);
+          font-size: var(--font-size-sm);
+        }
+
+        .help-toggle-btn:hover {
+          background: rgba(255, 255, 255, 0.2);
+          border-color: var(--accent-primary);
+          color: var(--accent-primary);
+          transform: translateY(-50%) scale(1.1);
+        }
+
         .status-display {
-          margin-top: 16px;
+          margin-top: 8px;
           width: 100%;
-          max-width: 300px;
+          max-width: 260px;
         }
 
         .status-message {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 16px;
-          border-radius: 12px;
-          font-size: var(--font-size-base);
-          margin-bottom: 8px;
-          background: var(--glass-bg);
-          backdrop-filter: blur(10px);
-          border: 1px solid var(--border-primary);
-        }
-
-        .status-message.error {
-          background: rgba(239, 68, 68, 0.1);
-          color: var(--accent-error);
-          border-color: rgba(239, 68, 68, 0.3);
-        }
-
-        .status-message.transcript {
-          background: rgba(96, 165, 250, 0.1);
-          color: var(--accent-blue);
-          border-color: rgba(96, 165, 250, 0.3);
-        }
-
-        .status-message.feedback {
+          padding: 6px 12px;
+          border-radius: 6px;
+          font-size: var(--font-size-sm);
           background: rgba(52, 199, 89, 0.1);
           color: var(--accent-primary);
-          border-color: var(--border-accent);
-        }
-
-        .status-icon {
-          font-size: var(--font-size-lg);
-          flex-shrink: 0;
+          border: 1px solid var(--border-accent);
+          text-align: center;
         }
 
         .command-help {
           flex: 0 0 auto;
-          width: 250px;
-          padding-left: 20px;
+          width: 200px;
+          padding-left: 16px;
           border-left: 1px solid var(--border-primary);
         }
 
         .help-header {
           display: flex;
           align-items: center;
-          gap: 6px;
-          margin-bottom: 12px;
-          padding-bottom: 6px;
+          gap: 4px;
+          margin-bottom: 8px;
+          padding-bottom: 4px;
           border-bottom: 1px solid var(--border-secondary);
         }
 
@@ -901,20 +1494,20 @@ const VoiceNavigationChatGPT = () => {
         .command-list {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 4px;
         }
 
         .command-item {
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 6px 8px;
+          gap: 4px;
+          padding: 4px 6px;
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid var(--border-secondary);
-          border-radius: 6px;
+          border-radius: 4px;
           transition: all 0.2s ease;
-          font-size: var(--font-size-xs);
-          line-height: 1.3;
+          font-size: calc(var(--font-size-xs) * 0.9);
+          line-height: 1.2;
         }
 
         .command-icon {
@@ -939,147 +1532,16 @@ const VoiceNavigationChatGPT = () => {
           margin-left: 4px;
         }
 
-        /* Voice UI Enhancements */
-        .voice-level-container {
-          margin-top: 16px;
-          width: 100%;
-          max-width: 200px;
-        }
-
-        .voice-level-label {
-          font-size: var(--font-size-xs);
-          color: var(--text-secondary);
-          margin-bottom: 6px;
-          text-align: center;
-        }
-
-        .voice-level-bar {
-          height: 8px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 4px;
-          overflow: hidden;
-          border: 1px solid var(--border-primary);
-        }
-
-        .voice-level-fill {
-          height: 100%;
-          background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
-          border-radius: 3px;
-          transition: width 0.1s ease;
-        }
-
-        .waveform-container {
-          margin-top: 16px;
-          width: 100%;
-          max-width: 200px;
-        }
-
-        .waveform-label {
-          font-size: var(--font-size-xs);
-          color: var(--text-secondary);
-          margin-bottom: 8px;
-          text-align: center;
-        }
-
-        .waveform {
-          display: flex;
-          justify-content: center;
-          align-items: end;
-          height: 40px;
-          gap: 3px;
-        }
-
-        .waveform-bar {
-          width: 6px;
-          background: linear-gradient(180deg, var(--accent-primary), var(--accent-secondary));
-          border-radius: 3px;
-          min-height: 2px;
-          animation: waveformPulse 1s ease-in-out infinite;
-        }
-
-        @keyframes waveformPulse {
-          0%, 100% { opacity: 0.6; }
-          50% { opacity: 1; }
-        }
-
-        .voice-preview {
-          margin-top: 16px;
-          width: 100%;
-          max-width: 250px;
-          padding: 12px;
-          background: var(--glass-bg);
-          border: 1px solid var(--border-primary);
-          border-radius: 8px;
-        }
-
-        .preview-label {
-          font-size: var(--font-size-xs);
-          color: var(--text-secondary);
-          margin-bottom: 6px;
-          text-align: center;
-        }
-
-        .preview-text {
-          font-size: var(--font-size-sm);
-          text-align: center;
-          line-height: 1.4;
-        }
-
-        .final-text {
-          color: var(--accent-primary);
-          font-weight: 600;
-        }
-
-        .interim-text {
-          color: var(--text-secondary);
-          font-style: italic;
-        }
 
         @media (max-width: 768px) {
           .voice-navigation-chatgpt {
             flex-direction: column;
-            padding: 20px 16px;
-            gap: 20px;
+            padding: 12px;
+            gap: 12px;
           }
 
           .voice-content {
             min-width: auto;
-          }
-
-          .command-help {
-            padding-left: 0;
-            border-left: none;
-            border-top: 1px solid var(--border-primary);
-            padding-top: 16px;
-            width: 100%;
-          }
-
-          .voice-button {
-            width: 70px;
-            height: 70px;
-          }
-
-          .microphone-icon {
-            font-size: calc(var(--font-size-xl) * 1.1);
-          }
-
-          .pulse-ring {
-            width: 90px;
-            height: 90px;
-          }
-        }
-
-        @media (max-width: 600px) {
-          .voice-navigation-chatgpt {
-            flex-direction: column;
-            padding: 16px 12px;
-            gap: 16px;
-            margin: 12px 0;
-          }
-
-          .voice-content {
-            min-width: auto;
-            width: 100%;
           }
 
           .command-help {
@@ -1090,91 +1552,69 @@ const VoiceNavigationChatGPT = () => {
             width: 100%;
           }
 
-          .voice-button {
-            width: 60px;
-            height: 60px;
+          .voice-sphere {
+            width: 70px;
+            height: 70px;
           }
 
-          .microphone-icon {
-            font-size: calc(var(--font-size-lg) * 1.2);
-          }
-
-          .pulse-ring {
-            width: 80px;
-            height: 80px;
-          }
-
-          .section-header {
-            margin-bottom: 16px;
-            padding-bottom: 8px;
-          }
-
-          .section-title {
-            font-size: var(--font-size-lg);
-          }
-
-          .voice-level-container,
-          .waveform-container {
-            max-width: 180px;
-            margin-top: 12px;
-          }
-
-          .voice-preview {
-            max-width: 220px;
-            margin-top: 12px;
-            padding: 10px;
-          }
-
-          .status-display {
-            margin-top: 12px;
-            max-width: 280px;
-          }
-
-          .status-message {
-            padding: 10px 12px;
-            font-size: var(--font-size-sm);
-          }
-
-          .command-list {
-            gap: 4px;
-          }
-
-          .command-item {
-            padding: 4px 6px;
-            font-size: calc(var(--font-size-xs) * 0.9);
-            flex-wrap: wrap;
-            line-height: 1.2;
-          }
-
-          .command-text {
-            font-size: calc(var(--font-size-xs) * 0.85);
-          }
-
-          .command-desc {
-            font-size: calc(var(--font-size-xs) * 0.8);
-            margin-left: 2px;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .voice-navigation-chatgpt {
-            padding: 12px 8px;
-            gap: 12px;
-            margin: 8px 0;
-          }
-
-          .voice-button {
+          .sphere-core {
             width: 50px;
             height: 50px;
           }
 
-          .microphone-icon {
-            font-size: var(--font-size-lg);
+          .particle-field {
+            width: 90px;
+            height: 90px;
           }
 
-          .pulse-ring {
-            width: 70px;
-            height: 70px;
+          .microphone-icon {
+            font-size: var(--font-size-base);
+          }
+        }
+
+        @media (max-width: 600px) {
+          .voice-navigation-chatgpt {
+            flex-direction: column;
+            padding: 10px;
+            gap: 10px;
+            margin: 8px 0;
+          }
+
+          .voice-content {
+            min-width: auto;
+            width: 100%;
+          }
+
+          .command-help {
+            padding-left: 0;
+            border-left: none;
+            border-top: 1px solid var(--border-primary);
+            padding-top: 8px;
+            width: 100%;
+          }
+
+          .voice-sphere {
+            width: 60px;
+            height: 60px;
+          }
+
+          .sphere-core {
+            width: 45px;
+            height: 45px;
+          }
+
+          .particle-field {
+            width: 80px;
+            height: 80px;
+          }
+
+          .microphone-icon {
+            font-size: var(--font-size-sm);
+          }
+
+          .section-header {
+            margin-bottom: 8px;
+            padding-bottom: 4px;
           }
 
           .section-title {
@@ -1184,20 +1624,34 @@ const VoiceNavigationChatGPT = () => {
           .voice-level-container,
           .waveform-container {
             max-width: 160px;
+            margin-top: 6px;
           }
 
           .voice-preview {
             max-width: 200px;
-            padding: 8px;
+            margin-top: 6px;
+            padding: 6px;
           }
 
           .status-display {
-            max-width: 250px;
+            margin-top: 6px;
+            max-width: 240px;
+          }
+
+          .status-message {
+            padding: 6px 8px;
+            font-size: calc(var(--font-size-sm) * 0.9);
+          }
+
+          .command-list {
+            gap: 3px;
           }
 
           .command-item {
             padding: 3px 4px;
             font-size: calc(var(--font-size-xs) * 0.8);
+            flex-wrap: wrap;
+            line-height: 1.1;
           }
 
           .command-text {
@@ -1206,14 +1660,73 @@ const VoiceNavigationChatGPT = () => {
 
           .command-desc {
             font-size: calc(var(--font-size-xs) * 0.7);
+            margin-left: 1px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .voice-navigation-chatgpt {
+            padding: 8px;
+            gap: 8px;
+            margin: 6px 0;
+          }
+
+          .voice-sphere {
+            width: 50px;
+            height: 50px;
+          }
+
+          .sphere-core {
+            width: 40px;
+            height: 40px;
+          }
+
+          .particle-field {
+            width: 70px;
+            height: 70px;
+          }
+
+          .microphone-icon {
+            font-size: calc(var(--font-size-sm) * 0.9);
+          }
+
+          .section-title {
+            font-size: var(--font-size-sm);
+          }
+
+          .voice-level-container,
+          .waveform-container {
+            max-width: 140px;
+          }
+
+          .voice-preview {
+            max-width: 180px;
+            padding: 6px;
+          }
+
+          .status-display {
+            max-width: 220px;
+          }
+
+          .command-item {
+            padding: 2px 3px;
+            font-size: calc(var(--font-size-xs) * 0.75);
+          }
+
+          .command-text {
+            font-size: calc(var(--font-size-xs) * 0.7);
+          }
+
+          .command-desc {
+            font-size: calc(var(--font-size-xs) * 0.65);
             display: block;
             width: 100%;
             margin-left: 0;
-            margin-top: 2px;
+            margin-top: 1px;
           }
 
           .help-title {
-            font-size: var(--font-size-sm);
+            font-size: calc(var(--font-size-sm) * 0.9);
           }
         }
       `}</style>

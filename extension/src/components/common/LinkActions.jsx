@@ -1,6 +1,7 @@
 import { faBookmark, faEllipsisV, faExternalLinkAlt, faFolder, faPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export function LinkActions({
   url,
@@ -60,13 +61,39 @@ export function LinkActions({
   };
 
   const getDropdownPosition = () => {
-    const positions = {
-      'bottom-right': { top: '100%', left: '0', marginTop: '4px' },
-      'bottom-left': { top: '100%', right: '0', marginTop: '4px' },
-      'top-right': { bottom: '100%', left: '0', marginBottom: '4px' },
-      'top-left': { bottom: '100%', right: '0', marginBottom: '4px' }
-    };
-    return positions[position] || positions['bottom-right'];
+    if (!triggerRef.current) return { top: 0, left: 0 };
+
+    const rect = triggerRef.current.getBoundingClientRect();
+    const dropdownWidth = 160;
+    const dropdownHeight = 200; // estimated
+
+    let top, left;
+
+    switch (position) {
+      case 'bottom-left':
+        top = rect.bottom + 4;
+        left = rect.right - dropdownWidth;
+        break;
+      case 'top-right':
+        top = rect.top - dropdownHeight - 4;
+        left = rect.left;
+        break;
+      case 'top-left':
+        top = rect.top - dropdownHeight - 4;
+        left = rect.right - dropdownWidth;
+        break;
+      case 'bottom-right':
+      default:
+        top = rect.bottom + 4;
+        left = rect.left;
+        break;
+    }
+
+    // Keep dropdown on screen
+    top = Math.min(Math.max(top, 10), window.innerHeight - dropdownHeight - 10);
+    left = Math.min(Math.max(left, 10), window.innerWidth - dropdownWidth - 10);
+
+    return { top, left };
   };
 
   const actions = [
@@ -155,11 +182,11 @@ export function LinkActions({
         <FontAwesomeIcon icon={triggerIcon} />
       </button>
 
-      {isOpen && (
+      {isOpen && createPortal(
         <div
           className="link-actions-dropdown"
           style={{
-            position: 'absolute',
+            position: 'fixed',
             ...getDropdownPosition(),
             background: 'var(--glass-bg, rgba(20, 20, 30, 0.95))',
             backdropFilter: 'blur(20px)',
@@ -168,7 +195,7 @@ export function LinkActions({
             padding: '4px 0',
             minWidth: '160px',
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-            zIndex: 1000,
+            zIndex: 999998,
             fontSize: '13px'
           }}
         >
@@ -216,7 +243,8 @@ export function LinkActions({
               </button>
             </React.Fragment>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

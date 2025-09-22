@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateWorkspaceModal } from './popups/CreateWorkspaceModal';
 
 export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated }) {
@@ -81,53 +81,53 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated }
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
           </svg>
-          Create Workspace
+          Create
         </button>
         {workspaces.map((ws, i) => (
-        <button
-          key={ws}
-          onClick={() => onChange(ws)}
-          ref={el => btnRefs.current[i] = el}
-          style={{
-            background: ws === active
-              ? 'rgba(255, 255, 255, 0.15)'
-              : 'rgba(255, 255, 255, 0.08)',
-            border: ws === active
-              ? '1px solid rgba(255, 255, 255, 0.3)'
-              : '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '8px 12px',
-            color: ws === active ? '#ffffff' : 'rgba(255, 255, 255, 0.8)',
-            fontSize: 'var(--font-size-base)',
-            fontWeight: '500',
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            display: 'flex',
-            alignItems: 'center',
-            height: '32px',
-            justifyContent: 'center',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-            outline: 'none',
-            position: 'relative',
-            whiteSpace: 'nowrap'
-          }}
-          onMouseEnter={(e) => {
-            if (ws !== active) {
-              e.target.style.background = 'rgba(255, 255, 255, 0.12)';
-              e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (ws !== active) {
-              e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-              e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-            }
-          }}
-        >
-          {ws}
-        </button>
+          <button
+            key={ws}
+            onClick={() => onChange(ws)}
+            ref={el => btnRefs.current[i] = el}
+            style={{
+              background: ws === active
+                ? 'rgba(255, 255, 255, 0.15)'
+                : 'rgba(255, 255, 255, 0.08)',
+              border: ws === active
+                ? '1px solid rgba(255, 255, 255, 0.3)'
+                : '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              color: ws === active ? '#ffffff' : 'rgba(255, 255, 255, 0.8)',
+              fontSize: 'var(--font-size-base)',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              height: '32px',
+              justifyContent: 'center',
+              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+              outline: 'none',
+              position: 'relative',
+              whiteSpace: 'nowrap'
+            }}
+            onMouseEnter={(e) => {
+              if (ws !== active) {
+                e.target.style.background = 'rgba(255, 255, 255, 0.12)';
+                e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (ws !== active) {
+                e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+              }
+            }}
+          >
+            {ws}
+          </button>
         ))}
       </div>
 

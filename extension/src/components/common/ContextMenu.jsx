@@ -1,6 +1,7 @@
 import { faBookmark, faCopy, faExternalLinkAlt, faFolder, faFolderPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { listWorkspaces, addUrlToWorkspace } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils';
 
@@ -143,7 +144,7 @@ export function ContextMenu({
     }
   ];
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
       className="context-menu"
@@ -157,7 +158,7 @@ export function ContextMenu({
         border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
         borderRadius: '8px',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-        zIndex: 10000,
+        zIndex: 999999,
         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
         animation: 'contextMenuSlide 0.15s ease-out',
         overflow: 'hidden'
@@ -390,6 +391,7 @@ export function ContextMenu({
           }
         }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 }

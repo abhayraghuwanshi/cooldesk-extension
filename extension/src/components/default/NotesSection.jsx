@@ -1,4 +1,4 @@
-import { faCheck, faListCheck, faMicrophone, faPause, faPlay, faSquare, faSquareCheck, faStop, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faMicrophone, faPause, faPlay, faSquare, faSquareCheck, faStop, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
@@ -221,7 +221,6 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
                 onPlay(note);
               }}
               style={{
-                width: 32,
                 height: 32,
                 borderRadius: 16,
                 border: 'none',
@@ -248,7 +247,6 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
               onDelete(note.id);
             }}
             style={{
-              width: 32,
               height: 32,
               borderRadius: 16,
               border: 'none',
@@ -551,8 +549,8 @@ export function NotesSection() {
       const errorMessage = error.name === 'NotAllowedError'
         ? 'Microphone access denied. Please allow microphone permissions and try again.'
         : error.name === 'NotFoundError'
-        ? 'No microphone found. Please check your audio devices.'
-        : 'Could not access microphone. Please check permissions and try again.';
+          ? 'No microphone found. Please check your audio devices.'
+          : 'Could not access microphone. Please check permissions and try again.';
 
       alert(errorMessage);
     }
@@ -678,7 +676,7 @@ export function NotesSection() {
           alignItems: 'center',
           gap: 8
         }}>
-          <FontAwesomeIcon icon={faListCheck} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} />
+          {/* <FontAwesomeIcon icon={faListCheck} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
           Todos
         </h2>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -764,7 +762,6 @@ export function NotesSection() {
             <button
               onClick={isRecording ? stopRecording : startRecording}
               style={{
-                width: 32,
                 height: 32,
                 borderRadius: 16,
                 border: '1px solid',
@@ -810,7 +807,6 @@ export function NotesSection() {
                 }}
                 disabled={!text.trim()}
                 style={{
-                  width: 32,
                   height: 32,
                   borderRadius: 16,
                   border: '1px solid',

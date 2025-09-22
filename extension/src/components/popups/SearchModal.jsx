@@ -4,6 +4,7 @@ import { personas } from '../../data/personas.js';
 import { getUIState, listNotes, listWorkspaces, saveUIState } from '../../db/index.js';
 import { getHostTabs } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils.js';
+import { fuzzySearch } from '../../utils/searchUtils.js';
 
 const SearchModalComponent = function SearchModal({
     isOpen,
@@ -276,7 +277,7 @@ const SearchModalComponent = function SearchModal({
             return;
         }
 
-        const q = (search || '').trim().toLowerCase();
+        const q = (search || '').trim();
         if (!q) {
             setContentMatches([]);
             setNotesMatches([]);
@@ -303,147 +304,77 @@ const SearchModalComponent = function SearchModal({
             console.log('[SearchModal] First few tabs:', tabItems.slice(0, 3).map(t => ({ title: t.title, url: t.url })));
         }
 
+        // Use fuzzy search for content matches
+        const contentResults = fuzzySearch(dataRef.current.list, q, ['title', 'url']);
         // Separate matches by priority: tabs first, then others
-        const tabMatches = [];
-        const otherMatches = [];
-
-        for (const item of dataRef.current.list) {
-            const inTitle = (item.title || '').toLowerCase().includes(q);
-            const inUrl = (item.url || '').toLowerCase().includes(q);
-
-            // Debug tab matching specifically
-            if (item.type === 'tab') {
-                console.log('[SearchModal] Checking tab:', item.title, '| URL:', item.url, '| Title match:', inTitle, '| URL match:', inUrl);
-            }
-
-            if (inTitle || inUrl) {
-                console.log('[SearchModal] Match found:', item.type, item.title, item.url);
-
-                if (item.type === 'tab') {
-                    tabMatches.push(item);
-                } else {
-                    otherMatches.push(item);
-                }
-            }
-        }
-
+        const tabMatches = contentResults.filter(item => item.type === 'tab');
+        const otherMatches = contentResults.filter(item => item.type !== 'tab');
         // Combine results: tabs first, then others, limit to 12 total
-        const out = [...tabMatches, ...otherMatches].slice(0, 12);
+        const contentOut = [...tabMatches, ...otherMatches].slice(0, 12);
+        console.log('[SearchModal] Total content matches found:', contentOut.length);
+        console.log('[SearchModal] Tab matches:', contentOut.filter(item => item.type === 'tab').length);
+        setContentMatches(contentOut);
 
-        console.log('[SearchModal] Total matches found:', out.length);
-        console.log('[SearchModal] Tab matches:', out.filter(item => item.type === 'tab').length);
-        setContentMatches(out);
+        // Search in notes using fuzzy search
+        const noteResults = fuzzySearch(notesRef.current.notes, q, ['content', 'text', 'title']);
+        const noteMatches = noteResults.map(note => ({
+            type: 'note',
+            id: note.id,
+            title: note.title || (note.type === 'voice' || note.type === 'voice-text' ? '🎤 Voice Note' : 'Untitled Note'),
+            content: note.content || note.text || '',
+            url: note.url,
+            created: note.created || note.createdAt,
+            lastUpdated: note.lastUpdated || note.updatedAt,
+            noteType: note.type,
+            hasAudio: !!note.audioData
+        })).slice(0, 5); // Limit to 5 matches
+        setNotesMatches(noteMatches);
 
-        // Search in notes
-        const noteMatches = [];
-        console.log('[SearchModal] Searching through', notesRef.current.notes.length, 'notes for:', q);
-
-        for (const note of notesRef.current.notes) {
-            if (!note) continue;
-
-            // Handle both 'text' and 'content' fields (API inconsistency)
-            const noteContent = note.content || note.text || '';
-            const noteTitle = note.title || '';
-
-            console.log('[SearchModal] Checking note:', {
-                id: note.id,
-                title: noteTitle,
-                content: noteContent?.substring(0, 50),
-                type: note.type
-            });
-
-            const inContent = noteContent.toLowerCase().includes(q);
-            const inTitle = noteTitle.toLowerCase().includes(q);
-
-            if (inContent || inTitle) {
-                console.log('[SearchModal] Note matches!', noteTitle || noteContent?.substring(0, 30));
-                noteMatches.push({
-                    type: 'note',
-                    id: note.id,
-                    title: noteTitle || (note.type === 'voice' || note.type === 'voice-text' ? '🎤 Voice Note' : 'Untitled Note'),
-                    content: noteContent,
-                    url: note.url,
-                    created: note.created || note.createdAt,
-                    lastUpdated: note.lastUpdated || note.updatedAt,
-                    noteType: note.type,
-                    hasAudio: !!note.audioData
-                });
-            }
-        }
-        setNotesMatches(noteMatches.slice(0, 5)); // Limit to 5 matches
-
-        // Search in daily notes
-        const dailyNoteMatches = [];
-        for (const dailyNote of notesRef.current.dailyNotes) {
-            if (!dailyNote) continue;
-            const inContent = (dailyNote.content || '').toLowerCase().includes(q);
+        // Search in daily notes using fuzzy search
+        const dailyNoteResults = fuzzySearch(notesRef.current.dailyNotes, q, ['content']);
+        const dailyNoteMatches = dailyNoteResults.map(dailyNote => ({
+            type: 'dailyNote',
+            date: dailyNote.date,
+            content: dailyNote.content,
+            selections: dailyNote.selections || [],
+            metadata: dailyNote.metadata
+        })).filter(dailyNote => {
+            // Additional check for selections
             let inSelections = false;
             if (dailyNote.selections && Array.isArray(dailyNote.selections)) {
                 inSelections = dailyNote.selections.some(sel =>
-                    (sel.text || '').toLowerCase().includes(q) ||
-                    (sel.title || '').toLowerCase().includes(q)
+                    fuzzySearch([sel], q, ['text', 'title']).length > 0
                 );
             }
-            if (inContent || inSelections) {
-                dailyNoteMatches.push({
-                    type: 'dailyNote',
-                    date: dailyNote.date,
-                    content: dailyNote.content,
-                    selections: dailyNote.selections || [],
-                    metadata: dailyNote.metadata
-                });
-            }
-        }
-        setDailyNotesMatches(dailyNoteMatches.slice(0, 5)); // Limit to 5 matches
+            return dailyNote.content.toLowerCase().includes(q.toLowerCase()) || inSelections;
+        }).slice(0, 5); // Limit to 5 matches
+        setDailyNotesMatches(dailyNoteMatches);
 
-        // Search in personas
-        const personaMatches = [];
-        for (const persona of personas) {
-            const inTitle = persona.title.toLowerCase().includes(q);
-            const inDescription = persona.description.toLowerCase().includes(q);
+        // Search in personas using fuzzy search
+        const personaResults = fuzzySearch(personas, q, ['title', 'description']);
+        const personaMatches = personaResults.map(persona => ({
+            type: 'persona',
+            title: persona.title,
+            description: persona.description,
+            icon: persona.icon,
+            workspaces: persona.workspaces
+        })).filter(persona => {
+            // Additional check for workspaces
             let inWorkspaces = false;
-
             if (persona.workspaces) {
-                inWorkspaces = persona.workspaces.some(ws =>
-                    (ws.name || '').toLowerCase().includes(q) ||
-                    (ws.description || '').toLowerCase().includes(q)
-                );
+                inWorkspaces = fuzzySearch(persona.workspaces, q, ['name', 'description']).length > 0;
             }
-
-            if (inTitle || inDescription || inWorkspaces) {
-                personaMatches.push({
-                    type: 'persona',
-                    title: persona.title,
-                    description: persona.description,
-                    icon: persona.icon,
-                    workspaces: persona.workspaces
-                });
-            }
-        }
+            return persona.title.toLowerCase().includes(q.toLowerCase()) || persona.description.toLowerCase().includes(q.toLowerCase()) || inWorkspaces;
+        });
         setPersonasMatches(personaMatches);
 
-        // Search in workspaces
-        const workspaceMatches = [];
+        // Search in workspaces using fuzzy search
         console.log('[SearchModal] Searching workspaces for:', q);
         console.log('[SearchModal] Available workspaces:', workspacesRef.current.length);
-
-        for (const workspace of workspacesRef.current) {
-            if (!workspace) continue;
-
-            // Debug log for specific search
-            if (q === 'netflix') {
-                console.log('[SearchModal] Checking workspace:', workspace.name);
-                console.log('[SearchModal] Workspace URLs:', workspace.urls);
-                console.log('[SearchModal] Workspace items:', workspace.items);
-            }
-
-            const inName = (workspace.name || '').toLowerCase().includes(q);
-            const inDescription = (workspace.description || '').toLowerCase().includes(q);
-
-            // Enhanced URL/domain search
-            let inContent = false;
-            let matchedDomains = [];
-
+        const workspaceResults = fuzzySearch(workspacesRef.current, q, ['name', 'description']);
+        const workspaceMatches = workspaceResults.map(workspace => {
+            const uniqueDomains = [];
+            // Enhanced URL/domain search logic remains the same
             // Helper function to extract domain from URL
             const extractDomain = (url) => {
                 try {
@@ -453,60 +384,28 @@ const SearchModalComponent = function SearchModal({
                     return url.toLowerCase();
                 }
             };
-
             // Helper function to check if query matches domain/URL
             const matchesUrl = (url) => {
                 if (!url) return false;
                 const urlLower = url.toLowerCase();
-
-                // Debug log for Netflix search
-                if (q === 'netflix') {
-                    console.log('[SearchModal] Checking URL:', url, 'against query:', q);
-                }
-
-                // Direct string match
-                if (urlLower.includes(q)) {
-                    if (q === 'netflix') {
-                        console.log('[SearchModal] Direct match found for:', url);
-                    }
-                    return true;
-                }
-
-                // Domain extraction and matching
+                if (urlLower.includes(q.toLowerCase())) return true;
                 try {
                     const domain = extractDomain(url);
-
-                    // Debug log for Netflix search
-                    if (q === 'netflix') {
-                        console.log('[SearchModal] Extracted domain:', domain, 'from URL:', url);
-                    }
-
-                    // Exact domain match
-                    if (domain.includes(q)) {
-                        if (q === 'netflix') {
-                            console.log('[SearchModal] Domain match found:', domain);
-                        }
-                        matchedDomains.push(domain);
+                    if (domain.includes(q.toLowerCase())) {
+                        uniqueDomains.push(domain);
                         return true;
                     }
-
-                    // Check if query matches any part of domain (split by dots)
                     const domainParts = domain.split('.');
                     for (const part of domainParts) {
-                        if (part.includes(q)) {
-                            matchedDomains.push(domain);
+                        if (part.includes(q.toLowerCase())) {
+                            uniqueDomains.push(domain);
                             return true;
                         }
-
-                        // Also check if the query might be a partial match for common domains
-                        // e.g., "git" should match "github.com"
-                        if (q.length >= 3 && part.startsWith(q)) {
-                            matchedDomains.push(domain);
+                        if (q.length >= 3 && part.startsWith(q.toLowerCase())) {
+                            uniqueDomains.push(domain);
                             return true;
                         }
                     }
-
-                    // Handle common domain shortcuts
                     const commonMappings = {
                         'git': ['github', 'gitlab', 'gitpod'],
                         'drive': ['drive.google', 'onedrive'],
@@ -516,24 +415,20 @@ const SearchModalComponent = function SearchModal({
                         'aws': ['amazon', 'amazonaws'],
                         'cloud': ['cloud.google', 'icloud']
                     };
-
                     for (const [shortcut, domains] of Object.entries(commonMappings)) {
-                        if (q === shortcut || q.includes(shortcut)) {
+                        if (q.toLowerCase() === shortcut || q.toLowerCase().includes(shortcut)) {
                             for (const mappedDomain of domains) {
                                 if (domain.includes(mappedDomain)) {
-                                    matchedDomains.push(domain);
+                                    uniqueDomains.push(domain);
                                     return true;
                                 }
                             }
                         }
                     }
-
                 } catch { }
-
                 return false;
             };
-
-            // Search in workspace URLs
+            let inContent = false;
             if (workspace.urls && Array.isArray(workspace.urls)) {
                 workspace.urls.forEach(urlObj => {
                     const url = typeof urlObj === 'string' ? urlObj : urlObj?.url;
@@ -542,38 +437,29 @@ const SearchModalComponent = function SearchModal({
                     }
                 });
             }
-
-            // Search in workspace items
             if (workspace.items && Array.isArray(workspace.items)) {
                 workspace.items.forEach(item => {
-                    // Check item title
-                    if ((item.title || '').toLowerCase().includes(q)) {
+                    if ((item.title || '').toLowerCase().includes(q.toLowerCase())) {
                         inContent = true;
                     }
-
-                    // Check item URL with domain matching
                     if (matchesUrl(item.url)) {
                         inContent = true;
                     }
                 });
             }
-
-            if (inName || inDescription || inContent) {
-                const uniqueDomains = [...new Set(matchedDomains)];
-                workspaceMatches.push({
-                    type: 'workspace',
-                    id: workspace.id,
-                    name: workspace.name,
-                    description: workspace.description,
-                    gridType: workspace.gridType,
-                    itemCount: (workspace.urls || []).length + (workspace.items || []).length,
-                    matchedDomains: uniqueDomains,
-                    workspace: workspace
-                });
-            }
-        }
-        setWorkspaceMatches(workspaceMatches.slice(0, 5)); // Limit to 5 matches
-
+            return {
+                type: 'workspace',
+                id: workspace.id,
+                name: workspace.name,
+                description: workspace.description,
+                gridType: workspace.gridType,
+                itemCount: (workspace.urls || []).length + (workspace.items || []).length,
+                matchedDomains: [...new Set(uniqueDomains)],
+                workspace: workspace,
+                inContent: inContent || workspace.name.toLowerCase().includes(q.toLowerCase()) || (workspace.description || '').toLowerCase().includes(q.toLowerCase())
+            };
+        }).filter(w => w.inContent).slice(0, 5); // Limit to 5 matches
+        setWorkspaceMatches(workspaceMatches);
     }, [search, isOpen]);
 
     const runSearch = async (q) => {

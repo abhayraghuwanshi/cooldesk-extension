@@ -1,7 +1,7 @@
-import { faArrowUpRightFromSquare, faGlobe, faRotateRight } from '@fortawesome/free-solid-svg-icons';
+import { faGlobe, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
-import { enqueueOpenInChrome, getHostActivity, getHostDashboard, sendMessage } from '../../services/extensionApi';
+import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils';
 
 export function CoolFeedSection({ tabs, pings }) {
@@ -23,18 +23,18 @@ export function CoolFeedSection({ tabs, pings }) {
         if (!mounted) return;
         if (act?.ok && Array.isArray(act.rows) && act.rows.length) {
           const norm = act.rows
-          .filter(r => {
-            const url = r.url || '';
-            // Filter out edge system tabs
-            return !url.startsWith('edge://newtab') && !url.startsWith('edge://extensions');
-          })
-          .map(r => ({
-            url: r.url,
-            time: Number(r.time) || 0,
-            scroll: Number(r.scroll) || 0,
-            clicks: Number(r.clicks) || 0,
-            forms: Number(r.forms) || 0,
-          })).sort((a, b) => b.time - a.time);
+            .filter(r => {
+              const url = r.url || '';
+              // Filter out edge system tabs
+              return !url.startsWith('edge://newtab') && !url.startsWith('edge://extensions');
+            })
+            .map(r => ({
+              url: r.url,
+              time: Number(r.time) || 0,
+              scroll: Number(r.scroll) || 0,
+              clicks: Number(r.clicks) || 0,
+              forms: Number(r.forms) || 0,
+            })).sort((a, b) => b.time - a.time);
           setRows(norm);
           setError('');
           return;
@@ -320,19 +320,8 @@ export function CoolFeedSection({ tabs, pings }) {
           alignItems: 'center',
           gap: 8
         }}>
-          <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} />
+          {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
           Activity
-          <span style={{
-            fontSize: 'var(--font-size-sm)',
-            color: '#ffffff',
-            background: 'rgba(52, 199, 89, 0.2)',
-            padding: '4px 8px',
-            borderRadius: 12,
-            fontWeight: 500,
-            border: '1px solid rgba(52, 199, 89, 0.3)'
-          }}>
-            {rows.length}{fallbackUsed ? ' all' : ''}
-          </span>
         </h2>
 
         {/* Controls */}
@@ -340,7 +329,6 @@ export function CoolFeedSection({ tabs, pings }) {
           <button
             onClick={loadActivity}
             style={{
-              width: 32,
               height: 32,
               borderRadius: 16,
               border: 'none',
@@ -366,7 +354,7 @@ export function CoolFeedSection({ tabs, pings }) {
             <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 'var(--font-size-base)' }} />
           </button>
 
-          <select
+          {/* <select
             value={maxFeed}
             onChange={(e) => setMaxFeed(parseInt(e.target.value, 10))}
             style={{
@@ -383,12 +371,9 @@ export function CoolFeedSection({ tabs, pings }) {
           >
             <option value={12}>12</option>
             <option value={15}>15</option>
-            <option value={18}>18</option>
-            <option value={21}>21</option>
-            <option value={24}>24</option>
-          </select>
+          </select> */}
 
-          <select
+          {/* <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
             style={{
@@ -408,7 +393,7 @@ export function CoolFeedSection({ tabs, pings }) {
             <option value="clicks">Clicks</option>
             <option value="scroll">Scroll</option>
             <option value="forms">Forms</option>
-          </select>
+          </select> */}
         </div>
       </div>
       {

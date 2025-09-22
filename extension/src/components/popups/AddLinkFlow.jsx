@@ -10,17 +10,7 @@ export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd
     try {
       console.log('[AddLinkFlow] mount', {
         allItems: Array.isArray(allItems) ? allItems.length : 0,
-        allItemsSample: Array.isArray(allItems) ? allItems.slice(0, 3).map(item => ({
-          title: item?.title,
-          url: item?.url,
-          workspaceGroup: item?.workspaceGroup
-        })) : [],
         savedItems: Array.isArray(savedItems) ? savedItems.length : 0,
-        savedItemsSample: Array.isArray(savedItems) ? savedItems.slice(0, 3).map(item => ({
-          title: item?.title,
-          url: item?.url,
-          workspaceGroup: item?.workspaceGroup
-        })) : [],
         workspace: currentWorkspace,
       });
     } catch { }
@@ -49,15 +39,10 @@ export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd
 
   const filteredItems = React.useMemo(() => {
     const q = debouncedSearch;
-    console.log('[AddLinkFlow] filtering with query:', q);
-
     // Build source list: history/bookmarks items not yet categorized + all saved items from DB
     const baseItems = allItems.filter(item => !item.workspaceGroup);
-    console.log('[AddLinkFlow] baseItems after filtering workspaceGroup:', baseItems.length);
-
     // Insert saved first so they are retained on dedupe and appear first when no query
     const merged = [...savedItems, ...baseItems];
-    console.log('[AddLinkFlow] merged items:', merged.length);
 
     // Dedupe by URL, prefer saved item for metadata if present
     const byUrl = new Map();
@@ -68,12 +53,8 @@ export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd
       if (!byUrl.has(url)) byUrl.set(url, it);
     }
     const items = Array.from(byUrl.values());
-    console.log('[AddLinkFlow] items after deduplication:', items.length);
 
-    if (!q) {
-      console.log('[AddLinkFlow] no query, returning first 200 items');
-      return items.slice(0, 200);
-    }
+    if (!q) return items.slice(0, 200);
 
     const tokens = q.split(/\s+/).filter(Boolean);
 
@@ -134,25 +115,12 @@ export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd
       return score;
     };
 
-    const scored = items.map(it => ({ it, score: scoreItem(it) }));
-    const filtered = scored.filter(x => x.score > 0);
-    const sorted = filtered.sort((a, b) => b.score - a.score);
-    const final = sorted.slice(0, 200).map(x => x.it);
-
-    console.log('[AddLinkFlow] search results:', {
-      query: q,
-      totalItems: items.length,
-      scoredItems: scored.length,
-      filteredItems: filtered.length,
-      finalResults: final.length,
-      sampleResults: final.slice(0, 3).map(item => ({
-        title: item?.title,
-        url: item?.url,
-        score: scored.find(s => s.it === item)?.score
-      }))
-    });
-
-    return final;
+    return items
+      .map(it => ({ it, score: scoreItem(it) }))
+      .filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 200)
+      .map(x => x.it);
   }, [allItems, savedItems, debouncedSearch]);
 
   return (
