@@ -876,7 +876,7 @@ export const upsertNote = saveNote
  * List pins (legacy compatibility)
  */
 export const listPings = withErrorHandling(async (options = {}) => {
-    const { limit = 6 } = options
+    const { limit = 12 } = options
     
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.PINS, 'readonly')

@@ -27,6 +27,12 @@ export function PingsSection({ tabs }) {
   const addPing = React.useCallback(async (tab) => {
     try {
       if (!tab?.url) return;
+
+      // Check if we already have 12 pins
+      if (pings.length >= 12) {
+        console.warn('[PingsSection] Maximum of 12 pins reached');
+        return;
+      }
       const ping = {
         id: `ping_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         url: tab.url,
@@ -115,11 +121,21 @@ export function PingsSection({ tabs }) {
     };
   }, [loadPings]);
 
+  const maxPins = 12;
+  const displayPings = pings.slice(0, maxPins);
+
   return (
     <div className="coolDesk-section">
       <h2 className="coolDesk-section-title">Pins</h2>
-      <div className="coolDesk-pings-container" style={{ display: 'flex', flexDirection: 'row', overflowX: 'auto', whiteSpace: 'nowrap' }}>
-        {pings.map((ping, index) => (
+      <div className="coolDesk-pings-container" style={{
+        display: 'flex',
+        flexDirection: 'row',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+        width: '100%',
+        maxWidth: '100%'
+      }}>
+        {displayPings.map((ping, index) => (
           <div
             key={index}
             className="coolDesk-ping-item"
