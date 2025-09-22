@@ -458,31 +458,61 @@ export async function handleGetActivityData(msg, sender, sendResponse) {
     console.log('[Activity Debug] HANDLER ENTRY - handleGetActivityData called');
 
     try {
-        // Temporary simplified handler to bypass database issues
-        const mockData = [
-            {
-                url: "https://github.com",
-                time: 120000,
-                clicks: 15,
-                scroll: 80,
-                forms: 2
-            },
-            {
-                url: "https://stackoverflow.com",
-                time: 95000,
-                clicks: 8,
-                scroll: 90,
-                forms: 0
-            }
-        ];
+        // Use in-memory activity data (background scripts can't access IndexedDB easily)
+        console.log('[Activity Debug] Using in-memory activity data');
+        console.log('[Activity Debug] Current activityData keys:', Object.keys(activityData));
 
-        console.log('[Activity Debug] Sending mock data response');
-        sendResponse({ ok: true, rows: mockData, mock: true });
+        const memoryRows = Object.entries(activityData).map(([url, data]) => ({
+            url,
+            time: data.time || 0,
+            clicks: data.clicks || 0,
+            scroll: data.scroll || 0,
+            forms: data.forms || 0
+        }));
+
+        // Also include session data if available
+        const sessionRows = Array.from(urlSessions.entries()).map(([url, session]) => ({
+            url,
+            time: session.timeSpent || 0,
+            clicks: session.clicks || 0,
+            scroll: session.scrollDepth || 0,
+            forms: session.forms || 0
+        }));
+
+        // Merge and deduplicate data
+        const allData = new Map();
+
+        // Add memory data first
+        memoryRows.forEach(row => {
+            allData.set(row.url, row);
+        });
+
+        // Add/merge session data
+        sessionRows.forEach(row => {
+            const existing = allData.get(row.url) || { url: row.url, time: 0, clicks: 0, scroll: 0, forms: 0 };
+            allData.set(row.url, {
+                url: row.url,
+                time: Math.max(existing.time, row.time),
+                clicks: Math.max(existing.clicks, row.clicks),
+                scroll: Math.max(existing.scroll, row.scroll),
+                forms: Math.max(existing.forms, row.forms)
+            });
+        });
+
+        const finalRows = Array.from(allData.values())
+            .filter(row => row.time > 0 || row.clicks > 0 || row.scroll > 0 || row.forms > 0)
+            .sort((a, b) => b.time - a.time);
+
+        console.log('[Activity Debug] Sending merged data response with', finalRows.length, 'items');
+        console.log('[Activity Debug] Sample data:', finalRows.slice(0, 3));
+        sendResponse({ ok: true, rows: finalRows, fromMemory: true });
 
     } catch (error) {
         console.error('[Activity Debug] HANDLER ERROR:', error);
         try {
-            sendResponse({ ok: false, error: String(error), handlerError: true });
+            // Last resort: send empty data rather than failing
+            console.log('[Activity Debug] Error occurred, sending empty response');
+            sendResponse({ ok: true, rows: [], error: String(error), fallback: true });
         } catch (sendError) {
             console.error('[Activity Debug] Handler sendResponse also failed:', sendError);
         }

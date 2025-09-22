@@ -2,6 +2,7 @@ import { faGlobe, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../../services/extensionApi';
+import { getActivityData } from '../../services/activityService';
 import { getFaviconUrl } from '../../utils';
 
 export function CoolFeedSection({ tabs, pings }) {
@@ -68,56 +69,28 @@ export function CoolFeedSection({ tabs, pings }) {
         return;
       }
 
-      // Chrome extension mode: ask background for IndexedDB-backed activity
-      console.log('[CoolFeed Debug] About to send getActivityData message');
-      const resp = await new Promise((resolve) => {
-        let resolved = false;
-
-        // Set timeout to prevent hanging
-        const timeoutId = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            console.warn('[CoolFeed] Request timeout after 5 seconds');
-            resolve({ ok: false, error: 'Request timeout' });
-          }
-        }, 5000);
-
-        chrome.runtime.sendMessage({ action: 'getActivityData' }, (response) => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeoutId);
-
-            if (chrome.runtime.lastError) {
-              console.warn('[CoolFeed] Runtime error:', chrome.runtime.lastError.message);
-              resolve({ ok: false, error: chrome.runtime.lastError.message });
-            } else {
-              resolve(response || { ok: false, error: 'No response received' });
-            }
-          }
-        });
-      });
-      console.log('[CoolFeed Debug] Received response:', resp);
+      // Chrome extension mode: use new activityService for direct data access
+      console.log('[CoolFeed Debug] Using activityService for data access');
+      const activityRows = await getActivityData();
       if (!mounted) return;
-      if (resp && resp.ok) {
-        const arr = Array.isArray(resp.rows) ? resp.rows : [];
-        const norm = arr
-          .filter(r => {
-            const url = r.url || '';
-            // Filter out edge system tabs
-            return !url.startsWith('edge://newtab') && !url.startsWith('edge://extensions');
-          })
-          .map(r => ({
-            url: r.url,
-            time: Number(r.time) || 0,
-            scroll: Number(r.scroll) || 0,
-            clicks: Number(r.clicks) || 0,
-            forms: Number(r.forms) || 0,
-          })).sort((a, b) => b.time - a.time);
-        setRows(norm);
-        setError('');
-      } else {
-        setError((resp && resp.error) ? String(resp.error) : 'Failed to load activity data');
-      }
+
+      const norm = activityRows
+        .filter(r => {
+          const url = r.url || '';
+          // Filter out edge system tabs
+          return !url.startsWith('edge://newtab') && !url.startsWith('edge://extensions');
+        })
+        .map(r => ({
+          url: r.url,
+          time: Number(r.time) || 0,
+          scroll: Number(r.scroll) || 0,
+          clicks: Number(r.clicks) || 0,
+          forms: Number(r.forms) || 0,
+        })).sort((a, b) => b.time - a.time);
+
+      console.log('[CoolFeed Debug] Setting rows with', norm.length, 'items:', norm.slice(0, 3));
+      setRows(norm);
+      setError('');
     } catch (e) {
       console.warn('getActivityData failed:', e);
       // Suppress noisy error in Electron; show real errors only in extension context
