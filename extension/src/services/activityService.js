@@ -36,8 +36,19 @@ export async function getActivityData() {
                 scroll: Number(r?.scroll) || 0,
                 forms: Number(r?.forms) || 0
             }))
-            .filter(row => row.time > 0 || row.clicks > 0 || row.scroll > 0 || row.forms > 0)
-            .sort((a, b) => b.time - a.time);
+            .filter(row => {
+                // Include if any activity exists
+                const hasActivity = row.time > 0 || row.clicks > 0 || row.scroll > 0 || row.forms > 0;
+                // Also filter out system URLs
+                const isSystemUrl = row.url.startsWith('edge://') || row.url.startsWith('chrome://');
+                return hasActivity && !isSystemUrl;
+            })
+            .sort((a, b) => {
+                // Sort by total activity score rather than just time
+                const scoreA = (a.time || 0) + (a.clicks || 0) * 1000 + (a.scroll || 0) * 10 + (a.forms || 0) * 5000;
+                const scoreB = (b.time || 0) + (b.clicks || 0) * 1000 + (b.scroll || 0) * 10 + (b.forms || 0) * 5000;
+                return scoreB - scoreA;
+            });
 
             console.log('[ActivityService] Loaded', rows.length, 'activity items from IndexedDB');
             return rows;
