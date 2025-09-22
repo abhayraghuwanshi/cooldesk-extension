@@ -1,4 +1,4 @@
-import { faBroom, faGlobe, faHistory, faRotateRight, faThumbtack, faTrash, faUndo } from '@fortawesome/free-solid-svg-icons';
+import { faBroom, faGlobe, faHistory, faRotateRight, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { enqueueOpenInChrome, getHostTabs } from '../../services/extensionApi';
@@ -8,11 +8,11 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const [tabs, setTabs] = React.useState([]);
   const [tabsError, setTabsError] = React.useState(null);
   const [hoveredTabId, setHoveredTabId] = React.useState(null);
-  const hoverTimeoutRef = React.useRef(null);
   const [removingTabIds, setRemovingTabIds] = React.useState(new Set());
   const [autoCleanupEnabled, setAutoCleanupEnabled] = React.useState(false);
   const [recentlyClosed, setRecentlyClosed] = React.useState([]);
   const [showRecentlyClosed, setShowRecentlyClosed] = React.useState(false);
+  const previewShownTabs = React.useRef(new Set());
 
 
 
@@ -72,9 +72,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     const id = setInterval(refreshTabs, 15000);
     return () => {
       clearInterval(id);
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
     };
   }, [refreshTabs]);
 
@@ -319,16 +316,70 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     }
   }, []);
 
+  const handleMouseEnter = React.useCallback((tab) => {
+    if (tab && !previewShownTabs.current.has(tab.id)) {
+      onRequestPreview(tab.url, tab.id);
+      previewShownTabs.current.add(tab.id);
+    }
+  }, [tabs, onRequestPreview]);
+
+  const handleMouseLeave = React.useCallback(() => {
+    // No longer needed for styling
+  }, []);
+
   return (
     <div style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
-      {/* CSS for spinner animation */}
+      {/* CSS for animations */}
       <style>
         {`
           @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
+          }
+
+          .tab-item {
+            margin: 2px;
+            transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), background-color 0.2s ease-out;
+          }
+
+          .tab-item:hover {
+            transform: scale(1.05);
+            background-color: rgba(255, 255, 255, 0.1);
+          }
+
+          .tab-icon-container {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: box-shadow 0.2s ease-out;
+          }
+
+          .tab-item:hover .tab-icon-container {
+            box-shadow: 0 8px 32px rgba(0, 122, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+          }
+
+          .tab-actions {
+            transition: opacity 0.15s ease-out, transform 0.15s ease-out, visibility 0.15s ease-out;
+            opacity: 0;
+            transform: translateY(-5px);
+            pointer-events: none;
+            visibility: hidden;
+          }
+
+          .tab-item:hover .tab-actions {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+            visibility: visible;
+            transition-delay: 0.1s;
+          }
+
+          .tab-action-btn {
+            transition: transform 0.15s ease-out, background-color 0.15s ease-out;
+          }
+
+          .tab-action-btn:hover {
+            transform: scale(1.1);
           }
         `}
       </style>
@@ -418,14 +469,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               cursor: 'pointer',
               transition: 'all 0.2s ease'
             }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-              e.target.style.transform = 'scale(1.05)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-              e.target.style.transform = 'scale(1)';
-            }}
             aria-label="Reload"
             title="Reload tabs"
           >
@@ -452,7 +495,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           <div style={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: '12px',
+            gap: '16px',
             justifyContent: 'center',
             alignItems: 'flex-end',
             padding: '20px 16px',
@@ -483,60 +526,44 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                 return (
                   <div
                     key={tab.id}
+                    className="tab-item"
                     style={{
+                      padding: '8px 12px',
+                      borderRadius: 8,
                       display: 'flex',
-                      flexDirection: 'column',
                       alignItems: 'center',
+                      gap: 12,
                       cursor: 'pointer',
-                      transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                      transform: isHovered ? 'scale(1.15) translateY(-6px)' : 'scale(1)',
-                      zIndex: isHovered ? 10 : 1,
                       position: 'relative',
-                      padding: '8px',
-                      margin: '4px',
-                      borderRadius: '8px'
+                      backgroundColor: 'transparent' // Let CSS handle hover
                     }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
-                      if (hasTabsUpdate) {
-                        focusTab(tab);
-                      } else if (tab?.url) {
-                        enqueueOpenInChrome(tab.url).catch(() => { });
-                      }
-                    }}
+                    onClick={() => focusTab(tab)}
                     onMouseEnter={() => {
-                      if (hoverTimeoutRef.current) {
-                        clearTimeout(hoverTimeoutRef.current);
-                        hoverTimeoutRef.current = null;
-                      }
+                      handleMouseEnter(tab);
                       setHoveredTabId(tab.id);
                     }}
                     onMouseLeave={() => {
-                      // Simple timeout to prevent flickering
-                      hoverTimeoutRef.current = setTimeout(() => {
-                        setHoveredTabId(null);
-                        hoverTimeoutRef.current = null;
-                      }, 150);
+                      handleMouseLeave();
+                      setHoveredTabId(null);
                     }}
                   >
                     {/* Dock Icon Container */}
-                    <div style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '12px',
-                      background: `linear-gradient(145deg, ${colors.bg})`,
-                      border: `2px solid ${colors.border}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      boxShadow: isHovered
-                        ? `0 8px 32px rgba(0, 122, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)`
-                        : `0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)`,
-                      backdropFilter: 'blur(10px)'
-                    }}>
+                    <div
+                      className="tab-icon-container"
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '12px',
+                        background: `linear-gradient(145deg, ${colors.bg})`,
+                        border: `2px solid ${colors.border}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        backdropFilter: 'blur(10px)'
+                      }}
+                    >
                       {/* Favicon */}
                       {(() => {
                         const safeHttp = (s) => typeof s === 'string' && /^https?:\/\//i.test(s);
@@ -614,8 +641,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      opacity: isHovered ? 1 : 0.7,
-                      transition: 'opacity 0.3s ease'
+                      opacity: 0.7,
+                      transition: 'opacity 0.3s ease',
+                      display: 'none'
                     }}>
                       {(() => {
                         try {
@@ -632,22 +660,24 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '5px',
+                        gap: '8px',
                         position: 'absolute',
-                        right: '8px',
-                        top: '-40px',
-                        background: 'var(--color-card-bg)',
-                        padding: '2px 5px',
+                        right: '-8px',
+                        top: '-50px',
+                        padding: '8px',
                         borderRadius: '12px',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-                        zIndex: 10, // Ensure it's above other content
-                        opacity: hoveredTabId === tab.id ? 1 : 0,
-                        visibility: hoveredTabId === tab.id ? 'visible' : 'hidden',
-                        transition: 'opacity 0.2s ease, visibility 0.2s ease'
+
+                        backdropFilter: 'blur(10px)',
+
+                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)',
+                        zIndex: 1000,
+                        pointerEvents: 'auto',
+                        whiteSpace: 'nowrap'
                       }}
                     >
                       {/* Pin Button */}
                       <button
+                        className="tab-action-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           onAddPing(tab);
@@ -655,7 +685,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                         style={{
                           width: '32px',
                           height: '32px',
-                          borderRadius: 6,
+                          borderRadius: 8,
                           border: 'none',
                           background: 'rgba(255, 149, 0, 0.9)',
                           color: 'white',
@@ -663,24 +693,15 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
-                          fontSize: '12px',
-                          transition: 'all 0.2s ease'
                         }}
                         title="Pin tab"
-                        onMouseEnter={(e) => {
-                          e.target.style.background = 'rgba(255, 149, 0, 1)';
-                          e.target.style.transform = 'scale(1.1)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.background = 'rgba(255, 149, 0, 0.9)';
-                          e.target.style.transform = 'scale(1)';
-                        }}
                       >
-                        <FontAwesomeIcon icon={faThumbtack} />
+                        📌
                       </button>
 
                       {/* Close Button */}
                       <button
+                        className="tab-action-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeTab(tab);
@@ -688,7 +709,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                         style={{
                           width: '32px',
                           height: '32px',
-                          borderRadius: 6,
+                          borderRadius: 8,
                           border: 'none',
                           background: 'rgba(255, 59, 48, 0.9)',
                           color: 'white',
@@ -696,20 +717,10 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
-                          fontSize: '12px',
-                          transition: 'all 0.2s ease'
                         }}
                         title="Close tab"
-                        onMouseEnter={(e) => {
-                          e.target.style.background = 'rgba(255, 59, 48, 1)';
-                          e.target.style.transform = 'scale(1.1)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.background = 'rgba(255, 59, 48, 0.9)';
-                          e.target.style.transform = 'scale(1)';
-                        }}
                       >
-                        <FontAwesomeIcon icon={faTrash} />
+                        🗑️
                       </button>
                     </div>
                   </div>
@@ -871,13 +882,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           textOverflow: 'ellipsis',
                           lineHeight: 1.2
                         }}>
-                          {tab.title || (() => {
-                            try {
-                              return new URL(tab?.url || '').hostname;
-                            } catch {
-                              return tab?.url || 'Unknown';
-                            }
-                          })()}
+                          {tab.title || tab.url}
                         </div>
                         <div style={{
                           fontSize: 'calc(var(--font-size-xs) * 0.9)',

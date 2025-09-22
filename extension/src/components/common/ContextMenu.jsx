@@ -14,6 +14,7 @@ export function ContextMenu({
   onDelete,
   onOpen,
   onAddToBookmarks,
+  onAddToWorkspace,
   isPinned = false,
   position = { x: 0, y: 0 }
 }) {
@@ -103,12 +104,18 @@ export function ContextMenu({
 
   const handleAddToWorkspace = async (workspace) => {
     try {
-      await addUrlToWorkspace(workspace.id, {
-        url,
-        title: title || url,
-        addedAt: Date.now()
-      });
-      console.log(`Added to workspace: ${workspace.name}`);
+      if (onAddToWorkspace) {
+        await onAddToWorkspace(url, workspace.name);
+        console.log(`Added to workspace: ${workspace.name}`);
+      } else {
+        // Fallback to the old method if onAddToWorkspace is not provided
+        await addUrlToWorkspace(workspace.id, {
+          url,
+          title: title || url,
+          addedAt: Date.now()
+        });
+        console.log(`Added to workspace: ${workspace.name}`);
+      }
     } catch (err) {
       console.error('Failed to add to workspace:', err);
     }
@@ -141,6 +148,13 @@ export function ContextMenu({
       action: () => setShowWorkspaces(!showWorkspaces),
       hasSubmenu: true,
       color: '#34C759'
+    },
+    {
+      id: 'delete',
+      label: 'Delete',
+      icon: faTrash,
+      action: () => handleAction(() => onDelete?.(url)),
+      color: '#FF3B30'
     }
   ];
 

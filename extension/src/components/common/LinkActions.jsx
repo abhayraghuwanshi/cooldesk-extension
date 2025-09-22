@@ -20,7 +20,9 @@ export function LinkActions({
   className = '',
   style = {},
   triggerIcon = faEllipsisV,
-  position = 'bottom-right' // bottom-right, bottom-left, top-right, top-left
+  position = 'bottom-right', // bottom-right, bottom-left, top-right, top-left
+  currentWorkspace = null, // Add current workspace prop
+  onTriggerClick = null // Custom trigger click handler
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -113,7 +115,9 @@ export function LinkActions({
     },
     showWorkspace && onAddToWorkspace && {
       id: 'workspace',
-      label: 'Add to Workspace',
+      label: currentWorkspace && currentWorkspace !== 'All'
+        ? `Add to "${currentWorkspace}"`
+        : 'Add to Workspace',
       icon: faFolder,
       action: () => onAddToWorkspace(url, title),
       color: '#34C759'
@@ -153,7 +157,11 @@ export function LinkActions({
         ref={triggerRef}
         onClick={(e) => {
           e.stopPropagation();
-          setIsOpen(!isOpen);
+          if (onTriggerClick) {
+            onTriggerClick(e);
+          } else {
+            setIsOpen(!isOpen);
+          }
         }}
         className="link-actions-trigger"
         style={{
@@ -251,7 +259,7 @@ export function LinkActions({
 }
 
 // Convenience component for common use cases
-export function QuickLinkActions({ url, title, onPin, onAddToWorkspace, onDelete, isPinned }) {
+export function QuickLinkActions({ url, title, onPin, onAddToWorkspace, onDelete, isPinned, currentWorkspace, onTriggerClick }) {
   return (
     <LinkActions
       url={url}
@@ -260,6 +268,8 @@ export function QuickLinkActions({ url, title, onPin, onAddToWorkspace, onDelete
       onAddToWorkspace={onAddToWorkspace}
       onDelete={onDelete}
       isPinned={isPinned}
+      currentWorkspace={currentWorkspace}
+      onTriggerClick={onTriggerClick}
       showOpen={false}
       showBookmarks={false}
       triggerIcon={faEllipsisV}
@@ -269,13 +279,14 @@ export function QuickLinkActions({ url, title, onPin, onAddToWorkspace, onDelete
 }
 
 // Minimal actions for space-constrained areas
-export function MiniLinkActions({ url, onPin, onDelete, isPinned }) {
+export function MiniLinkActions({ url, onPin, onDelete, isPinned, currentWorkspace }) {
   return (
     <LinkActions
       url={url}
       onPin={onPin}
       onDelete={onDelete}
       isPinned={isPinned}
+      currentWorkspace={currentWorkspace}
       showWorkspace={false}
       showOpen={false}
       showBookmarks={false}

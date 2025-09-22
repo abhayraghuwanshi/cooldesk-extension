@@ -145,6 +145,7 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onDelete, onAdd
                 onAddRelated={onAddRelated}
                 timeSpentMs={timeSpent[cleanedKey]}
                 onDelete={onDelete}
+                onAddToWorkspace={onAddSavedItem}
               />
             );
           })()

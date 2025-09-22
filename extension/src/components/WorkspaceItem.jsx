@@ -306,6 +306,14 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
               onAddToWorkspace={actionHandlers.handleAddToWorkspace}
               onDelete={actionHandlers.handleDelete}
               isPinned={isPinned}
+              onTriggerClick={(e) => {
+                // Get click position for context menu placement
+                setContextMenuPosition({
+                  x: e.clientX,
+                  y: e.clientY
+                });
+                setShowContextMenu(true);
+              }}
             />
           </div>
         </div>
@@ -321,6 +329,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         onDelete={actionHandlers.handleDelete}
         onOpen={actionHandlers.handleOpen}
         onAddToBookmarks={actionHandlers.handleAddToBookmarks}
+        onAddToWorkspace={onAddToWorkspace}
         isPinned={isPinned}
         position={contextMenuPosition}
       />
