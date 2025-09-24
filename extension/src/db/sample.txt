@@ -1,0 +1,34 @@
+"06b69248-2548-4d1b-9ffb-52484e9970ac"	
+{id: '06b69248-2548-4d1b-9ffb-52484e9970ac', timestamp: 1758626730932, sessionId: 'session_1758626730932', url: 'https://youtube.com', time: 0, …}
+1	"16cecdf3-5560-4c72-8f97-a12866a2a05a"	
+{id: '16cecdf3-5560-4c72-8f97-a12866a2a05a', timestamp: 1758626701071, sessionId: 'session_1758626701071', url: 'edge://newtab', time: 45392, …}
+2	"2094b81b-b07b-432e-8989-c734c0effe0c"	
+{id: '2094b81b-b07b-432e-8989-c734c0effe0c', timestamp: 1758626852794, sessionId: 'session_1758626852794', url: 'edge://extensions', time: 1600, …}
+3	"3429088d-3ac1-4df3-94ae-e276e4a631f6"	
+{id: '3429088d-3ac1-4df3-94ae-e276e4a631f6', timestamp: 1758626740937, sessionId: 'session_1758626740937', url: 'https://youtube.com', time: 0, …}
+4	"70115c14-7373-4384-bbc7-530cb23fd028"	
+{id: '70115c14-7373-4384-bbc7-530cb23fd028', timestamp: 1758626735939, sessionId: 'session_1758626735939', url: 'https://youtube.com', time: 0, …}
+5	"b837d3de-169e-42bf-b51b-f97da54490de"	
+{id: 'b837d3de-169e-42bf-b51b-f97da54490de', timestamp: 1758626725940, sessionId: 'session_1758626725940', url: 'https://youtube.com', time: 0, …}
+6	"c2157551-d9dd-4854-bbd6-d286dc928b16"	
+{id: 'c2157551-d9dd-4854-bbd6-d286dc928b16', timestamp: 1758626720940, sessionId: 'session_1758626720940', url: 'https://youtube.com', time: 0, …}
+7	"d17501f8-c44c-4938-b3a3-48a26b8280bc"	
+{id: 'd17501f8-c44c-4938-b3a3-48a26b8280bc', timestamp: 1758626852795, sessionId: 'session_1758626852795', url: 'https://youtube.com', time: 1616, …}
+8	"e3cb0775-f498-49eb-9dab-06147c6c1ef0"	
+{id: 'e3cb0775-f498-49eb-9dab-06147c6c1ef0', timestamp: 1758626745938, sessionId: 'session_1758626745938', url: 'https://youtube.com', time: 0, …}
+9	"f58a8449-28dd-47d1-bc25-9d8c90bcc3fb"	
+{id: 'f58a8449-28dd-47d1-bc25-9d8c90bcc3fb', timestamp: 1758626710937, sessionId: 'session_1758626710937', url: 'edge://newtab', time: 2432, …}
+10	"session_1758626705927_iz7cx9jta_1758626719383_9ppeso"	
+{id: 'session_1758626705927_iz7cx9jta_1758626719383_9ppeso', timestamp: 1758626719383, sessionId: 'session_1758626705927_iz7cx9jta', url: 'https://youtube.com', metrics: {…}, …}
+11	"session_1758626705927_iz7cx9jta_1758626725378_9k01qi"	
+{id: 'session_1758626705927_iz7cx9jta_1758626725378_9k01qi', timestamp: 1758626725378, sessionId: 'session_1758626705927_iz7cx9jta', url: 'https://youtube.com', metrics: {…}, …}
+12	"session_1758626705927_iz7cx9jta_1758626728389_cu5a7f"	
+{id: 'session_1758626705927_iz7cx9jta_1758626728389_cu5a7f', timestamp: 1758626728389, sessionId: 'session_1758626705927_iz7cx9jta', url: 'https://youtube.com', metrics: {…}, …}
+13	"session_1758626705927_iz7cx9jta_1758626734385_3q76kc"	
+{id: 'session_1758626705927_iz7cx9jta_1758626734385_3q76kc', timestamp: 1758626734385, sessionId: 'session_1758626705927_iz7cx9jta', url: 'https://youtube.com', metrics: {…}, …}
+14	"session_1758626705927_iz7cx9jta_1758626740379_evsgt8"	
+{id: 'session_1758626705927_iz7cx9jta_1758626740379_evsgt8', timestamp: 1758626740379, sessionId: 'session_1758626705927_iz7cx9jta', url: 'https://youtube.com', metrics: {…}, …}
+15	"session_1758626705927_iz7cx9jta_1758626743384_rbhnj8"	
+{id: 'session_1758626705927_iz7cx9jta_1758626743384_rbhnj8', timestamp: 1758626743384, sessionId: 'session_1758626705927_iz7cx9jta', url: 'https://youtube.com', metrics: {…}, …}
+16	"session_1758626847791_ai3ttwgvs_1758626851132_w0r3bl"	
+{id: 'session_1758626847791_ai3ttwgvs_1758626851132_w0r3bl', timestamp: 1758626851132, sessionId: 'session_1758626847791_ai3ttwgvs', url: 'https://youtube.com', metrics: {…}, …}

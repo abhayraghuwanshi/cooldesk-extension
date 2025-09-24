@@ -11,7 +11,6 @@ import {
   faTriangleExclamation,
   faUndo
 } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { ItemGrid } from './components/ItemGrid';
@@ -1299,7 +1298,7 @@ export default function App() {
       <div>
 
         {/* Warning: Require Gemini API key for AI features */}
-        {(() => {
+        {/* {(() => {
           const missingApi = !(settings?.geminiApiKey || '').trim();
           const shouldShow = missingApi && !dismissedSettingsWarning;
           if (!shouldShow) return null;
@@ -1343,7 +1342,7 @@ export default function App() {
               </div>
             </div>
           );
-        })()}
+        })()} */}
 
         {/* Pins and Cool Feed Side by Side */}
         <ErrorBoundary>

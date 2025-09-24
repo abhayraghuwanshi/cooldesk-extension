@@ -132,7 +132,7 @@ export function WorkspaceProject({
     // Accent colors for variety
     const accentColors = [
       '#3b82f6', // Blue
-      '#6b7280', // Gray  
+      '#6b7280', // Gray
       '#4b5563', // Slate
       '#22c55e', // Green
       '#ea580c', // Orange
@@ -178,7 +178,12 @@ export function WorkspaceProject({
           marginTop: '16px'
         }}>
           <div>
-            <ProjectSublinks values={values} />
+            <ProjectSublinks
+              values={values}
+              onDelete={onDelete}
+              onAddToWorkspace={undefined}
+              tabs={[]}
+            />
           </div>
         </div>
       )}

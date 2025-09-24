@@ -1,15 +1,146 @@
-import { faTrash } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getDomainFromUrl, getFaviconUrl } from '../utils';
+import { createLinkActionHandlers, isUrlPinned } from '../utils/linkActionHandlers.js';
+import { ContextMenu } from './common/ContextMenu.jsx';
 
-export function ProjectSublinks({ values = [], onDelete }) {
+export function ProjectSublinks({ values = [], onDelete, onAddToWorkspace, tabs = [] }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [pinnedItems, setPinnedItems] = useState({});
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [selectedItem, setSelectedItem] = useState(null);
+
+  // Handle individual item deletion by removing URL from workspace
+  const handleItemDelete = useCallback(async (url) => {
+    try {
+      const hostname = new URL(url).hostname;
+      const confirmed = confirm(`Remove this specific item from ${hostname} workspace?`);
+      if (!confirmed) return;
+
+      console.log('Attempting to delete individual item:', url);
+
+      // Import database functions
+      const db = await import('../db/index.js');
+
+      try {
+        // Get all workspaces
+        const allWorkspaces = await db.listWorkspaces();
+        let currentWorkspaceId = null;
+        let currentWorkspace = null;
+
+        // Find which workspace this item belongs to
+        if (allWorkspaces && Array.isArray(allWorkspaces)) {
+          for (const workspace of allWorkspaces) {
+            if (workspace.values && workspace.values.some(v => v.url === url)) {
+              currentWorkspaceId = workspace.id;
+              currentWorkspace = workspace;
+              break;
+            }
+          }
+        }
+
+        if (currentWorkspaceId && currentWorkspace) {
+          // Filter out the item to be deleted
+          const updatedValues = currentWorkspace.values.filter(v => v.url !== url);
+
+          if (updatedValues.length === 0) {
+            // If this was the last item, delete the entire workspace
+            await db.deleteWorkspace(currentWorkspaceId);
+            console.log('Deleted workspace as it was the last item');
+          } else {
+            // Otherwise, update the workspace with the remaining items
+            await db.updateWorkspace(currentWorkspaceId, { values: updatedValues });
+            console.log('Updated workspace by removing the item');
+          }
+
+          // Notify parent component
+          if (onDelete) {
+            const item = values.find(v => v.url === url);
+            if (item) {
+              await onDelete(url, [item], { individual: true });
+            }
+          }
+        } else {
+          console.log('Could not find workspace, using fallback delete');
+          if (onDelete) {
+            const item = values.find(v => v.url === url);
+            if (item) {
+              await onDelete(url, [item], { individual: true });
+            }
+          }
+        }
+      } catch (dbError) {
+        console.error('Database error during individual deletion:', dbError);
+        // Fallback to parent delete
+        if (onDelete) {
+          const item = values.find(v => v.url === url);
+          if (item) {
+            await onDelete(url, [item], { individual: true });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in individual item deletion:', error);
+      alert('Error deleting individual item. Please try again.');
+    }
+  }, [onDelete, values]);
+
+  // Create action handlers
+  const actionHandlers = useMemo(() => {
+    return createLinkActionHandlers({
+      tabs,
+      onWorkspaceModalOpen: onAddToWorkspace,
+      onDeleteConfirm: () => true, // Skip confirmation since we handle it above
+      onDeleteAction: handleItemDelete,
+      onSuccess: (result) => {
+        if (result.action === 'pinned') {
+          setPinnedItems(prev => ({ ...prev, [result.url]: true }));
+        } else if (result.action === 'unpinned') {
+          setPinnedItems(prev => ({ ...prev, [result.url]: false }));
+        }
+      },
+      onError: (error) => {
+        console.error('Action error:', error);
+      }
+    });
+  }, [tabs, onDelete, onAddToWorkspace, values]);
+
+  // Load pin status for all items
+  useEffect(() => {
+    const loadPinStatuses = async () => {
+      const statuses = {};
+      for (const item of values) {
+        try {
+          const pinned = await isUrlPinned(item.url);
+          statuses[item.url] = pinned;
+        } catch (error) {
+          console.warn('Failed to check pin status:', error);
+          statuses[item.url] = false;
+        }
+      }
+      setPinnedItems(statuses);
+    };
+    if (values.length > 0) {
+      loadPinStatuses();
+    }
+  }, [values]);
 
   // Utility function to truncate long titles
   const truncateTitle = (title, maxLength = 35) => {
     if (!title || title.length <= maxLength) return title;
     return title.slice(0, maxLength).trim() + '…';
+  };
+
+  const handleRightClick = (e, item) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setSelectedItem(item);
+    setContextMenuPosition({
+      x: e.clientX,
+      y: e.clientY
+    });
+    setShowContextMenu(true);
   };
 
   if (!values || values.length === 0) {
@@ -40,6 +171,7 @@ export function ProjectSublinks({ values = [], onDelete }) {
             }}
             onMouseEnter={() => setHoveredIndex(index)}
             onMouseLeave={() => setHoveredIndex(null)}
+            onContextMenu={(e) => handleRightClick(e, item)}
           >
             {/* Main clickable area */}
             <div
@@ -113,45 +245,60 @@ export function ProjectSublinks({ values = [], onDelete }) {
               opacity: hoveredIndex === index ? 1 : 0,
               transition: 'opacity 0.2s ease'
             }}>
-              {/* External link button */}
-
-              {/* Delete button */}
-              {onDelete && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(item.url, [item]);
-                  }}
-                  style={{
-                    background: 'rgba(255, 59, 48, 0.2)',
-                    border: '1px solid rgba(255, 59, 48, 0.4)',
-                    borderRadius: '4px',
-                    padding: '4px',
-                    color: '#FF3B30',
-                    cursor: 'pointer',
-                    fontSize: '10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s ease'
-                  }}
-                  title="Delete this link"
-                  onMouseEnter={(e) => {
-                    e.target.style.background = '#FF3B30';
-                    e.target.style.color = 'white';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = 'rgba(255, 59, 48, 0.2)';
-                    e.target.style.color = '#FF3B30';
-                  }}
-                >
-                  <FontAwesomeIcon icon={faTrash} />
-                </button>
-              )}
+              {/* Three-dot menu button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRightClick(e, item);
+                }}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '4px',
+                  padding: '4px',
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  width: '20px',
+                  height: '20px'
+                }}
+                title="More options"
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.2)';
+                  e.target.style.color = 'white';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                  e.target.style.color = 'rgba(255, 255, 255, 0.7)';
+                }}
+              >
+                ⋯
+              </button>
             </div>
           </div>
         );
       })}
+
+      {/* Context Menu */}
+      {selectedItem && (
+        <ContextMenu
+          show={showContextMenu}
+          onClose={() => setShowContextMenu(false)}
+          url={selectedItem.url}
+          title={selectedItem.title || selectedItem.extractedData?.title || getDomainFromUrl(selectedItem.url)}
+          onPin={actionHandlers.handlePin}
+          onDelete={actionHandlers.handleDelete}
+          onOpen={actionHandlers.handleOpen}
+          onAddToBookmarks={actionHandlers.handleAddToBookmarks}
+          onAddToWorkspace={actionHandlers.handleAddToWorkspace}
+          isPinned={pinnedItems[selectedItem.url] || false}
+          position={contextMenuPosition}
+        />
+      )}
     </div>
   );
 }

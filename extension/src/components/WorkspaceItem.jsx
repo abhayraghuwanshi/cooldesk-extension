@@ -1,10 +1,7 @@
-import { faTag, faTrash } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { formatTime, getDomainFromUrl, getFaviconUrl, getUrlParts } from '../utils';
 import { createLinkActionHandlers, isUrlPinned } from '../utils/linkActionHandlers.js';
 import { ContextMenu } from './common/ContextMenu.jsx';
-import { QuickLinkActions } from './common/LinkActions.jsx';
 import { WorkspaceSelectionModal } from './popups/WorkspaceSelectionModal.jsx';
 
 export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, values, onAddRelated, timeSpentMs, onDelete, onAddToWorkspace, tabs = [] }, ref) {
@@ -143,8 +140,14 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
   };
 
 
+  // Utility function to truncate long titles
+  const truncateTitle = (title, maxLength = 35) => {
+    if (!title || title.length <= maxLength) return title;
+    return title.slice(0, maxLength).trim() + '…';
+  };
+
   return (
-    <li
+    <div
       className="workspace-item"
       tabIndex={0}
       ref={ref}
@@ -158,6 +161,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         }
       }}
       style={{
+        background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
         borderRadius: '12px',
         marginBottom: '12px',
         backdropFilter: 'blur(10px)',
@@ -168,18 +172,19 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
       }}
       title="Right-click for options"
     >
-      <div className="item-header" onClick={handleItemClick} style={{
+      {/* Main clickable area */}
+      <div onClick={handleItemClick} style={{
         padding: '16px',
         display: 'flex',
         alignItems: 'center',
-        gap: '12px'
+        gap: '12px',
+        flex: 1
       }}>
         {favicon && (
           <div style={{
-            width: 32,
-            height: 32,
-            borderRadius: 8,
-            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+            width: 48,
+            height: 48,
+            borderRadius: 10,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -188,14 +193,14 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             <img
               src={favicon}
               alt=""
-              width={18}
-              height={18}
-              style={{ borderRadius: 4 }}
+              width={32}
+              height={32}
+              style={{ borderRadius: 6 }}
             />
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Workspace Title - show workspace name instead of individual URL */}
+          {/* Workspace Title */}
           <div style={{
             fontSize: 16,
             color: 'var(--text, #ffffff)',
@@ -205,117 +210,63 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis'
-          }}>
-            {workspaceTitle}
+          }}
+            title={workspaceTitle}
+          >
+            {truncateTitle(workspaceTitle, 40)}
           </div>
 
-          {/* URL Count and Platform Info */}
-          <div style={{
-            fontSize: 13,
-            color: 'var(--text-dim, rgba(255, 255, 255, 0.7))',
-            lineHeight: 1.4,
-            marginBottom: 0,
-            fontWeight: 400,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis'
-          }}>
-            {(() => {
-              if (values && values.length > 1) {
-                // Check if this is an AI chat workspace with conversations
-                const hasConversations = values.some(item =>
-                  item.extractedData?.details?.type === 'conversation'
-                );
-
-                if (hasConversations) {
-                  const conversationCount = values.filter(item =>
-                    item.extractedData?.details?.type === 'conversation'
-                  ).length;
-                  return `${conversationCount} conversation${conversationCount !== 1 ? 's' : ''}`;
-                } else {
-                  return `${values.length} URLs`;
-                }
-              } else if (values && values.length > 0 && values[0].extractedData && values[0].extractedData.title) {
-                return values[0].extractedData.title;
-              } else {
-                try {
-                  return new URL(base).hostname;
-                } catch {
-                  return base.length > 40 ? base.slice(0, 37) + '…' : base;
-                }
-              }
-            })()}
-          </div>
-
-          {/* Tags display */}
-          {tags.length > 0 && (
+          {/* Time spent display */}
+          {timeString && timeString !== '0s' && (
             <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '4px',
-              marginTop: '6px',
-              alignItems: 'center'
+              fontSize: 12,
+              color: 'var(--accent-color, #3b82f6)',
+              lineHeight: 1.3,
+              marginTop: 2,
+              fontWeight: 500
             }}>
-              <FontAwesomeIcon
-                icon={faTag}
-                style={{
-                  fontSize: '10px',
-                  color: 'var(--text-dim, rgba(255, 255, 255, 0.5))',
-                  marginRight: '2px'
-                }}
-              />
-              {tags.slice(0, 3).map(tag => (
-                <span
-                  key={tag}
-                  style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    background: 'var(--tag-bg, rgba(255, 255, 255, 0.1))',
-                    color: 'var(--text-dim, rgba(255, 255, 255, 0.7))',
-                  }}
-                >
-                  {tag}
-                </span>
-              ))}
-              {tags.length > 3 && (
-                <span style={{
-                  fontSize: '10px',
-                  color: 'var(--text-dim, rgba(255, 255, 255, 0.5))'
-                }}>
-                  +{tags.length - 3}
-                </span>
-              )}
+              {timeString}
             </div>
           )}
         </div>
-        <div className="item-actions" style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: '8px'
-        }}>
-          {/* Three-dot button for full menu */}
-          <div style={{
-            display: hovered ? 'block' : 'none'
-          }}>
-            <QuickLinkActions
-              url={base}
-              title={workspaceTitle}
-              onPin={actionHandlers.handlePin}
-              onAddToWorkspace={actionHandlers.handleAddToWorkspace}
-              onDelete={actionHandlers.handleDelete}
-              isPinned={isPinned}
-              onTriggerClick={(e) => {
-                // Get click position for context menu placement
-                setContextMenuPosition({
-                  x: e.clientX,
-                  y: e.clientY
-                });
-                setShowContextMenu(true);
-              }}
-            />
-          </div>
+
+        {/* Three-dot menu icon */}
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            setContextMenuPosition({
+              x: e.clientX,
+              y: e.clientY
+            });
+            setShowContextMenu(true);
+          }}
+          style={{
+            opacity: hovered ? 1 : 0,
+            transition: 'opacity 0.2s ease',
+            padding: '8px',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--text-secondary, rgba(255, 255, 255, 0.6))',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            lineHeight: 1,
+            transform: 'rotate(90deg)',
+            flexShrink: 0
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.1))';
+            e.target.style.color = 'var(--text-primary, #ffffff)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'transparent';
+            e.target.style.color = 'var(--text-secondary, rgba(255, 255, 255, 0.6))';
+          }}
+          title="More options"
+        >
+          ⋯
         </div>
       </div>
 
@@ -341,6 +292,6 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         url={base}
         title={workspaceTitle}
       />
-    </li>
+    </div>
   );
 });

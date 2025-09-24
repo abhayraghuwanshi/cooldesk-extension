@@ -532,7 +532,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       borderRadius: 8,
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 12,
                       cursor: 'pointer',
                       position: 'relative',
                       backgroundColor: 'transparent' // Let CSS handle hover

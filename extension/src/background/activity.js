@@ -13,6 +13,76 @@ function cleanUrl(url) {
     }
 }
 
+// Enhanced URL filtering to exclude system and low-value URLs
+function isValidTrackingUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+
+    // System URLs to exclude
+    const systemPrefixes = [
+        'chrome://', 'edge://', 'about:', 'moz-extension://',
+        'chrome-extension://', 'extension://', 'file://'
+    ];
+
+    // Low-value domains to exclude
+    const excludeDomains = [
+        'newtab', 'extensions', 'settings', 'blank'
+    ];
+
+    // Check system prefixes
+    if (systemPrefixes.some(prefix => url.startsWith(prefix))) {
+        return false;
+    }
+
+    // Check if it's a meaningful URL (has domain)
+    try {
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname.toLowerCase();
+
+        // Exclude if domain is in exclude list or is empty
+        if (!domain || excludeDomains.some(exclude => domain.includes(exclude))) {
+            return false;
+        }
+
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// Calculate engagement score based on user interactions
+function calculateEngagementScore(data) {
+    const time = Number(data.time) || 0;
+    const clicks = Number(data.clicks) || 0;
+    const scroll = Number(data.scroll) || 0;
+    const forms = Number(data.forms) || 0;
+
+    // Weighted scoring: forms > clicks > scroll > time
+    const score = (
+        forms * 100 +      // Form submissions are high-value interactions
+        clicks * 10 +      // Clicks show active engagement
+        scroll * 0.5 +     // Scrolling shows content consumption
+        (time / 1000) * 0.1 // Time has lowest weight (per second)
+    );
+
+    return Math.round(score * 100) / 100; // Round to 2 decimal places
+}
+
+// Check if session has minimum engagement to be worth tracking
+function hasMinimumEngagement(data) {
+    const time = Number(data.time) || 0;
+    const clicks = Number(data.clicks) || 0;
+    const scroll = Number(data.scroll) || 0;
+    const forms = Number(data.forms) || 0;
+
+    // Minimum thresholds for tracking
+    return (
+        time >= 5000 ||    // At least 5 seconds
+        clicks >= 2 ||     // At least 2 clicks
+        scroll >= 25 ||    // At least 25% scroll
+        forms >= 1         // Any form submission
+    );
+}
+
 // Helper to identify audio streaming sites
 function isAudioStreamingSite(url) {
     const audioSites = [
@@ -46,6 +116,18 @@ let sessionStartTime = Date.now();
 let sessionEvents = new Map(); // Track events per URL in current session
 let urlSessions = new Map(); // Track ongoing sessions per URL to avoid duplicates
 let urlSessionIds = new Map(); // Track consistent session IDs per URL
+let tabSessions = new Map(); // Track sessions per tab ID to prevent duplicates
+
+// Create unique session ID using tab ID and URL
+function createTabSessionId(tabId, url) {
+    const cleaned = cleanUrl(url);
+    if (!cleaned || !tabId) return null;
+
+    // Create deterministic session ID: tab_<tabId>_<urlHash>_<day>
+    const urlHash = cleaned.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
+    const day = Math.floor(Date.now() / (24 * 60 * 60 * 1000)); // Same day = same session
+    return `tab_${tabId}_${urlHash}_${day}`;
+}
 
 // Flush activity batch to database
 async function flushActivityBatch() {
@@ -62,7 +144,8 @@ async function flushActivityBatch() {
     for (const url of urls) {
         try {
             const payload = { url, time: activityData[url]?.time || 0, updatedAt: Date.now(), ...activityData[url] };
-            await putActivityRow(payload);
+            // DISABLED: Let tab-based time series system handle all persistence
+            // await putActivityRow(payload);
             batch.push({ url: payload.url, time: payload.time || 0, scroll: Number(payload.scroll) || 0, clicks: Number(payload.clicks) || 0, forms: Number(payload.forms) || 0, updatedAt: payload.updatedAt });
         } catch (e) {
             // If write fails, keep it dirty for next round
@@ -85,6 +168,29 @@ async function flushTimeSeriesEvents() {
     if (!sessionEvents || sessionEvents.size === 0) return;
 
     const events = Array.from(sessionEvents.values());
+
+    // Filter out invalid events before processing
+    const validEvents = events.filter(event => {
+        const hasData = event.timeSpent > 0 || event.clicks > 0 || event.forms > 0 || event.scrollDepth > 0;
+        const hasValidUrl = event.url && isValidTrackingUrl(event.url);
+        return hasData && hasValidUrl;
+    });
+
+    if (validEvents.length === 0) {
+        console.log('[TimeSeries] No valid events to flush');
+        try {
+            if (sessionEvents && typeof sessionEvents.clear === 'function') {
+                sessionEvents.clear();
+            }
+        } catch (e) {
+            console.warn('[Activity] Failed to clear sessionEvents:', e);
+            sessionEvents = new Map();
+        }
+        return;
+    }
+
+    console.log('[TimeSeries] Flushing', validEvents.length, 'valid events out of', events.length, 'total');
+
     try {
         if (sessionEvents && typeof sessionEvents.clear === 'function') {
             sessionEvents.clear();
@@ -94,38 +200,41 @@ async function flushTimeSeriesEvents() {
         sessionEvents = new Map(); // Re-initialize if clear fails
     }
 
-    for (const event of events) {
-        if (event.timeSpent > 0 || event.clicks > 0 || event.forms > 0 || event.scrollDepth > 0) {
-            // Use consistent session ID for this URL
-            const baseSessionId = urlSessionIds.get(event.url) || currentSessionId;
-            // Create unique event ID with random suffix to prevent duplicates
-            const uniqueEventId = `${baseSessionId}_${event.lastSeen}_${Math.random().toString(36).substr(2, 6)}`;
+    for (const event of validEvents) {
+        // Use tab-based session ID if available, otherwise fall back to URL-based
+        const baseSessionId = event.tabSessionId || urlSessionIds.get(event.url) || currentSessionId;
 
-            const timeSeriesEvent = {
-                id: uniqueEventId,
-                url: event.url,
-                timestamp: event.lastSeen,
-                sessionId: baseSessionId,
-                metrics: {
-                    timeSpent: event.timeSpent,
-                    clicks: event.clicks,
-                    scrollDepth: event.scrollDepth,
-                    forms: event.forms,
-                    interactions: [...new Set(event.interactions)] // Dedupe interactions
-                },
-                context: {
-                    tabId: currentActive.tabId,
-                    sessionStart: event.firstSeen,
-                    duration: event.lastSeen - event.firstSeen,
-                    continued: event.sessionContinued || false
-                }
-            };
+        // For tab-based sessions, use the session ID directly as the event ID to ensure single record per tab+URL+day
+        // This ensures the same tab+URL combination always updates the same database record
+        const eventId = event.tabSessionId ? event.tabSessionId : `${baseSessionId}_${event.lastSeen}_${Math.random().toString(36).substr(2, 6)}`;
 
-            try {
-                await putActivityTimeSeriesEvent(timeSeriesEvent);
-            } catch (e) {
-                console.warn('[TimeSeries] Failed to store event:', e);
+        const timeSeriesEvent = {
+            id: eventId,
+            url: event.url,
+            timestamp: event.lastSeen, // Always update to latest timestamp
+            sessionId: baseSessionId,
+            metrics: {
+                timeSpent: event.timeSpent, // Accumulated total time
+                clicks: event.clicks, // Accumulated total clicks
+                scrollDepth: event.scrollDepth, // Max scroll depth reached
+                forms: event.forms, // Accumulated total forms
+                interactions: [...new Set(event.interactions)] // Dedupe interactions
+            },
+            context: {
+                tabId: currentActive.tabId,
+                sessionStart: event.firstSeen, // Keep original start time
+                duration: event.lastSeen - event.firstSeen, // Total session duration
+                continued: event.sessionContinued || false,
+                lastUpdate: Date.now() // Track when this record was last updated
             }
+        };
+
+        try {
+            // Since we're using consistent IDs, this will either create or update the existing record
+            await putActivityTimeSeriesEvent(timeSeriesEvent);
+            console.log('[TimeSeries] Stored/updated session:', eventId, 'time:', event.timeSpent);
+        } catch (e) {
+            console.warn('[TimeSeries] Failed to store event:', e);
         }
     }
 }
@@ -133,6 +242,13 @@ async function flushTimeSeriesEvents() {
 // Accumulate time for a URL
 async function accumulateTime(url, now = Date.now()) {
     if (!url || !currentActive.since) return;
+
+    // Enhanced URL validation
+    if (!isValidTrackingUrl(url)) {
+        console.log('[Activity Debug] Skipping invalid URL:', url);
+        return;
+    }
+
     const cleaned = cleanUrl(url);
     if (!cleaned) return;
 
@@ -151,42 +267,48 @@ async function accumulateTime(url, now = Date.now()) {
     const shouldTrackTime = isCurrentlyActive || (isAudioSite && hasAudioActivity);
 
     if (shouldTrackTime) {
-        // For background audio, apply reduced weight (30% of full time)
-        const timeWeight = isCurrentlyActive ? 1.0 : 0.3;
+        // Simplified time weighting - less complex logic
+        const timeWeight = isCurrentlyActive ? 1.0 : 0.5; // Reduced from 0.3 to 0.5 for background audio
         const weightedDelta = Math.floor(delta * timeWeight);
 
         activityData[cleaned].time = (activityData[cleaned].time || 0) + weightedDelta;
-        activityDirty.add(cleaned);
+
+        // Only mark dirty if engagement meets minimum threshold
+        if (hasMinimumEngagement(activityData[cleaned])) {
+            activityDirty.add(cleaned);
+        }
     } else {
         // Not tracking time for this URL
         return;
     }
 
-    // Track time series event - continue existing session if within 5 minutes
-    const SESSION_CONTINUITY_MS = 5 * 60 * 1000; // 5 minutes
-    const existingSession = urlSessions.get(cleaned);
+    // Track time series event using tab-based sessions
+    const tabSessionId = createTabSessionId(currentActive.tabId, url);
+    if (!tabSessionId) return;
+
+    const existingTabSession = tabSessions.get(tabSessionId);
+    const SESSION_CONTINUITY_MS = 30 * 60 * 1000; // 30 minutes for same tab
 
     if (!sessionEvents.has(cleaned)) {
-        // Check if we should continue an existing session or start new one
-        const shouldContinue = existingSession && (now - existingSession.lastSeen) < SESSION_CONTINUITY_MS;
+        // Check if we should continue an existing tab session
+        const shouldContinue = existingTabSession && (now - existingTabSession.lastSeen) < SESSION_CONTINUITY_MS;
 
-        // Get or create consistent session ID for this URL
-        if (!urlSessionIds.has(cleaned) || !shouldContinue) {
-            urlSessionIds.set(cleaned, `url_${cleaned.replace(/[^a-zA-Z0-9]/g, '_')}_${now}`);
-        }
+        // Use tab-based session ID
+        urlSessionIds.set(cleaned, tabSessionId);
 
         sessionEvents.set(cleaned, {
             url: cleaned,
-            timeSpent: shouldContinue ? existingSession.timeSpent : 0,
-            clicks: shouldContinue ? existingSession.clicks : 0,
-            scrollDepth: shouldContinue ? existingSession.scrollDepth : 0,
-            forms: shouldContinue ? existingSession.forms : 0,
-            interactions: shouldContinue ? [...existingSession.interactions] : [],
-            firstSeen: shouldContinue ? existingSession.firstSeen : now,
+            timeSpent: shouldContinue ? existingTabSession.timeSpent : 0,
+            clicks: shouldContinue ? existingTabSession.clicks : 0,
+            scrollDepth: shouldContinue ? existingTabSession.scrollDepth : 0,
+            forms: shouldContinue ? existingTabSession.forms : 0,
+            interactions: shouldContinue ? [...existingTabSession.interactions] : [],
+            firstSeen: shouldContinue ? existingTabSession.firstSeen : now,
             lastSeen: now,
             sessionContinued: shouldContinue,
-            hasAudio: shouldContinue ? existingSession.hasAudio : false,
-            isAudioSite: isAudioSite
+            hasAudio: shouldContinue ? existingTabSession.hasAudio : false,
+            isAudioSite: isAudioSite,
+            tabSessionId: tabSessionId  // FIXED: Add tab session ID
         });
     }
 
@@ -199,8 +321,8 @@ async function accumulateTime(url, now = Date.now()) {
     sessionEvent.timeSpent += weightedDelta;
     sessionEvent.lastSeen = now;
 
-    // Update persistent session tracking
-    urlSessions.set(cleaned, {
+    // Update persistent tab session tracking
+    tabSessions.set(tabSessionId, {
         timeSpent: sessionEvent.timeSpent,
         clicks: sessionEvent.clicks,
         scrollDepth: sessionEvent.scrollDepth,
@@ -209,8 +331,13 @@ async function accumulateTime(url, now = Date.now()) {
         firstSeen: sessionEvent.firstSeen,
         lastSeen: now,
         hasAudio: sessionEvent.hasAudio,
-        isAudioSite: sessionEvent.isAudioSite
+        isAudioSite: sessionEvent.isAudioSite,
+        tabId: currentActive.tabId,
+        url: cleaned
     });
+
+    // Also maintain urlSessions for backward compatibility
+    urlSessions.set(cleaned, tabSessions.get(tabSessionId));
 }
 
 // Tab event handlers
@@ -333,14 +460,18 @@ export function initializeActivityTracking() {
             currentActive.since = 0;
             flushActivityBatch().catch(() => { });
             flushTimeSeriesEvents().catch(() => { });
-            // Clear URL sessions on idle (natural session break)
+            // Clear sessions on idle (natural session break)
             try {
                 if (urlSessions && typeof urlSessions.clear === 'function') {
                     urlSessions.clear();
                 }
+                if (tabSessions && typeof tabSessions.clear === 'function') {
+                    tabSessions.clear();
+                }
             } catch (e) {
-                console.warn('[Activity] Failed to clear urlSessions:', e);
+                console.warn('[Activity] Failed to clear urlSessions/tabSessions:', e);
                 urlSessions = new Map();
+                tabSessions = new Map();
             }
             try {
                 if (urlSessionIds && typeof urlSessionIds.clear === 'function') {
@@ -366,30 +497,46 @@ export function handleActivityMessage(msg, sender) {
         console.log('[Activity Debug] Skipping message - missing URL or type:', { hasUrl: !!sender.tab?.url, hasType: !!msg.type });
         return;
     }
-    
+
+    // Enhanced URL validation
+    if (!isValidTrackingUrl(sender.tab.url)) {
+        console.log('[Activity Debug] Skipping message - invalid tracking URL:', sender.tab.url);
+        return;
+    }
+
     const cleaned = cleanUrl(sender.tab.url);
     if (!cleaned) {
         console.log('[Activity Debug] Skipping message - could not clean URL:', sender.tab.url);
         return;
     }
-    
+
     console.log('[Activity Debug] Processing activity for URL:', cleaned, 'type:', msg.type);
     
     if (!activityData[cleaned]) activityData[cleaned] = { time: 0, scroll: 0, clicks: 0, forms: 0 };
+
+    // Create tab-based session ID for this message
+    const tabSessionId = createTabSessionId(sender.tab.id, sender.tab.url);
+    const existingTabSession = tabSessions.get(tabSessionId);
+
     if (!sessionEvents.has(cleaned)) {
+        // Check if we should continue existing tab session
+        const now = Date.now();
+        const shouldContinue = existingTabSession && (now - existingTabSession.lastSeen) < (30 * 60 * 1000);
+
         sessionEvents.set(cleaned, {
             url: cleaned,
-            timeSpent: 0,
-            clicks: 0,
-            scrollDepth: 0,
-            forms: 0,
-            interactions: [],
-            firstSeen: Date.now(),
-            lastSeen: Date.now(),
-            hasAudio: false,
-            isAudioSite: isAudioStreamingSite(cleaned)
+            timeSpent: shouldContinue ? existingTabSession.timeSpent : 0,
+            clicks: shouldContinue ? existingTabSession.clicks : 0,
+            scrollDepth: shouldContinue ? existingTabSession.scrollDepth : 0,
+            forms: shouldContinue ? existingTabSession.forms : 0,
+            interactions: shouldContinue ? [...existingTabSession.interactions] : [],
+            firstSeen: shouldContinue ? existingTabSession.firstSeen : now,
+            lastSeen: now,
+            hasAudio: shouldContinue ? existingTabSession.hasAudio : false,
+            isAudioSite: isAudioStreamingSite(cleaned),
+            tabSessionId: tabSessionId
         });
-        console.log('[Activity Debug] Created new session for:', cleaned);
+        console.log('[Activity Debug] Created/continued tab session for:', cleaned, 'tabId:', sender.tab.id);
     }
     const sessionEvent = sessionEvents.get(cleaned);
 
@@ -437,19 +584,39 @@ export function handleActivityMessage(msg, sender) {
                 }
                 break;
         }
-        // Mark for batched persistence and update persistent session
-        activityDirty.add(cleaned);
-        urlSessions.set(cleaned, {
-            timeSpent: sessionEvent.timeSpent,
-            clicks: sessionEvent.clicks,
-            scrollDepth: sessionEvent.scrollDepth,
-            forms: sessionEvent.forms,
-            interactions: sessionEvent.interactions,
-            firstSeen: sessionEvent.firstSeen,
-            lastSeen: sessionEvent.lastSeen,
-            hasAudio: sessionEvent.hasAudio,
-            isAudioSite: sessionEvent.isAudioSite
-        });
+
+        // Calculate engagement score for better tracking
+        const engagementScore = calculateEngagementScore(activityData[cleaned]);
+        console.log('[Activity Debug] Engagement score for', cleaned, ':', engagementScore);
+
+        // Only mark for persistence if engagement meets minimum threshold
+        if (hasMinimumEngagement(activityData[cleaned])) {
+            activityDirty.add(cleaned);
+            console.log('[Activity Debug] Added to dirty set (meets engagement threshold):', cleaned);
+
+            // Update persistent tab session with engagement score
+            if (tabSessionId) {
+                tabSessions.set(tabSessionId, {
+                    timeSpent: sessionEvent.timeSpent,
+                    clicks: sessionEvent.clicks,
+                    scrollDepth: sessionEvent.scrollDepth,
+                    forms: sessionEvent.forms,
+                    interactions: sessionEvent.interactions,
+                    firstSeen: sessionEvent.firstSeen,
+                    lastSeen: sessionEvent.lastSeen,
+                    hasAudio: sessionEvent.hasAudio,
+                    isAudioSite: sessionEvent.isAudioSite,
+                    engagementScore: engagementScore,
+                    tabId: sender.tab.id,
+                    url: cleaned
+                });
+
+                // Also maintain urlSessions for backward compatibility
+                urlSessions.set(cleaned, tabSessions.get(tabSessionId));
+            }
+        } else {
+            console.log('[Activity Debug] Skipping persistence (below engagement threshold):', cleaned);
+        }
     }
 }
 
@@ -765,6 +932,10 @@ export function initializeActivity() {
     if (!urlSessionIds || typeof urlSessionIds.clear !== 'function') {
         console.warn('[Activity] Re-initializing urlSessionIds Map');
         urlSessionIds = new Map();
+    }
+    if (!tabSessions || typeof tabSessions.clear !== 'function') {
+        console.warn('[Activity] Re-initializing tabSessions Map');
+        tabSessions = new Map();
     }
 
     initializeActivityTracking();

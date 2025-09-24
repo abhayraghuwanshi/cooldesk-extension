@@ -257,9 +257,6 @@ export function ContextMenu({
                 }}
                 onMouseEnter={(e) => {
                   e.target.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.08))';
-                  if (action.hasSubmenu) {
-                    setShowWorkspaces(true);
-                  }
                 }}
                 onMouseLeave={(e) => {
                   e.target.style.background = 'transparent';

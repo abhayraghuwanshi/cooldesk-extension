@@ -1,5 +1,75 @@
 import { listPings, getAllActivity } from '../db/index.js';
 
+// Enhanced URL filtering to exclude system and low-value URLs
+function isValidTrackingUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+
+    // System URLs to exclude
+    const systemPrefixes = [
+        'chrome://', 'edge://', 'about:', 'moz-extension://',
+        'chrome-extension://', 'extension://', 'file://'
+    ];
+
+    // Low-value domains to exclude
+    const excludeDomains = [
+        'newtab', 'extensions', 'settings', 'blank'
+    ];
+
+    // Check system prefixes
+    if (systemPrefixes.some(prefix => url.startsWith(prefix))) {
+        return false;
+    }
+
+    // Check if it's a meaningful URL (has domain)
+    try {
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname.toLowerCase();
+
+        // Exclude if domain is in exclude list or is empty
+        if (!domain || excludeDomains.some(exclude => domain.includes(exclude))) {
+            return false;
+        }
+
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// Calculate engagement score based on user interactions
+function calculateEngagementScore(data) {
+    const time = Number(data.time) || 0;
+    const clicks = Number(data.clicks) || 0;
+    const scroll = Number(data.scroll) || 0;
+    const forms = Number(data.forms) || 0;
+
+    // Weighted scoring: forms > clicks > scroll > time
+    const score = (
+        forms * 100 +      // Form submissions are high-value interactions
+        clicks * 10 +      // Clicks show active engagement
+        scroll * 0.5 +     // Scrolling shows content consumption
+        (time / 1000) * 0.1 // Time has lowest weight (per second)
+    );
+
+    return Math.round(score * 100) / 100; // Round to 2 decimal places
+}
+
+// Check if session has minimum engagement to be worth tracking
+function hasMinimumEngagement(data) {
+    const time = Number(data.time) || 0;
+    const clicks = Number(data.clicks) || 0;
+    const scroll = Number(data.scroll) || 0;
+    const forms = Number(data.forms) || 0;
+
+    // Minimum thresholds for tracking
+    return (
+        time >= 5000 ||    // At least 5 seconds
+        clicks >= 2 ||     // At least 2 clicks
+        scroll >= 25 ||    // At least 25% scroll
+        forms >= 1         // Any form submission
+    );
+}
+
 /**
  * Get pins data directly from database
  * @returns {Promise<Array>} Array of pin objects
@@ -27,30 +97,35 @@ export async function getActivityData() {
         // First try to get data directly from IndexedDB using getAllActivity
         console.log('[ActivityService] Fetching activity data from IndexedDB');
         const result = await getAllActivity({ limit: 100 });
+        console.log('[ActivityService] Raw result from database:', { success: result?.success, dataLength: result?.data?.length, sampleData: result?.data?.slice(0, 2) });
 
         if (result && result.success && Array.isArray(result.data)) {
             const rows = result.data.map(r => ({
                 url: String(r?.url || ''),
-                time: Number(r?.time) || 0,
-                clicks: Number(r?.clicks) || 0,
-                scroll: Number(r?.scroll) || 0,
-                forms: Number(r?.forms) || 0
+                // Handle both old format (direct properties) and new format (metrics object)
+                time: Number(r?.time || r?.metrics?.timeSpent) || 0,
+                clicks: Number(r?.clicks || r?.metrics?.clicks) || 0,
+                scroll: Number(r?.scroll || r?.metrics?.scrollDepth) || 0,
+                forms: Number(r?.forms || r?.metrics?.forms) || 0
             }))
             .filter(row => {
-                // Include if any activity exists
-                const hasActivity = row.time > 0 || row.clicks > 0 || row.scroll > 0 || row.forms > 0;
-                // Also filter out system URLs
-                const isSystemUrl = row.url.startsWith('edge://') || row.url.startsWith('chrome://');
-                return hasActivity && !isSystemUrl;
+                // Enhanced filtering for better data quality
+                return isValidTrackingUrl(row.url) && hasMinimumEngagement(row);
+            })
+            .map(row => {
+                // Add engagement score to each row
+                return {
+                    ...row,
+                    engagementScore: calculateEngagementScore(row)
+                };
             })
             .sort((a, b) => {
-                // Sort by total activity score rather than just time
-                const scoreA = (a.time || 0) + (a.clicks || 0) * 1000 + (a.scroll || 0) * 10 + (a.forms || 0) * 5000;
-                const scoreB = (b.time || 0) + (b.clicks || 0) * 1000 + (b.scroll || 0) * 10 + (b.forms || 0) * 5000;
-                return scoreB - scoreA;
+                // Sort by engagement score for better relevance
+                return (b.engagementScore || 0) - (a.engagementScore || 0);
             });
 
-            console.log('[ActivityService] Loaded', rows.length, 'activity items from IndexedDB');
+            console.log('[ActivityService] Loaded', rows.length, 'activity items from IndexedDB after filtering');
+            console.log('[ActivityService] Sample filtered data:', rows.slice(0, 3));
             return rows;
         }
 
@@ -67,8 +142,12 @@ export async function getActivityData() {
                 scroll: data.scroll || 0,
                 forms: data.forms || 0
             }))
-            .filter(row => row.time > 0 || row.clicks > 0 || row.scroll > 0 || row.forms > 0)
-            .sort((a, b) => b.time - a.time);
+            .filter(row => isValidTrackingUrl(row.url) && hasMinimumEngagement(row))
+            .map(row => ({
+                ...row,
+                engagementScore: calculateEngagementScore(row)
+            }))
+            .sort((a, b) => (b.engagementScore || 0) - (a.engagementScore || 0));
 
             console.log('[ActivityService] Loaded', rows.length, 'activity items from storage');
             return rows;

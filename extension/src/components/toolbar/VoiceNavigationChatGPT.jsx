@@ -2,7 +2,6 @@ import { faArrowDown, faExchangeAlt, faHashtag, faLightbulb, faMicrophone, faPlu
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import React, { useEffect, useRef, useState } from 'react';
-import aiSpiralGif from '../../ai-spiral.gif';
 
 const VoiceNavigationChatGPT = () => {
   const [isListening, setIsListening] = useState(false);
@@ -613,15 +612,6 @@ const VoiceNavigationChatGPT = () => {
                       }}
                     />
                   ))}
-                </div>
-                <div className="microphone-icon">
-                  <div className="spiral-container active">
-                    <img
-                      src={aiSpiralGif}
-                      alt="Listening..."
-                      className="ai-spiral-animation"
-                    />
-                  </div>
                 </div>
               </div>
             )}

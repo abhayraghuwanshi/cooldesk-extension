@@ -171,7 +171,7 @@ export function ItemGrid({ items, workspaces = [], onAddRelated, onDelete, onAdd
             cursor: 'pointer',
             transform: 'translateY(0)',
             background: 'rgba(255, 255, 255, 0.05)',
-            border: '2px dashed rgba(255, 255, 255, 0.2)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
             minHeight: '80px',
             maxWidth: '40px',
             width: '40px',
