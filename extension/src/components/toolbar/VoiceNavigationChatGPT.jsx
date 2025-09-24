@@ -2,6 +2,8 @@ import { faArrowDown, faExchangeAlt, faHashtag, faLightbulb, faMicrophone, faPlu
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import React, { useEffect, useRef, useState } from 'react';
+import { fuzzySearch } from '../../utils/searchUtils.js';
+import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
 
 const VoiceNavigationChatGPT = () => {
   const [isListening, setIsListening] = useState(false);
@@ -13,6 +15,29 @@ const VoiceNavigationChatGPT = () => {
   const [waveformData, setWaveformData] = useState(Array(5).fill(0));
   const [showEnergyWave, setShowEnergyWave] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [connectionExpired, setConnectionExpired] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+
+  // Initialize voice command processor
+  const commandProcessorRef = useRef(null);
+
+  // Connection management refs
+  const sessionTimerRef = useRef(null);
+  const keepAliveTimerRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
+  const timeDisplayTimerRef = useRef(null);
+  const sessionStartTimeRef = useRef(null);
+
+  const showFeedback = (message, type = 'success') => {
+    setFeedback(message);
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
+    feedbackTimeoutRef.current = setTimeout(() => {
+      setFeedback('');
+      setTranscript('');
+    }, 3000);
+  };
   const recognitionRef = useRef(null);
   const feedbackTimeoutRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -26,58 +51,281 @@ const VoiceNavigationChatGPT = () => {
     setTimeout(() => setShowEnergyWave(false), 1000);
   };
 
-  // Initialize speech recognition
+  // Connection management functions
+  const SESSION_DURATION = 10 * 60 * 1000; // 10 minutes
+  const KEEP_ALIVE_INTERVAL = 30 * 1000; // 30 seconds
+  const RECONNECT_DELAY = 2000; // 2 seconds
+
+  const clearAllTimers = () => {
+    if (sessionTimerRef.current) {
+      clearTimeout(sessionTimerRef.current);
+      sessionTimerRef.current = null;
+    }
+    if (keepAliveTimerRef.current) {
+      clearInterval(keepAliveTimerRef.current);
+      keepAliveTimerRef.current = null;
+    }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (timeDisplayTimerRef.current) {
+      clearInterval(timeDisplayTimerRef.current);
+      timeDisplayTimerRef.current = null;
+    }
+  };
+
+  const updateTimeRemaining = () => {
+    if (sessionStartTimeRef.current && !connectionExpired) {
+      const elapsed = Date.now() - sessionStartTimeRef.current;
+      const remaining = Math.max(0, SESSION_DURATION - elapsed);
+      setTimeRemaining(Math.ceil(remaining / 1000));
+
+      if (remaining <= 0) {
+        expireSession();
+      }
+    }
+  };
+
+  const expireSession = () => {
+    setConnectionExpired(true);
+    setTimeRemaining(0);
+    stopListening();
+    clearAllTimers();
+    setFeedback('Voice session expired after 10 minutes. Click to reconnect.', 'warning');
+  };
+
+  const startSession = () => {
+    sessionStartTimeRef.current = Date.now();
+    setConnectionExpired(false);
+    setTimeRemaining(600); // 10 minutes
+
+    // 10-minute session timer
+    sessionTimerRef.current = setTimeout(() => {
+      expireSession();
+    }, SESSION_DURATION);
+
+    // Update time display every second
+    timeDisplayTimerRef.current = setInterval(updateTimeRemaining, 1000);
+
+    // Keep-alive mechanism (restart speech recognition periodically)
+    keepAliveTimerRef.current = setInterval(() => {
+      if (isListening && annyang && !connectionExpired) {
+        try {
+          // Restart annyang to prevent browser timeouts
+          annyang.abort();
+          setTimeout(() => {
+            if (!connectionExpired) {
+              annyang.start({ autoRestart: true, continuous: true });
+            }
+          }, 100);
+        } catch (error) {
+          console.warn('Keep-alive restart failed:', error);
+        }
+      }
+    }, KEEP_ALIVE_INTERVAL);
+  };
+
+  const attemptReconnect = () => {
+    if (!connectionExpired && annyang && !isListening) {
+      reconnectTimerRef.current = setTimeout(() => {
+        try {
+          annyang.start({ autoRestart: true, continuous: true });
+          setError('');
+        } catch (error) {
+          console.warn('Auto-reconnect failed:', error);
+          // Try again in a few seconds
+          attemptReconnect();
+        }
+      }, RECONNECT_DELAY);
+    }
+  };
+
+  // Initialize speech recognition and command processor
   useEffect(() => {
+    // Initialize the command processor
+    if (!commandProcessorRef.current) {
+      commandProcessorRef.current = new VoiceCommandProcessor(showFeedback);
+    }
+
     if (annyang) {
-      // Define voice commands using annyang
+      // Simple bridge pattern - delegate all commands to processor
       const commands = {
-        'switch to tab :num': (num) => {
-          switchToTabByIndex(parseInt(num) - 1);
+        // Special handling for numbered commands (annyang pattern)
+        'switch to tab :num': async (num) => {
+          await commandProcessorRef.current.processVoiceCommand(`switch to tab ${num}`);
         },
-        'go to tab :num': (num) => {
-          switchToTabByIndex(parseInt(num) - 1);
+        'go to tab :num': async (num) => {
+          await commandProcessorRef.current.processVoiceCommand(`go to tab ${num}`);
         },
-        'next tab': switchToNextTab,
-        'previous tab': switchToPreviousTab,
-        'prev tab': switchToPreviousTab,
-        'close tab': closeCurrentTab,
-        'new tab': createNewTab,
-        'find tab *term': findTab,
-        'search tab *term': findTab,
-        'search for *term': performWebSearch,
-        'google search *term': performWebSearch,
-        'search *term': performWebSearch,
+        'click :num': async (num) => {
+          await commandProcessorRef.current.processVoiceCommand(`click ${num}`);
+        },
+        'click number :num': async (num) => {
+          await commandProcessorRef.current.processVoiceCommand(`click number ${num}`);
+        },
+        // Commands with parameters
+        'find tab *term': async (term) => {
+          await commandProcessorRef.current.processVoiceCommand(`find tab ${term}`);
+        },
+        'search tab *term': async (term) => {
+          await commandProcessorRef.current.processVoiceCommand(`search tab ${term}`);
+        },
+        'search for *term': async (term) => {
+          await commandProcessorRef.current.processVoiceCommand(`search for ${term}`);
+        },
+        'google search *term': async (term) => {
+          await commandProcessorRef.current.processVoiceCommand(`google search ${term}`);
+        },
+        'search *term': async (term) => {
+          await commandProcessorRef.current.processVoiceCommand(`search ${term}`);
+        },
+        'click *text': async (text) => {
+          await commandProcessorRef.current.processVoiceCommand(`click ${text}`);
+        },
+        'click on *text': async (text) => {
+          await commandProcessorRef.current.processVoiceCommand(`click on ${text}`);
+        },
+        // Special UI commands that need to stay in the component
         'show numbers': showElementNumbers,
+        'show numbers.': showElementNumbers,
+        'show numbers!': showElementNumbers,
         'number elements': showElementNumbers,
+        'number elements.': showElementNumbers,
+        'number elements!': showElementNumbers,
         'hide numbers': hideElementNumbers,
+        'hide numbers.': hideElementNumbers,
+        'hide numbers!': hideElementNumbers,
         'clear numbers': hideElementNumbers,
-        'click :num': (num) => {
-          clickByNumber(`click ${num}`);
+        'clear numbers.': hideElementNumbers,
+        'clear numbers!': hideElementNumbers,
+        // Media controls
+        'play': async () => {
+          await commandProcessorRef.current.processVoiceCommand('play');
         },
-        'click number :num': (num) => {
-          clickByNumber(`click number ${num}`);
+        'play.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('play');
         },
-        'click *text': clickLink,
-        'click on *text': clickLink,
-        'scroll down': () => {
-          window.scrollBy(0, 500);
-          setFeedback('Scrolled down');
+        'play!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('play');
         },
-        'scroll up': () => {
-          window.scrollBy(0, -500);
-          setFeedback('Scrolled up');
+        'pause': async () => {
+          await commandProcessorRef.current.processVoiceCommand('pause');
         },
-        'go back': () => {
-          window.history.back();
-          setFeedback('Going back');
+        'pause.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('pause');
         },
-        'reload': () => {
-          window.location.reload();
-          setFeedback('Reloading page');
+        'pause!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('pause');
         },
-        'refresh': () => {
-          window.location.reload();
-          setFeedback('Reloading page');
+        'spacebar': async () => {
+          await commandProcessorRef.current.processVoiceCommand('spacebar');
+        },
+        'click play': async () => {
+          await commandProcessorRef.current.processVoiceCommand('click play');
+        },
+        'click pause': async () => {
+          await commandProcessorRef.current.processVoiceCommand('click pause');
+        },
+        // Navigation commands
+        'next tab': async () => {
+          await commandProcessorRef.current.processVoiceCommand('next tab');
+        },
+        'next tab.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('next tab');
+        },
+        'next tab!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('next tab');
+        },
+        'previous tab': async () => {
+          await commandProcessorRef.current.processVoiceCommand('previous tab');
+        },
+        'previous tab.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('previous tab');
+        },
+        'previous tab!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('previous tab');
+        },
+        'prev tab': async () => {
+          await commandProcessorRef.current.processVoiceCommand('prev tab');
+        },
+        'prev tab.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('prev tab');
+        },
+        'prev tab!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('prev tab');
+        },
+        'close tab': async () => {
+          await commandProcessorRef.current.processVoiceCommand('close tab');
+        },
+        'close tab.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('close tab');
+        },
+        'close tab!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('close tab');
+        },
+        'new tab': async () => {
+          await commandProcessorRef.current.processVoiceCommand('new tab');
+        },
+        'new tab.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('new tab');
+        },
+        'new tab!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('new tab');
+        },
+        'scroll down': async () => {
+          await commandProcessorRef.current.processVoiceCommand('scroll down');
+        },
+        'scroll down.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('scroll down');
+        },
+        'scroll down!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('scroll down');
+        },
+        'scroll up': async () => {
+          await commandProcessorRef.current.processVoiceCommand('scroll up');
+        },
+        'scroll up.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('scroll up');
+        },
+        'scroll up!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('scroll up');
+        },
+        'go back': async () => {
+          await commandProcessorRef.current.processVoiceCommand('go back');
+        },
+        'go back.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('go back');
+        },
+        'go back!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('go back');
+        },
+        'go forward': async () => {
+          await commandProcessorRef.current.processVoiceCommand('go forward');
+        },
+        'go forward.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('go forward');
+        },
+        'go forward!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('go forward');
+        },
+        'reload': async () => {
+          await commandProcessorRef.current.processVoiceCommand('reload');
+        },
+        'reload.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('reload');
+        },
+        'reload!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('reload');
+        },
+        'refresh': async () => {
+          await commandProcessorRef.current.processVoiceCommand('refresh');
+        },
+        'refresh.': async () => {
+          await commandProcessorRef.current.processVoiceCommand('refresh');
+        },
+        'refresh!': async () => {
+          await commandProcessorRef.current.processVoiceCommand('refresh');
         }
       };
 
@@ -114,10 +362,13 @@ const VoiceNavigationChatGPT = () => {
       });
 
       annyang.addCallback('error', (error) => {
+        console.warn('Speech recognition error:', error);
         setIsListening(false);
         setError(`Speech recognition error: ${error.error}`);
         setFeedback('');
         setInterimTranscript('');
+        setVoiceLevel(0);
+        setWaveformData(Array(5).fill(0));
         stopAudioAnalysis();
       });
 
@@ -131,7 +382,19 @@ const VoiceNavigationChatGPT = () => {
       annyang.addCallback('end', () => {
         setIsListening(false);
         setInterimTranscript('');
+        setVoiceLevel(0);
+        setWaveformData(Array(5).fill(0));
         stopAudioAnalysis();
+
+        // Auto-reconnect if session is still active and not manually stopped
+        if (!connectionExpired) {
+          attemptReconnect();
+        }
+
+        // Clear feedback after a short delay when recognition ends
+        setTimeout(() => {
+          setFeedback('');
+        }, 2000);
       });
 
     } else {
@@ -177,12 +440,18 @@ const VoiceNavigationChatGPT = () => {
   const stopAudioAnalysis = () => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
     }
     if (microphoneRef.current) {
       microphoneRef.current.getTracks().forEach(track => track.stop());
+      microphoneRef.current = null;
     }
-    if (audioContextRef.current) {
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    if (analyserRef.current) {
+      analyserRef.current = null;
     }
     setVoiceLevel(0);
     setWaveformData(Array(5).fill(0));
@@ -218,8 +487,24 @@ const VoiceNavigationChatGPT = () => {
   };
 
   const startListening = () => {
+    if (connectionExpired) {
+      // Restart the session
+      startSession();
+    }
+
     if (annyang && !isListening) {
-      annyang.start({ autoRestart: true, continuous: true });
+      try {
+        annyang.start({ autoRestart: true, continuous: true });
+
+        // Start session management if not already started
+        if (!sessionStartTimeRef.current) {
+          startSession();
+        }
+      } catch (error) {
+        console.error('Failed to start voice recognition:', error);
+        setError('Failed to start voice recognition');
+        setIsListening(false);
+      }
     }
   };
 
@@ -227,114 +512,21 @@ const VoiceNavigationChatGPT = () => {
     if (annyang && isListening) {
       annyang.abort();
     }
-  };
+    // Force reset all states
+    setIsListening(false);
+    setTranscript('');
+    setInterimTranscript('');
+    setFeedback('');
+    setError('');
+    setVoiceLevel(0);
+    setWaveformData(Array(5).fill(0));
+    setShowEnergyWave(false);
+    stopAudioAnalysis();
 
-  // Tab management functions
-  const switchToTabByIndex = async (index) => {
-    try {
-      const tabs = await chrome.tabs.query({ currentWindow: true });
-      if (index >= 0 && index < tabs.length) {
-        await chrome.tabs.update(tabs[index].id, { active: true });
-        setFeedback(`Switched to tab ${index + 1}: ${tabs[index].title}`);
-        triggerEnergyWave();
-      } else {
-        setFeedback(`Tab ${index + 1} not found. Available tabs: 1-${tabs.length}`);
-      }
-    } catch (error) {
-      setFeedback(`Failed to switch to tab: ${error.message}`);
-    }
-  };
-
-  const switchToNextTab = async () => {
-    try {
-      const tabs = await chrome.tabs.query({ currentWindow: true });
-      const activeTab = tabs.find(tab => tab.active);
-      const currentIndex = tabs.findIndex(tab => tab.id === activeTab.id);
-      const nextIndex = (currentIndex + 1) % tabs.length;
-      await chrome.tabs.update(tabs[nextIndex].id, { active: true });
-      setFeedback(`Switched to next tab: ${tabs[nextIndex].title}`);
-    } catch (error) {
-      setFeedback(`Failed to switch to next tab: ${error.message}`);
-    }
-  };
-
-  const switchToPreviousTab = async () => {
-    try {
-      const tabs = await chrome.tabs.query({ currentWindow: true });
-      const activeTab = tabs.find(tab => tab.active);
-      const currentIndex = tabs.findIndex(tab => tab.id === activeTab.id);
-      const prevIndex = currentIndex === 0 ? tabs.length - 1 : currentIndex - 1;
-      await chrome.tabs.update(tabs[prevIndex].id, { active: true });
-      setFeedback(`Switched to previous tab: ${tabs[prevIndex].title}`);
-    } catch (error) {
-      setFeedback(`Failed to switch to previous tab: ${error.message}`);
-    }
-  };
-
-  const closeCurrentTab = async () => {
-    try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      await chrome.tabs.remove(activeTab.id);
-      setFeedback('Tab closed');
-    } catch (error) {
-      setFeedback(`Failed to close tab: ${error.message}`);
-    }
-  };
-
-  const createNewTab = async () => {
-    try {
-      await chrome.tabs.create({});
-      setFeedback('New tab created');
-    } catch (error) {
-      setFeedback(`Failed to create new tab: ${error.message}`);
-    }
-  };
-
-  const findTab = async (command) => {
-    try {
-      const searchMatch = command.match(/find tab (.+)/) || command.match(/search tab (.+)/);
-      if (searchMatch) {
-        const searchTerm = searchMatch[1].trim();
-        const tabs = await chrome.tabs.query({});
-        // Use fuzzy search to find matching tabs
-        const matchingTabs = fuzzySearch(tabs, searchTerm.toLowerCase(), ['title', 'url'], { threshold: 0.3 });
-
-        if (matchingTabs.length > 0) {
-          const matchingTab = matchingTabs[0]; // Take the best match
-          await chrome.tabs.update(matchingTab.id, { active: true });
-          await chrome.windows.update(matchingTab.windowId, { focused: true });
-          setFeedback(`Switched to: ${matchingTab.title}`);
-          triggerEnergyWave();
-        } else {
-          setFeedback(`No tab found matching "${searchTerm}"`);
-        }
-      }
-    } catch (error) {
-      setFeedback(`Failed to search tabs: ${error.message}`);
-    }
-  };
-
-  const performWebSearch = async (command) => {
-    try {
-      let searchTerm = '';
-      if (command.includes('search for')) {
-        searchTerm = command.replace(/.*search for\s+/, '').trim();
-      } else if (command.includes('google search')) {
-        searchTerm = command.replace(/.*google search\s+/, '').trim();
-      } else if (command.includes('search')) {
-        searchTerm = command.replace(/.*search\s+/, '').trim();
-      }
-
-      if (!searchTerm) {
-        setFeedback('Please specify what to search for');
-        return;
-      }
-
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchTerm)}`;
-      await chrome.tabs.create({ url: searchUrl });
-      setFeedback(`Searching Google for "${searchTerm}"`);
-    } catch (error) {
-      setFeedback(`Failed to perform web search: ${error.message}`);
+    // Clear reconnection attempts
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
     }
   };
 
@@ -430,6 +622,7 @@ const VoiceNavigationChatGPT = () => {
       setFeedback(`Failed to click link: ${error.message}`);
     }
   };
+
 
   const findAndClickLink = (searchText) => {
     const elements = document.querySelectorAll('a, button, [role="button"], [onclick]');

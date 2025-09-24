@@ -946,3 +946,204 @@ export const readContentElementByNumber = (number) => {
     content: element.textContent?.trim() || ''
   };
 };
+
+// Media control helper functions for injection
+export const playMediaOnPage = () => {
+  // Try multiple strategies to play media
+  const strategies = [
+    // YouTube specific
+    () => {
+      const playButton = document.querySelector('.ytp-play-button[aria-label*="Play"], .ytp-play-button[title*="Play"]');
+      if (playButton && playButton.getAttribute('aria-label')?.includes('Play')) {
+        playButton.click();
+        return { success: true, message: 'Playing YouTube video' };
+      }
+      return null;
+    },
+    // HTML5 video elements
+    () => {
+      const videos = document.querySelectorAll('video');
+      for (const video of videos) {
+        if (video.paused) {
+          video.play();
+          return { success: true, message: 'Playing video' };
+        }
+      }
+      return null;
+    },
+    // HTML5 audio elements
+    () => {
+      const audios = document.querySelectorAll('audio');
+      for (const audio of audios) {
+        if (audio.paused) {
+          audio.play();
+          return { success: true, message: 'Playing audio' };
+        }
+      }
+      return null;
+    },
+    // Generic play buttons
+    () => {
+      const playSelectors = [
+        '[aria-label*="play" i]',
+        '[title*="play" i]',
+        '.play-button',
+        '.play-btn',
+        '[data-testid*="play"]',
+        'button[class*="play"]'
+      ];
+
+      for (const selector of playSelectors) {
+        const element = document.querySelector(selector);
+        if (element && element.offsetParent !== null) { // Check if visible
+          element.click();
+          return { success: true, message: 'Clicked play button' };
+        }
+      }
+      return null;
+    }
+  ];
+
+  for (const strategy of strategies) {
+    const result = strategy();
+    if (result) return result;
+  }
+
+  return { success: false, message: 'No playable media found' };
+};
+
+export const pauseMediaOnPage = () => {
+  // Try multiple strategies to pause media
+  const strategies = [
+    // YouTube specific
+    () => {
+      const pauseButton = document.querySelector('.ytp-play-button[aria-label*="Pause"], .ytp-play-button[title*="Pause"]');
+      if (pauseButton && pauseButton.getAttribute('aria-label')?.includes('Pause')) {
+        pauseButton.click();
+        return { success: true, message: 'Paused YouTube video' };
+      }
+      return null;
+    },
+    // HTML5 video elements
+    () => {
+      const videos = document.querySelectorAll('video');
+      for (const video of videos) {
+        if (!video.paused) {
+          video.pause();
+          return { success: true, message: 'Paused video' };
+        }
+      }
+      return null;
+    },
+    // HTML5 audio elements
+    () => {
+      const audios = document.querySelectorAll('audio');
+      for (const audio of audios) {
+        if (!audio.paused) {
+          audio.pause();
+          return { success: true, message: 'Paused audio' };
+        }
+      }
+      return null;
+    },
+    // Generic pause buttons
+    () => {
+      const pauseSelectors = [
+        '[aria-label*="pause" i]',
+        '[title*="pause" i]',
+        '.pause-button',
+        '.pause-btn',
+        '[data-testid*="pause"]',
+        'button[class*="pause"]'
+      ];
+
+      for (const selector of pauseSelectors) {
+        const element = document.querySelector(selector);
+        if (element && element.offsetParent !== null) { // Check if visible
+          element.click();
+          return { success: true, message: 'Clicked pause button' };
+        }
+      }
+      return null;
+    }
+  ];
+
+  for (const strategy of strategies) {
+    const result = strategy();
+    if (result) return result;
+  }
+
+  return { success: false, message: 'No pausable media found' };
+};
+
+export const togglePlayPauseOnPage = () => {
+  // Try multiple strategies to toggle play/pause
+  const strategies = [
+    // YouTube specific - always try to click the play/pause button
+    () => {
+      const playPauseButton = document.querySelector('.ytp-play-button');
+      if (playPauseButton) {
+        const isPlaying = playPauseButton.getAttribute('aria-label')?.includes('Pause');
+        playPauseButton.click();
+        return {
+          success: true,
+          message: isPlaying ? 'Paused YouTube video' : 'Playing YouTube video'
+        };
+      }
+      return null;
+    },
+    // Use spacebar key simulation for YouTube and other video sites
+    () => {
+      // Check if we're on a video site
+      const videoElement = document.querySelector('video, .video-player, .ytp-chrome-bottom');
+      if (videoElement) {
+        // Simulate spacebar press
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: ' ',
+          code: 'Space',
+          keyCode: 32,
+          which: 32,
+          bubbles: true,
+          cancelable: true
+        }));
+        return { success: true, message: 'Toggled play/pause with spacebar' };
+      }
+      return null;
+    },
+    // HTML5 video elements
+    () => {
+      const videos = document.querySelectorAll('video');
+      for (const video of videos) {
+        if (video.paused) {
+          video.play();
+          return { success: true, message: 'Playing video' };
+        } else {
+          video.pause();
+          return { success: true, message: 'Paused video' };
+        }
+      }
+      return null;
+    },
+    // HTML5 audio elements
+    () => {
+      const audios = document.querySelectorAll('audio');
+      for (const audio of audios) {
+        if (audio.paused) {
+          audio.play();
+          return { success: true, message: 'Playing audio' };
+        } else {
+          audio.pause();
+          return { success: true, message: 'Paused audio' };
+        }
+      }
+      return null;
+    }
+  ];
+
+  for (const strategy of strategies) {
+    const result = strategy();
+    if (result) return result;
+  }
+
+  return { success: false, message: 'No media controls found' };
+};

@@ -48,8 +48,7 @@ import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntim
 import { getFaviconUrl, getUrlParts } from './utils';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
-import './utils/realTimeCategorizor'; // Auto-enables real-time categorization
-// import './utils/debugUrlIndexing'; // Adds debug functions to window
+import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
 
 // Simple error boundary to prevent entire app crash due to child errors
 class ErrorBoundary extends React.Component {
@@ -259,8 +258,11 @@ export default function App() {
         // Create platform-specific workspaces (GitHub, ChatGPT, etc.)
         const platformWorkspacesToCreate = await GenericUrlParser.createWorkspacesFromUrls(urls, existingWorkspaces);
 
-        // Create category-based workspaces (Social, Shopping, etc.)
-        const categoryWorkspacesToCreate = createCategoryBasedWorkspaces(urls, existingWorkspaces);
+        // Filter URLs that should use generic categorization (not handled by GenericUrlParser)
+        const urlsForCategorization = urls.filter(url => GenericUrlParser.shouldUseGenericCategorization(url));
+
+        // Create category-based workspaces (Social, Shopping, etc.) for remaining URLs
+        const categoryWorkspacesToCreate = createCategoryBasedWorkspaces(urlsForCategorization, [...existingWorkspaces, ...platformWorkspacesToCreate]);
 
         // Combine both types
         const workspacesToCreate = [...platformWorkspacesToCreate, ...categoryWorkspacesToCreate];

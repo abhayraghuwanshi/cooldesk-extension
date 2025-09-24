@@ -1113,6 +1113,25 @@ export class GenericUrlParser {
   }
 
   /**
+   * Check if URL should use generic categorization instead of platform-specific parsing
+   * @param {string} url - URL to check
+   * @returns {boolean} - Whether URL should use generic categorization
+   */
+  static shouldUseGenericCategorization(url) {
+    if (!url || typeof url !== 'string') return false;
+
+    try {
+      const urlObj = new URL(url);
+      const domain = urlObj.hostname.replace('www.', '');
+
+      // If we have a specific platform config, don't use generic categorization
+      return !this.config[domain];
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * Check if URL should be excluded globally
    * @param {string} url - URL to check
    * @returns {boolean} - Whether URL should be excluded

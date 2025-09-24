@@ -1,4 +1,5 @@
 import * as pageInteraction from './pageInteractionService.js';
+import { fuzzySearch } from '../utils/searchUtils.js';
 
 export class VoiceCommandProcessor {
   constructor(showFeedback) {
@@ -121,8 +122,28 @@ export class VoiceCommandProcessor {
       else if (command.includes('go forward') || command.includes('forward')) {
         await this.goForward();
       }
+      // Page reload commands
+      else if (command.includes('reload') || command.includes('refresh')) {
+        await this.reloadCurrentTab();
+      }
+      // Media control commands
+      else if (command.includes('play') && !command.includes('pause')) {
+        await this.playMedia();
+      }
+      else if (command.includes('pause')) {
+        await this.pauseMedia();
+      }
+      else if (command.includes('play pause') || command.includes('toggle play') || command.includes('spacebar')) {
+        await this.togglePlayPause();
+      }
+      else if (command.includes('click play')) {
+        await this.playMedia();
+      }
+      else if (command.includes('click pause')) {
+        await this.pauseMedia();
+      }
       else {
-        this.showFeedback('Command not recognized. Try "switch to tab 2", "search for cats", "click subscribe", or "open gmail"', 'error');
+        this.showFeedback('Command not recognized. Try "switch to tab 2", "search for cats", "click subscribe", "play", "pause", or "open gmail"', 'error');
       }
     } catch (error) {
       console.error('Error processing voice command:', error);
@@ -197,13 +218,13 @@ export class VoiceCommandProcessor {
         const url = tab.url.toLowerCase();
         const search = cleanSearchTerm.toLowerCase();
 
-        // Strategy 1: Direct word match (word boundaries)
-        const wordMatch = new RegExp(`\\b${search}\\b`, 'i').test(title) ||
-          new RegExp(`\\b${search}\\b`, 'i').test(url);
-
         // Strategy 2: Starts with match
         const startsWithMatch = title.startsWith(search) ||
           title.split(' ').some(word => word.startsWith(search));
+
+        // Strategy 1: Direct word match (word boundaries)
+        const wordMatch = new RegExp(`\\b${search}\\b`, 'i').test(title) ||
+          new RegExp(`\\b${search}\\b`, 'i').test(url);
 
         // Strategy 3: Contains match (original)
         const containsMatch = title.includes(search) || url.includes(search);
@@ -304,19 +325,10 @@ export class VoiceCommandProcessor {
         const searchTerm = searchMatch[1].trim();
         const tabs = await chrome.tabs.query({});
 
-        const matchingTabs = tabs.filter(tab => {
-          const title = tab.title.toLowerCase();
-          const url = tab.url.toLowerCase();
-          const search = searchTerm.toLowerCase();
-
-          // Enhanced matching with multiple strategies
-          const wordMatch = new RegExp(`\\b${search}\\b`, 'i').test(title) ||
-            new RegExp(`\\b${search}\\b`, 'i').test(url);
-          const startsWithMatch = title.startsWith(search) ||
-            title.split(' ').some(word => word.startsWith(search));
-          const containsMatch = title.includes(search) || url.includes(search);
-
-          return wordMatch || startsWithMatch || containsMatch;
+        // Use fuzzySearch for better matching
+        const matchingTabs = fuzzySearch(tabs, searchTerm, ['title', 'url'], {
+          threshold: 0.3,
+          includeScore: true
         });
 
         if (matchingTabs.length > 0) {
@@ -605,6 +617,58 @@ export class VoiceCommandProcessor {
       }
     } catch (error) {
       throw new Error(`Failed to read content: ${error.message}`);
+    }
+  }
+
+  // Media control functions
+  async playMedia() {
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: pageInteraction.playMediaOnPage
+      });
+
+      if (results && results[0] && results[0].result) {
+        const result = results[0].result;
+        this.showFeedback(result.message, result.success ? 'success' : 'error');
+      }
+    } catch (error) {
+      throw new Error(`Failed to play media: ${error.message}`);
+    }
+  }
+
+  async pauseMedia() {
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: pageInteraction.pauseMediaOnPage
+      });
+
+      if (results && results[0] && results[0].result) {
+        const result = results[0].result;
+        this.showFeedback(result.message, result.success ? 'success' : 'error');
+      }
+    } catch (error) {
+      throw new Error(`Failed to pause media: ${error.message}`);
+    }
+  }
+
+  async togglePlayPause() {
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: pageInteraction.togglePlayPauseOnPage
+      });
+
+      if (results && results[0] && results[0].result) {
+        const result = results[0].result;
+        this.showFeedback(result.message, result.success ? 'success' : 'error');
+      }
+    } catch (error) {
+      throw new Error(`Failed to toggle play/pause: ${error.message}`);
     }
   }
 }

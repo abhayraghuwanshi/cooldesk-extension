@@ -1,3 +1,6 @@
+// Import appstore.json data
+import appstoreData from './appstore.json';
+
 class URLCategory {
   constructor(name, urls = [], patterns = []) {
     this.name = name;
@@ -38,99 +41,11 @@ class CategoryManager {
   }
 
   initializeDefaultCategories() {
-    // Entertainment category
-    const entertainment = new URLCategory('entertainment', [
-      'netflix.com',
-      'hotstar.com',
-      'disney.com',
-      'amazon.com/prime',
-      'youtube.com',
-      'hulu.com',
-      'spotify.com',
-      'apple.com/tv',
-      'hbo.com',
-      'paramount.com',
-      'peacocktv.com'
-    ], [
-      'streaming',
-      'movies',
-      'tv-shows',
-      'music'
-    ]);
-
-    // Work/Productivity category
-    const productivity = new URLCategory('productivity', [
-      'gmail.com',
-      'outlook.com',
-      'slack.com',
-      'teams.microsoft.com',
-      'zoom.us',
-      'google.com/drive',
-      'dropbox.com',
-      'notion.so',
-      'trello.com',
-      'asana.com',
-      'monday.com'
-    ], [
-      'workspace',
-      'collaboration',
-      'email',
-      'documents'
-    ]);
-
-    // Social Media category
-    const socialMedia = new URLCategory('social', [
-      'facebook.com',
-      'twitter.com',
-      'instagram.com',
-      'linkedin.com',
-      'tiktok.com',
-      'reddit.com',
-      'pinterest.com',
-      'snapchat.com'
-    ], [
-      'social-media',
-      'networking'
-    ]);
-
-    // Shopping category
-    const shopping = new URLCategory('shopping', [
-      'amazon.com',
-      'ebay.com',
-      'walmart.com',
-      'target.com',
-      'bestbuy.com',
-      'flipkart.com',
-      'myntra.com',
-      'ajio.com'
-    ], [
-      'ecommerce',
-      'shopping',
-      'retail'
-    ]);
-
-    // News category
-    const news = new URLCategory('news', [
-      'bbc.com',
-      'cnn.com',
-      'reuters.com',
-      'timesofindia.com',
-      'ndtv.com',
-      'hindustantimes.com',
-      'theguardian.com',
-      'nytimes.com'
-    ], [
-      'news',
-      'current-affairs',
-      'journalism'
-    ]);
-
-    // Add categories to manager
-    this.categories.set('entertainment', entertainment);
-    this.categories.set('productivity', productivity);
-    this.categories.set('social', socialMedia);
-    this.categories.set('shopping', shopping);
-    this.categories.set('news', news);
+    // Load categories from appstore.json data
+    for (const [categoryName, domains] of Object.entries(appstoreData)) {
+      const category = new URLCategory(categoryName, domains, []);
+      this.categories.set(categoryName, category);
+    }
   }
 
   addCategory(category) {
