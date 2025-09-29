@@ -1,4 +1,4 @@
-import { faBroom, faHistory, faRotateRight, faUndo, faLayerGroup } from '@fortawesome/free-solid-svg-icons';
+import { faBroom, faHistory, faRotateRight, faUndo, faLayerGroup, faGear } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { getHostTabs } from '../../services/extensionApi';
@@ -16,6 +16,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   // New state to manage which group is expanded
   const [expandedGroup, setExpandedGroup] = React.useState(null);
   const groupsContainerRef = React.useRef(null);
+  // Settings popover state
+  const [showSettings, setShowSettings] = React.useState(false);
+  const settingsRef = React.useRef(null);
 
 
   const refreshTabs = React.useCallback(() => {
@@ -59,6 +62,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     const handleClickOutside = (event) => {
       if (groupsContainerRef.current && !groupsContainerRef.current.contains(event.target)) {
         setExpandedGroup(null);
+      }
+      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
+        setShowSettings(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -113,6 +119,42 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     }
   }, [autoCleanupEnabled]);
 
+  // Hoisted function: Move all tabs for each hostname from other windows into the active window
+  async function consolidateToActiveWindow() {
+    try {
+      if (typeof chrome === 'undefined' || !chrome?.windows?.getLastFocused || !chrome?.tabs?.move) return;
+
+      // Find the target window (last focused)
+      const focused = await chrome.windows.getLastFocused({ populate: false });
+      const targetWindowId = focused?.id;
+      if (targetWindowId == null) return;
+
+      // Collect tabs to move (skip pinned) grouped by hostname already in groupedTabs
+      const tabsToMove = [];
+      Object.values(groupedTabs).forEach((arr) => {
+        const fromOthers = arr.filter(t => !t.pinned && t.windowId !== targetWindowId);
+        // Keep relative order by original index
+        fromOthers.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+        tabsToMove.push(...fromOthers.map(t => t.id));
+      });
+
+      if (tabsToMove.length === 0) return;
+
+      // Move all at once to end of target window; lastError logged if any
+      await new Promise((resolve) => {
+        chrome.tabs.move(tabsToMove, { windowId: targetWindowId, index: -1 }, () => {
+          const err = chrome.runtime?.lastError;
+          if (err) {
+            console.warn('tabs.move (consolidate) failed:', err.message);
+          }
+          resolve();
+        });
+      });
+    } catch (e) {
+      console.warn('consolidateToActiveWindow error:', e);
+    }
+  }
+
   // Toggle auto-organize and save to storage
   const toggleAutoOrganize = React.useCallback(async () => {
     const newValue = !autoOrganizeEnabled;
@@ -120,6 +162,18 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     try {
       if (typeof chrome !== 'undefined' && chrome?.storage?.local?.set) {
         await chrome.storage.local.set({ autoOrganizeEnabled: newValue });
+      }
+      // If enabling, immediately consolidate to the active window (Option A)
+      if (newValue) {
+        try {
+          await consolidateToActiveWindow();
+          // Give a moment and then refresh, arrange effect will finish grouping
+          setTimeout(() => {
+            try { refreshTabs(); } catch {}
+          }, 200);
+        } catch (e) {
+          console.warn('consolidateToActiveWindow failed:', e);
+        }
       }
     } catch (e) {
       console.warn('Failed to save auto-organize setting:', e);
@@ -340,7 +394,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
         }}>
           Tabs
         </h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
           <button
             onClick={() => setShowRecentlyClosed(!showRecentlyClosed)}
             style={{
@@ -357,38 +411,88 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           >
             <FontAwesomeIcon icon={faHistory} style={{ fontSize: '12px' }} />
           </button>
-          <button
-            onClick={toggleAutoCleanup}
-            style={{
-              height: 32,
-              width: 32,
-              borderRadius: '50%',
-              border: 'none',
-              background: autoCleanupEnabled ? 'rgba(52, 199, 89, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-              color: autoCleanupEnabled ? '#34C759' : '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            title={`Auto-cleanup ${autoCleanupEnabled ? 'enabled' : 'disabled'}`}
-          >
-            <FontAwesomeIcon icon={faBroom} style={{ fontSize: '12px' }} />
-          </button>
-          <button
-            onClick={toggleAutoOrganize}
-            style={{
-              height: 32,
-              width: 32,
-              borderRadius: '50%',
-              border: 'none',
-              background: autoOrganizeEnabled ? 'rgba(0, 122, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-              color: autoOrganizeEnabled ? '#007AFF' : '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-            title={`Auto-organize ${autoOrganizeEnabled ? 'enabled' : 'disabled'}`}
-          >
-            <FontAwesomeIcon icon={faLayerGroup} style={{ fontSize: '12px' }} />
-          </button>
+          {/* Settings button and popover */}
+          <div ref={settingsRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowSettings(s => !s)}
+              style={{
+                height: 32,
+                width: 32,
+                borderRadius: '50%',
+                border: 'none',
+                background: showSettings ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                color: '#ffffff',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              title="Settings"
+            >
+              <FontAwesomeIcon icon={faGear} style={{ fontSize: '12px' }} />
+            </button>
+            {showSettings && (
+              <div style={{
+                position: 'absolute',
+                top: '40px',
+                right: 0,
+                width: 320,
+                maxWidth: '90vw',
+                maxHeight: 320,
+                overflowY: 'auto',
+                background: 'rgba(28, 28, 33, 0.96)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: 14,
+                padding: 14,
+                boxShadow: '0 12px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(14px)',
+                zIndex: 200
+              }}>
+                <div style={{
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  letterSpacing: '-0.2px',
+                  marginBottom: 10
+                }}>
+                  Settings
+                </div>
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0 10px 0' }} />
+
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff',
+                    padding: '8px 6px', borderRadius: 10
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FontAwesomeIcon icon={faBroom} style={{ fontSize: 12, color: '#34C759' }} />
+                    <span style={{ fontSize: 13 }}>Auto-cleanup</span>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!autoCleanupEnabled} onChange={toggleAutoCleanup} style={{ transform: 'scale(1.1)' }} />
+                    <span>{autoCleanupEnabled ? 'On' : 'Off'}</span>
+                  </label>
+                </div>
+
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '6px 0' }} />
+
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff',
+                    padding: '8px 6px', borderRadius: 10
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FontAwesomeIcon icon={faLayerGroup} style={{ fontSize: 12, color: '#007AFF' }} />
+                    <span style={{ fontSize: 13 }}>Auto-organize</span>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!autoOrganizeEnabled} onChange={toggleAutoOrganize} style={{ transform: 'scale(1.1)' }} />
+                    <span>{autoOrganizeEnabled ? 'On' : 'Off'}</span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
           <button
             onClick={refreshTabs}
             style={{
@@ -502,22 +606,22 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                   {isExpanded && (
                     <div className="popover-list" style={{
                       position: 'absolute',
-                      top: '90px',
+                      bottom: '90px',
                       left: '50%',
                       transform: 'translateX(-50%)',
-                      width: '280px',
+                      width: '320px',
                       background: 'rgba(35, 35, 40, 0.95)',
                       backdropFilter: 'blur(20px)',
                       borderRadius: '14px',
                       border: '1px solid rgba(70, 70, 75, 0.7)',
-                      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)',
-                      padding: '8px',
-                      zIndex: 100
+                      boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
+                      pointerEvents: 'auto',
+                      zIndex: 10000,
+                      padding: '8px'
                     }}>
                       {groupTabs.map(tab => (
                         <div
                           key={tab.id}
-                          className="popover-list-item"
                           style={{
                             display: 'flex',
                             alignItems: 'center',
