@@ -1,4 +1,4 @@
-import { faBroom, faHistory, faRotateRight, faUndo, faLayerGroup, faGear } from '@fortawesome/free-solid-svg-icons';
+import { faBroom, faGear, faHistory, faLayerGroup, faRotateRight, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { getHostTabs } from '../../services/extensionApi';
@@ -10,6 +10,8 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const [removingTabIds, setRemovingTabIds] = React.useState(new Set());
   const [autoCleanupEnabled, setAutoCleanupEnabled] = React.useState(false);
   const [recentlyClosed, setRecentlyClosed] = React.useState([]);
+  const [recentSortKey, setRecentSortKey] = React.useState('time_desc'); // time_desc | time_asc | host_az | title_az
+  const [recentView, setRecentView] = React.useState('icons'); // icons | list
   const [showRecentlyClosed, setShowRecentlyClosed] = React.useState(false);
   const [autoOrganizeEnabled, setAutoOrganizeEnabled] = React.useState(false);
 
@@ -155,6 +157,40 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     }
   }
 
+  // Hoisted function: Arrange tabs within each window per current groupedTabs (skips pinned)
+  function performArrange() {
+    try {
+      if (!autoOrganizeEnabled || tabs.length === 0 || typeof chrome === 'undefined' || !chrome.tabs || !chrome.tabs.move) {
+        return;
+      }
+      const byWindow = new Map();
+      Object.values(groupedTabs)
+        .flat()
+        .filter(t => !t.pinned)
+        .forEach(t => {
+          if (!byWindow.has(t.windowId)) byWindow.set(t.windowId, []);
+          byWindow.get(t.windowId).push(t.id);
+        });
+
+      byWindow.forEach((desiredIds, windowId) => {
+        const currentIds = tabs
+          .filter(t => t.windowId === windowId && !t.pinned && desiredIds.includes(t.id))
+          .map(t => t.id);
+
+        if (JSON.stringify(desiredIds) !== JSON.stringify(currentIds)) {
+          chrome.tabs.move(desiredIds, { index: 0 }, () => {
+            const err = chrome.runtime?.lastError;
+            if (err) {
+              console.warn('tabs.move failed:', err.message);
+            }
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('performArrange error:', e);
+    }
+  }
+
   // Toggle auto-organize and save to storage
   const toggleAutoOrganize = React.useCallback(async () => {
     const newValue = !autoOrganizeEnabled;
@@ -169,8 +205,12 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           await consolidateToActiveWindow();
           // Give a moment and then refresh, arrange effect will finish grouping
           setTimeout(() => {
-            try { refreshTabs(); } catch {}
+            try { refreshTabs(); } catch { }
           }, 200);
+          // Also trigger an arrange pass right away
+          setTimeout(() => {
+            try { performArrange(); } catch { }
+          }, 50);
         } catch (e) {
           console.warn('consolidateToActiveWindow failed:', e);
         }
@@ -184,19 +224,18 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const fetchRecentlyClosed = React.useCallback(async () => {
     try {
       if (typeof chrome !== 'undefined' && chrome?.sessions?.getRecentlyClosed) {
-        const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 10 });
-        const closedTabs = sessions
-          .filter(session => session.tab) // Only include tabs, not windows
-          .map(session => session.tab)
-          .filter(tab => {
-            // Filter out system/extension tabs
-            const url = tab.url || '';
+        const sessions = await chrome.sessions.getRecentlyClosed({ maxResults: 25 });
+        const items = sessions
+          .filter(s => s.tab)
+          .map(s => ({ tab: s.tab, lastModified: s.lastModified }))
+          .filter(item => {
+            const url = item.tab?.url || '';
             return !url.startsWith('chrome://') &&
               !url.startsWith('chrome-extension://') &&
               !url.startsWith('edge://') &&
               !url.startsWith('moz-extension://');
           });
-        setRecentlyClosed(closedTabs);
+        setRecentlyClosed(items);
       }
     } catch (e) {
       console.warn('Failed to fetch recently closed tabs:', e);
@@ -225,6 +264,38 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
       fetchRecentlyClosed();
     }
   }, [showRecentlyClosed, fetchRecentlyClosed]);
+
+  // Derived: group recently closed by timeline buckets and sort
+  const groupedRecentlyClosed = React.useMemo(() => {
+    const items = Array.isArray(recentlyClosed) ? [...recentlyClosed] : [];
+    const getHost = (u) => { try { return new URL(u || '').hostname.replace(/^www\./, ''); } catch { return ''; } };
+    const now = Date.now();
+    const startOfToday = new Date().setHours(0,0,0,0);
+    const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
+
+    // Sort
+    items.sort((a, b) => {
+      const at = a.lastModified ?? 0; const bt = b.lastModified ?? 0;
+      const ah = getHost(a.tab?.url); const bh = getHost(b.tab?.url);
+      const atitle = a.tab?.title || ''; const btitle = b.tab?.title || '';
+      switch (recentSortKey) {
+        case 'time_asc': return (at - bt);
+        case 'host_az': return ah.localeCompare(bh) || atitle.localeCompare(btitle);
+        case 'title_az': return atitle.localeCompare(btitle);
+        case 'time_desc':
+        default: return (bt - at);
+      }
+    });
+
+    const buckets = { Today: [], Yesterday: [], Earlier: [] };
+    for (const it of items) {
+      const t = it.lastModified ?? 0;
+      if (t >= startOfToday) buckets.Today.push(it);
+      else if (t >= startOfYesterday) buckets.Yesterday.push(it);
+      else buckets.Earlier.push(it);
+    }
+    return buckets;
+  }, [recentlyClosed, recentSortKey]);
 
   // Sort tabs by hostname (DNS) so similar URLs are grouped, filter out removing tabs
   const sortedTabs = React.useMemo(() => {
@@ -305,46 +376,14 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     setExpandedGroup(prev => (prev === hostname ? null : hostname));
   };
 
-  // *** NEW FUNCTION to physically arrange tabs in the browser window ***
+  // Arrange tabs in the browser window whenever inputs change
   React.useEffect(() => {
     if (!autoOrganizeEnabled || tabs.length === 0 || typeof chrome === 'undefined' || !chrome.tabs || !chrome.tabs.move) {
       return;
     }
 
-    const arrangeTabs = () => {
-      try {
-        // Build the desired order per window, skipping pinned tabs
-        const byWindow = new Map();
-        Object.values(groupedTabs)
-          .flat()
-          .filter(t => !t.pinned)
-          .forEach(t => {
-            if (!byWindow.has(t.windowId)) byWindow.set(t.windowId, []);
-            byWindow.get(t.windowId).push(t.id);
-          });
-
-        // For each window, compare and move if different
-        byWindow.forEach((desiredIds, windowId) => {
-          const currentIds = tabs
-            .filter(t => t.windowId === windowId && !t.pinned && desiredIds.includes(t.id))
-            .map(t => t.id);
-
-          if (JSON.stringify(desiredIds) !== JSON.stringify(currentIds)) {
-            chrome.tabs.move(desiredIds, { index: 0 }, () => {
-              const err = chrome.runtime?.lastError;
-              if (err) {
-                console.warn('tabs.move failed:', err.message);
-              }
-            });
-          }
-        });
-      } catch (e) {
-        console.warn('arrangeTabs error:', e);
-      }
-    };
-
     // Arrange tabs shortly after they are refreshed.
-    const timeoutId = setTimeout(arrangeTabs, 300);
+    const timeoutId = setTimeout(performArrange, 200);
     return () => clearTimeout(timeoutId);
 
   }, [groupedTabs, tabs, autoOrganizeEnabled]);
@@ -366,6 +405,30 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           }
           .popover-list {
             animation: fadeIn 0.2s ease-out;
+          }
+          .recent-sort-select {
+            appearance: none;
+            -webkit-appearance: none;
+            background-color: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 8px;
+            padding: 4px 24px 4px 8px;
+            background-position: right 8px center;
+            background-repeat: no-repeat;
+          }
+          .recent-sort-select:hover {
+            background-color: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.28);
+          }
+          .recent-sort-select:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
+            border-color: rgba(0, 122, 255, 0.6);
+          }
+          .recent-sort-select option {
+            background-color: #1f1f25;
+            color: #fff;
           }
           @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-5px) scale(0.98); }
@@ -399,7 +462,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
             onClick={() => setShowRecentlyClosed(!showRecentlyClosed)}
             style={{
               height: 32,
-              width: 32,
               borderRadius: '50%',
               border: 'none',
               background: showRecentlyClosed ? 'rgba(255, 149, 0, 0.2)' : 'rgba(255, 255, 255, 0.1)',
@@ -417,7 +479,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               onClick={() => setShowSettings(s => !s)}
               style={{
                 height: 32,
-                width: 32,
                 borderRadius: '50%',
                 border: 'none',
                 background: showSettings ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
@@ -497,7 +558,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
             onClick={refreshTabs}
             style={{
               height: 32,
-              width: 32,
               borderRadius: '50%',
               border: 'none',
               background: 'rgba(255, 255, 255, 0.1)',
@@ -631,6 +691,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                             cursor: 'pointer',
                             color: 'rgba(255, 255, 255, 0.9)'
                           }}
+                          title={`${tab.title || ''}${tab.url ? ` — ${tab.url}` : ''}`}
                           onClick={() => focusTab(tab)}
                         >
                           <img
@@ -639,6 +700,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                             width={18}
                             height={18}
                             style={{ borderRadius: '4px', flexShrink: 0 }}
+                            title={tab.title || tab.url || ''}
                             onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }}
                           />
                           <span style={{ flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '14px' }}>
@@ -668,7 +730,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
         </div>
       )}
 
-      {/* Recently Closed Section remains the same */}
+      {/* Recently Closed Section: Timeline + Sort Controls */}
       {showRecentlyClosed && (
         <div style={{ marginTop: 24 }}>
           <h3 style={{
@@ -684,33 +746,130 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
             <FontAwesomeIcon icon={faHistory} style={{ color: '#FF9500', fontSize: '14px' }} />
             Recently Closed
           </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0 12px 0', gap: 8 }}>
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Timeline</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>
+                <span>Sort</span>
+                <select
+                  value={recentSortKey}
+                  onChange={(e) => setRecentSortKey(e.target.value)}
+                  className="recent-sort-select"
+                  style={{
+                    background: 'rgba(255,255,255,0.08)', color: '#fff', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
+                    padding: '4px 8px', fontSize: 12, outline: 'none'
+                  }}
+                >
+                  <option value="time_desc">Newest first</option>
+                  <option value="time_asc">Oldest first</option>
+                  <option value="host_az">Hostname A→Z</option>
+                  <option value="title_az">Title A→Z</option>
+                </select>
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => setRecentView('icons')}
+                  style={{
+                    height: 24,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    background: recentView === 'icons' ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
+                    color: '#fff', cursor: 'pointer', fontSize: 12
+                  }}
+                  title="Icon view"
+                >Icons</button>
+                <button
+                  onClick={() => setRecentView('list')}
+                  style={{
+                    height: 24,
+                    padding: '0 8px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    background: recentView === 'list' ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
+                    color: '#fff', cursor: 'pointer', fontSize: 12
+                  }}
+                  title="List view"
+                >List</button>
+              </div>
+            </div>
+          </div>
           {recentlyClosed.length === 0 ? (
             <div style={{ textAlign: 'center', color: 'rgba(255, 255, 255, 0.5)', padding: '20px', fontStyle: 'italic' }}>
               No recently closed tabs
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px' }}>
-              {recentlyClosed.map((tab, index) => (
-                <div
-                  key={`${tab.sessionId || index}-${tab.url}`}
-                  style={{
-                    padding: '8px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                  onClick={() => restoreTab(tab.sessionId)}
-                >
-                  <img src={getFaviconUrl(tab.url, 32)} alt="" width={16} height={16} style={{ borderRadius: 3 }} onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.title}</div>
+            <div>
+              {(['Today', 'Yesterday', 'Earlier']).map(section => (
+                groupedRecentlyClosed[section] && groupedRecentlyClosed[section].length > 0 ? (
+                  <div key={section} style={{ marginBottom: 12 }}>
+                    <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 600, margin: '8px 0' }}>{section}</div>
+                    {recentView === 'icons' ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(40px, 1fr))', gap: 8 }}>
+                        {groupedRecentlyClosed[section].map((item, index) => (
+                          <div
+                            key={`${item.tab?.sessionId || index}-${item.tab?.url}`}
+                            onClick={() => restoreTab(item.tab?.sessionId)}
+                            title={`${item.tab?.title || ''}${item.tab?.url ? ` — ${item.tab.url}` : ''}`}
+                            style={{
+                              width: 40, height: 40,
+                              borderRadius: 10,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              cursor: 'pointer',
+                              background: 'rgba(255,255,255,0.05)',
+                              border: '1px solid rgba(255,255,255,0.1)'
+                            }}
+                          >
+                            <img src={getFaviconUrl(item.tab?.url, 32)} alt="" width={16} height={16} style={{ borderRadius: 4 }} onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }} />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {groupedRecentlyClosed[section].map((item, index) => (
+                          <div
+                            key={`${item.tab?.sessionId || index}-${item.tab?.url}`}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'auto 1fr auto',
+                              alignItems: 'center',
+                              gap: 10,
+                              padding: '6px 8px',
+                              borderRadius: 8,
+                              background: 'rgba(255, 255, 255, 0.04)',
+                              border: '1px solid rgba(255, 255, 255, 0.08)'
+                            }}
+                            title={`${item.tab?.title || ''}${item.tab?.url ? ` — ${item.tab.url}` : ''}`}
+                          >
+                            <img src={getFaviconUrl(item.tab?.url, 32)} alt="" width={16} height={16} style={{ borderRadius: 3 }} onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.tab?.title}</div>
+                              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {(() => { try { return new URL(item.tab?.url || '').hostname.replace(/^www\./,''); } catch { return ''; } })()}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => restoreTab(item.tab?.sessionId)}
+                              style={{
+                                height: 24,
+                                padding: '0 10px',
+                                borderRadius: 6,
+                                border: '1px solid rgba(255,255,255,0.18)',
+                                background: 'rgba(255,255,255,0.08)',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                fontSize: 12
+                              }}
+                              title="Restore tab"
+                            >
+                              Restore
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <FontAwesomeIcon icon={faUndo} style={{ color: 'rgba(255,255,255,0.6)', fontSize: '10px' }} />
-                </div>
+                ) : null
               ))}
             </div>
           )}
