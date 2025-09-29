@@ -921,6 +921,56 @@ async function main() {
       })();
       return true;
     }
+
+    // Get workspace data for voice commands
+    if (msg?.action === 'getWorkspaceData') {
+      (async () => {
+        try {
+          // Get dashboard data from storage
+          const { dashboardData } = await chrome.storage.local.get(['dashboardData']);
+
+          let allItems = [];
+          let savedItems = [];
+
+          if (dashboardData) {
+            // Combine history and bookmarks
+            allItems = [
+              ...(dashboardData.history || []),
+              ...(dashboardData.bookmarks || [])
+            ];
+          }
+
+          // Get saved workspaces
+          try {
+            const { listWorkspaces } = await import('../db/index.js');
+            const workspacesResult = await listWorkspaces();
+            const workspaces = workspacesResult?.success ? workspacesResult.data : [];
+
+            // Flatten all workspace URLs
+            savedItems = workspaces.flatMap(ws =>
+              (ws.urls || []).map(u => ({
+                ...u,
+                workspaceGroup: ws.name,
+                id: `${ws.id}-${u.url}`
+              }))
+            );
+          } catch (e) {
+            console.warn('[Background] Failed to get workspace data:', e);
+          }
+
+          sendResponse({
+            success: true,
+            data: { allItems, savedItems }
+          });
+        } catch (e) {
+          console.error('[Background] Error getting workspace data:', e);
+          sendResponse({ success: false, error: e?.message || 'Failed to get workspace data' });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
   })
 
   // Handle connections from content scripts to keep service worker alive

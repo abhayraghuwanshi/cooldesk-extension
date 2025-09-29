@@ -1,4 +1,4 @@
-import { faBroom, faGlobe, faHistory, faRotateRight, faUndo } from '@fortawesome/free-solid-svg-icons';
+import { faBroom, faGlobe, faHistory, faRotateRight, faThumbtack, faTimes, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { enqueueOpenInChrome, getHostTabs } from '../../services/extensionApi';
@@ -495,7 +495,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           <div style={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: '16px',
             justifyContent: 'center',
             alignItems: 'flex-end',
             padding: '20px 16px',
@@ -652,76 +651,77 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                         }
                       })()}
                     </div>
-
-                    {/* Hover Actions Popup */}
                     <div
-                      className="tab-actions"
                       style={{
+                        position: 'absolute',
+                        right: '0',
+                        top: '-30px',
+                        opacity: '0',
+                        transition: 'opacity 0.2s ease',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '8px',
-                        position: 'absolute',
-                        right: '-8px',
-                        top: '-50px',
-                        padding: '8px',
-                        borderRadius: '12px',
-
+                        padding: '6px',
+                        borderRadius: '8px',
+                        background: 'rgba(0, 0, 0, 0.9)',
                         backdropFilter: 'blur(10px)',
-
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
                         boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)',
-                        zIndex: 1000,
-                        pointerEvents: 'auto',
-                        whiteSpace: 'nowrap'
+                        zIndex: '100'
                       }}
+                      className="tab-actions"
                     >
-                      {/* Pin Button */}
                       <button
-                        className="tab-action-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           onAddPing(tab);
                         }}
+                        title="Pin tab"
                         style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: 8,
-                          border: 'none',
-                          background: 'rgba(255, 149, 0, 0.9)',
-                          color: 'white',
+                          width: '28px',
+                          height: '28px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'rgba(255, 255, 255, 0.8)',
+                          borderRadius: '6px',
                           cursor: 'pointer',
+                          transition: 'all 0.2s ease'
                         }}
-                        title="Pin tab"
+                        onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                        onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
                       >
-                        📌
+                        <FontAwesomeIcon icon={faThumbtack} style={{ fontSize: '12px' }} />
                       </button>
 
-                      {/* Close Button */}
                       <button
-                        className="tab-action-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeTab(tab);
                         }}
+                        title="Close tab"
                         style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: 8,
-                          border: 'none',
-                          background: 'rgba(255, 59, 48, 0.9)',
-                          color: 'white',
+                          width: '28px',
+                          height: '28px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'rgba(255, 255, 255, 0.8)',
+                          borderRadius: '6px',
                           cursor: 'pointer',
+                          transition: 'all 0.2s ease'
                         }}
-                        title="Close tab"
+                        onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                        onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
                       >
-                        🗑️
+                        <FontAwesomeIcon icon={faTimes} style={{ fontSize: '12px' }} />
                       </button>
                     </div>
+
                   </div>
                 );
               })

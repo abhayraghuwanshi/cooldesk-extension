@@ -2,8 +2,14 @@ import * as pageInteraction from './pageInteractionService.js';
 import { fuzzySearch } from '../utils/searchUtils.js';
 
 export class VoiceCommandProcessor {
-  constructor(showFeedback) {
+  constructor(showFeedback, workspaceData = null) {
     this.showFeedback = showFeedback;
+    this.workspaceData = workspaceData;
+  }
+
+  // Update workspace data for dynamic access
+  updateWorkspaceData(workspaceData) {
+    this.workspaceData = workspaceData;
   }
 
   async processVoiceCommand(command) {
@@ -74,7 +80,12 @@ export class VoiceCommandProcessor {
       else if (command.includes('open youtube') || command.includes('go to youtube')) {
         await this.openWebsite('https://youtube.com');
       }
-      else if (command.includes('open') || command.includes('go to website')) {
+      // Open from workspace - handle various patterns
+      else if (command.toLowerCase().includes('open') && !command.includes('go to website')) {
+        console.log('Open command detected:', command);
+        await this.openFromWorkspace(command);
+      }
+      else if (command.includes('go to website')) {
         await this.openWebsiteByName(command);
       }
       // Numbered clicking commands
@@ -110,10 +121,10 @@ export class VoiceCommandProcessor {
         await this.clickLink(command.replace('follow link', 'click').replace('follow', 'click'));
       }
       // Page interaction commands
-      else if (command.includes('scroll down')) {
+      else if (command.trim() === 'scroll down' || command.trim() === 'scroll down.' || command.trim() === 'scroll down!') {
         await this.scrollPage('down');
       }
-      else if (command.includes('scroll up')) {
+      else if (command.trim() === 'scroll up' || command.trim() === 'scroll up.' || command.trim() === 'scroll up!') {
         await this.scrollPage('up');
       }
       else if (command.includes('go back') || command.includes('back')) {
@@ -407,6 +418,98 @@ export class VoiceCommandProcessor {
       this.showFeedback(`Opened ${domain}`);
     } catch (error) {
       throw new Error(`Failed to open website: ${error.message}`);
+    }
+  }
+
+  async openFromWorkspace(command) {
+    try {
+      console.log('openFromWorkspace called with command:', command);
+
+      let searchTerm = '';
+
+      // Extract search term from command - handle punctuation
+      if (command.includes('open')) {
+        searchTerm = command.replace(/.*open\s+/, '').trim();
+        // Remove trailing punctuation (., !, ?)
+        searchTerm = searchTerm.replace(/[.!?]+$/, '').trim();
+      }
+
+      console.log('Extracted search term:', searchTerm);
+
+      if (!searchTerm) {
+        this.showFeedback('Please specify what to open', 'error');
+        return;
+      }
+
+      // Get workspace data from chrome storage if not provided
+      let workspaceData = this.workspaceData;
+      console.log('Current workspace data from processor:', workspaceData);
+
+      if (!workspaceData) {
+        console.log('No workspace data, fetching from background...');
+        try {
+          // Try to get workspace data from chrome runtime message
+          const response = await chrome.runtime.sendMessage({
+            action: 'getWorkspaceData'
+          });
+          console.log('Background response:', response);
+          if (response?.success) {
+            workspaceData = response.data;
+          }
+        } catch (error) {
+          console.warn('Could not get workspace data:', error);
+        }
+      }
+
+      if (!workspaceData || (!workspaceData.allItems && !workspaceData.savedItems)) {
+        console.log('No workspace data available, using fallback. WorkspaceData:', workspaceData);
+        // Fallback to website mapping
+        await this.openWebsiteByName(command);
+        return;
+      }
+
+      // Combine all available items for search
+      const allItems = [
+        ...(workspaceData.allItems || []),
+        ...(workspaceData.savedItems || [])
+      ];
+
+      console.log('Total items available for search:', allItems.length);
+      console.log('Sample items:', allItems.slice(0, 3).map(item => ({ title: item.title, url: item.url })));
+
+      if (allItems.length === 0) {
+        console.log('No items found, using fallback');
+        await this.openWebsiteByName(command);
+        return;
+      }
+
+      // Use fuzzy search to find matching items
+      const matches = fuzzySearch(allItems, searchTerm, ['title', 'url'], {
+        threshold: 0.3,
+        includeScore: true
+      });
+
+      console.log('Fuzzy search results:', matches.length, 'matches for term:', searchTerm);
+
+      if (matches.length > 0) {
+        const bestMatch = matches[0];
+        const url = bestMatch.url;
+
+        if (url) {
+          await chrome.tabs.create({ url });
+          this.showFeedback(`Opened: ${bestMatch.title || url}`);
+        } else {
+          this.showFeedback('No valid URL found for that item', 'error');
+        }
+      } else {
+        // If no workspace matches, try website mapping as fallback
+        this.showFeedback(`No workspace matches for "${searchTerm}". Trying website search...`);
+        await this.openWebsiteByName(command);
+      }
+    } catch (error) {
+      console.error('Error opening from workspace:', error);
+      // Fallback to website mapping
+      await this.openWebsiteByName(command);
     }
   }
 

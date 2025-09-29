@@ -2,8 +2,8 @@ import { faArrowDown, faExchangeAlt, faHashtag, faLightbulb, faMicrophone, faPlu
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import React, { useEffect, useRef, useState } from 'react';
-import { fuzzySearch } from '../../utils/searchUtils.js';
 import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
+import { fuzzySearch } from '../../utils/searchUtils.js';
 
 const VoiceNavigationChatGPT = () => {
   const [isListening, setIsListening] = useState(false);
@@ -20,6 +20,10 @@ const VoiceNavigationChatGPT = () => {
 
   // Initialize voice command processor
   const commandProcessorRef = useRef(null);
+  const [workspaceData, setWorkspaceData] = useState(null);
+
+  // Track user intent for stopping voice navigation
+  const userIntentStoppedRef = useRef(false);
 
   // Connection management refs
   const sessionTimerRef = useRef(null);
@@ -90,7 +94,13 @@ const VoiceNavigationChatGPT = () => {
   const expireSession = () => {
     setConnectionExpired(true);
     setTimeRemaining(0);
+
+    // Don't mark as user intent when session expires automatically
+    const wasUserIntent = userIntentStoppedRef.current;
     stopListening();
+    // Reset the flag since this was an automatic expiration, not user intent
+    userIntentStoppedRef.current = wasUserIntent;
+
     clearAllTimers();
     setFeedback('Voice session expired after 10 minutes. Click to reconnect.', 'warning');
   };
@@ -127,25 +137,61 @@ const VoiceNavigationChatGPT = () => {
   };
 
   const attemptReconnect = () => {
+    // Don't auto-reconnect if user intentionally stopped
+    if (userIntentStoppedRef.current) {
+      console.log('Auto-reconnect cancelled: User intentionally stopped voice navigation');
+      return;
+    }
+
     if (!connectionExpired && annyang && !isListening) {
       reconnectTimerRef.current = setTimeout(() => {
+        // Check again in case user stopped during the timeout
+        if (userIntentStoppedRef.current) {
+          console.log('Auto-reconnect cancelled during timeout: User stopped voice navigation');
+          return;
+        }
+
         try {
           annyang.start({ autoRestart: true, continuous: true });
           setError('');
         } catch (error) {
           console.warn('Auto-reconnect failed:', error);
-          // Try again in a few seconds
-          attemptReconnect();
+          // Try again in a few seconds only if user hasn't stopped
+          if (!userIntentStoppedRef.current) {
+            attemptReconnect();
+          }
         }
       }, RECONNECT_DELAY);
     }
   };
 
+  // Fetch workspace data for voice commands
+  const fetchWorkspaceData = async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'getWorkspaceData'
+      });
+
+      if (response?.success) {
+        setWorkspaceData(response.data);
+        // Update command processor if it exists
+        if (commandProcessorRef.current) {
+          commandProcessorRef.current.updateWorkspaceData(response.data);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch workspace data:', error);
+    }
+  };
+
   // Initialize speech recognition and command processor
   useEffect(() => {
+    // Fetch workspace data on component mount
+    fetchWorkspaceData();
+
     // Initialize the command processor
     if (!commandProcessorRef.current) {
-      commandProcessorRef.current = new VoiceCommandProcessor(showFeedback);
+      commandProcessorRef.current = new VoiceCommandProcessor(showFeedback, workspaceData);
     }
 
     if (annyang) {
@@ -179,6 +225,10 @@ const VoiceNavigationChatGPT = () => {
         },
         'search *term': async (term) => {
           await commandProcessorRef.current.processVoiceCommand(`search ${term}`);
+        },
+        // Open commands
+        'open *term': async (term) => {
+          await commandProcessorRef.current.processVoiceCommand(`open ${term}`);
         },
         'click *text': async (text) => {
           await commandProcessorRef.current.processVoiceCommand(`click ${text}`);
@@ -349,7 +399,7 @@ const VoiceNavigationChatGPT = () => {
         if (phrases.length > 0) {
           const command = phrases[0];
           setTranscript(command);
-          setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", or "switch to tab 2"`);
+          setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", or "switch to tab 2"`);
           // Clear feedback after 3 seconds
           if (feedbackTimeoutRef.current) {
             clearTimeout(feedbackTimeoutRef.current);
@@ -363,6 +413,13 @@ const VoiceNavigationChatGPT = () => {
 
       annyang.addCallback('error', (error) => {
         console.warn('Speech recognition error:', error);
+
+        // Don't set error state if user intentionally stopped
+        if (userIntentStoppedRef.current) {
+          console.log('Ignoring error - user intentionally stopped voice navigation');
+          return;
+        }
+
         setIsListening(false);
         setError(`Speech recognition error: ${error.error}`);
         setFeedback('');
@@ -386,9 +443,12 @@ const VoiceNavigationChatGPT = () => {
         setWaveformData(Array(5).fill(0));
         stopAudioAnalysis();
 
-        // Auto-reconnect if session is still active and not manually stopped
-        if (!connectionExpired) {
+        // Auto-reconnect only if session is active and user hasn't manually stopped
+        if (!connectionExpired && !userIntentStoppedRef.current) {
+          console.log('Voice recognition ended, attempting auto-reconnect...');
           attemptReconnect();
+        } else if (userIntentStoppedRef.current) {
+          console.log('Voice recognition ended by user intent, no auto-reconnect');
         }
 
         // Clear feedback after a short delay when recognition ends
@@ -415,8 +475,16 @@ const VoiceNavigationChatGPT = () => {
         clearTimeout(feedbackTimeoutRef.current);
       }
       stopAudioAnalysis();
+      clearAllTimers();
     };
   }, []);
+
+  // Update command processor when workspace data changes
+  useEffect(() => {
+    if (commandProcessorRef.current && workspaceData) {
+      commandProcessorRef.current.updateWorkspaceData(workspaceData);
+    }
+  }, [workspaceData]);
 
   // Audio analysis functions
   const startAudioAnalysis = async () => {
@@ -487,6 +555,12 @@ const VoiceNavigationChatGPT = () => {
   };
 
   const startListening = () => {
+    // Reset user intent flag when user starts listening
+    userIntentStoppedRef.current = false;
+
+    // Clear any previous errors
+    setError('');
+
     if (connectionExpired) {
       // Restart the session
       startSession();
@@ -509,6 +583,10 @@ const VoiceNavigationChatGPT = () => {
   };
 
   const stopListening = () => {
+    console.log('stopListening called');
+    // Mark that user intentionally stopped the voice navigation
+    userIntentStoppedRef.current = true;
+
     if (annyang && isListening) {
       annyang.abort();
     }
@@ -516,8 +594,9 @@ const VoiceNavigationChatGPT = () => {
     setIsListening(false);
     setTranscript('');
     setInterimTranscript('');
-    setFeedback('');
+    setFeedback('Voice navigation stopped. Click to start listening again.', 'info');
     setError('');
+    console.log('Error cleared in stopListening');
     setVoiceLevel(0);
     setWaveformData(Array(5).fill(0));
     setShowEnergyWave(false);
@@ -540,7 +619,7 @@ const VoiceNavigationChatGPT = () => {
 
       if (results && results[0] && results[0].result) {
         const elementCount = results[0].result.count;
-        setFeedback(`Showing numbers on ${elementCount} clickable elements. Say "click 1" to "click ${elementCount}"`);
+        setFeedback(`Showing numbers on ${elementCount} clickable elements (up to 40). Say "click 1" to "click ${elementCount}"`);
       }
     } catch (error) {
       setFeedback(`Failed to show numbers: ${error.message}`);
@@ -657,51 +736,153 @@ const VoiceNavigationChatGPT = () => {
     const existingNumbers = document.querySelectorAll('.voice-nav-number');
     existingNumbers.forEach(el => el.remove());
 
-    const selectors = ['a', 'button', '[role="button"]', '[onclick]', 'input[type="submit"]', 'input[type="button"]', '[class*="btn"]'];
+    // Expanded selectors for comprehensive coverage
+    const selectors = [
+      // Basic interactive elements
+      'a', 'button', '[role="button"]', '[onclick]',
+      'input[type="submit"]', 'input[type="button"]',
+      '[class*="btn"]', '[class*="button"]',
+
+      // YouTube specific selectors
+      'a[href*="/watch"]', // Video links
+      'a[href*="/channel/"]', // Channel links
+      'a[href*="/c/"]', // Channel links (new format)
+      'a[href*="/@"]', // Handle-based channels
+      'a[href*="/playlist"]', // Playlist links
+      '.yt-lockup-view-model__content-image', // Video thumbnails
+      '.ytd-compact-video-renderer', // Sidebar videos
+      '.ytd-rich-item-renderer', // Home page videos
+      '.ytd-video-renderer', // Search results videos
+
+      // Common website patterns
+      '[class*="card"]', '[class*="item"]', '[class*="tile"]',
+      '[class*="post"]', '[class*="article"]', '[class*="entry"]',
+      '[class*="link"]', '[class*="nav"]', '[class*="menu"]',
+      '[class*="tab"]', '[class*="thumb"]', '[class*="preview"]',
+
+      // Social media patterns
+      '[data-testid*="tweet"]', '[data-testid*="post"]',
+      '[aria-label*="like"]', '[aria-label*="share"]', '[aria-label*="comment"]',
+
+      // E-commerce patterns
+      '[class*="product"]', '[class*="item"]', '[class*="listing"]',
+      '[class*="add-to-cart"]', '[class*="buy"]', '[class*="purchase"]',
+
+      // Generic clickable patterns
+      '[class*="clickable"]', '[data-href]', '[data-url]',
+      '[tabindex="0"]', '[tabindex="-1"]', // Focusable elements
+
+      // Media controls and interactive elements
+      '[class*="play"]', '[class*="pause"]', '[class*="video"]',
+      '[class*="audio"]', '[class*="media"]', '[class*="control"]'
+    ];
+
     let elements = [];
     selectors.forEach(selector => {
-      elements.push(...Array.from(document.querySelectorAll(selector)));
+      try {
+        const found = document.querySelectorAll(selector);
+        elements.push(...Array.from(found));
+      } catch (e) {
+        // Skip invalid selectors
+        console.warn('Invalid selector:', selector);
+      }
     });
 
+    // Enhanced visibility and interactivity filtering
     const visibleElements = elements.filter((el, index, arr) => {
+      // Remove duplicates
       if (arr.indexOf(el) !== index) return false;
+
+      // Check basic visibility
       const style = window.getComputedStyle(el);
       const rect = el.getBoundingClientRect();
-      return style.display !== 'none' && style.visibility !== 'hidden' &&
-        rect.width > 5 && rect.height > 5 &&
-        rect.top < window.innerHeight && rect.bottom > 0;
+
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      if (rect.width < 3 || rect.height < 3) return false;
+
+      // Check if element is in viewport (with some buffer)
+      const viewportBuffer = 100;
+      if (rect.bottom < -viewportBuffer ||
+        rect.top > window.innerHeight + viewportBuffer ||
+        rect.right < 0 ||
+        rect.left > window.innerWidth) return false;
+
+      // Check if element is actually interactive
+      const isClickable = el.tagName === 'A' ||
+        el.tagName === 'BUTTON' ||
+        el.onclick !== null ||
+        el.hasAttribute('data-href') ||
+        el.hasAttribute('data-url') ||
+        el.getAttribute('role') === 'button' ||
+        el.getAttribute('tabindex') !== null ||
+        el.className.includes('clickable') ||
+        el.className.includes('btn') ||
+        el.className.includes('link') ||
+        el.className.includes('card') ||
+        el.className.includes('item') ||
+        getComputedStyle(el).cursor === 'pointer';
+
+      return isClickable;
     });
 
-    visibleElements.slice(0, 15).forEach((element, index) => {
+    // Sort by position (top to bottom, left to right) for more intuitive numbering
+    visibleElements.sort((a, b) => {
+      const rectA = a.getBoundingClientRect();
+      const rectB = b.getBoundingClientRect();
+
+      // If elements are roughly on the same line (within 20px), sort by x position
+      if (Math.abs(rectA.top - rectB.top) < 20) {
+        return rectA.left - rectB.left;
+      }
+      // Otherwise sort by y position
+      return rectA.top - rectB.top;
+    });
+
+    // Increase limit to 40 elements
+    visibleElements.slice(0, 40).forEach((element, index) => {
       const number = index + 1;
       const numberEl = document.createElement('div');
       numberEl.className = 'voice-nav-number';
       numberEl.textContent = number;
+
+      // Enhanced styling with better visibility
       numberEl.style.cssText = `
         position: absolute;
-        width: 20px; height: 20px;
+        width: 22px; height: 22px;
         border-radius: 50%;
-        background: #ff4444;
+        background: linear-gradient(135deg, #ff4444, #cc0000);
         color: white;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: calc(var(--font-size-xs) * 0.85);
+        font-size: 11px;
         font-weight: bold;
+        font-family: Arial, sans-serif;
         border: 2px solid white;
-        z-index: 10000;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        z-index: 999999;
         pointer-events: none;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
       `;
 
       const rect = element.getBoundingClientRect();
-      numberEl.style.top = `${rect.top + window.scrollY - 10}px`;
-      numberEl.style.left = `${rect.left + window.scrollX - 10}px`;
+
+      // Better positioning logic
+      let top = rect.top + window.scrollY - 11;
+      let left = rect.left + window.scrollX - 11;
+
+      // Ensure numbers stay within viewport
+      if (left < 5) left = 5;
+      if (top < 5) top = rect.top + window.scrollY + 5;
+
+      numberEl.style.top = `${top}px`;
+      numberEl.style.left = `${left}px`;
 
       document.body.appendChild(numberEl);
       element.setAttribute('data-voice-nav-number', number);
     });
 
-    return { count: Math.min(15, visibleElements.length) };
+    return { count: Math.min(40, visibleElements.length) };
   };
 
   const removeNumbersFromElements = () => {
@@ -722,6 +903,13 @@ const VoiceNavigationChatGPT = () => {
       success: true,
       elementText: element.textContent?.trim() || element.getAttribute('title') || `Element ${number}`
     };
+  };
+
+  // Helper function to format time remaining
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -754,54 +942,159 @@ const VoiceNavigationChatGPT = () => {
               /* Celestial Orb Animation */
               <div className="sphere-container">
                 <div className="celestial-orb-container">
-                  {/* Celestial Rings */}
-                  <div className="celestial-ring"
+                  {/* Enhanced Celestial Rings with Dynamic Rotations */}
+                  <div className="celestial-ring ring-1"
                     style={{
-                      width: '200px',
-                      height: '200px',
-                      transform: 'translate(-50%, -50%) rotateX(70deg)'
+                      width: '120px',
+                      height: '120px',
+                      transform: 'translate(-50%, -50%) rotateX(70deg)',
+                      opacity: 0.8 + voiceLevel * 0.4,
+                      boxShadow: `0 0 ${10 + voiceLevel * 20}px rgba(124, 58, 237, ${0.3 + voiceLevel * 0.3})`
+                    }}>
+                    <div className="ring-particles">
+                      {Array.from({ length: 8 }, (_, i) => (
+                        <div key={i} className="ring-particle"
+                          style={{ '--delay': `${i * 0.25}s`, '--angle': `${i * 45}deg` }} />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="celestial-ring ring-2"
+                    style={{
+                      width: '100px',
+                      height: '100px',
+                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(60deg)',
+                      opacity: 0.6 + voiceLevel * 0.4,
+                      filter: `blur(${Math.max(0, 1 - voiceLevel * 2)}px)`
+                    }}>
+                    <div className="ring-glow"></div>
+                  </div>
+
+                  <div className="celestial-ring ring-3"
+                    style={{
+                      width: '140px',
+                      height: '140px',
+                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(120deg)',
+                      opacity: 0.7 + voiceLevel * 0.3
+                    }}>
+                    <div className="particle-orbit advanced-orbit">
+                      <div className="orbit-trail"></div>
+                    </div>
+                  </div>
+
+                  {/* Additional Dynamic Rings */}
+                  <div className="celestial-ring ring-4"
+                    style={{
+                      width: '80px',
+                      height: '80px',
+                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(-45deg)',
+                      opacity: 0.5 + voiceLevel * 0.5
                     }}>
                   </div>
-                  <div className="celestial-ring"
-                    style={{
-                      width: '150px',
-                      height: '150px',
-                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(60deg)'
-                    }}>
-                  </div>
-                  {/* Ring with Particle Trail */}
-                  <div className="celestial-ring"
-                    style={{
-                      width: '170px',
-                      height: '170px',
-                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(120deg)'
-                    }}>
-                    <div className="particle-orbit"></div>
-                  </div>
-                  {/* Central Orb */}
+                  {/* Enhanced Central Orb */}
                   <div className="sphere-core" style={{
                     transform: `translate(-50%, -50%) scale(${1 + voiceLevel * 0.4})`,
-                    filter: `brightness(${1 + voiceLevel * 0.5})`,
-                    animationDuration: `${Math.max(2, 4 - voiceLevel * 2)}s`
+                    filter: `brightness(${1 + voiceLevel * 0.5}) saturate(${1 + voiceLevel * 0.3})`,
+                    animationDuration: `${Math.max(1.5, 4 - voiceLevel * 2.5)}s`,
+                    boxShadow: `
+                      inset 0 0 20px rgba(255, 255, 255, 0.2),
+                      0 0 ${30 + voiceLevel * 40}px ${5 + voiceLevel * 15}px rgba(124, 58, 237, ${0.4 + voiceLevel * 0.4}),
+                      0 0 ${15 + voiceLevel * 20}px ${2 + voiceLevel * 8}px rgba(255, 255, 255, ${0.1 + voiceLevel * 0.3})
+                    `
                   }}>
+                    {/* Voice-reactive surface patterns */}
+                    {voiceLevel > 0.2 && (
+                      <div className="voice-surface-effects">
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <div
+                            key={i}
+                            className="surface-ripple"
+                            style={{
+                              '--angle': `${i * 30}deg`,
+                              '--intensity': voiceLevel,
+                              '--delay': `${i * 0.08}s`
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-                {/* Energy Wave Effect */}
+                {/* Enhanced Energy Wave Effects */}
                 {showEnergyWave && (
                   <div className="energy-wave-container">
-                    <div className="energy-wave energy-wave-1"></div>
-                    <div className="energy-wave energy-wave-2"></div>
-                    <div className="energy-wave energy-wave-3"></div>
+                    <div className="energy-wave energy-wave-1">
+                      <div className="wave-inner"></div>
+                    </div>
+                    <div className="energy-wave energy-wave-2">
+                      <div className="wave-inner"></div>
+                    </div>
+                    <div className="energy-wave energy-wave-3">
+                      <div className="wave-inner"></div>
+                    </div>
+                    {/* Additional wave patterns */}
+                    <div className="energy-wave energy-wave-hex">
+                      <div className="hex-pattern"></div>
+                    </div>
+                    <div className="energy-wave energy-wave-spiral">
+                      <div className="spiral-pattern"></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Continuous subtle waves when listening */}
+                {isListening && (
+                  <div className="continuous-waves">
+                    <div className="wave-ring wave-ring-1"></div>
+                    <div className="wave-ring wave-ring-2"></div>
+                    <div className="wave-ring wave-ring-3"></div>
                   </div>
                 )}
                 <div className="particle-field">
-                  {Array.from({ length: 12 }, (_, i) => (
+                  {/* Enhanced Particle System with Multiple Types */}
+                  {Array.from({ length: 20 }, (_, i) => {
+                    const particleType = i % 4;
+                    const intensity = 0.5 + voiceLevel * 1.5;
+                    return (
+                      <div
+                        key={i}
+                        className={`particle particle-type-${particleType}`}
+                        style={{
+                          '--delay': `${i * 0.15}s`,
+                          '--duration': `${1.5 + Math.random() * 2}s`,
+                          '--intensity': intensity,
+                          '--start-x': `${Math.random() * 100}%`,
+                          '--end-x': `${Math.random() * 100}%`,
+                          '--size': `${2 + voiceLevel * 3 + Math.random() * 2}px`,
+                          '--opacity': Math.max(0.3, voiceLevel + 0.2)
+                        }}
+                      />
+                    );
+                  })}
+
+                  {/* Spiral Particles */}
+                  {Array.from({ length: 6 }, (_, i) => (
                     <div
-                      key={i}
-                      className="particle"
+                      key={`spiral-${i}`}
+                      className="spiral-particle"
                       style={{
-                        animationDelay: `${i * 0.2}s`,
-                        animationDuration: `${2 + Math.random() * 2}s`
+                        '--angle': `${i * 60}deg`,
+                        '--radius': `${45 + voiceLevel * 20}px`,
+                        '--speed': `${3 + voiceLevel * 2}s`,
+                        '--delay': `${i * 0.5}s`
+                      }}
+                    />
+                  ))}
+
+                  {/* Voice-Reactive Burst Particles */}
+                  {voiceLevel > 0.3 && Array.from({ length: 8 }, (_, i) => (
+                    <div
+                      key={`burst-${i}`}
+                      className="burst-particle"
+                      style={{
+                        '--burst-angle': `${i * 45}deg`,
+                        '--burst-distance': `${40 + voiceLevel * 40}px`,
+                        '--burst-delay': `${i * 0.1}s`
                       }}
                     />
                   ))}
@@ -811,8 +1104,23 @@ const VoiceNavigationChatGPT = () => {
           </button>
 
           <div className="button-label">
-            {isListening ? 'Listening...' : 'Voice Navigation'}
+            {isListening ? 'Listening...' : connectionExpired ? 'Session Expired - Click to Reconnect' : 'Voice Navigation'}
           </div>
+
+          {/* Session Timer */}
+          {(isListening || connectionExpired) && (
+            <div className="session-timer" style={{
+              fontSize: '12px',
+              color: connectionExpired ? '#ff4444' : timeRemaining < 60 ? '#ff6666' : '#888',
+              marginTop: '4px',
+              textAlign: 'center'
+            }}>
+              {connectionExpired
+                ? '⚠️ Session Expired'
+                : `⏱️ ${formatTime(timeRemaining)} remaining`
+              }
+            </div>
+          )}
 
         </div>
 
@@ -874,6 +1182,11 @@ const VoiceNavigationChatGPT = () => {
             <div className="command-item">
               <FontAwesomeIcon icon={faTimes} className="command-icon" />
               <span className="command-text">"close tab"</span> → <span className="command-desc">close current tab</span>
+            </div>
+
+            <div className="command-item">
+              <FontAwesomeIcon icon={faExchangeAlt} className="command-icon" />
+              <span className="command-text">"open youtube"</span> → <span className="command-desc">open from workspace</span>
             </div>
           </div>
         </div>
@@ -940,17 +1253,47 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .voice-sphere {
-          width: 90px;
-          height: 90px;
+          width: 65px;
+          height: 65px;
           border: none;
           background: transparent;
           cursor: pointer;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
           position: relative;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 0;
+          transform-style: preserve-3d;
+          perspective: 1000px;
+        }
+
+        .voice-sphere:not(.listening) {
+          animation: idleFloat 6s ease-in-out infinite;
+        }
+
+        .voice-sphere.listening {
+          animation: listeningPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes idleFloat {
+          0%, 100% {
+            transform: translateY(0px) rotateX(0deg);
+          }
+          50% {
+            transform: translateY(-3px) rotateX(2deg);
+          }
+        }
+
+        @keyframes listeningPulse {
+          0%, 100% {
+            transform: scale(1) rotateX(0deg);
+            filter: brightness(1);
+          }
+          50% {
+            transform: scale(1.02) rotateX(1deg);
+            filter: brightness(1.1);
+          }
         }
 
         .voice-sphere:hover:not(:disabled) {
@@ -967,8 +1310,8 @@ const VoiceNavigationChatGPT = () => {
         }
 
         .mic-button-container {
-          width: 60px;
-          height: 60px;
+          width: 45px;
+          height: 45px;
           border-radius: 50%;
           background: radial-gradient(circle at 30% 30%, #ec4899, #7c3aed, #2563eb);
           box-shadow:
@@ -1049,8 +1392,8 @@ const VoiceNavigationChatGPT = () => {
 
         .sphere-core {
           position: absolute;
-          width: 80px;
-          height: 80px;
+          width: 30px;
+          height: 30px;
           top: 50%;
           left: 50%;
           border-radius: 50%;
@@ -1116,11 +1459,112 @@ const VoiceNavigationChatGPT = () => {
           border-radius: 50%;
           transform-style: preserve-3d;
           transform-origin: center center;
+          transition: all 0.3s ease;
         }
 
         .voice-sphere.listening .celestial-ring {
           border-color: rgba(255, 68, 68, 0.4);
           box-shadow: 0 0 10px rgba(255, 68, 68, 0.3);
+        }
+
+        /* Enhanced Ring Animations */
+        .ring-1 {
+          animation: ring1Rotate 20s linear infinite, ring1Wobble 8s ease-in-out infinite alternate;
+        }
+
+        .ring-2 {
+          animation: ring2Rotate 15s linear infinite reverse, ring2Pulse 6s ease-in-out infinite;
+        }
+
+        .ring-3 {
+          animation: ring3Rotate 25s linear infinite, ring3Tilt 10s ease-in-out infinite alternate;
+        }
+
+        .ring-4 {
+          animation: ring4Rotate 18s linear infinite reverse, ring4Spin 12s ease-in-out infinite;
+        }
+
+        @keyframes ring1Rotate {
+          from { transform: translate(-50%, -50%) rotateX(70deg) rotateZ(0deg); }
+          to { transform: translate(-50%, -50%) rotateX(70deg) rotateZ(360deg); }
+        }
+
+        @keyframes ring1Wobble {
+          0%, 100% { transform: translate(-50%, -50%) rotateX(70deg) rotateY(0deg); }
+          50% { transform: translate(-50%, -50%) rotateX(70deg) rotateY(20deg); }
+        }
+
+        @keyframes ring2Rotate {
+          from { transform: translate(-50%, -50%) rotateX(70deg) rotateY(60deg) rotateZ(0deg); }
+          to { transform: translate(-50%, -50%) rotateX(70deg) rotateY(60deg) rotateZ(-360deg); }
+        }
+
+        @keyframes ring2Pulse {
+          0%, 100% { opacity: 0.6; border-width: 1px; }
+          50% { opacity: 1; border-width: 2px; }
+        }
+
+        @keyframes ring3Rotate {
+          from { transform: translate(-50%, -50%) rotateX(70deg) rotateY(120deg) rotateZ(0deg); }
+          to { transform: translate(-50%, -50%) rotateX(70deg) rotateY(120deg) rotateZ(360deg); }
+        }
+
+        @keyframes ring3Tilt {
+          0%, 100% { transform: translate(-50%, -50%) rotateX(70deg) rotateY(120deg); }
+          50% { transform: translate(-50%, -50%) rotateX(85deg) rotateY(120deg); }
+        }
+
+        @keyframes ring4Rotate {
+          from { transform: translate(-50%, -50%) rotateX(70deg) rotateY(-45deg) rotateZ(0deg); }
+          to { transform: translate(-50%, -50%) rotateX(70deg) rotateY(-45deg) rotateZ(-360deg); }
+        }
+
+        @keyframes ring4Spin {
+          0%, 100% { transform: translate(-50%, -50%) rotateX(70deg) rotateY(-45deg); }
+          50% { transform: translate(-50%, -50%) rotateX(55deg) rotateY(-45deg); }
+        }
+
+        /* Ring Particles */
+        .ring-particles {
+          position: relative;
+          width: 100%;
+          height: 100%;
+        }
+
+        .ring-particle {
+          position: absolute;
+          width: 3px;
+          height: 3px;
+          background: rgba(124, 58, 237, 0.8);
+          border-radius: 50%;
+          box-shadow: 0 0 6px rgba(124, 58, 237, 0.6);
+          animation: ringParticleOrbit 4s linear infinite;
+          transform-origin: 110px 110px;
+          left: 50%;
+          top: 0;
+          margin-left: -1.5px;
+          animation-delay: var(--delay);
+        }
+
+        @keyframes ringParticleOrbit {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        .ring-glow {
+          position: absolute;
+          top: -2px;
+          left: -2px;
+          right: -2px;
+          bottom: -2px;
+          border-radius: 50%;
+          background: radial-gradient(circle, transparent 60%, rgba(124, 58, 237, 0.2) 80%, transparent 100%);
+          animation: ringGlowPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes ringGlowPulse {
+          0%, 100% { opacity: 0.3; transform: scale(1); }
+          50% { opacity: 0.8; transform: scale(1.1); }
         }
 
         .particle-orbit {
@@ -1199,6 +1643,239 @@ const VoiceNavigationChatGPT = () => {
           }
         }
 
+        /* Enhanced Wave Effects */
+        .wave-inner {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 60%;
+          height: 60%;
+          border: 1px solid rgba(52, 199, 89, 0.4);
+          border-radius: 50%;
+          transform: translate(-50%, -50%);
+          animation: waveInnerPulse 1s ease-out forwards;
+        }
+
+        @keyframes waveInnerPulse {
+          0% {
+            width: 60%;
+            height: 60%;
+            opacity: 0.8;
+          }
+          100% {
+            width: 90%;
+            height: 90%;
+            opacity: 0;
+          }
+        }
+
+        .energy-wave-hex {
+          clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+          border: none;
+          background: linear-gradient(45deg, transparent, rgba(52, 199, 89, 0.3), transparent);
+        }
+
+        .hex-pattern {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 80%;
+          height: 80%;
+          transform: translate(-50%, -50%);
+          clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+          background: rgba(52, 199, 89, 0.2);
+          animation: hexRotate 1s ease-out forwards;
+        }
+
+        @keyframes hexRotate {
+          0% {
+            transform: translate(-50%, -50%) rotate(0deg) scale(0.5);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, -50%) rotate(360deg) scale(2);
+            opacity: 0;
+          }
+        }
+
+        .energy-wave-spiral {
+          border: none;
+          background: conic-gradient(from 0deg, transparent, rgba(52, 199, 89, 0.6), transparent, rgba(52, 199, 89, 0.4), transparent);
+          border-radius: 50%;
+        }
+
+        .spiral-pattern {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 90%;
+          height: 90%;
+          transform: translate(-50%, -50%);
+          border-radius: 50%;
+          background: conic-gradient(from 90deg, transparent, rgba(52, 199, 89, 0.3), transparent);
+          animation: spiralSpin 1s ease-out forwards;
+        }
+
+        @keyframes spiralSpin {
+          0% {
+            transform: translate(-50%, -50%) rotate(0deg) scale(0.3);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, -50%) rotate(720deg) scale(1.5);
+            opacity: 0;
+          }
+        }
+
+        /* Continuous Wave Rings */
+        .continuous-waves {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          pointer-events: none;
+          z-index: 0;
+        }
+
+        .wave-ring {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          border: 1px solid rgba(255, 68, 68, 0.2);
+          border-radius: 50%;
+          transform: translate(-50%, -50%);
+          animation: continuousWave 3s ease-in-out infinite;
+        }
+
+        .wave-ring-1 {
+          width: 100px;
+          height: 100px;
+          animation-delay: 0s;
+        }
+
+        .wave-ring-2 {
+          width: 140px;
+          height: 140px;
+          animation-delay: 1s;
+        }
+
+        .wave-ring-3 {
+          width: 180px;
+          height: 180px;
+          animation-delay: 2s;
+        }
+
+        @keyframes continuousWave {
+          0%, 100% {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+          }
+          50% {
+            opacity: 0.4;
+            transform: translate(-50%, -50%) scale(1.2);
+          }
+        }
+
+        /* Voice-Reactive Surface Effects */
+        .voice-surface-effects {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          border-radius: 50%;
+          overflow: hidden;
+          pointer-events: none;
+        }
+
+        .surface-ripple {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 4px;
+          height: 4px;
+          background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.2) 50%, transparent 100%);
+          border-radius: 50%;
+          transform-origin: 0 0;
+          animation: surfaceRipple calc(0.5s + var(--intensity, 0.5) * 1s) ease-out infinite;
+          animation-delay: var(--delay, 0s);
+          opacity: var(--intensity, 0.5);
+        }
+
+        @keyframes surfaceRipple {
+          0% {
+            transform: translate(-50%, -50%)
+                      rotate(var(--angle, 0deg))
+                      translateX(10px)
+                      scale(0);
+            opacity: 1;
+          }
+          50% {
+            transform: translate(-50%, -50%)
+                      rotate(var(--angle, 0deg))
+                      translateX(25px)
+                      scale(1.5);
+            opacity: 0.8;
+          }
+          100% {
+            transform: translate(-50%, -50%)
+                      rotate(var(--angle, 0deg))
+                      translateX(35px)
+                      scale(0);
+            opacity: 0;
+          }
+        }
+
+        /* Enhanced State Transitions */
+        .celestial-orb-container {
+          transform-style: preserve-3d;
+          perspective: 800px;
+          animation: container-wobble 20s infinite ease-in-out alternate;
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .voice-sphere:not(.listening) .celestial-orb-container {
+          filter: brightness(0.8) saturate(0.7);
+          transform: scale(0.95);
+        }
+
+        .voice-sphere.listening .celestial-orb-container {
+          filter: brightness(1.2) saturate(1.3);
+          transform: scale(1);
+        }
+
+        /* Advanced Orbit Trail */
+        .advanced-orbit {
+          overflow: visible;
+        }
+
+        .orbit-trail {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          border-radius: 50%;
+          background: conic-gradient(
+            from 0deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.1) 10%,
+            rgba(124, 58, 237, 0.3) 20%,
+            transparent 30%,
+            transparent 70%,
+            rgba(124, 58, 237, 0.2) 80%,
+            rgba(255, 255, 255, 0.1) 90%,
+            transparent 100%
+          );
+          animation: orbitTrailRotate 8s linear infinite;
+        }
+
+        @keyframes orbitTrailRotate {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
         .sphere-grid {
           position: absolute;
           top: 0;
@@ -1263,8 +1940,8 @@ const VoiceNavigationChatGPT = () => {
 
         .particle-field {
           position: absolute;
-          width: 200px;
-          height: 200px;
+          width: 140px;
+          height: 140px;
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
@@ -1274,17 +1951,112 @@ const VoiceNavigationChatGPT = () => {
 
         .particle {
           position: absolute;
-          width: 2px;
-          height: 2px;
-          background: rgba(0, 191, 255, 0.8);
+          width: var(--size, 2px);
+          height: var(--size, 2px);
+          background: rgba(0, 191, 255, var(--opacity, 0.8));
           border-radius: 50%;
-          animation: particleFloat linear infinite;
+          animation: particleFloat var(--duration, 3s) linear infinite;
+          animation-delay: var(--delay, 0s);
           box-shadow: 0 0 6px rgba(0, 191, 255, 0.6);
+          left: var(--start-x, 50%);
         }
 
         .voice-sphere.listening .particle {
-          background: rgba(255, 68, 68, 0.8);
+          background: rgba(255, 68, 68, var(--opacity, 0.8));
           box-shadow: 0 0 6px rgba(255, 68, 68, 0.6);
+        }
+
+        /* Different particle types */
+        .particle-type-0 {
+          background: radial-gradient(circle, rgba(0, 191, 255, var(--opacity, 0.8)) 0%, transparent 70%);
+          animation-name: particleFloat;
+        }
+
+        .particle-type-1 {
+          background: radial-gradient(circle, rgba(124, 58, 237, var(--opacity, 0.8)) 0%, transparent 70%);
+          animation-name: particleFloatSlow;
+          width: calc(var(--size, 2px) * 0.8);
+          height: calc(var(--size, 2px) * 0.8);
+        }
+
+        .particle-type-2 {
+          background: radial-gradient(circle, rgba(236, 72, 153, var(--opacity, 0.8)) 0%, transparent 70%);
+          animation-name: particleFloatFast;
+          border-radius: 0;
+          transform: rotate(45deg);
+        }
+
+        .particle-type-3 {
+          background: linear-gradient(45deg, rgba(52, 199, 89, var(--opacity, 0.8)), rgba(0, 191, 255, var(--opacity, 0.8)));
+          animation-name: particleFloatSpiral;
+          width: calc(var(--size, 2px) * 1.2);
+          height: calc(var(--size, 2px) * 1.2);
+        }
+
+        /* Spiral Particles */
+        .spiral-particle {
+          position: absolute;
+          width: 4px;
+          height: 4px;
+          background: radial-gradient(circle, rgba(255, 255, 255, 0.9) 0%, rgba(124, 58, 237, 0.8) 50%, transparent 100%);
+          border-radius: 50%;
+          top: 50%;
+          left: 50%;
+          transform-origin: 0 0;
+          animation: spiralOrbit var(--speed, 3s) linear infinite;
+          animation-delay: var(--delay, 0s);
+          box-shadow: 0 0 8px rgba(124, 58, 237, 0.6);
+        }
+
+        @keyframes spiralOrbit {
+          0% {
+            transform: translate(-50%, -50%)
+                      rotate(0deg)
+                      translateX(var(--radius, 60px))
+                      rotate(0deg);
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.8;
+          }
+          100% {
+            transform: translate(-50%, -50%)
+                      rotate(360deg)
+                      translateX(var(--radius, 60px))
+                      rotate(-360deg);
+            opacity: 1;
+          }
+        }
+
+        /* Burst Particles */
+        .burst-particle {
+          position: absolute;
+          width: 3px;
+          height: 3px;
+          background: radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(255, 68, 68, 0.9) 40%, transparent 70%);
+          border-radius: 50%;
+          top: 50%;
+          left: 50%;
+          animation: burstExpand 0.8s ease-out forwards;
+          animation-delay: var(--burst-delay, 0s);
+          transform-origin: center;
+          opacity: 0;
+          box-shadow: 0 0 10px rgba(255, 68, 68, 0.8);
+        }
+
+        @keyframes burstExpand {
+          0% {
+            transform: translate(-50%, -50%) rotate(var(--burst-angle, 0deg)) translateX(0) scale(0);
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.8;
+            transform: translate(-50%, -50%) rotate(var(--burst-angle, 0deg)) translateX(calc(var(--burst-distance, 40px) * 0.7)) scale(1.2);
+          }
+          100% {
+            transform: translate(-50%, -50%) rotate(var(--burst-angle, 0deg)) translateX(var(--burst-distance, 40px)) scale(0);
+            opacity: 0;
+          }
         }
 
         @keyframes particleFloat {
@@ -1302,6 +2074,69 @@ const VoiceNavigationChatGPT = () => {
           }
           100% {
             transform: translateY(-75px) translateX(-15px) scale(0);
+            opacity: 0;
+          }
+        }
+
+        @keyframes particleFloatSlow {
+          0% {
+            transform: translateY(85px) translateX(var(--start-x, 0)) scale(0) rotate(0deg);
+            opacity: 0;
+          }
+          15% {
+            opacity: var(--opacity, 0.8);
+            transform: translateY(70px) translateX(calc(var(--start-x, 0) + 10px)) scale(1) rotate(90deg);
+          }
+          85% {
+            opacity: var(--opacity, 0.8);
+            transform: translateY(-70px) translateX(var(--end-x, -20px)) scale(1) rotate(270deg);
+          }
+          100% {
+            transform: translateY(-85px) translateX(calc(var(--end-x, -20px) - 10px)) scale(0) rotate(360deg);
+            opacity: 0;
+          }
+        }
+
+        @keyframes particleFloatFast {
+          0% {
+            transform: translateY(60px) translateX(var(--start-x, 10px)) scale(0);
+            opacity: 0;
+          }
+          5% {
+            opacity: var(--opacity, 0.9);
+            transform: translateY(50px) translateX(calc(var(--start-x, 10px) + 3px)) scale(1.2);
+          }
+          95% {
+            opacity: var(--opacity, 0.9);
+            transform: translateY(-50px) translateX(var(--end-x, -5px)) scale(1.2);
+          }
+          100% {
+            transform: translateY(-60px) translateX(calc(var(--end-x, -5px) - 3px)) scale(0);
+            opacity: 0;
+          }
+        }
+
+        @keyframes particleFloatSpiral {
+          0% {
+            transform: translateY(80px) translateX(0) scale(0) rotate(0deg);
+            opacity: 0;
+          }
+          20% {
+            opacity: var(--opacity, 0.7);
+            transform: translateY(60px) translateX(15px) scale(1) rotate(72deg);
+          }
+          40% {
+            transform: translateY(20px) translateX(-10px) scale(1.1) rotate(144deg);
+          }
+          60% {
+            transform: translateY(-20px) translateX(20px) scale(1) rotate(216deg);
+          }
+          80% {
+            opacity: var(--opacity, 0.7);
+            transform: translateY(-60px) translateX(-15px) scale(1) rotate(288deg);
+          }
+          100% {
+            transform: translateY(-80px) translateX(0) scale(0) rotate(360deg);
             opacity: 0;
           }
         }
