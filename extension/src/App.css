@@ -1130,7 +1130,6 @@ body,
 
 .related-title {
   font-weight: 600;
-  color: #e5e7eb;
   font-size: 14px;
   line-height: 1.3;
 }
@@ -1146,9 +1145,10 @@ body,
   -webkit-box-orient: vertical;
 }
 
-.suggestion-controls {
-  text-align: center;
-  margin: 16px 0;
+/* Workspace switch animations */
+@keyframes ws-fade-slide-in {
+  0% { opacity: 0; transform: translateY(8px) scale(0.995); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .suggestion-controls button {

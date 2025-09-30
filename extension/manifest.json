@@ -69,5 +69,13 @@
       ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "oauth2": {
+    "client_id": "dolmgalgldegfddhnafmganlbhkgapoj.apps.googleusercontent.com",
+    "scopes": [
+      "profile",
+      "email",
+      "openid"
+    ]
+  }
 }

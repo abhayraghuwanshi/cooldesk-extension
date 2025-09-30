@@ -1,4 +1,4 @@
-import { faBroom, faGear, faHistory, faLayerGroup, faRotateRight, faUndo } from '@fortawesome/free-solid-svg-icons';
+import { faBroom, faGear, faHistory, faLayerGroup, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { getHostTabs } from '../../services/extensionApi';
@@ -270,7 +270,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
     const items = Array.isArray(recentlyClosed) ? [...recentlyClosed] : [];
     const getHost = (u) => { try { return new URL(u || '').hostname.replace(/^www\./, ''); } catch { return ''; } };
     const now = Date.now();
-    const startOfToday = new Date().setHours(0,0,0,0);
+    const startOfToday = new Date().setHours(0, 0, 0, 0);
     const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
 
     // Sort
@@ -354,6 +354,10 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const removeTab = React.useCallback((tab) => {
     try {
       if (!tab) return;
+      // Never close the currently active tab to avoid accidental closures
+      if (tab.active) {
+        return;
+      }
       setRemovingTabIds(prev => new Set([...prev, tab.id]));
 
       const hasRemove = typeof chrome !== 'undefined' && chrome?.tabs?.remove;
@@ -610,6 +614,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               const firstTab = groupTabs[0];
               if (!firstTab) return null;
 
+              const hasActive = Array.isArray(groupTabs) && groupTabs.some(t => !!t.active);
               return (
                 <div key={hostname} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   {/* Collapsed State */}
@@ -621,30 +626,30 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       padding: '8px',
                       borderRadius: '18px',
                       background: 'rgba(45, 45, 50, 0.7)',
-                      border: '1px solid rgba(70, 70, 75, 0.5)',
+                      border: hasActive ? '1px solid rgba(0, 122, 255, 0.8)' : '1px solid rgba(70, 70, 75, 0.5)',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3)',
+                      boxShadow: hasActive ? '0 0 0 2px rgba(0,122,255,0.25), 0 4px 15px rgba(0, 0, 0, 0.3)' : '0 4px 15px rgba(0, 0, 0, 0.3)',
                       backdropFilter: 'blur(10px)',
                       position: 'relative',
                     }}
                     onClick={() => handleToggleGroup(hostname)}
                   >
                     <img
-                      src={getFaviconUrl(firstTab.url, 64)}
+                      src={getFaviconUrl(firstTab.url, 64) || '/logo.png'}
                       alt={`${hostname} favicon`}
                       width={32}
                       height={32}
                       style={{ borderRadius: '8px', marginBottom: '4px' }}
-                      onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }}
+                      onError={(e) => { e.currentTarget.src = '/logo.png'; }}
                     />
                     <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '11px', textAlign: 'center', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {hostname}
                     </div>
-                    {/* Badge */}
+                    {/* Count Badge */}
                     <div style={{
                       position: 'absolute',
                       top: '-5px',
@@ -660,6 +665,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                     }}>
                       {groupTabs.length}
                     </div>
+
                   </div>
 
                   {/* Expanded State (Popover) */}
@@ -689,33 +695,34 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                             padding: '8px 10px',
                             borderRadius: '10px',
                             cursor: 'pointer',
-                            color: 'rgba(255, 255, 255, 0.9)'
+                            color: 'rgba(255, 255, 255, 0.9)',
+                            border: tab.active ? '1px solid rgba(0,122,255,0.5)' : '1px solid transparent',
+                            background: tab.active ? 'rgba(0,122,255,0.12)' : 'transparent'
                           }}
                           title={`${tab.title || ''}${tab.url ? ` — ${tab.url}` : ''}`}
                           onClick={() => focusTab(tab)}
                         >
                           <img
-                            src={getFaviconUrl(tab.url, 32)}
+                            src={getFaviconUrl(tab.url, 32) || '/logo.png'}
                             alt=""
                             width={18}
                             height={18}
                             style={{ borderRadius: '4px', flexShrink: 0 }}
                             title={tab.title || tab.url || ''}
-                            onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }}
+                            onError={(e) => { e.currentTarget.src = '/logo.png'; }}
                           />
-                          <span style={{ flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '14px' }}>
-                            {tab.title}
-                          </span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation(); // Prevent focusTab from firing
+                              if (tab.active) return; // Don't allow closing active tab
                               removeTab(tab);
                             }}
                             title="Close tab"
                             style={{
-                              background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.6)', cursor: 'pointer',
+                              background: 'none', border: 'none', color: tab.active ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255, 255, 255, 0.6)', cursor: tab.active ? 'not-allowed' : 'pointer',
                               fontSize: '16px', padding: '0 5px', lineHeight: 1
                             }}
+                            disabled={!!tab.active}
                           >
                             &times;
                           </button>
@@ -845,7 +852,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontSize: 13, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.tab?.title}</div>
                               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {(() => { try { return new URL(item.tab?.url || '').hostname.replace(/^www\./,''); } catch { return ''; } })()}
+                                {(() => { try { return new URL(item.tab?.url || '').hostname.replace(/^www\./, ''); } catch { return ''; } })()}
                               </div>
                             </div>
                             <button

@@ -39,6 +39,11 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
 
 let currentUser = null;
 
+// Read OAuth client configuration from the extension manifest (MV3) or env
+const manifest = (typeof chrome !== 'undefined' && chrome.runtime?.getManifest) ? chrome.runtime.getManifest() : null;
+const OAUTH_CLIENT_ID = manifest?.oauth2?.client_id || (typeof process !== 'undefined' ? process.env.EXT_OAUTH_CLIENT_ID : undefined);
+const OAUTH_SCOPES = manifest?.oauth2?.scopes || ["profile", "email", "openid"];
+
 // ------------------
 // Auth Setup
 // ------------------
@@ -110,6 +115,10 @@ export const signInWithGoogle = async () => {
     // Chrome Extension Identity API
     if (typeof chrome !== "undefined" && chrome.identity?.getAuthToken) {
       try {
+        // identity.getAuthToken relies on manifest.oauth2 client_id + scopes
+        if (!manifest?.oauth2?.client_id) {
+          throw new Error("Missing oauth2.client_id in manifest.json. Configure OAuth client for chrome.identity.");
+        }
         const token = await new Promise((resolve, reject) => {
           chrome.identity.getAuthToken({ interactive: true }, (token) => {
             if (chrome.runtime.lastError) {
@@ -134,12 +143,14 @@ export const signInWithGoogle = async () => {
       }
     }
 
-    // Fallback: Extension popup window approach for Edge/Firefox
-    // Note: You need to set up OAuth client ID in Google Console for this domain
+    // Fallback: Extension popup window approach for non-Chrome or when getAuthToken fails
+    if (!OAUTH_CLIENT_ID) {
+      return { success: false, error: 'OAuth client ID not configured. Add oauth2.client_id in manifest.json or EXT_OAUTH_CLIENT_ID env.' };
+    }
     const authUrl = `https://accounts.google.com/oauth/v2/auth?` +
-      `client_id=${encodeURIComponent('256165123494-web-client-id.apps.googleusercontent.com')}&` +
+      `client_id=${encodeURIComponent(OAUTH_CLIENT_ID)}&` +
       `response_type=token&` +
-      `scope=${encodeURIComponent('profile email')}&` +
+      `scope=${encodeURIComponent(OAUTH_SCOPES.join(' '))}&` +
       `redirect_uri=${encodeURIComponent(chrome.identity.getRedirectURL())}`;
 
     return new Promise((resolve, reject) => {
@@ -220,10 +231,13 @@ export const upgradeAnonymousWithGoogle = async () => {
     }
 
     // Fallback for Edge/other browsers
+    if (!OAUTH_CLIENT_ID) {
+      return { success: false, error: 'OAuth client ID not configured. Add oauth2.client_id in manifest.json or EXT_OAUTH_CLIENT_ID env.' };
+    }
     const authUrl = `https://accounts.google.com/oauth/v2/auth?` +
-      `client_id=${encodeURIComponent('256165123494-web-client-id.apps.googleusercontent.com')}&` +
+      `client_id=${encodeURIComponent(OAUTH_CLIENT_ID)}&` +
       `response_type=token&` +
-      `scope=${encodeURIComponent('profile email')}&` +
+      `scope=${encodeURIComponent(OAUTH_SCOPES.join(' '))}&` +
       `redirect_uri=${encodeURIComponent(chrome.identity.getRedirectURL())}`;
 
     return new Promise((resolve) => {

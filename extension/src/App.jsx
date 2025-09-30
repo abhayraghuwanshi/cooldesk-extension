@@ -40,6 +40,7 @@ library.add(
 import { ActivityPanel } from './components/default/ActivityPanel';
 import { CoolFeedSection } from './components/default/CoolFeedSection.jsx';
 import { PingsSection } from './components/default/PingsSection';
+import { PinnedWorkspace } from './components/default/PinnedWorkspace';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import categoryManager from './data/categories';
 import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
@@ -112,6 +113,9 @@ export default function App() {
   const [processes, setProcesses] = useState([])
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [fontSize, setFontSize] = useState('medium')
+
+  // Pinned workspaces
+  const [pinnedWorkspaces, setPinnedWorkspaces] = useState([])
 
 
   // Auto-reset active section after 5 seconds of inactivity
@@ -341,6 +345,39 @@ export default function App() {
       return () => { };
     }
   }, [])
+
+  // Load pinned workspaces from storage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { pinnedWorkspaces: storedPins } = await storageGet(['pinnedWorkspaces']);
+        if (Array.isArray(storedPins)) setPinnedWorkspaces(storedPins);
+      } catch { }
+    })();
+  }, [])
+
+  const savePinnedWorkspaces = async (list) => {
+    try { await storageSet({ pinnedWorkspaces: list }); } catch { }
+  };
+
+  const togglePinWorkspace = (name) => {
+    if (!name || typeof name !== 'string') return;
+    setPinnedWorkspaces((prev) => {
+      const exists = prev.includes(name);
+      const next = exists ? prev.filter(n => n !== name) : [...prev, name];
+      savePinnedWorkspaces(next);
+      return next;
+    });
+  };
+
+  const unpinWorkspace = (name) => {
+    if (!name) return;
+    setPinnedWorkspaces((prev) => {
+      const next = prev.filter(n => n !== name);
+      savePinnedWorkspaces(next);
+      return next;
+    });
+  };
 
 
 
@@ -1363,11 +1400,36 @@ export default function App() {
           </div>
         </ErrorBoundary>
 
+        <ErrorBoundary>
+          <div>
+            <PinnedWorkspace
+              items={pinnedWorkspaces}
+              active={workspace}
+              onSelect={(name) => setWorkspace(name)}
+              onUnpin={unpinWorkspace}
+              workspaces={savedWorkspaces}
+              onReorder={(order) => {
+                if (Array.isArray(order)) {
+                  setPinnedWorkspaces(order);
+                  try { savePinnedWorkspaces(order); } catch { }
+                }
+              }}
+            />
+          </div>
+        </ErrorBoundary>
+
         {/* Filters */}
         <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span> */}
-            <WorkspaceFilters items={filterItems} active={workspace} onChange={setWorkspace} onWorkspaceCreated={createWorkspace} />
+            <WorkspaceFilters
+              items={filterItems}
+              active={workspace}
+              onChange={setWorkspace}
+              onWorkspaceCreated={createWorkspace}
+              onPinWorkspace={togglePinWorkspace}
+              pinnedWorkspaces={pinnedWorkspaces}
+            />
           </div>
         </div>
 
@@ -1379,19 +1441,19 @@ export default function App() {
             {showCurrentWorkspace && (
               <>
                 {workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
-                  <div>
+                  <div key={`ws-${workspace}`} className="ws-animate-in">
                     {renderWorkspaceGrid(
                       savedWorkspaces.find(ws => ws.name === workspace),
                       mergedWorkspaceItems
                     )}
                   </div>
                 ) : (
-                  <>
+                  <div key={`ws-${workspace}`} className="ws-animate-in">
                     {renderWorkspaceGrid(
                       workspace === 'All' ? { name: 'All', gridType: 'ItemGrid' } : savedWorkspaces.find(ws => ws.name === workspace),
                       workspace === 'All' ? allItemsCombined : mergedWorkspaceItems
                     )}
-                  </>
+                  </div>
                 )}
               </>
             )}

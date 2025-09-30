@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateWorkspaceModal } from './popups/CreateWorkspaceModal';
 
-export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated }) {
+export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, onPinWorkspace, pinnedWorkspaces = [] }) {
   const workspaces = useMemo(() => {
     const set = new Set()
     items.forEach((i) => i.workspaceGroup && set.add(i.workspaceGroup))
@@ -11,6 +11,7 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated }
   const btnRefs = useRef([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [currentTab, setCurrentTab] = useState(null)
+  const [menu, setMenu] = useState({ open: false, x: 0, y: 0, ws: null })
 
   // Get current tab when modal opens
   useEffect(() => {
@@ -28,6 +29,18 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated }
       getCurrentTab()
     }
   }, [showCreateModal])
+
+  // Close context menu on outside click or Escape
+  useEffect(() => {
+    const onClick = () => setMenu({ open: false, x: 0, y: 0, ws: null })
+    const onKey = (e) => { if (e.key === 'Escape') setMenu({ open: false, x: 0, y: 0, ws: null }) }
+    document.addEventListener('click', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('click', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [])
 
   const handleCreateWorkspace = async (name, description) => {
     try {
@@ -125,11 +138,60 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated }
                 e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
               }
             }}
+            onContextMenu={(e) => {
+              try { e.preventDefault(); e.stopPropagation(); } catch {}
+              setMenu({ open: true, x: e.clientX, y: e.clientY, ws })
+            }}
           >
             {ws}
           </button>
         ))}
       </div>
+
+      {menu.open && (
+        <div
+          style={{
+            position: 'fixed',
+            top: `${menu.y}px`,
+            left: `${menu.x}px`,
+            background: 'rgba(28,28,33,0.98)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            borderRadius: 8,
+            minWidth: 160,
+            zIndex: 9999,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.45)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(() => {
+            const isPinned = Array.isArray(pinnedWorkspaces) && pinnedWorkspaces.includes(menu.ws)
+            const label = isPinned ? 'Unpin from Pinned Workspaces' : 'Pin to Pinned Workspaces'
+            return (
+              <button
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 12px',
+                  textAlign: 'left',
+                  background: 'transparent',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 13
+                }}
+                onClick={() => {
+                  if (typeof onPinWorkspace === 'function') {
+                    onPinWorkspace(menu.ws) // toggle
+                  }
+                  setMenu({ open: false, x: 0, y: 0, ws: null })
+                }}
+              >
+                {label}
+              </button>
+            )
+          })()}
+        </div>
+      )}
 
       <CreateWorkspaceModal
         show={showCreateModal}
