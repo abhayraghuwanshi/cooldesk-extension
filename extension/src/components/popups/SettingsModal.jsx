@@ -1,4 +1,4 @@
-import { faBullseye, faFolder, faPalette, faRocket, faUser } from '@fortawesome/free-solid-svg-icons';
+import { faBullseye, faPalette, faRocket, faUser } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { getPersonaUrlCount, personas, validatePersona } from '../../data/personas';
@@ -12,7 +12,6 @@ import AccountTab from '../settings/AccountTab';
 import PersonasTab from '../settings/PersonasTab';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
-import WorkspacesTab from '../settings/WorkspacesTab';
 
 export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFontSizeChange }) {
   const [localSettings, setLocalSettings] = useState(settings)
@@ -804,15 +803,6 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
               createPersonaWorkspaces={createPersonaWorkspaces}
               setSelectedPersona={setSelectedPersona}
               setSelectedCategories={setSelectedCategories}
-            />
-          </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faFolder} style={{ marginRight: '8px' }} />Workspaces</>}>
-            <WorkspacesTab
-              editableWorkspaces={editableWorkspaces}
-              handleUpdateWorkspaceField={handleUpdateWorkspaceField}
-              handleSaveWorkspaceRow={handleSaveWorkspaceRow}
-              handleDeleteWorkspace={handleDeleteWorkspace}
-              handleOpenCreateWorkspace={handleOpenCreateWorkspace}
             />
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>

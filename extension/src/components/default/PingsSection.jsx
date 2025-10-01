@@ -1,11 +1,23 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faPlus } from '@fortawesome/free-solid-svg-icons';
 import { deletePing as dbDeletePing, listPings as dbListPings, upsertPing as dbUpsertPing, subscribePinsChanges } from '../../db/index.js';
 import { enqueueOpenInChrome } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils';
+import { AddLinkFlow } from '../popups/AddLinkFlow.jsx';
 
 export function PingsSection({ tabs }) {
   const [pings, setPings] = React.useState([]);
   const [hoveredPingId, setHoveredPingId] = React.useState(null);
+  const [showAddMenu, setShowAddMenu] = React.useState(false);
+  const addTileRef = React.useRef(null);
+  const [menuPos, setMenuPos] = React.useState({ x: 0, y: 0, width: 360 }); // retained but unused in modal mode
+  const modalRef = React.useRef(null);
+  const pingsRef = React.useRef([]);
+  const [allItems, setAllItems] = React.useState([]);
+
+  const updateMenuPosition = React.useCallback(() => {}, []);
 
   const loadPings = React.useCallback(async () => {
     try {
@@ -24,12 +36,15 @@ export function PingsSection({ tabs }) {
     }
   }, []);
 
+  // Keep a live ref of pings to avoid stale closure in addPing
+  React.useEffect(() => { pingsRef.current = pings; }, [pings]);
+
   const addPing = React.useCallback(async (tab) => {
     try {
       if (!tab?.url) return;
 
       // Check if we already have 12 pins
-      if (pings.length >= 12) {
+      if ((pingsRef.current?.length || 0) >= 12) {
         console.warn('[PingsSection] Maximum of 12 pins reached');
         return;
       }
@@ -103,6 +118,33 @@ export function PingsSection({ tabs }) {
     }
   }, [tabs]);
 
+  // Close the add menu when clicking outside
+  React.useEffect(() => {
+    if (!showAddMenu) return;
+    const onDown = (e) => {
+      // If click is inside modal content or on the add tile, do nothing
+      if (modalRef.current && modalRef.current.contains(e.target)) return;
+      if (addTileRef.current && addTileRef.current.contains(e.target)) return;
+      setShowAddMenu(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setShowAddMenu(false);
+    };
+    const onScroll = () => updateMenuPosition();
+    const onResize = () => updateMenuPosition();
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    updateMenuPosition();
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [showAddMenu, updateMenuPosition]);
+
   React.useEffect(() => {
     loadPings();
   }, [loadPings]);
@@ -123,6 +165,96 @@ export function PingsSection({ tabs }) {
 
   const maxPins = 12;
   const displayPings = pings.slice(0, maxPins);
+  const pinnedUrls = new Set(displayPings.map(p => p.url));
+  const availableTabs = Array.isArray(tabs) ? tabs.filter(t => t?.url && !pinnedUrls.has(t.url)) : [];
+  const savedItems = React.useMemo(() => {
+    return displayPings.map(p => ({
+      id: p.id,
+      url: p.url,
+      title: p.title || (() => { try { return new URL(p.url).hostname; } catch { return p.url; } })(),
+      workspaceGroup: 'Pins'
+    }));
+  }, [displayPings]);
+
+  // Load history, bookmarks, and open tabs as allItems when modal opens
+  React.useEffect(() => {
+    if (!showAddMenu) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = [];
+        // Include open tabs
+        const tabItems = (Array.isArray(tabs) ? tabs : [])
+          .filter(t => t?.url)
+          .map(t => ({
+            id: t.id ?? `tab_${t.url}`,
+            url: t.url,
+            title: t.title || (() => { try { return new URL(t.url).hostname; } catch { return t.url; } })(),
+            lastVisitTime: Date.now(),
+            visitCount: 1
+          }));
+        items.push(...tabItems);
+
+        // History (requires chrome.history permission)
+        if (typeof chrome !== 'undefined' && chrome?.history?.search) {
+          await new Promise((resolve) => {
+            try {
+              chrome.history.search({ text: '', maxResults: 500, startTime: 0 }, (results) => {
+                try {
+                  const hist = (results || [])
+                    .filter(r => r?.url)
+                    .map(r => ({
+                      id: `hist_${r.id || r.url}`,
+                      url: r.url,
+                      title: r.title || (() => { try { return new URL(r.url).hostname; } catch { return r.url; } })(),
+                      lastVisitTime: r.lastVisitTime || 0,
+                      visitCount: r.visitCount || 0
+                    }));
+                  items.push(...hist);
+                } catch {}
+                resolve();
+              });
+            } catch { resolve(); }
+          });
+        }
+
+        // Bookmarks
+        if (typeof chrome !== 'undefined' && chrome?.bookmarks?.getTree) {
+          await new Promise((resolve) => {
+            try {
+              chrome.bookmarks.getTree((nodes) => {
+                try {
+                  const stack = [...(nodes || [])];
+                  while (stack.length) {
+                    const n = stack.pop();
+                    if (!n) continue;
+                    if (n.children && n.children.length) stack.push(...n.children);
+                    if (n.url) {
+                      items.push({
+                        id: `bm_${n.id}`,
+                        url: n.url,
+                        title: n.title || (() => { try { return new URL(n.url).hostname; } catch { return n.url; } })(),
+                        dateAdded: n.dateAdded || 0,
+                        lastVisitTime: n.dateAdded || 0,
+                        visitCount: 0
+                      });
+                    }
+                  }
+                } catch {}
+                resolve();
+              });
+            } catch { resolve(); }
+          });
+        }
+
+        if (!cancelled) setAllItems(items);
+      } catch (e) {
+        console.warn('[PingsSection] Failed to load allItems for AddLinkFlow', e);
+        if (!cancelled) setAllItems([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showAddMenu, tabs]);
 
   return (
     <div className="coolDesk-section">
@@ -218,7 +350,110 @@ export function PingsSection({ tabs }) {
             )}
           </div>
         ))}
+        {/* Add-pin tile at the end */}
+        <div
+          ref={addTileRef}
+          className="coolDesk-ping-item add-pin-tile"
+          style={{
+            marginRight: '10px',
+            position: 'relative',
+            cursor: 'pointer',
+            padding: '4px',
+            borderRadius: '6px',
+            transition: 'background-color 0.2s',
+            border: '1px dashed var(--border-color, rgba(255,255,255,0.15))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '32px',
+            height: '32px'
+          }}
+          title="Add pin from open tabs"
+          onClick={(e) => {
+            e.stopPropagation();
+            // Compute portal menu position relative to viewport
+            updateMenuPosition();
+            setShowAddMenu((v) => !v);
+          }}
+          onMouseEnter={() => setHoveredPingId('add')}
+          onMouseLeave={() => setHoveredPingId(null)}
+        >
+          <FontAwesomeIcon icon={faPlus} style={{ fontSize: 14, color: 'var(--text-secondary, rgba(255,255,255,0.7))' }} />
+        </div>
       </div>
+      {showAddMenu && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.35)',
+            zIndex: 999999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16
+          }}
+          onMouseDown={(e) => {
+            // close when clicking on the overlay (not inside the panel)
+            if (e.target === e.currentTarget) setShowAddMenu(false);
+          }}
+        >
+          <div ref={modalRef} onMouseDown={(e) => e.stopPropagation()} style={{
+            width: 'min(780px, 96vw)',
+            height: 'min(70vh, 720px)',
+            background: 'var(--surface-0, #101015)',
+            border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+            borderRadius: 12,
+            overflow: 'hidden',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 16px',
+              borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+              background: 'var(--surface-1, rgba(255,255,255,0.02))'
+            }}>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary, #fff)' }}>Add Pin</div>
+              <button
+                onClick={() => setShowAddMenu(false)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--text-secondary, rgba(255,255,255,0.7))',
+                  cursor: 'pointer',
+                  fontSize: 18
+                }}
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <AddLinkFlow
+                allItems={allItems}
+                savedItems={savedItems}
+                currentWorkspace="Pins"
+                onAdd={async (item) => {
+                  const t = { url: item.url, title: item.title, favIconUrl: getFaviconUrl(item.url) };
+                  await addPing(t);
+                  setShowAddMenu(false);
+                }}
+                onAddSaved={async (url) => {
+                  const t = { url, title: (() => { try { return new URL(url).hostname; } catch { return url; } })(), favIconUrl: getFaviconUrl(url) };
+                  await addPing(t);
+                  setShowAddMenu(false);
+                }}
+                onCancel={() => setShowAddMenu(false)}
+              />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

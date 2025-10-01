@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateWorkspaceModal } from './popups/CreateWorkspaceModal';
 
-export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, onPinWorkspace, pinnedWorkspaces = [] }) {
+export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, onPinWorkspace, onDeleteWorkspace, pinnedWorkspaces = [] }) {
   const workspaces = useMemo(() => {
     const set = new Set()
     items.forEach((i) => i.workspaceGroup && set.add(i.workspaceGroup))
@@ -96,7 +96,6 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, 
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
           </svg>
-          Create
         </button>
         {workspaces.map((ws, i) => (
           <button
@@ -112,9 +111,9 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, 
                 : '1px solid rgba(255, 255, 255, 0.1)',
               borderRadius: '8px',
               padding: '8px 12px',
-              color: ws === active ? '#ffffff' : 'rgba(255, 255, 255, 0.8)',
+              color: 'rgba(255, 255, 255, 0.85)',
               fontSize: 'var(--font-size-base)',
-              fontWeight: '500',
+              fontWeight: 500,
               cursor: 'pointer',
               transition: 'all 0.2s ease',
               display: 'flex',
@@ -163,6 +162,7 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, 
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Pin/Unpin */}
           {(() => {
             const isPinned = Array.isArray(pinnedWorkspaces) && pinnedWorkspaces.includes(menu.ws)
             const label = isPinned ? 'Unpin from Pinned Workspaces' : 'Pin to Pinned Workspaces'
@@ -181,7 +181,7 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, 
                 }}
                 onClick={() => {
                   if (typeof onPinWorkspace === 'function') {
-                    onPinWorkspace(menu.ws) // toggle
+                    onPinWorkspace(menu.ws)
                   }
                   setMenu({ open: false, x: 0, y: 0, ws: null })
                 }}
@@ -190,6 +190,36 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, 
               </button>
             )
           })()}
+
+          {/* Divider */}
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '4px 0' }} />
+
+          {/* Delete */}
+          <button
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 12px',
+              textAlign: 'left',
+              background: 'transparent',
+              color: '#fca5a5',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13
+            }}
+            onClick={() => {
+              const ws = menu.ws
+              setMenu({ open: false, x: 0, y: 0, ws: null })
+              if (!ws) return
+              const ok = confirm(`Delete workspace "${ws}"? This cannot be undone.`)
+              if (!ok) return
+              if (typeof onDeleteWorkspace === 'function') {
+                try { onDeleteWorkspace(ws) } catch (err) { console.error('Delete workspace failed:', err) }
+              }
+            }}
+          >
+            Delete workspace
+          </button>
         </div>
       )}
 

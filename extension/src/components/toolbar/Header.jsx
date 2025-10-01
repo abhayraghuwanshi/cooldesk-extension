@@ -3,7 +3,8 @@ import {
   faCalendarDays,
   faCircleQuestion,
   faEnvelope,
-  faPalette
+  faPalette,
+  faColumns
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useState } from 'react';
@@ -83,6 +84,32 @@ export function Header({
         try { await chrome.storage.local.set({ pendingQuery: q }); } catch { }
         if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' });
       } catch { }
+    }
+  };
+
+  // Split-screen: tile current window left and open CoolDesk (index.html) on the right
+  const openSplitScreen = async () => {
+    try {
+      if (!chrome?.windows?.getCurrent || !chrome?.windows?.update || !chrome?.windows?.create) {
+        // Fallback: open a new tab with index.html
+        if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' });
+        return;
+      }
+      const cur = await chrome.windows.getCurrent();
+      // Use available screen size
+      const availW = window.screen?.availWidth || 1200;
+      const availH = window.screen?.availHeight || 800;
+      const halfW = Math.max(600, Math.floor(availW / 2));
+      const leftBounds = { left: 0, top: 0, width: halfW, height: availH, state: 'normal' };
+      const rightBounds = { left: halfW, top: 0, width: availW - halfW, height: availH, state: 'normal' };
+
+      // Move current window to the left half
+      await chrome.windows.update(cur.id, leftBounds);
+      // Open CoolDesk on the right half
+      await chrome.windows.create({ url: 'index.html', focused: true, ...rightBounds });
+    } catch (err) {
+      console.error('Split screen failed:', err);
+      try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch {}
     }
   };
 
@@ -309,6 +336,19 @@ export function Header({
           }}
         >
           <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+        </button>
+        {/* Split Screen (tile windows) */}
+        <button
+          className="icon-btn"
+          onClick={openSplitScreen}
+          title="Split Screen"
+          style={{
+            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
+            color: 'var(--text, #e5e7eb)'
+          }}
+        >
+          <FontAwesomeIcon icon={faColumns} />
         </button>
         <div style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap', flexShrink: 0, minWidth: 'fit-content' }} title={now.toLocaleString()}>
           {timeStr}
