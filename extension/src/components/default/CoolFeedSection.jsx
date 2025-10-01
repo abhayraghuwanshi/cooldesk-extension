@@ -1,6 +1,8 @@
-import { faGlobe, faRotateRight } from '@fortawesome/free-solid-svg-icons';
+import { faGlobe, faRotateRight, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
+import { createPortal } from 'react-dom';
+import { getUIState, saveUIState } from '../../db/unified-api.js';
 import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../../services/extensionApi';
 import { getActivityData } from '../../services/activityService';
 import { getFaviconUrl } from '../../utils';
@@ -11,6 +13,9 @@ export function CoolFeedSection({ tabs, pings }) {
   const [error, setError] = React.useState('');
   const [sortBy, setSortBy] = React.useState('all'); // 'all' | 'time' | 'clicks' | 'scroll' | 'forms'
   const [maxFeed, setMaxFeed] = React.useState(12);
+  const [hiddenUrls, setHiddenUrls] = React.useState(() => new Set());
+  const uiStateRef = React.useRef(null);
+  const [ctxMenu, setCtxMenu] = React.useState({ show: false, x: 0, y: 0, url: null });
 
   const loadActivity = React.useCallback(async () => {
     let mounted = true;
@@ -106,6 +111,46 @@ export function CoolFeedSection({ tabs, pings }) {
     const id = setInterval(() => { if (!disposed) loadActivity(); }, 30000);
     return () => { disposed = true; clearInterval(id); };
   }, [loadActivity]);
+
+  // Load hidden URLs from unified DB UI_STATE
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ui = await getUIState();
+        if (cancelled) return;
+        uiStateRef.current = ui || { id: 'default' };
+        const arr = Array.isArray(ui?.hiddenActivityUrls) ? ui.hiddenActivityUrls : [];
+        setHiddenUrls(new Set(arr));
+      } catch (e) {
+        console.warn('[CoolFeed] Failed to load hiddenActivityUrls', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const hideUrl = React.useCallback(async (url) => {
+    if (!url) return;
+    setHiddenUrls((prev) => {
+      const next = new Set(prev);
+      next.add(url);
+      const base = uiStateRef.current || { id: 'default' };
+      uiStateRef.current = { ...base, hiddenActivityUrls: Array.from(next) };
+      saveUIState(uiStateRef.current).catch((e) => console.warn('[CoolFeed] saveUIState failed', e));
+      return next;
+    });
+    setCtxMenu({ show: false, x: 0, y: 0, url: null });
+  }, []);
+
+  // Close context menu on outside click / escape
+  React.useEffect(() => {
+    if (!ctxMenu.show) return;
+    const onDown = () => setCtxMenu((c) => ({ ...c, show: false }));
+    const onKey = (e) => { if (e.key === 'Escape') setCtxMenu((c) => ({ ...c, show: false })); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [ctxMenu.show]);
 
   // Enhanced weighted ranking algorithm for comprehensive activity scoring
   const WEIGHTS = React.useMemo(() => ({
@@ -267,8 +312,12 @@ export function CoolFeedSection({ tabs, pings }) {
 
   // Limit the size of Cool Feed list via dropdown
   const displayedSuggestions = React.useMemo(
-    () => suggestions.slice(0, Math.max(1, Number(maxFeed) || 12)),
-    [suggestions, maxFeed]
+    () => suggestions
+      .filter(r => {
+        try { return !hiddenUrls.has(new URL(r.url).href); } catch { return !hiddenUrls.has(r.url); }
+      })
+      .slice(0, Math.max(1, Number(maxFeed) || 12)),
+    [suggestions, maxFeed, hiddenUrls]
   );
 
   return (
@@ -450,6 +499,12 @@ export function CoolFeedSection({ tabs, pings }) {
                     e.stopPropagation();
                     openOrFocusUrl(r.url);
                   }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const href = (() => { try { return new URL(r.url).href; } catch { return r.url; } })();
+                    setCtxMenu({ show: true, x: e.clientX, y: e.clientY, url: href });
+                  }}
                   title={`${host}\n${r.url}\nActivity: ${activityLevel} | Time: ${Math.round((r.time || 0) / 1000)}s | Clicks: ${r.clicks || 0}`}
                   style={{
                     display: 'flex',
@@ -529,6 +584,46 @@ export function CoolFeedSection({ tabs, pings }) {
           </div>
         )
       }
+      {ctxMenu.show && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: Math.min(ctxMenu.y, window.innerHeight - 60),
+            left: Math.min(ctxMenu.x, window.innerWidth - 220),
+            width: 200,
+            background: 'var(--glass-bg, rgba(20,20,30,0.95))',
+            backdropFilter: 'blur(20px)',
+            border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+            borderRadius: 8,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            zIndex: 999999,
+            overflow: 'hidden'
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => hideUrl(ctxMenu.url)}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-primary, #fff)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--hover-bg, rgba(255,255,255,0.08))'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            title="Hide this URL from Activity"
+          >
+            <FontAwesomeIcon icon={faEyeSlash} style={{ color: '#FF3B30' }} />
+            <span>Hide this URL</span>
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

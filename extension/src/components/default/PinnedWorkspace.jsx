@@ -7,6 +7,18 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
 
     const list = Array.isArray(items) ? items.slice(0, 24) : [];
 
+    const openInSameTab = React.useCallback((url) => {
+        if (!url) return;
+        try {
+            // Prefer Chrome API if available
+            if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
+                chrome.tabs.update({ url });
+                return;
+            }
+        } catch {}
+        try { window.location.href = url; } catch {}
+    }, []);
+
     return (
         <div className="coolDesk-section">
             <h2 className="coolDesk-section-title">Fancy pins</h2>
@@ -60,7 +72,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                                 try {
                                     e.dataTransfer.setData('text/plain', name);
                                     e.dataTransfer.effectAllowed = 'move';
-                                } catch {}
+                                } catch { }
                             }}
                             onDragEnter={(e) => {
                                 e.preventDefault();
@@ -152,9 +164,14 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                                             border: '1px solid rgba(255,255,255,0.16)',
                                             backdropFilter: 'blur(8px)',
                                             WebkitBackdropFilter: 'blur(8px)',
-                                            boxShadow: '0 6px 18px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)'
+                                            boxShadow: '0 6px 18px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)',
+                                            cursor: 'pointer'
                                         }}
                                             title={u.title || u.url}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                openInSameTab(u.url);
+                                            }}
                                         >
                                             <img
                                                 src={(u.favicon && /^https?:\/\//i.test(u.favicon)) ? u.favicon : (getFaviconUrl(u.url, 16) || '/logo.png')}

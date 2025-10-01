@@ -1,4 +1,5 @@
 import React from 'react';
+import { getUIState, saveUIState } from '../../db/unified-api.js';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { DailyNotesSection } from './DailyNotesSection';
@@ -14,6 +15,36 @@ export function ActivityPanel({ activeSection = 0 }) {
 
   // State for responsive layout
   const [isNarrowScreen, setIsNarrowScreen] = React.useState(false);
+
+  // Hidden sections persistence (double-click to toggle) using unified DB UI_STATE
+  const [hiddenSections, setHiddenSections] = React.useState({});
+  const uiStateRef = React.useRef(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ui = await getUIState();
+        if (cancelled) return;
+        uiStateRef.current = ui || { id: 'default' };
+        setHiddenSections(ui?.hiddenActivitySections || {});
+      } catch (e) {
+        console.warn('[ActivityPanel] Failed to load UI state for hidden sections', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggleHidden = React.useCallback(async (name) => {
+    setHiddenSections((prev) => {
+      const next = { ...prev, [name]: !prev?.[name] };
+      // Fire-and-forget save to unified DB
+      const base = uiStateRef.current || { id: 'default' };
+      uiStateRef.current = { ...base, hiddenActivitySections: next };
+      saveUIState(uiStateRef.current).catch((e) => console.warn('[ActivityPanel] saveUIState failed', e));
+      return next;
+    });
+  }, []);
 
   // Refs for section scrolling
   const sectionRefs = React.useRef([]);
@@ -239,22 +270,45 @@ export function ActivityPanel({ activeSection = 0 }) {
           }
         }
 
-        // Regular single-section display
+        // Regular single-section display with hide/show on double-click
+        const isHidden = !!hiddenSections[section.name];
         return (
           <ErrorBoundary key={section.name}>
-            <div
-              ref={el => sectionRefs.current[index] = el}
-              style={{
-                marginTop: index === 0 ? 16 : 32,
-                opacity: isAllMode ? 1 : (isCurrentSection ? 1 : 0.3),
-                transform: isAllMode ? 'scale(1)' : (isCurrentSection ? 'scale(1)' : 'scale(0.98)'),
-                transition: 'all 0.3s ease',
-                filter: isAllMode ? 'none' : (isCurrentSection ? 'none' : 'blur(1px)'),
-                pointerEvents: isAllMode ? 'auto' : (isCurrentSection ? 'auto' : 'none')
-              }}
-            >
-              {section.component}
-            </div>
+            {isHidden ? (
+              <div
+                onDoubleClick={() => toggleHidden(section.name)}
+                ref={el => sectionRefs.current[index] = el}
+                style={{
+                  marginTop: index === 0 ? 16 : 32,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px dashed var(--border-primary, rgba(255,255,255,0.15))',
+                  color: 'var(--text-secondary, rgba(255,255,255,0.7))',
+                  background: 'var(--surface-1, rgba(255,255,255,0.03))',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+                title="Double-click to show this section again"
+              >
+                Hidden: {section.name} (double-click to show)
+              </div>
+            ) : (
+              <div
+                onDoubleClick={() => toggleHidden(section.name)}
+                ref={el => sectionRefs.current[index] = el}
+                style={{
+                  marginTop: index === 0 ? 16 : 32,
+                  opacity: isAllMode ? 1 : (isCurrentSection ? 1 : 0.3),
+                  transform: isAllMode ? 'scale(1)' : (isCurrentSection ? 'scale(1)' : 'scale(0.98)'),
+                  transition: 'all 0.3s ease',
+                  filter: isAllMode ? 'none' : (isCurrentSection ? 'none' : 'blur(1px)'),
+                  pointerEvents: isAllMode ? 'auto' : (isCurrentSection ? 'auto' : 'none')
+                }}
+                title="Double-click to hide this section"
+              >
+                {section.component}
+              </div>
+            )}
           </ErrorBoundary>
         );
       })}

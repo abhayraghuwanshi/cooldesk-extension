@@ -1,14 +1,14 @@
 import {
   faArrowUpRightFromSquare,
-  faCalendarDays,
-  faCircleQuestion,
-  faEnvelope,
+  faColumns,
   faPalette,
-  faColumns
+  faTableColumns,
+  faTableCellsLarge
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useState } from 'react';
 import { getUIState, saveUIState } from '../../db/index.js';
+import { getFaviconUrl } from '../../utils';
 import MusicControls from './MusicControls';
 import { SearchBox } from './SearchBox.jsx';
 
@@ -81,9 +81,37 @@ export function Header({
       // Fallback: open in a new tab
       try {
         const q = (overrideQuery != null ? String(overrideQuery) : search || '').trim();
-        try { await chrome.storage.local.set({ pendingQuery: q }); } catch { }
         if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' });
       } catch { }
+    }
+  };
+
+  // Triple-screen: tile current window to the left third and open two new windows to fill middle and right thirds
+  const openTripleScreen = async () => {
+    try {
+      if (!chrome?.windows?.getCurrent || !chrome?.windows?.update || !chrome?.windows?.create) {
+        // Fallback: open two more tabs with index.html
+        try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch {}
+        try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch {}
+        return;
+      }
+      const cur = await chrome.windows.getCurrent();
+      const availW = window.screen?.availWidth || 1440;
+      const availH = window.screen?.availHeight || 900;
+      // Two-column layout: left = 50% width, full height; right = 50% width split into two 50% height windows
+      const halfW = Math.max(600, Math.floor(availW / 2));
+      const left = { left: 0, top: 0, width: halfW, height: availH, state: 'normal' };
+      const rightW = availW - halfW; // account for odd pixels
+      const topRight = { left: halfW, top: 0, width: rightW, height: Math.floor(availH / 2), state: 'normal' };
+      const bottomRight = { left: halfW, top: Math.floor(availH / 2), width: rightW, height: availH - Math.floor(availH / 2), state: 'normal' };
+
+      await chrome.windows.update(cur.id, left);
+      await chrome.windows.create({ url: 'index.html', focused: false, ...topRight });
+      await chrome.windows.create({ url: 'index.html', focused: true, ...bottomRight });
+    } catch (err) {
+      console.error('Triple screen failed:', err);
+      try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch {}
+      try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch {}
     }
   };
 
@@ -109,7 +137,7 @@ export function Header({
       await chrome.windows.create({ url: 'index.html', focused: true, ...rightBounds });
     } catch (err) {
       console.error('Split screen failed:', err);
-      try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch {}
+      try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch { }
     }
   };
 
@@ -117,6 +145,23 @@ export function Header({
   const barStyle = isFooter
     ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2000 }
     : { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000 };
+
+  // Unify icon sizes with SearchBox height rhythm
+  // Button box ~36px to match typical input heights; icon ~20px
+  const iconBtnStyle = {
+    height: 36,
+    width: 36,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+    border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
+    color: 'var(--text, #e5e7eb)',
+    flexShrink: 0,
+    transition: 'all 0.15s ease'
+  };
+  const iconImgStyle = { width: 20, height: 20, borderRadius: 4, objectFit: 'contain', display: 'block' };
 
   return (
     <header className="header ai-header" style={{
@@ -138,9 +183,9 @@ export function Header({
             src={chrome.runtime.getURL('logo.png')}
             alt="Logo"
             style={{
-              width: '70px',
-              height: '70px',
-              borderRadius: '6px',
+              width: 36,
+              height: 36,
+              borderRadius: 8,
               objectFit: 'contain',
               filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))'
             }}
@@ -151,7 +196,7 @@ export function Header({
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
         </div>
         {/* Navigation Arrows */}
-        {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (() => {
+        {/* {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (() => {
           // Define sections for ActivityPanel navigation - add 'All' as first option
           const sections = ['All', 'Current Tabs', 'Pins', 'Notes', 'Daily Notes', 'Cool Feed'];
           const isActivityNavigation = activeSection !== undefined && setActiveSection;
@@ -167,6 +212,8 @@ export function Header({
               setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
             }
           };
+
+  
 
           const handleNext = () => {
             if (isActivityNavigation) {
@@ -251,7 +298,7 @@ export function Header({
               )}
             </div>
           );
-        })()}
+        })()} */}
         <MusicControls />
 
 
@@ -259,11 +306,7 @@ export function Header({
           className="icon-btn"
           onClick={() => setShowSettings(true)}
           title="Customization"
-          style={{
-            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
-            color: 'var(--text, #e5e7eb)'
-          }}
+          style={iconBtnStyle}
         >
           <FontAwesomeIcon icon={faPalette} />
         </button>
@@ -276,13 +319,31 @@ export function Header({
             } catch { }
           }}
           title="Open Gmail"
-          style={{
-            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
-            color: 'var(--text, #e5e7eb)'
-          }}
+          style={iconBtnStyle}
         >
-          <FontAwesomeIcon icon={faEnvelope} />
+          {(() => {
+            const url = 'https://mail.google.com/';
+            const u = (() => { try { return new URL(url); } catch { return null; } })();
+            const candidates = [
+              // Known Gmail favicon paths
+              'https://mail.google.com/favicon.ico',
+              'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico',
+              u ? `${u.origin}/favicon.ico` : null,
+              getFaviconUrl(url, 32)
+            ].filter(Boolean);
+            return (
+              <img
+                src={candidates[0]}
+                alt="Gmail"
+                style={iconImgStyle}
+                onError={(e) => {
+                  const cur = e.currentTarget;
+                  const next = candidates.find(c => c && c !== cur.src);
+                  if (next) cur.src = next;
+                }}
+              />
+            );
+          })()}
         </button>
         <button
           className="icon-btn"
@@ -293,62 +354,57 @@ export function Header({
             } catch { }
           }}
           title="Open Google Calendar"
-          style={{
-            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
-            color: 'var(--text, #e5e7eb)'
-          }}
+          style={iconBtnStyle}
         >
-          <FontAwesomeIcon icon={faCalendarDays} />
-        </button>
-        <button
-          className="icon-btn"
-          onClick={() => {
-            const msg = [
-              'Navigation Shortcuts',
-              '',
-              'Arrows (← ↑ → ↓): Move between cards in the grid',
-              'Enter/Click: Open selected card',
-              '',
-              'Alt+← / Alt+→: Switch between Workspace and Saved tabs',
-              'Ctrl+1 / Ctrl+2: Jump to Workspace/Saved tabs',
-              'Ctrl+← / Ctrl+→: Switch tabs',
-            ].join('\n');
-            alert(msg);
-          }}
-          title="Help (shortcuts)"
-          style={{
-            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
-            color: 'var(--text, #e5e7eb)'
-          }}
-        >
-          <FontAwesomeIcon icon={faCircleQuestion} />
+          {(() => {
+            const url = 'https://calendar.google.com/';
+            const u = (() => { try { return new URL(url); } catch { return null; } })();
+            const candidates = [
+              // Known Calendar favicon assets
+              'https://calendar.google.com/googlecalendar/images/favicons_2020q4/calendar_16_2x.png',
+              'https://calendar.google.com/googlecalendar/images/favicons_2020q4/calendar_32_2x.png',
+              u ? `${u.origin}/favicon.ico` : null,
+              getFaviconUrl(url, 32)
+            ].filter(Boolean);
+            return (
+              <img
+                src={candidates[0]}
+                alt="Google Calendar"
+                style={iconImgStyle}
+                onError={(e) => {
+                  const cur = e.currentTarget;
+                  const next = candidates.find(c => c && c !== cur.src);
+                  if (next) cur.src = next;
+                }}
+              />
+            );
+          })()}
         </button>
         <button
           className="icon-btn"
           onClick={openInSidePanel}
           title="Open in Sidebar"
-          style={{
-            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
-            color: 'var(--text, #e5e7eb)'
-          }}
+          style={iconBtnStyle}
         >
-          <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+          <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ width: 20, height: 20 }} />
         </button>
         {/* Split Screen (tile windows) */}
         <button
           className="icon-btn"
           onClick={openSplitScreen}
           title="Split Screen"
-          style={{
-            background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-            borderColor: 'var(--border-primary, rgba(255, 255, 255, 0.1))',
-            color: 'var(--text, #e5e7eb)'
-          }}
+          style={iconBtnStyle}
         >
-          <FontAwesomeIcon icon={faColumns} />
+          <FontAwesomeIcon icon={faTableColumns} style={{ width: 20, height: 20 }} />
+        </button>
+        {/* Triple Screen (tile windows 3-way) */}
+        <button
+          className="icon-btn"
+          onClick={openTripleScreen}
+          title="Triple Screen"
+          style={iconBtnStyle}
+        >
+          <FontAwesomeIcon icon={faTableCellsLarge} style={{ width: 20, height: 20 }} />
         </button>
         <div style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap', flexShrink: 0, minWidth: 'fit-content' }} title={now.toLocaleString()}>
           {timeStr}
