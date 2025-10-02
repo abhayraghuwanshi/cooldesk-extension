@@ -124,9 +124,12 @@ export default function VoiceNavigationHelp() {
       <style jsx>{`
         .command-help {
           flex: 0 0 auto;
-          width: 280px;
-          padding-left: 16px;
-          border-left: 1px solid var(--border-primary, rgba(255,255,255,0.1));
+          width: clamp(200px, 24vw, 240px);
+          max-width: 240px;
+          min-width: 200px;
+          padding-left: 8px;
+          margin-left: 8px;
+          border-left: none;
           max-height: 600px;
           overflow-y: auto;
         }
@@ -154,7 +157,7 @@ export default function VoiceNavigationHelp() {
         .command-list { 
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 4px;
         }
         .command-category {
           font-size: 11px;
@@ -171,17 +174,19 @@ export default function VoiceNavigationHelp() {
           margin-top: 0;
         }
         .command-item { 
-          display: flex; 
-          align-items: center; 
-          gap: 8px; 
+          display: grid;
+          grid-template-columns: 18px 1fr;
+          align-items: start;
+          column-gap: 8px;
+          row-gap: 2px;
           color: var(--text, #e5e7eb); 
           font-size: 12px;
           padding: 6px 8px;
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid var(--border-secondary, rgba(255,255,255,0.08));
-          border-radius: 6px;
+          border-radius: 8px;
           transition: all 0.2s ease;
-          line-height: 1.3;
+          line-height: 1.25;
         }
         .command-item:hover {
           background: rgba(255, 255, 255, 0.08);
@@ -189,27 +194,31 @@ export default function VoiceNavigationHelp() {
           transform: translateX(2px);
         }
         .command-icon { 
-          width: 14px; 
+          width: 16px; 
           opacity: 0.9;
-          flex-shrink: 0;
           color: var(--accent-blue, #60a5fa);
+          grid-column: 1 / 2;
+          grid-row: 1 / 3;
         }
         .command-text { 
           font-weight: 600;
           color: var(--accent-primary, #34c759);
           font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
           font-size: 11px;
-          flex-shrink: 0;
+          display: inline;
         }
         .command-desc { 
           opacity: 0.8;
           color: var(--text-secondary, #9ca3af);
-          font-size: 11px;
+          font-size: 10.5px;
+          display: block;
+          margin-top: 2px;
         }
 
         @media (max-width: 768px) {
           .command-help {
             padding-left: 0;
+            margin-left: 0;
             border-left: none;
             border-top: 1px solid var(--border-primary, rgba(255,255,255,0.1));
             padding-top: 12px;
@@ -220,15 +229,15 @@ export default function VoiceNavigationHelp() {
 
         @media (max-width: 600px) {
           .command-item {
+            grid-template-columns: 16px 1fr;
             padding: 4px 6px;
             font-size: 11px;
-            gap: 6px;
           }
           .command-text {
             font-size: 10px;
           }
           .command-desc {
-            font-size: 10px;
+            font-size: 9.5px;
           }
           .command-category {
             font-size: 10px;
