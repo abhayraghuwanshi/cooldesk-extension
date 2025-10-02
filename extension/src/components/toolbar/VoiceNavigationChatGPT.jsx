@@ -4,6 +4,7 @@ import annyang from 'annyang';
 import React, { useEffect, useRef, useState } from 'react';
 import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
 import { fuzzySearch } from '../../utils/searchUtils.js';
+import RandomVoiceCommandTip from './RandomVoiceCommandTip.jsx';
 import VoiceNavigationHelp from './VoiceNavigationHelp.jsx';
 
 const VoiceNavigationChatGPT = () => {
@@ -1173,6 +1174,10 @@ const VoiceNavigationChatGPT = () => {
             </div>
           </div>
         )}
+      </div>
+
+      <div style={{ marginTop: 6 }}>
+        <RandomVoiceCommandTip />
       </div>
 
       {/* Command Help Sidebar */}
