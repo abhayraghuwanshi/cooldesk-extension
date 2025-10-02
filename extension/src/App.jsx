@@ -13,8 +13,6 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import './styles/themes/components-vars.css';
-import './styles/components.css';
 import { ItemGrid } from './components/ItemGrid';
 import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
@@ -24,6 +22,8 @@ import { Header } from './components/toolbar/Header';
 import { VerticalHeader } from './components/toolbar/VerticalHeader';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 import './search.css';
+import './styles/components.css';
+import './styles/themes/components-vars.css';
 
 // Add icons to the library
 library.add(
@@ -43,7 +43,6 @@ import { ActivityPanel } from './components/default/ActivityPanel';
 import { CoolFeedSection } from './components/default/CoolFeedSection.jsx';
 import { PingsSection } from './components/default/PingsSection';
 import { PinnedWorkspace } from './components/default/PinnedWorkspace';
-import { VantaBackground } from './components/visual/VantaBackground';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import categoryManager from './data/categories';
 import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
@@ -1335,15 +1334,6 @@ export default function App() {
       ) : 0,
       transition: 'margin-left 0.3s ease'
     }}>
-
-      {/* Background visual (Vanta.js) */}
-      <VantaBackground enabled={true} options={{
-        color: 0x3355aa,
-        shininess: 35.0,
-        waveHeight: 12.0,
-        waveSpeed: 0.6,
-        zoom: 1.0,
-      }} />
 
       {/* Main Content Area with conditional wrapper */}
       <div>

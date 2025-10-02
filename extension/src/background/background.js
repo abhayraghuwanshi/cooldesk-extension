@@ -762,6 +762,7 @@ async function main() {
           if (chrome?.sidePanel?.open && windowId) {
             try {
               console.log('[Background] Attempting to open side panel for window:', windowId);
+              console.log('[Background] Side panel path:', chrome.runtime.getURL('index.html'));
               // ✅ This simple direct call works - DO NOT MODIFY
               await chrome.sidePanel.open({ windowId });
               console.log('[Background] Side panel opened successfully!');
@@ -769,13 +770,18 @@ async function main() {
               cleanup();
               return;
             } catch (sidePanelError) {
-              console.log('[Background] Side panel open failed:', sidePanelError.message);
+              console.error('[Background] Side panel open failed:', sidePanelError);
+              console.log('[Background] Error details:', {
+                message: sidePanelError.message,
+                stack: sidePanelError.stack
+              });
               // Continue to fallback methods below
             }
           } else {
             console.log('[Background] Side panel API not available or no windowId:', {
               hasSidePanel: !!chrome?.sidePanel?.open,
-              windowId
+              windowId,
+              sender: sender?.tab
             });
           }
 

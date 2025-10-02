@@ -339,8 +339,11 @@ export const VALIDATION_SCHEMAS = {
         },
         historyDays: {
             [ValidationRules.TYPE]: 'number',
-            [ValidationRules.MIN_VALUE]: 1,
             [ValidationRules.MAX_VALUE]: 365
+        },
+        updatedAt: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
         }
     },
 
@@ -360,6 +363,14 @@ export const VALIDATION_SCHEMAS = {
         viewMode: {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.ENUM]: ['grid', 'list', 'card', 'kanban']
+        },
+        // Header quick access shortcuts (max 5 URLs)
+        headerUrls: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'string',
+                maxItems: 5
+            }
         },
         lastActiveTab: {
             [ValidationRules.TYPE]: 'string'

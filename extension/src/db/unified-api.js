@@ -545,18 +545,32 @@ export const getUIState = withErrorHandling(async () => {
  * Save UI state
  */
 export const saveUIState = withErrorHandling(async (uiStateData) => {
-    const uiState = validateAndSanitize({
-        id: 'default',
-        ...uiStateData,
-        updatedAt: Date.now()
-    }, 'uiState')
-    
+    // Merge with existing UI state to avoid overwriting unrelated keys
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.UI_STATE, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.UI_STATE)
-    
+
+    const existing = await new Promise((resolve) => {
+        try {
+            const getReq = store.get('default')
+            getReq.onsuccess = () => resolve(getReq.result || null)
+            getReq.onerror = () => resolve(null)
+        } catch {
+            resolve(null)
+        }
+    })
+
+    const merged = {
+        id: 'default',
+        ...(existing || {}),
+        ...(uiStateData || {}),
+        updatedAt: Date.now()
+    }
+
+    const uiState = validateAndSanitize(merged, 'uiState')
+
     const request = store.put(uiState)
-    
+
     return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(uiState)
         request.onerror = () => reject(request.error)
@@ -565,12 +579,6 @@ export const saveUIState = withErrorHandling(async (uiStateData) => {
     operation: 'saveUIState',
     severity: ErrorSeverity.MEDIUM
 })
-
-// ===== ACTIVITY & TIME TRACKING =====
-
-/**
- * Put activity time series event
- */
 export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData) => {
     console.log('[DB Debug] putActivityTimeSeriesEvent called with:', {
         id: eventData.id,

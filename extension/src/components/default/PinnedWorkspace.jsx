@@ -15,8 +15,8 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                 chrome.tabs.update({ url });
                 return;
             }
-        } catch {}
-        try { window.location.href = url; } catch {}
+        } catch { }
+        try { window.location.href = url; } catch { }
     }, []);
 
     return (

@@ -1,3 +1,124 @@
+{/* Quick URL Shortcuts (read-only render) */ }
+// {!!quickUrls.length && (
+//   <div style={{
+//     borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+//     borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+//     padding: effectiveCollapsed ? '6px 4px' : '8px',
+//     display: 'flex',
+//     gap: '8px',
+//     justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
+//     alignItems: 'center',
+//     flexWrap: 'wrap'
+//   }}>
+//     {quickUrls.map((url, idx) => {
+//       const u = (() => { try { return new URL(url); } catch { return null; } })();
+//       const candidates = [
+//         u ? `${u.origin}/favicon.ico` : null,
+//         getFaviconUrl(url, 32)
+//       ].filter(Boolean);
+//       const showFallback = failedFavs.has(url) || candidates.length === 0;
+//       const hostInitial = (u?.hostname?.[0] || '•').toUpperCase();
+//       return (
+//         <button
+//           key={url + idx}
+//           className="icon-btn"
+//           onClick={() => {
+//             try { if (chrome?.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank'); } catch {}
+//           }}
+//           title={url}
+//           style={{
+//             background: 'none', border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
+//             borderRadius: 8, padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center'
+//           }}
+//         >
+//           {showFallback ? (
+//             <div style={{ width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)', color: 'var(--text, #e5e7eb)', fontSize: 12, fontWeight: 700 }}>
+//               {hostInitial}
+//             </div>
+//           ) : (
+//             <img
+//               src={candidates[0]}
+//               alt={u?.hostname || 'site'}
+//               style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain', display: 'block' }}
+//               onError={(e) => {
+//                 const cur = e.currentTarget;
+//                 const next = candidates.find((c) => c && c !== cur.src);
+//                 if (next) {
+//                   cur.src = next;
+//                 } else {
+//                   setFailedFavs((prev) => {
+//                     const s = new Set(prev); s.add(url); return s;
+//                   });
+//                 }
+//               }}
+//             />
+//           )}
+//         </button>
+//       );
+//     })}
+//   </div>
+// )}
+// {/* Quick URL Shortcuts (read-only render) */}
+// {!!quickUrls.length && (
+//   <div style={{
+//     borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+//     borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+//     padding: effectiveCollapsed ? '6px 4px' : '8px',
+//     display: 'flex',
+//     gap: '8px',
+//     justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
+//     alignItems: 'center',
+//     flexWrap: 'wrap'
+//   }}>
+//     {quickUrls.map((url, idx) => {
+//       const u = (() => { try { return new URL(url); } catch { return null; } })();
+//       const candidates = [
+//         u ? `${u.origin}/favicon.ico` : null,
+//         // Use same util as Header for consistency if available
+//         // Fallback to origin/favicon.ico only if util not imported here
+//       ].filter(Boolean);
+//       const showFallback = failedFavs.has(url) || candidates.length === 0;
+//       const hostInitial = (u?.hostname?.[0] || '•').toUpperCase();
+//       return (
+//         <button
+//           key={url + idx}
+//           className="icon-btn"
+//           onClick={() => {
+//             try { if (chrome?.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank'); } catch {}
+//           }}
+//           title={url}
+//           style={{
+//             background: 'none', border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
+//             borderRadius: 8, padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center'
+//           }}
+//         >
+//           {showFallback ? (
+//             <div style={{ width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)', color: 'var(--text, #e5e7eb)', fontSize: 12, fontWeight: 700 }}>
+//               {hostInitial}
+//             </div>
+//           ) : (
+//             <img
+//               src={candidates[0]}
+//               alt={u?.hostname || 'site'}
+//               style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain', display: 'block' }}
+//               onError={(e) => {
+//                 const cur = e.currentTarget;
+//                 const next = candidates.find((c) => c && c !== cur.src);
+//                 if (next) {
+//                   cur.src = next;
+//                 } else {
+//                   setFailedFavs((prev) => {
+//                     const s = new Set(prev); s.add(url); return s;
+//                   });
+//                 }
+//               }}
+//             />
+//           )}
+//         </button>
+//       );
+//     })}
+//   </div>
+// )}
 import {
   faArrowUpRightFromSquare,
   faBackward,

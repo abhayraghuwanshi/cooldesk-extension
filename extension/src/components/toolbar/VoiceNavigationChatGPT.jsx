@@ -1,9 +1,10 @@
-import { faArrowDown, faExchangeAlt, faHashtag, faLightbulb, faMicrophone, faPlus, faQuestionCircle, faSearch, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faMicrophone, faQuestionCircle } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import React, { useEffect, useRef, useState } from 'react';
 import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
 import { fuzzySearch } from '../../utils/searchUtils.js';
+import VoiceNavigationHelp from './VoiceNavigationHelp.jsx';
 
 const VoiceNavigationChatGPT = () => {
   const [isListening, setIsListening] = useState(false);
@@ -204,11 +205,13 @@ const VoiceNavigationChatGPT = () => {
         'go to tab :num': async (num) => {
           await commandProcessorRef.current.processVoiceCommand(`go to tab ${num}`);
         },
-        'click :num': async (num) => {
-          await commandProcessorRef.current.processVoiceCommand(`click ${num}`);
+        'click :num': (num) => {
+          console.log('[VoiceNav] "click [num]" command triggered, num:', num);
+          clickByNumber(`click ${num}`);
         },
-        'click number :num': async (num) => {
-          await commandProcessorRef.current.processVoiceCommand(`click number ${num}`);
+        'click number :num': (num) => {
+          console.log('[VoiceNav] "click number [num]" command triggered, num:', num);
+          clickByNumber(`click number ${num}`);
         },
         // Commands with parameters
         'find tab *term': async (term) => {
@@ -237,18 +240,54 @@ const VoiceNavigationChatGPT = () => {
           await commandProcessorRef.current.processVoiceCommand(`click on ${text}`);
         },
         // Special UI commands that need to stay in the component
-        'show numbers': showElementNumbers,
-        'show numbers.': showElementNumbers,
-        'show numbers!': showElementNumbers,
-        'number elements': showElementNumbers,
-        'number elements.': showElementNumbers,
-        'number elements!': showElementNumbers,
-        'hide numbers': hideElementNumbers,
-        'hide numbers.': hideElementNumbers,
-        'hide numbers!': hideElementNumbers,
-        'clear numbers': hideElementNumbers,
-        'clear numbers.': hideElementNumbers,
-        'clear numbers!': hideElementNumbers,
+        'show numbers': () => {
+          console.log('[VoiceNav] "show numbers" command triggered');
+          showElementNumbers();
+        },
+        'show numbers.': () => {
+          console.log('[VoiceNav] "show numbers." command triggered');
+          showElementNumbers();
+        },
+        'show numbers!': () => {
+          console.log('[VoiceNav] "show numbers!" command triggered');
+          showElementNumbers();
+        },
+        'number elements': () => {
+          console.log('[VoiceNav] "number elements" command triggered');
+          showElementNumbers();
+        },
+        'number elements.': () => {
+          console.log('[VoiceNav] "number elements." command triggered');
+          showElementNumbers();
+        },
+        'number elements!': () => {
+          console.log('[VoiceNav] "number elements!" command triggered');
+          showElementNumbers();
+        },
+        'hide numbers': () => {
+          console.log('[VoiceNav] "hide numbers" command triggered');
+          hideElementNumbers();
+        },
+        'hide numbers.': () => {
+          console.log('[VoiceNav] "hide numbers." command triggered');
+          hideElementNumbers();
+        },
+        'hide numbers!': () => {
+          console.log('[VoiceNav] "hide numbers!" command triggered');
+          hideElementNumbers();
+        },
+        'clear numbers': () => {
+          console.log('[VoiceNav] "clear numbers" command triggered');
+          hideElementNumbers();
+        },
+        'clear numbers.': () => {
+          console.log('[VoiceNav] "clear numbers." command triggered');
+          hideElementNumbers();
+        },
+        'clear numbers!': () => {
+          console.log('[VoiceNav] "clear numbers!" command triggered');
+          hideElementNumbers();
+        },
         // Media controls
         'play': async () => {
           await commandProcessorRef.current.processVoiceCommand('play');
@@ -389,6 +428,7 @@ const VoiceNavigationChatGPT = () => {
       annyang.addCallback('result', (phrases) => {
         if (phrases.length > 0) {
           const command = phrases[0];
+          console.log('[VoiceNav] Voice command recognized:', command);
           setTranscript(command);
           setInterimTranscript('');
           // Feedback is set by the command action
@@ -1137,59 +1177,7 @@ const VoiceNavigationChatGPT = () => {
 
       {/* Command Help Sidebar */}
       {showHelp && (
-        <div className="command-help">
-          <div className="help-header">
-            <FontAwesomeIcon icon={faLightbulb} className="help-icon" />
-            <span className="help-title">Commands</span>
-          </div>
-
-          <div className="command-list">
-            <div className="command-item">
-              <FontAwesomeIcon icon={faHashtag} className="command-icon" />
-              <span className="command-text">"show numbers"</span> → <span className="command-desc">mark clickable elements</span>
-            </div>
-
-            <div className="command-item">
-              <FontAwesomeIcon icon={faHashtag} className="command-icon" />
-              <span className="command-text">"click 3"</span> → <span className="command-desc">click numbered element</span>
-            </div>
-
-            <div className="command-item">
-              <FontAwesomeIcon icon={faExchangeAlt} className="command-icon" />
-              <span className="command-text">"switch to tab 2"</span> → <span className="command-desc">switch tabs</span>
-            </div>
-
-            <div className="command-item">
-              <FontAwesomeIcon icon={faSearch} className="command-icon" />
-              <span className="command-text">"search for cats"</span> → <span className="command-desc">google search</span>
-            </div>
-
-            <div className="command-item">
-              <FontAwesomeIcon icon={faSearch} className="command-icon" />
-              <span className="command-text">"find tab gmail"</span> → <span className="command-desc">search tabs</span>
-            </div>
-
-            <div className="command-item">
-              <FontAwesomeIcon icon={faArrowDown} className="command-icon" />
-              <span className="command-text">"scroll down"</span> → <span className="command-desc">scroll page</span>
-            </div>
-
-            <div className="command-item">
-              <FontAwesomeIcon icon={faPlus} className="command-icon" />
-              <span className="command-text">"new tab"</span> → <span className="command-desc">create new tab</span>
-            </div>
-
-            <div className="command-item">
-              <FontAwesomeIcon icon={faTimes} className="command-icon" />
-              <span className="command-text">"close tab"</span> → <span className="command-desc">close current tab</span>
-            </div>
-
-            <div className="command-item">
-              <FontAwesomeIcon icon={faExchangeAlt} className="command-icon" />
-              <span className="command-text">"open youtube"</span> → <span className="command-desc">open from workspace</span>
-            </div>
-          </div>
-        </div>
+        <VoiceNavigationHelp />
       )}
 
       <style jsx>{`
