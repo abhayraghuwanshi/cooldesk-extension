@@ -3,16 +3,19 @@
 //   import { hasRuntime, sendMessage, onMessage, tabs } from '../services/extensionApi'
 //   const resp = await sendMessage({ action: 'getTimeSpent' })
 
-// --- Minimal WebSocket client to talk to the Electron host ---
+import { isHostSyncEnabled, getHostUrl, getWebSocketUrl } from './syncConfig';
+
+// --- Minimal WebSocket client to talk to the Electron host (gated by sync config) ---
 let _ws = null;
 let _wsConnected = false;
 let _wsListeners = [];
 let _wsPersistent = [];
 
 function ensureWS() {
+  if (!isHostSyncEnabled()) return; // disabled: never attempt WS
   if (_ws && (_ws.readyState === WebSocket.CONNECTING || _ws.readyState === WebSocket.OPEN)) return;
   try {
-    _ws = new WebSocket('ws://127.0.0.1:4000');
+    _ws = new WebSocket(getWebSocketUrl());
   } catch {
     return;
   }
@@ -52,6 +55,7 @@ function ensureWS() {
 }
 
 function wsSend(type, payload) {
+  if (!isHostSyncEnabled()) return false; // disabled
   try {
     ensureWS();
     if (_wsConnected && _ws?.readyState === WebSocket.OPEN) {
@@ -63,6 +67,7 @@ function wsSend(type, payload) {
 }
 
 function waitFor(type, timeoutMs = 2000) {
+  if (!isHostSyncEnabled()) return Promise.reject(new Error('Host sync disabled'));
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       // remove listener on timeout
@@ -81,8 +86,9 @@ export function hasChrome() {
 // Ask the host to enqueue an action for the Chrome extension to open/focus a URL
 export async function enqueueOpenInChrome(url) {
   if (!url || typeof url !== 'string') return { ok: false, error: 'Invalid url' };
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
-    const res = await fetch('http://127.0.0.1:4000/actions/open', {
+    const res = await fetch(`${getHostUrl()}/actions/open`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url })
@@ -98,9 +104,10 @@ export async function enqueueOpenInChrome(url) {
 
 // --- Host Tabs helpers ---
 export async function setHostTabs(tabs) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
     const payload = Array.isArray(tabs) ? tabs : (tabs?.tabs || []);
-    const res = await fetch('http://127.0.0.1:4000/tabs', {
+    const res = await fetch(`${getHostUrl()}/tabs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -112,8 +119,9 @@ export async function setHostTabs(tabs) {
 }
 
 export async function getHostTabs() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled', tabs: [] };
   try {
-    const res = await fetch('http://127.0.0.1:4000/tabs');
+    const res = await fetch(`${getHostUrl()}/tabs`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json().catch(() => []);
     return { ok: true, tabs: Array.isArray(data) ? data : [] };
@@ -124,8 +132,9 @@ export async function getHostTabs() {
 
 // --- Host Workspaces helpers ---
 export async function getHostWorkspaces() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
-    const res = await fetch('http://127.0.0.1:4000/workspaces');
+    const res = await fetch(`${getHostUrl()}/workspaces`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json().catch(() => []);
     return { ok: true, workspaces: Array.isArray(data) ? data : [] };
@@ -135,8 +144,9 @@ export async function getHostWorkspaces() {
 }
 
 export async function setHostWorkspaces(list) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
-    const res = await fetch('http://127.0.0.1:4000/workspaces', {
+    const res = await fetch(`${getHostUrl()}/workspaces`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(Array.isArray(list) ? list : []),
@@ -149,10 +159,11 @@ export async function setHostWorkspaces(list) {
 
 // --- Host URLs helpers ---
 export async function setHostUrls(list) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
     // Accept either an array of URL docs or { urls: [...] }
     const payload = Array.isArray(list) ? list : (Array.isArray(list?.urls) ? list.urls : []);
-    const res = await fetch('http://127.0.0.1:4000/urls', {
+    const res = await fetch(`${getHostUrl()}/urls`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -164,8 +175,9 @@ export async function setHostUrls(list) {
 }
 
 export async function getHostUrls() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled', urls: [] };
   try {
-    const res = await fetch('http://127.0.0.1:4000/urls');
+    const res = await fetch(`${getHostUrl()}/urls`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json().catch(() => []);
     return { ok: true, urls: Array.isArray(data) ? data : [] };
@@ -176,10 +188,11 @@ export async function getHostUrls() {
 
 // --- Host Activity helpers ---
 export async function setHostActivity(rows) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
     const payload = Array.isArray(rows) ? rows : (Array.isArray(rows?.rows) ? rows.rows : (rows && rows.url ? [rows] : []));
     if (!Array.isArray(payload)) return { ok: false, error: 'Invalid payload' };
-    const res = await fetch('http://127.0.0.1:4000/activity', {
+    const res = await fetch(`${getHostUrl()}/activity`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -191,9 +204,10 @@ export async function setHostActivity(rows) {
 }
 
 export async function getHostActivity(sinceMs) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled', rows: [] };
   try {
     const q = Number.isFinite(Number(sinceMs)) ? `?since=${Number(sinceMs)}` : '';
-    const res = await fetch(`http://127.0.0.1:4000/activity${q}`);
+    const res = await fetch(`${getHostUrl()}/activity${q}`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, rows: [] };
     const data = await res.json().catch(() => []);
     return { ok: true, rows: Array.isArray(data) ? data : [] };
@@ -204,8 +218,9 @@ export async function getHostActivity(sinceMs) {
 
 // --- Host sync helpers (Electron app API) ---
 export async function setHostSettings(settings) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
-    const res = await fetch('http://127.0.0.1:4000/settings', {
+    const res = await fetch(`${getHostUrl()}/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings || {}),
@@ -217,8 +232,9 @@ export async function setHostSettings(settings) {
 }
 
 export async function getHostSettings() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
-    const res = await fetch('http://127.0.0.1:4000/settings');
+    const res = await fetch(`${getHostUrl()}/settings`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json().catch(() => ({}));
     return { ok: true, settings: data };
@@ -228,8 +244,9 @@ export async function getHostSettings() {
 }
 
 export async function setHostDashboard(dashboard) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
-    const res = await fetch('http://127.0.0.1:4000/dashboard', {
+    const res = await fetch(`${getHostUrl()}/dashboard`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dashboard || {}),
@@ -241,8 +258,9 @@ export async function setHostDashboard(dashboard) {
 }
 
 export async function getHostDashboard() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
-    const res = await fetch('http://127.0.0.1:4000/dashboard');
+    const res = await fetch(`${getHostUrl()}/dashboard`);
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json().catch(() => ({}));
     return { ok: true, dashboard: data };
@@ -255,9 +273,10 @@ export async function getHostDashboard() {
 // Expected host response shape: { ok: boolean, target?: string }
 export async function getRedirectDecision(url) {
   if (!url || typeof url !== 'string') return { ok: false, error: 'Invalid url' };
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
     const q = encodeURIComponent(url);
-    const res = await fetch(`http://127.0.0.1:4000/redirect?url=${q}`);
+    const res = await fetch(`${getHostUrl()}/redirect?url=${q}`);
     if (res.status === 204) return { ok: true, target: null };
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = await res.json().catch(() => ({}));
@@ -279,7 +298,8 @@ export async function openExternalUrl(url) {
     }
   } catch { }
   try {
-    const res = await fetch('http://127.0.0.1:4000/tabs/open', {
+    if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+    const res = await fetch(`${getHostUrl()}/tabs/open`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url })
@@ -313,7 +333,8 @@ export async function focusWindow(pid) {
   } catch { /* fall through to HTTP */ }
 
   try {
-    const res = await fetch('http://127.0.0.1:4000/focus', {
+    if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+    const res = await fetch(`${getHostUrl()}/focus`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pid: id }),
@@ -530,7 +551,8 @@ export async function getProcesses() {
   } catch { /* fall through to HTTP */ }
 
   try {
-    const res = await fetch('http://127.0.0.1:4000/processes', { method: 'GET' });
+    if (!isHostSyncEnabled()) return [];
+    const res = await fetch(`${getHostUrl()}/processes`, { method: 'GET' });
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data) ? data : [];

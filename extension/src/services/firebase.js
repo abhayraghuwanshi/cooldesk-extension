@@ -17,6 +17,9 @@ import {
   setDoc
 } from "firebase/firestore";
 
+// Feature flag: disable authentication in this build for a cleaner manifest
+export const AUTH_DISABLED = true;
+
 // ------------------
 // Firebase Config
 // ------------------
@@ -32,10 +35,12 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Set persistence for auth state
-setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.warn("Could not enable auth persistence:", error);
-});
+// Set persistence for auth state (skip when disabled)
+if (!AUTH_DISABLED) {
+  setPersistence(auth, browserLocalPersistence).catch((error) => {
+    console.warn("Could not enable auth persistence:", error);
+  });
+}
 
 let currentUser = null;
 
@@ -50,6 +55,10 @@ const OAUTH_SCOPES = manifest?.oauth2?.scopes || ["profile", "email", "openid"];
 const AUTH_STATE_KEY = 'firebase_auth_state';
 
 export const initAuth = () => {
+  if (AUTH_DISABLED) {
+    currentUser = null;
+    return Promise.resolve(null);
+  }
   return new Promise((resolve) => {
     // Wait for auth state to be restored from persistence
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -111,6 +120,9 @@ export const initAuth = () => {
 // Google Sign-In (Cross-browser Extension Support)
 // ------------------
 export const signInWithGoogle = async () => {
+  if (AUTH_DISABLED) {
+    return { success: false, error: 'Authentication is disabled in this build.' };
+  }
   try {
     // Chrome Extension Identity API
     if (typeof chrome !== "undefined" && chrome.identity?.getAuthToken) {
@@ -198,6 +210,9 @@ export const signInWithGoogle = async () => {
 // Upgrade Anonymous Account to Google
 // ------------------
 export const upgradeAnonymousWithGoogle = async () => {
+  if (AUTH_DISABLED) {
+    return { success: false, error: 'Authentication is disabled in this build.' };
+  }
   try {
     if (!auth.currentUser?.isAnonymous) {
       return { success: false, error: "Current user is not anonymous" };
@@ -340,6 +355,7 @@ export const createAnonymousUser = async () => {
 // ------------------
 export const initializeFirebase = async () => {
   try {
+    if (AUTH_DISABLED) return false;
     await initAuth();
     return true;
   } catch (error) {
@@ -349,11 +365,19 @@ export const initializeFirebase = async () => {
 };
 
 export const onAuthStateChange = (callback) => {
+  if (AUTH_DISABLED) {
+    // return a no-op unsubscribe
+    return () => {};
+  }
   return onAuthStateChanged(auth, callback);
 };
 
 export const signOutUser = async () => {
   try {
+    if (AUTH_DISABLED) {
+      currentUser = null;
+      return { success: true };
+    }
     // Mark that user explicitly signed out
     localStorage.setItem(AUTH_STATE_KEY, 'signed_out');
     await auth.signOut();

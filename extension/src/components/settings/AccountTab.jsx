@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { auth, signInWithGoogle, upgradeAnonymousWithGoogle } from "../../services/firebase";
+import { AUTH_DISABLED, auth, signInWithGoogle, upgradeAnonymousWithGoogle } from "../../services/firebase";
 
 const AccountTab = ({ currentUser }) => {
   const [authLoading, setAuthLoading] = useState(false);
@@ -52,7 +52,22 @@ const AccountTab = ({ currentUser }) => {
         User Authentication
       </h4>
 
-      {currentUser ? (
+      {AUTH_DISABLED ? (
+        <div
+          style={{
+            padding: "16px",
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: "12px",
+            fontSize: "13px",
+            color: "#9ca3af",
+            textAlign: "left",
+            backdropFilter: "blur(10px)",
+          }}
+        >
+          🔒 Account sign-in is temporarily disabled for this build to keep the manifest minimal. Local features continue to work. This section will be re-enabled in future builds.
+        </div>
+      ) : currentUser ? (
         <div>
           <div
             style={{

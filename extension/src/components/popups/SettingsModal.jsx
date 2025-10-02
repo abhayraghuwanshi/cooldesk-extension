@@ -1,14 +1,12 @@
-import { faBullseye, faPalette, faRocket, faUser } from '@fortawesome/free-solid-svg-icons';
+import { faBullseye, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { getPersonaUrlCount, personas, validatePersona } from '../../data/personas';
 import { listWorkspaces, saveWorkspace } from '../../db/index.js';
 import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet } from '../../services/extensionApi';
-import { deleteWorkspaceById, getCurrentUser, initializeFirebase, listWorkspaces as listWorkspacesFirebase, onAuthStateChange, signInWithGoogle, signOutUser, subscribeWorkspaceChanges } from '../../services/firebase';
 import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontSize } from '../../utils/fontUtils';
-import AccountTab from '../settings/AccountTab';
 import PersonasTab from '../settings/PersonasTab';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
@@ -24,9 +22,7 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
   const [selectedPersona, setSelectedPersona] = useState(null)
   const [selectedCategories, setSelectedCategories] = useState([])
   const [creatingWorkspaces, setCreatingWorkspaces] = useState(false)
-  const [firebaseInitialized, setFirebaseInitialized] = useState(false)
-  const [currentUser, setCurrentUser] = useState(null)
-  const [authLoading, setAuthLoading] = useState(false)
+  // Auth is paused in this build; Firebase state removed
   const [selectedTheme, setSelectedTheme] = useState('ai-midnight-nebula')
   const [fontFamily, setFontFamily] = useState('system')
   const [syncConfig, setSyncConfig] = useState(null)
@@ -385,41 +381,7 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
     loadSync();
   }, [show]);
 
-  // Initialize Firebase and auth state listener when modal shows
-  useEffect(() => {
-    if (!show) return;
-
-    let unsubscribeAuth = null;
-
-    (async () => {
-      try {
-        if (!firebaseInitialized) {
-          const success = await initializeFirebase();
-          setFirebaseInitialized(success);
-          if (!success) {
-            setError('Failed to initialize Firebase. Using local storage.');
-            return;
-          }
-        }
-
-        // Set up auth state listener
-        unsubscribeAuth = onAuthStateChange((user) => {
-          setCurrentUser(user);
-        });
-
-        // Set initial user
-        setCurrentUser(getCurrentUser());
-
-      } catch (err) {
-        console.error('Firebase initialization error:', err);
-        setError(`Firebase Error: ${err.message || 'Failed to initialize Firebase. Using local storage.'}`);
-      }
-    })();
-
-    return () => {
-      if (unsubscribeAuth) unsubscribeAuth();
-    };
-  }, [show, firebaseInitialized]);
+  // Auth initialization removed for this build
 
   // Load workspaces from Firebase and subscribe to changes
   // Load local workspaces when modal opens
@@ -440,55 +402,7 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
     })();
   }, [show]);
 
-  // Subscribe to Firebase workspace changes if initialized
-  useEffect(() => {
-    if (!show || !firebaseInitialized) return;
-    let unsub = null;
-    unsub = subscribeWorkspaceChanges(async () => {
-      try {
-        console.log('[SettingsModal] Firebase workspace change detected, merging...');
-        const firebaseList = await listWorkspacesFirebase();
-        const localList = await listWorkspaces();
-
-        console.log('[SettingsModal] Firebase workspaces:', firebaseList);
-        console.log('[SettingsModal] Local workspaces for merge:', localList);
-
-        // Merge local and Firebase workspaces, avoiding duplicates
-        const mergedWorkspaces = [];
-        const seenIds = new Set();
-
-        // Extract data from response objects
-        const localData = localList?.data || localList || [];
-        const firebaseData = firebaseList?.data || firebaseList || [];
-
-        // Add local workspaces first
-        if (Array.isArray(localData)) {
-          localData.forEach(workspace => {
-            if (workspace?.id && !seenIds.has(workspace.id)) {
-              mergedWorkspaces.push(workspace);
-              seenIds.add(workspace.id);
-            }
-          });
-        }
-
-        // Add Firebase workspaces that aren't duplicates
-        if (Array.isArray(firebaseData)) {
-          firebaseData.forEach(workspace => {
-            if (workspace?.id && !seenIds.has(workspace.id)) {
-              mergedWorkspaces.push(workspace);
-              seenIds.add(workspace.id);
-            }
-          });
-        }
-
-        console.log('[SettingsModal] Merged workspaces:', mergedWorkspaces);
-        setWorkspaces(mergedWorkspaces);
-      } catch (error) {
-        console.error('[SettingsModal] Error merging workspaces:', error);
-      }
-    });
-    return () => { try { unsub && unsub(); } catch { } };
-  }, [show, firebaseInitialized]);
+  // Firebase workspace subscription removed for this build
 
   const handleSave = () => {
     // Do not mirror workspaces into settings; workspaces are the source of truth
@@ -646,41 +560,7 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
     setShowCreateWorkspace(false)
   }
 
-  // Authentication handlers
-  const handleGoogleSignIn = async () => {
-    setAuthLoading(true);
-    setError('');
-
-    try {
-      // Use the existing Firebase signInWithGoogle function but in a new tab
-      const result = await signInWithGoogle();
-
-      if (!result.success) {
-        setError(result.error);
-      } else {
-        // Success - close modal
-        onClose();
-      }
-    } catch (err) {
-      setError(err.message || 'Google sign-in failed');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleSignOut = async () => {
-    setAuthLoading(true);
-    try {
-      const result = await signOutUser();
-      if (!result.success) {
-        setError(result.error);
-      }
-    } catch (err) {
-      setError(err.message || 'Sign out failed');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
+  // Authentication handlers removed for this build
 
 
   return (
@@ -815,11 +695,9 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
               onFontFamilyChange={handleFontFamilyChange}
             />
           </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>
-            <AccountTab
-              currentUser={currentUser}
-            />
-          </TabItem>
+          {/* <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>
+            <AccountTab />
+          </TabItem> */}
         </Tabs>
 
         {/* Removed global Save button; use Save & Continue in Basic tab */}

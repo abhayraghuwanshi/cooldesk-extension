@@ -1,5 +1,6 @@
 // Host communication bridge (WebSocket, polling, redirects)
 import { getRedirectDecision } from '../services/extensionApi.js';
+import { isHostSyncEnabled, getHostUrl, getWebSocketUrl } from '../services/syncConfig.js';
 
 // Helper function to check if URL is HTTP/HTTPS
 function isHttpUrl(u) {
@@ -70,10 +71,11 @@ const HOST_POLL_INTERVAL_MS = 500;
 let hostCooldownUntil = 0; // epoch ms
 
 async function pollOnceForAction() {
+  if (!isHostSyncEnabled()) return;
   // Respect cooldown window
   if (Date.now() < hostCooldownUntil) return;
   try {
-    const res = await fetch('http://127.0.0.1:4000/actions/next');
+    const res = await fetch(`${getHostUrl()}/actions/next`);
     if (!res.ok) return;
     const data = await res.json().catch(() => ({}));
     const action = data?.action;
@@ -90,6 +92,7 @@ async function pollOnceForAction() {
 }
 
 function ensureHostPolling(active) {
+  if (!isHostSyncEnabled()) { active = false; }
   if (active) {
     if (Date.now() < hostCooldownUntil) return; // don't start during cooldown
     if (!hostPollTimer) hostPollTimer = setInterval(() => { pollOnceForAction().catch(() => { }) }, HOST_POLL_INTERVAL_MS);
@@ -111,11 +114,12 @@ async function drainQueuedActionsOnConnect(maxLoops = 10) {
 }
 
 function startHostActionWS() {
+  if (!isHostSyncEnabled()) return;
   try {
     if (hostWs && (hostWs.readyState === WebSocket.OPEN || hostWs.readyState === WebSocket.CONNECTING)) return;
     // Skip attempting WS during cooldown
     if (Date.now() < hostCooldownUntil) return;
-    hostWs = new WebSocket('ws://127.0.0.1:4000');
+    hostWs = new WebSocket(getWebSocketUrl());
     hostWs.onopen = () => {
       hostWsConnected = true;
       if (hostWsReconnectTimer) { clearTimeout(hostWsReconnectTimer); hostWsReconnectTimer = null; }
@@ -189,8 +193,8 @@ export function initializeBridge() {
     if (url) maybeRedirect(tabId, url);
   });
 
-  // Start WebSocket bridge with HTTP polling fallback
-  startHostActionWS();
+  // Start WebSocket bridge with HTTP polling fallback if enabled
+  if (isHostSyncEnabled()) startHostActionWS();
 }
 
 // Placeholder for openOrFocusApp function (would need to be defined based on your app structure)
