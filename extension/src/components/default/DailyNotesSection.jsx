@@ -1,8 +1,9 @@
-import { faExternalLinkAlt, faGlobe, faLink, faSave, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faExternalLinkAlt, faGlobe, faLink } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { subscribeDailyNotesChanges } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils.js';
+import VerticalTimeline from '../timeline/VerticalTimeline.jsx';
 
 export function DailyNotesSection() {
   // Daily notes state
@@ -10,6 +11,65 @@ export function DailyNotesSection() {
   const [selectedDate, setSelectedDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [editingDailyNotes, setEditingDailyNotes] = React.useState(false);
   const [dailyNotesText, setDailyNotesText] = React.useState('');
+  // Timeline state for timeline-based navigation
+  const [timelineOffset, setTimelineOffset] = React.useState(0); // window start (days back)
+  const timelineRange = 14; // days to show in timeline
+  const [notesCache, setNotesCache] = React.useState({}); // { [date]: { selectionCount, preview } }
+  // Helpers for timeline labels and date ranges
+  const formatDateLabel = React.useCallback((dateStr) => {
+    try {
+      const today = new Date();
+      const d = new Date(dateStr + 'T00:00:00');
+      const diffDays = Math.floor((today.setHours(0, 0, 0, 0) - d.setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24));
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return 'Yesterday';
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  }, []);
+
+  const getDateNDaysAgo = React.useCallback((n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  const timelineDates = React.useMemo(() => {
+    const dates = [];
+    for (let i = 0; i < timelineRange; i++) {
+      dates.push(getDateNDaysAgo(timelineOffset + i));
+    }
+    return dates;
+  }, [timelineOffset, timelineRange, getDateNDaysAgo]);
+
+  // Prefetch lightweight metadata to power timeline badges and older pins previews
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const date of timelineDates) {
+        if (cancelled) return;
+        if (notesCache[date]) continue;
+
+        const res = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ type: 'getDailyNotes', date }, (response) => {
+            if (chrome.runtime.lastError) resolve({ ok: false, error: chrome.runtime.lastError.message });
+            else resolve(response);
+          });
+        });
+
+        if (cancelled) return;
+        setNotesCache((prev) => ({
+          ...prev,
+          [date]: {
+            selectionCount: res?.dailyNotes?.metadata?.selectionCount ?? 0,
+            preview: (res?.dailyNotes?.content || '').split('\n').find(Boolean) || ''
+          }
+        }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [timelineDates, notesCache]);
 
   // Daily notes functions
   const loadDailyNotes = React.useCallback(async (date) => {
@@ -450,12 +510,11 @@ export function DailyNotesSection() {
       unsubscribe();
     };
   }, [loadDailyNotes, selectedDate]);
-
   return (
     <div style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
     }}>
-      {/* Apple Notes Style Header */}
+      {/* Header */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -473,156 +532,45 @@ export function DailyNotesSection() {
           alignItems: 'center',
           gap: 8
         }}>
-          {/* <FontAwesomeIcon icon={faCalendarDay} style={{ color: '#FF9500', fontSize: 'var(--font-size-xl)' }} /> */}
           Thoughts
         </h2>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => handleDateChange(e.target.value)}
-          style={{
-            padding: '6px 10px',
-            borderRadius: 8,
-            border: 'none',
-            background: 'rgba(255, 255, 255, 0.1)',
-            color: '#ffffff',
-            fontSize: 'var(--font-size-base)',
-            fontWeight: 500,
-            fontFamily: 'inherit',
-            cursor: 'pointer'
-          }}
-        />
+
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Layout: Vertical timeline left, notes right */}
+      <div style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>
+        <div style={{ minWidth: 180, maxWidth: 220 }}>
+          <VerticalTimeline
+            dates={timelineDates}
+            notesCache={notesCache}
+            selectedDate={selectedDate}
+            onSelect={(d) => handleDateChange(d)}
+          />
+        </div>
 
-        {/* Daily notes content - Apple Style */}
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.05)',
-          borderRadius: 12,
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          overflow: 'hidden',
-          maxHeight: '350px'
-        }}>
-          {editingDailyNotes ? (
-            <div style={{
-              padding: 16,
-              maxHeight: '350px',
-              display: 'flex',
-              flexDirection: 'column'
-            }}>
-              <textarea
-                value={dailyNotesText}
-                onChange={(e) => setDailyNotesText(e.target.value)}
-                placeholder="Your daily notes... Selected text from web pages is automatically added here."
-                autoFocus
-                style={{
-                  width: '100%',
-                  height: '250px',
-                  padding: 0,
-                  border: 'none',
-                  background: 'transparent',
-                  color: '#ffffff',
-                  fontSize: 'var(--font-size-lg)',
-                  lineHeight: 1.4,
-                  resize: 'none',
-                  fontFamily: 'inherit',
-                  outline: 'none',
-                  overflowY: 'auto',
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: 'rgba(255, 255, 255, 0.3) transparent'
-                }}
-              />
-              <div style={{
-                display: 'flex',
-                gap: 8,
-                justifyContent: 'flex-end',
-                marginTop: 16,
-                paddingTop: 16,
-                borderTop: '1px solid rgba(255, 255, 255, 0.1)'
-              }}>
-                <button
-                  onClick={() => {
-                    setEditingDailyNotes(false);
-                    setDailyNotesText(dailyNotes?.content || '');
-                  }}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 8,
-                    border: 'none',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    color: '#ffffff',
-                    fontSize: 'var(--font-size-base)',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6
-                  }}
-                >
-                  <FontAwesomeIcon icon={faTimes} style={{ fontSize: 'var(--font-size-sm)' }} />
-                  Cancel
-                </button>
-                <button
-                  onClick={saveDailyNotes}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 8,
-                    border: 'none',
-                    background: '#007AFF',
-                    color: 'white',
-                    fontSize: 'var(--font-size-base)',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    boxShadow: '0 2px 8px rgba(0, 122, 255, 0.3)'
-                  }}
-                >
-                  <FontAwesomeIcon icon={faSave} style={{ fontSize: 'var(--font-size-sm)' }} />
-                  Save
-                </button>
-              </div>
-            </div>
-          ) : (
+        <div style={{ flex: 1 }}>
+          {(dailyNotes?.content && dailyNotes.content.trim()) || (dailyNotes?.metadata?.selectionCount > 0) ? (
             <div
-              onClick={() => setEditingDailyNotes(true)}
               className="daily-notes-scrollable-container"
               style={{
                 minHeight: 100,
-                maxHeight: '350px',
+                maxHeight: '420px',
                 padding: 16,
                 color: '#ffffff',
                 fontSize: 'var(--font-size-lg)',
                 lineHeight: 1.4,
-                cursor: 'pointer',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
-                transition: 'all 0.2s ease',
                 overflowY: 'auto',
-                scrollbarWidth: 'thin',
-                scrollbarColor: 'rgba(255, 255, 255, 0.3) transparent'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: 12,
+                border: '1px solid rgba(255, 255, 255, 0.1)'
               }}
             >
-              {dailyNotes?.content ?
-                renderContentWithLinks(dailyNotes.content) : (
-                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic', fontSize: 'calc(var(--font-size-base) * 1.07)' }}>
-                    Tap to add your daily notes... Selected text from web pages will appear here automatically.
-                  </span>
-                )}
+              {dailyNotes?.content ? renderContentWithLinks(dailyNotes.content) : null}
             </div>
-          )}
+          ) : null}
         </div>
-
       </div>
     </div>
   );
