@@ -1,5 +1,6 @@
 import * as pageInteraction from './pageInteractionService.js';
 import { fuzzySearch } from '../utils/searchUtils.js';
+import { voiceResponse } from '../utils/voiceResponse.js';
 
 export class VoiceCommandProcessor {
   constructor(showFeedback, workspaceData = null) {
@@ -490,7 +491,6 @@ export class VoiceCommandProcessor {
       });
 
       console.log('Fuzzy search results:', matches.length, 'matches for term:', searchTerm);
-
       if (matches.length > 0) {
         const bestMatch = matches[0];
         const url = bestMatch.url;
@@ -498,6 +498,8 @@ export class VoiceCommandProcessor {
         if (url) {
           await chrome.tabs.create({ url });
           this.showFeedback(`Opened: ${bestMatch.title || url}`);
+          // Voice response for successful fuzzy match
+          voiceResponse.fuzzyMatch(searchTerm, bestMatch);
         } else {
           this.showFeedback('No valid URL found for that item', 'error');
         }
@@ -560,6 +562,8 @@ export class VoiceCommandProcessor {
 
       await chrome.tabs.create({ url });
       this.showFeedback(`Opened ${siteName}`);
+      // Voice response for website opening
+      voiceResponse.success('Opening', siteName);
     } catch (error) {
       throw new Error(`Failed to open website: ${error.message}`);
     }

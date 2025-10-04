@@ -19,6 +19,8 @@ const VoiceNavigationChatGPT = () => {
   const [showHelp, setShowHelp] = useState(false);
   const [connectionExpired, setConnectionExpired] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(0);
+  const MAX_RECONNECT_ATTEMPTS = 3;
+  const reconnectAttemptsRef = useRef(0);
 
   // Initialize voice command processor
   const commandProcessorRef = useRef(null);
@@ -58,9 +60,9 @@ const VoiceNavigationChatGPT = () => {
   };
 
   // Connection management functions
-  const SESSION_DURATION = 10 * 60 * 1000; // 10 minutes
-  const KEEP_ALIVE_INTERVAL = 30 * 1000; // 30 seconds
-  const RECONNECT_DELAY = 2000; // 2 seconds
+  const SESSION_DURATION = 30 * 60 * 1000; // 30 minutes (increased from 10)
+  const KEEP_ALIVE_INTERVAL = 60 * 1000; // 60 seconds (less aggressive)
+  const RECONNECT_DELAY = 3000; // 3 seconds
 
   const clearAllTimers = () => {
     if (sessionTimerRef.current) {
@@ -102,17 +104,16 @@ const VoiceNavigationChatGPT = () => {
     stopListening();
     // Reset the flag since this was an automatic expiration, not user intent
     userIntentStoppedRef.current = wasUserIntent;
-
     clearAllTimers();
-    setFeedback('Voice session expired after 10 minutes. Click to reconnect.', 'warning');
+    setFeedback('Voice session expired after 30 minutes. Click to reconnect.', 'warning');
   };
 
   const startSession = () => {
     sessionStartTimeRef.current = Date.now();
     setConnectionExpired(false);
-    setTimeRemaining(600); // 10 minutes
+    setTimeRemaining(1800); // 30 minutes
 
-    // 10-minute session timer
+    // 30-minute session timer
     sessionTimerRef.current = setTimeout(() => {
       expireSession();
     }, SESSION_DURATION);
@@ -120,19 +121,21 @@ const VoiceNavigationChatGPT = () => {
     // Update time display every second
     timeDisplayTimerRef.current = setInterval(updateTimeRemaining, 1000);
 
-    // Keep-alive mechanism (restart speech recognition periodically)
+    // Keep-alive mechanism (less aggressive, only resume if needed)
     keepAliveTimerRef.current = setInterval(() => {
       if (isListening && annyang && !connectionExpired) {
         try {
-          // Restart annyang to prevent browser timeouts
-          annyang.abort();
-          setTimeout(() => {
-            if (!connectionExpired) {
-              annyang.start({ autoRestart: true, continuous: true });
-            }
-          }, 100);
+          console.log('[KeepAlive] Voice recognition still active');
+          // Resume audio context if suspended
+          if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+            audioContextRef.current.resume().then(() => {
+              console.log('[KeepAlive] Audio context resumed');
+            }).catch(err => {
+              console.warn('[KeepAlive] Failed to resume audio context:', err);
+            });
+          }
         } catch (error) {
-          console.warn('Keep-alive restart failed:', error);
+          console.warn('[KeepAlive] Keep-alive check failed:', error);
         }
       }
     }, KEEP_ALIVE_INTERVAL);
@@ -141,7 +144,16 @@ const VoiceNavigationChatGPT = () => {
   const attemptReconnect = () => {
     // Don't auto-reconnect if user intentionally stopped
     if (userIntentStoppedRef.current) {
-      console.log('Auto-reconnect cancelled: User intentionally stopped voice navigation');
+      console.log('[Reconnect] Cancelled: User intentionally stopped voice navigation');
+      reconnectAttemptsRef.current = 0;
+      return;
+    }
+
+    // Limit reconnection attempts
+    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      console.log('[Reconnect] Max attempts reached, stopping auto-reconnect');
+      setError('Voice recognition disconnected. Click microphone to restart.');
+      reconnectAttemptsRef.current = 0;
       return;
     }
 
@@ -149,18 +161,32 @@ const VoiceNavigationChatGPT = () => {
       reconnectTimerRef.current = setTimeout(() => {
         // Check again in case user stopped during the timeout
         if (userIntentStoppedRef.current) {
-          console.log('Auto-reconnect cancelled during timeout: User stopped voice navigation');
+          console.log('[Reconnect] Cancelled during timeout: User stopped voice navigation');
+          reconnectAttemptsRef.current = 0;
           return;
         }
 
         try {
+          reconnectAttemptsRef.current++;
+          console.log(`[Reconnect] Attempting reconnection (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
           annyang.start({ autoRestart: true, continuous: true });
           setError('');
+          // Reset counter on successful reconnect
+          setTimeout(() => {
+            if (isListening) {
+              reconnectAttemptsRef.current = 0;
+            }
+          }, 5000);
         } catch (error) {
-          console.warn('Auto-reconnect failed:', error);
-          // Try again in a few seconds only if user hasn't stopped
-          if (!userIntentStoppedRef.current) {
-            attemptReconnect();
+          console.warn('[Reconnect] Failed:', error);
+          // Try again with exponential backoff
+          if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+            const delay = RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current - 1);
+            console.log(`[Reconnect] Will retry in ${delay}ms`);
+            setTimeout(attemptReconnect, delay);
+          } else {
+            setError('Failed to reconnect voice recognition. Please restart manually.');
+            reconnectAttemptsRef.current = 0;
           }
         }
       }, RECONNECT_DELAY);
@@ -528,10 +554,17 @@ const VoiceNavigationChatGPT = () => {
   }, [workspaceData]);
 
   // Audio analysis functions
-  const startAudioAnalysis = async () => {
+  const startAudioAnalysis = async (retryCount = 0) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       microphoneRef.current = stream;
+      if (audioContextRef.current && audioContextRef.current.state === 'running') {
+        return; // Reuse existing context
+      }
+      // Close suspended contexts before creating new ones
+      if (audioContextRef.current?.state === 'suspended') {
+        await audioContextRef.current.close();
+      }
 
       audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
       analyserRef.current = audioContextRef.current.createAnalyser();
@@ -542,26 +575,51 @@ const VoiceNavigationChatGPT = () => {
 
       updateAudioData();
     } catch (error) {
-      console.warn('Could not access microphone for audio analysis:', error);
+      if (error.name === 'NotAllowedError') {
+        setError('Microphone permission denied');
+      } else if (retryCount < 2) {
+        setTimeout(() => startAudioAnalysis(retryCount + 1), 1000);
+      }
     }
   };
 
-  const stopAudioAnalysis = () => {
+  const stopAudioAnalysis = async () => {
+    console.log('[AudioAnalysis] Stopping audio analysis');
+    
+    // Cancel animation frame
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
+    
+    // Stop microphone stream
     if (microphoneRef.current) {
-      microphoneRef.current.getTracks().forEach(track => track.stop());
+      microphoneRef.current.getTracks().forEach(track => {
+        track.stop();
+        console.log('[AudioAnalysis] Stopped track:', track.label);
+      });
       microphoneRef.current = null;
     }
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close();
+    
+    // Close audio context properly
+    if (audioContextRef.current) {
+      try {
+        if (audioContextRef.current.state !== 'closed') {
+          await audioContextRef.current.close();
+          console.log('[AudioAnalysis] Audio context closed');
+        }
+      } catch (error) {
+        console.warn('[AudioAnalysis] Error closing audio context:', error);
+      }
       audioContextRef.current = null;
     }
+    
+    // Clear analyser
     if (analyserRef.current) {
       analyserRef.current = null;
     }
+    
+    // Reset UI state
     setVoiceLevel(0);
     setWaveformData(Array(5).fill(0));
   };
