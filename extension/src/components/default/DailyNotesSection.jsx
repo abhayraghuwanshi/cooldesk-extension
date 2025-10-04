@@ -1,10 +1,9 @@
-import { faExternalLinkAlt, faGlobe, faLink } from '@fortawesome/free-solid-svg-icons';
+import { faCalendarAlt, faChevronLeft, faChevronRight, faExternalLinkAlt, faGlobe, faLink } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { subscribeDailyNotesChanges } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils.js';
 import VerticalTimeline from '../timeline/VerticalTimeline.jsx';
-
 export function DailyNotesSection() {
   // Daily notes state
   const [dailyNotes, setDailyNotes] = React.useState(null);
@@ -28,6 +27,16 @@ export function DailyNotesSection() {
       return dateStr;
     }
   }, []);
+
+  // Timeline visibility state (hidden by default, persisted in localStorage)
+  const [showTimeline, setShowTimeline] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem('dailyNotes_showTimeline');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   const getDateNDaysAgo = React.useCallback((n) => {
     const d = new Date();
@@ -533,20 +542,55 @@ export function DailyNotesSection() {
           gap: 8
         }}>
           Thoughts
+          {/* Timeline toggle button */}
+          <button
+            onClick={() => setShowTimeline(!showTimeline)}
+            style={{
+              marginLeft: 'auto',
+              padding: '6px 12px',
+              borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.15)',
+              background: showTimeline ? 'rgba(52,199,89,0.12)' : 'rgba(255,255,255,0.08)',
+              color: '#ffffff',
+              cursor: 'pointer',
+              fontSize: 'var(--font-size-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              transition: 'all 0.2s ease'
+            }}
+            title={showTimeline ? 'Hide timeline' : 'Show timeline'}
+          >
+            <FontAwesomeIcon icon={faCalendarAlt} style={{ fontSize: 'var(--font-size-sm)' }} />
+            <span>{showTimeline ? 'Hide' : 'Show'} Timeline</span>
+            <FontAwesomeIcon
+              icon={showTimeline ? faChevronLeft : faChevronRight}
+              style={{ fontSize: 'var(--font-size-xs)' }}
+            />
+          </button>
         </h2>
 
       </div>
 
       {/* Layout: Vertical timeline left, notes right */}
       <div style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>
-        <div style={{ minWidth: 180, maxWidth: 220 }}>
-          <VerticalTimeline
-            dates={timelineDates}
-            notesCache={notesCache}
-            selectedDate={selectedDate}
-            onSelect={(d) => handleDateChange(d)}
-          />
-        </div>
+
+        {showTimeline && (
+          <div style={{
+            minWidth: 180,
+            maxWidth: 220,
+            animation: 'slideIn 0.3s ease-out',
+            right: 0
+          }}>
+            <VerticalTimeline
+              dates={timelineDates}
+              notesCache={notesCache}
+              selectedDate={selectedDate}
+              onSelect={(d) => handleDateChange(d)}
+            />
+          </div>
+        )}
+
 
         <div style={{ flex: 1 }}>
           {(dailyNotes?.content && dailyNotes.content.trim()) || (dailyNotes?.metadata?.selectionCount > 0) ? (

@@ -6,6 +6,31 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
     const [dragOverName, setDragOverName] = React.useState(null);
 
     const list = Array.isArray(items) ? items.slice(0, 24) : [];
+    
+    // Determine which workspaces to show visually (max 2)
+    // Priority: active workspace first, then first 2 from the list
+    const getVisibleWorkspaces = React.useCallback(() => {
+        if (list.length === 0) return [];
+        
+        const visible = [];
+        
+        // Always show active workspace first if it exists
+        if (active && list.includes(active)) {
+            visible.push(active);
+        }
+        
+        // Fill remaining slots with first items from list (up to 2 total)
+        for (const name of list) {
+            if (visible.length >= 2) break;
+            if (!visible.includes(name)) {
+                visible.push(name);
+            }
+        }
+        
+        return visible;
+    }, [list, active]);
+    
+    const visibleWorkspaces = getVisibleWorkspaces();
 
     const openInSameTab = React.useCallback((url) => {
         if (!url) return;
@@ -21,11 +46,28 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
 
     return (
         <div className="coolDesk-section">
-            <h2 className="coolDesk-section-title">Fancy pins</h2>
+            <h2 
+                className="coolDesk-section-title"
+                title={list.length > 2 ? "Scroll through the pills to see all pinned workspaces" : "Pin workspaces by right-clicking them"}
+                style={{ cursor: 'help' }}
+            >
+                Fancy pins
+                {list.length > 2 && (
+                    <span style={{ 
+                        marginLeft: 8, 
+                        fontSize: 'var(--font-size-xs)', 
+                        color: 'rgba(255,255,255,0.6)',
+                        fontWeight: 400
+                    }}>
+                        (showing {visibleWorkspaces.length} of {list.length})
+                    </span>
+                )}
+            </h2>
             {/* Pills row */}
             <div
                 className="coolDesk-pings-container"
                 style={{ display: 'flex', flexDirection: 'row', overflowX: 'auto', whiteSpace: 'nowrap', width: '100%', maxWidth: '100%', marginBottom: 8 }}
+                title={list.length > 2 ? "← Scroll to see all pinned workspaces →" : ""}
                 onDragOver={(e) => {
                     // Allow dropping between chips
                     e.preventDefault();
@@ -133,9 +175,9 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                 )}
             </div>
 
-            {/* Items lists per pinned workspace */}
+            {/* Items lists per pinned workspace (max 2 visible) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
-                {list.map((name) => {
+                {visibleWorkspaces.map((name) => {
                     const ws = Array.isArray(workspaces) ? workspaces.find(w => (w?.name || '').trim().toLowerCase() === String(name).trim().toLowerCase()) : null;
                     const urls = Array.isArray(ws?.urls) ? ws.urls.slice(0, 12) : [];
                     return (
