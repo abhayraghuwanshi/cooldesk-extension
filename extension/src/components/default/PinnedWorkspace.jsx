@@ -4,21 +4,22 @@ import { getFaviconUrl } from '../../utils';
 export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspaces = [], onReorder }) {
     const [hovered, setHovered] = React.useState(null);
     const [dragOverName, setDragOverName] = React.useState(null);
+    const [isHidden, setIsHidden] = React.useState(false);
 
     const list = Array.isArray(items) ? items.slice(0, 24) : [];
-    
+
     // Determine which workspaces to show visually (max 2)
     // Priority: active workspace first, then first 2 from the list
     const getVisibleWorkspaces = React.useCallback(() => {
         if (list.length === 0) return [];
-        
+
         const visible = [];
-        
+
         // Always show active workspace first if it exists
         if (active && list.includes(active)) {
             visible.push(active);
         }
-        
+
         // Fill remaining slots with first items from list (up to 2 total)
         for (const name of list) {
             if (visible.length >= 2) break;
@@ -26,10 +27,10 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                 visible.push(name);
             }
         }
-        
+
         return visible;
     }, [list, active]);
-    
+
     const visibleWorkspaces = getVisibleWorkspaces();
 
     const openInSameTab = React.useCallback((url) => {
@@ -44,18 +45,42 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
         try { window.location.href = url; } catch { }
     }, []);
 
+    if (isHidden) {
+        return (
+            <div
+                className="coolDesk-section"
+                onDoubleClick={() => setIsHidden(false)}
+                style={{
+                    marginTop: 12,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: '1px dashed var(--border-primary, rgba(255,255,255,0.15))',
+                    color: 'var(--text-secondary, rgba(255,255,255,0.7))',
+                    background: 'var(--surface-1, rgba(255,255,255,0.03))',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                }}
+                title="Double-click to show pinned workspaces again"
+            >
+                Hidden: Pinned Workspace (double-click to show)
+            </div>
+        );
+    }
+
     return (
         <div className="coolDesk-section">
-            <h2 
+            <h2
                 className="coolDesk-section-title"
                 title={list.length > 2 ? "Scroll through the pills to see all pinned workspaces" : "Pin workspaces by right-clicking them"}
                 style={{ cursor: 'help' }}
+                onDoubleClick={() => setIsHidden(true)}
+                data-double-click-hint="Double-click to hide pinned workspaces"
             >
-                Fancy pins
+                Pinned Workspace
                 {list.length > 2 && (
-                    <span style={{ 
-                        marginLeft: 8, 
-                        fontSize: 'var(--font-size-xs)', 
+                    <span style={{
+                        marginLeft: 8,
+                        fontSize: 'var(--font-size-xs)',
                         color: 'rgba(255,255,255,0.6)',
                         fontWeight: 400
                     }}>

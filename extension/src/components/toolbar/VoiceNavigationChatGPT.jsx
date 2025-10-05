@@ -1,4 +1,4 @@
-import { faMicrophone, faQuestionCircle } from '@fortawesome/free-solid-svg-icons';
+import { faMicrophone } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import React, { useEffect, useRef, useState } from 'react';
@@ -25,7 +25,6 @@ const VoiceNavigationChatGPT = () => {
   // Initialize voice command processor
   const commandProcessorRef = useRef(null);
   const [workspaceData, setWorkspaceData] = useState(null);
-
   // Track user intent for stopping voice navigation
   const userIntentStoppedRef = useRef(false);
 
@@ -35,6 +34,8 @@ const VoiceNavigationChatGPT = () => {
   const reconnectTimerRef = useRef(null);
   const timeDisplayTimerRef = useRef(null);
   const sessionStartTimeRef = useRef(null);
+  const endDebounceTimerRef = useRef(null);
+  const isReconnectingRef = useRef(false);
 
   const showFeedback = (message, type = 'success') => {
     setFeedback(message);
@@ -80,6 +81,10 @@ const VoiceNavigationChatGPT = () => {
     if (timeDisplayTimerRef.current) {
       clearInterval(timeDisplayTimerRef.current);
       timeDisplayTimerRef.current = null;
+    }
+    if (endDebounceTimerRef.current) {
+      clearTimeout(endDebounceTimerRef.current);
+      endDebounceTimerRef.current = null;
     }
   };
 
@@ -146,6 +151,7 @@ const VoiceNavigationChatGPT = () => {
     if (userIntentStoppedRef.current) {
       console.log('[Reconnect] Cancelled: User intentionally stopped voice navigation');
       reconnectAttemptsRef.current = 0;
+      isReconnectingRef.current = false;
       return;
     }
 
@@ -154,15 +160,20 @@ const VoiceNavigationChatGPT = () => {
       console.log('[Reconnect] Max attempts reached, stopping auto-reconnect');
       setError('Voice recognition disconnected. Click microphone to restart.');
       reconnectAttemptsRef.current = 0;
+      isReconnectingRef.current = false;
+      stopAudioAnalysis();
       return;
     }
 
     if (!connectionExpired && annyang && !isListening) {
+      isReconnectingRef.current = true;
       reconnectTimerRef.current = setTimeout(() => {
         // Check again in case user stopped during the timeout
         if (userIntentStoppedRef.current) {
           console.log('[Reconnect] Cancelled during timeout: User stopped voice navigation');
           reconnectAttemptsRef.current = 0;
+          isReconnectingRef.current = false;
+          stopAudioAnalysis();
           return;
         }
 
@@ -171,10 +182,11 @@ const VoiceNavigationChatGPT = () => {
           console.log(`[Reconnect] Attempting reconnection (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
           annyang.start({ autoRestart: true, continuous: true });
           setError('');
-          // Reset counter on successful reconnect
+          // Reset counter and flag on successful reconnect
           setTimeout(() => {
             if (isListening) {
               reconnectAttemptsRef.current = 0;
+              isReconnectingRef.current = false;
             }
           }, 5000);
         } catch (error) {
@@ -183,13 +195,18 @@ const VoiceNavigationChatGPT = () => {
           if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
             const delay = RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current - 1);
             console.log(`[Reconnect] Will retry in ${delay}ms`);
+            isReconnectingRef.current = false;
             setTimeout(attemptReconnect, delay);
           } else {
             setError('Failed to reconnect voice recognition. Please restart manually.');
             reconnectAttemptsRef.current = 0;
+            isReconnectingRef.current = false;
+            stopAudioAnalysis();
           }
         }
       }, RECONNECT_DELAY);
+    } else {
+      isReconnectingRef.current = false;
     }
   };
 
@@ -343,6 +360,64 @@ const VoiceNavigationChatGPT = () => {
         'click pause': async () => {
           await commandProcessorRef.current.processVoiceCommand('click pause');
         },
+        // New workspace and note commands
+        'add note *note': async (note) => {
+          await commandProcessorRef.current.processVoiceCommand(`add note ${note}`);
+        },
+        'create note *note': async (note) => {
+          await commandProcessorRef.current.processVoiceCommand(`create note ${note}`);
+        },
+        'add todo *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+        },
+        'add todo. *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+        },
+        'add todo! *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+        },
+        'add to do *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+        },
+        'add to do. *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+        },
+        'add to do! *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+        },
+        'create todo *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+        },
+        'create todo. *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+        },
+        'create todo! *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+        },
+        'create to do *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+        },
+        'create to do. *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+        },
+        'create to do! *todo': async (todo) => {
+          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+        },
+        'save url to workspace': async () => {
+          await commandProcessorRef.current.processVoiceCommand('save url to workspace');
+        },
+        'save to workspace': async () => {
+          await commandProcessorRef.current.processVoiceCommand('save to workspace');
+        },
+        'pin this page': async () => {
+          await commandProcessorRef.current.processVoiceCommand('pin this page');
+        },
+        'add to pins': async () => {
+          await commandProcessorRef.current.processVoiceCommand('add to pins');
+        },
+        'pin page': async () => {
+          await commandProcessorRef.current.processVoiceCommand('pin page');
+        },
         // Navigation commands
         'next tab': async () => {
           await commandProcessorRef.current.processVoiceCommand('next tab');
@@ -466,7 +541,7 @@ const VoiceNavigationChatGPT = () => {
         if (phrases.length > 0) {
           const command = phrases[0];
           setTranscript(command);
-          setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", or "switch to tab 2"`);
+          setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
           // Clear feedback after 3 seconds
           if (feedbackTimeoutRef.current) {
             clearTimeout(feedbackTimeoutRef.current);
@@ -479,7 +554,12 @@ const VoiceNavigationChatGPT = () => {
       });
 
       annyang.addCallback('error', (error) => {
-        console.warn('Speech recognition error:', error);
+        // Log benign no-speech at debug level; warn for others
+        if (error?.error === 'no-speech') {
+          console.debug('Speech recognition no-speech:', error);
+        } else {
+          console.warn('Speech recognition error:', error);
+        }
 
         // Don't set error state if user intentionally stopped
         if (userIntentStoppedRef.current) {
@@ -487,6 +567,22 @@ const VoiceNavigationChatGPT = () => {
           return;
         }
 
+        // Gracefully handle frequent benign errors
+        if (error?.error === 'no-speech') {
+          // Do not surface as an error; just try to continue
+          console.log('[VoiceNav] No speech detected; keeping audio active and attempting gentle reconnect');
+          // Avoid stopping audio analysis; schedule a reconnect if session is active
+          if (!connectionExpired) {
+            setTimeout(() => {
+              if (!userIntentStoppedRef.current && !isListening) {
+                attemptReconnect();
+              }
+            }, 800);
+          }
+          return;
+        }
+
+        // Default handling for other errors
         setIsListening(false);
         setError(`Speech recognition error: ${error.error}`);
         setFeedback('');
@@ -504,24 +600,46 @@ const VoiceNavigationChatGPT = () => {
       });
 
       annyang.addCallback('end', () => {
-        setIsListening(false);
-        setInterimTranscript('');
-        setVoiceLevel(0);
-        setWaveformData(Array(5).fill(0));
-        stopAudioAnalysis();
-
-        // Auto-reconnect only if session is active and user hasn't manually stopped
-        if (!connectionExpired && !userIntentStoppedRef.current) {
-          console.log('Voice recognition ended, attempting auto-reconnect...');
-          attemptReconnect();
-        } else if (userIntentStoppedRef.current) {
-          console.log('Voice recognition ended by user intent, no auto-reconnect');
+        // Debounce the end event - speech recognition fires 'end' frequently during normal pauses
+        if (endDebounceTimerRef.current) {
+          clearTimeout(endDebounceTimerRef.current);
         }
 
-        // Clear feedback after a short delay when recognition ends
-        setTimeout(() => {
-          setFeedback('');
-        }, 2000);
+        endDebounceTimerRef.current = setTimeout(() => {
+          // Only process if we're not already reconnecting
+          if (isReconnectingRef.current) {
+            console.log('[VoiceNav] Ignoring end event - already reconnecting');
+            return;
+          }
+
+          console.log('[VoiceNav] Voice recognition ended (debounced)');
+          setIsListening(false);
+          setInterimTranscript('');
+          setVoiceLevel(0);
+          setWaveformData(Array(5).fill(0));
+
+          // Don't stop audio analysis immediately - let reconnect handle it if needed
+          // This prevents the audio from stopping and starting repeatedly
+
+          // Auto-reconnect only if session is active and user hasn't manually stopped
+          if (!connectionExpired && !userIntentStoppedRef.current) {
+            console.log('[VoiceNav] Attempting auto-reconnect...');
+            attemptReconnect();
+          } else if (userIntentStoppedRef.current) {
+            console.log('[VoiceNav] Ended by user intent, stopping audio analysis');
+            stopAudioAnalysis();
+          } else {
+            console.log('[VoiceNav] Session expired, stopping audio analysis');
+            stopAudioAnalysis();
+          }
+
+          // Clear feedback after a short delay when recognition ends
+          setTimeout(() => {
+            if (!isListening) {
+              setFeedback('');
+            }
+          }, 2000);
+        }, 1500); // 1.5 second debounce to avoid rapid end/start cycles
       });
 
     } else {
@@ -585,13 +703,13 @@ const VoiceNavigationChatGPT = () => {
 
   const stopAudioAnalysis = async () => {
     console.log('[AudioAnalysis] Stopping audio analysis');
-    
+
     // Cancel animation frame
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
-    
+
     // Stop microphone stream
     if (microphoneRef.current) {
       microphoneRef.current.getTracks().forEach(track => {
@@ -600,7 +718,7 @@ const VoiceNavigationChatGPT = () => {
       });
       microphoneRef.current = null;
     }
-    
+
     // Close audio context properly
     if (audioContextRef.current) {
       try {
@@ -613,12 +731,12 @@ const VoiceNavigationChatGPT = () => {
       }
       audioContextRef.current = null;
     }
-    
+
     // Clear analyser
     if (analyserRef.current) {
       analyserRef.current = null;
     }
-    
+
     // Reset UI state
     setVoiceLevel(0);
     setWaveformData(Array(5).fill(0));
@@ -682,9 +800,16 @@ const VoiceNavigationChatGPT = () => {
   };
 
   const stopListening = () => {
-    console.log('stopListening called');
+    console.log('[VoiceNav] stopListening called');
     // Mark that user intentionally stopped the voice navigation
     userIntentStoppedRef.current = true;
+    isReconnectingRef.current = false;
+
+    // Clear debounce timer
+    if (endDebounceTimerRef.current) {
+      clearTimeout(endDebounceTimerRef.current);
+      endDebounceTimerRef.current = null;
+    }
 
     if (annyang && isListening) {
       annyang.abort();
@@ -695,7 +820,7 @@ const VoiceNavigationChatGPT = () => {
     setInterimTranscript('');
     setFeedback('Voice navigation stopped. Click to start listening again.', 'info');
     setError('');
-    console.log('Error cleared in stopListening');
+    console.log('[VoiceNav] Error cleared in stopListening');
     setVoiceLevel(0);
     setWaveformData(Array(5).fill(0));
     setShowEnergyWave(false);
@@ -1015,17 +1140,7 @@ const VoiceNavigationChatGPT = () => {
     <div className="voice-navigation-chatgpt">
       <div className="voice-content">
         {/* Section Title */}
-        <div className="section-header">
-          <FontAwesomeIcon icon={faMicrophone} className="section-icon" />
-          <h3 className="section-title">Voice Navigation</h3>
-          <button
-            className="help-toggle-btn"
-            onClick={() => setShowHelp(!showHelp)}
-            title="Toggle command help"
-          >
-            <FontAwesomeIcon icon={faQuestionCircle} />
-          </button>
-        </div>
+
         <div className="voice-button-container">
           <button
             className={`voice-sphere ${isListening ? 'listening' : ''}`}

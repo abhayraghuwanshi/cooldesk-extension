@@ -1,6 +1,7 @@
 import * as pageInteraction from './pageInteractionService.js';
 import { fuzzySearch } from '../utils/searchUtils.js';
 import { voiceResponse } from '../utils/voiceResponse.js';
+import { saveNote, listWorkspaces, addUrlToWorkspace } from '../db/index.js';
 
 export class VoiceCommandProcessor {
   constructor(showFeedback, workspaceData = null) {
@@ -154,8 +155,17 @@ export class VoiceCommandProcessor {
       else if (command.includes('click pause')) {
         await this.pauseMedia();
       }
-      else {
-        this.showFeedback('Command not recognized. Try "switch to tab 2", "search for cats", "click subscribe", "play", "pause", or "open gmail"', 'error');
+      else if (command.includes('add note') || command.includes('create note')) {
+        await this.addNote(command);
+      }
+      else if (command.includes('add todo') || command.includes('create todo')) {
+        await this.addTodo(command);
+      }
+      else if (command.includes('save url') || command.includes('save to workspace')) {
+        await this.saveUrlToWorkspace();
+      }
+      else if (command.includes('pin this') || command.includes('add to pins') || command.includes('pin page')) {
+        await this.addToPins();
       }
     } catch (error) {
       console.error('Error processing voice command:', error);
@@ -525,6 +535,9 @@ export class VoiceCommandProcessor {
         siteName = command.replace(/.*go to website\s+/, '').trim();
       }
 
+      // Remove trailing punctuation that may come from speech recognition
+      siteName = siteName.replace(/[.!?]+$/, '').trim();
+
       if (!siteName) {
         this.showFeedback('Please specify which website to open', 'error');
         return;
@@ -545,25 +558,32 @@ export class VoiceCommandProcessor {
         'spotify': 'https://spotify.com',
         'discord': 'https://discord.com',
         'slack': 'https://slack.com',
-        'zoom': 'https://zoom.us'
+        'zoom': 'https://zoom.us',
+        'cricbuzz': 'https://www.cricbuzz.com'
       };
 
       const normalizedName = siteName.toLowerCase().replace(/\s+/g, '');
+      const hasProtocol = /^https?:\/\//i.test(siteName);
+      const hasDomain = siteName.includes('.');
+
       let url = websiteMap[normalizedName];
 
-      if (!url) {
-        // Try to construct URL if not in mapping
-        if (!siteName.includes('.')) {
-          url = `https://${siteName}.com`;
-        } else {
-          url = siteName.startsWith('http') ? siteName : `https://${siteName}`;
-        }
+      if (!url && (hasProtocol || hasDomain)) {
+        url = hasProtocol ? siteName : `https://${siteName}`;
       }
 
-      await chrome.tabs.create({ url });
-      this.showFeedback(`Opened ${siteName}`);
-      // Voice response for website opening
-      voiceResponse.success('Opening', siteName);
+      if (url) {
+        await chrome.tabs.create({ url });
+        this.showFeedback(`Opened ${siteName}`);
+        voiceResponse.success('Opening', siteName);
+        return;
+      }
+
+      // Fallback: perform a Google search when we cannot determine the URL
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(siteName)}`;
+      await chrome.tabs.create({ url: searchUrl });
+      this.showFeedback(`Searching Google for "${siteName}"`);
+      voiceResponse.success('Searching', siteName);
     } catch (error) {
       throw new Error(`Failed to open website: ${error.message}`);
     }
@@ -600,7 +620,7 @@ export class VoiceCommandProcessor {
         if (result.success) {
           this.showFeedback(`Clicked: ${result.elementText || linkText}`);
         } else {
-          this.showFeedback(`Could not find clickable element: "${linkText}". ${result.suggestions || ''}`, 'error');
+          this.showFeedback('Command not recognized. Try "switch to tab 2", "search for cats", "click subscribe", "play", "pause", "add note [text]", "add todo [text]", "save url to workspace", or "pin this page"', 'error');
         }
       }
     } catch (error) {
@@ -776,6 +796,157 @@ export class VoiceCommandProcessor {
       }
     } catch (error) {
       throw new Error(`Failed to toggle play/pause: ${error.message}`);
+    }
+  }
+
+  async addTodo(command) {
+    try {
+      const normalized = command
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/\bto do\b/g, 'todo')
+        .trim();
+
+      let todoContent = '';
+      const addMatch = command.match(/add\s+(?:to\s+do|todo)\s+(.+)/i);
+      const createMatch = command.match(/create\s+(?:to\s+do|todo)\s+(.+)/i);
+
+      if (addMatch) {
+        todoContent = addMatch[1];
+      } else if (createMatch) {
+        todoContent = createMatch[1];
+      }
+
+      if (!todoContent) {
+        const normalizedMatch = normalized.match(/(?:add|create)\s+todo\s+(.+)/);
+        if (normalizedMatch) {
+          todoContent = normalizedMatch[1];
+        }
+      }
+
+      todoContent = todoContent.replace(/[.!?]+$/, '').trim();
+
+      if (!todoContent) {
+        this.showFeedback('Please specify what to add as a todo', 'error');
+        return;
+      }
+
+      // Get current page info for context
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const currentUrl = activeTab.url;
+      const currentTitle = activeTab.title;
+
+      // Save todo as a note with todo type
+      const now = Date.now();
+      const idSuffix = Math.random().toString(36).slice(2, 8);
+      const contextLine = currentUrl ? `\nSource: ${currentTitle} (${currentUrl})` : '';
+      const todoData = {
+        id: `todo_${now}_${idSuffix}`,
+        content: `TODO: ${todoContent}${contextLine}`,
+        type: 'voice',
+        status: 'todo',
+        createdAt: now,
+        updatedAt: now,
+        tags: ['voice_todo']
+      };
+
+      const result = await saveNote(todoData);
+
+      if (result) {
+        this.showFeedback(`Todo added: "${todoContent}"`);
+      } else {
+        this.showFeedback('Failed to save todo', 'error');
+      }
+    } catch (error) {
+      console.error('Error adding todo:', error);
+      this.showFeedback(`Failed to add todo: ${error.message}`, 'error');
+    }
+  }
+
+  async saveUrlToWorkspace() {
+    try {
+      // Get current page info
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const currentUrl = activeTab.url;
+      const currentTitle = activeTab.title;
+
+      if (!currentUrl) {
+        this.showFeedback('No current page URL found', 'error');
+        return;
+      }
+
+      // Get available workspaces
+      const workspacesResult = await listWorkspaces();
+      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
+
+      if (workspaces.length === 0) {
+        this.showFeedback('No workspaces available. Create a workspace first.', 'error');
+        return;
+      }
+
+      // Use the first workspace or prompt user to choose
+      const targetWorkspace = workspaces[0];
+
+      // Add URL to workspace
+      const urlData = {
+        url: currentUrl,
+        title: currentTitle,
+        favicon: activeTab.favIconUrl,
+        addedAt: Date.now()
+      };
+
+      const result = await addUrlToWorkspace(currentUrl, targetWorkspace.id, urlData);
+
+      if (result?.success) {
+        this.showFeedback(`Saved "${currentTitle}" to workspace "${targetWorkspace.name}"`);
+      } else {
+        this.showFeedback('Failed to save URL to workspace', 'error');
+      }
+    } catch (error) {
+      console.error('Error saving URL to workspace:', error);
+      this.showFeedback(`Failed to save URL: ${error.message}`, 'error');
+    }
+  }
+
+  async addToPins() {
+    try {
+      // Get current page info
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const currentUrl = activeTab.url;
+      const currentTitle = activeTab.title;
+
+      if (!currentUrl) {
+        this.showFeedback('No current page URL found', 'error');
+        return;
+      }
+
+      // For now, we'll save as a special note with pin type
+      // In a full implementation, you'd want a dedicated pins system
+      const pinData = {
+        content: `PINNED: ${currentTitle}`,
+        source: {
+          url: currentUrl,
+          title: currentTitle,
+          domain: new URL(currentUrl).hostname
+        },
+        metadata: {
+          type: 'voice_pin',
+          pinned: true,
+          timestamp: Date.now(),
+          date: new Date().toISOString().split('T')[0]
+        }
+      };
+
+      const result = await saveNote(pinData);
+
+      if (result?.success) {
+        this.showFeedback(`Page pinned: "${currentTitle}"`);
+      } else {
+        this.showFeedback('Failed to pin page', 'error');
+      }
+    } catch (error) {
+      console.error('Error adding to pins:', error);
+      this.showFeedback(`Failed to pin page: ${error.message}`, 'error');
     }
   }
 }

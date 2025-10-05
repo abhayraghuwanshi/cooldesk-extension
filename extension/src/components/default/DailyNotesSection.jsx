@@ -14,6 +14,9 @@ export function DailyNotesSection() {
   const [timelineOffset, setTimelineOffset] = React.useState(0); // window start (days back)
   const timelineRange = 14; // days to show in timeline
   const [notesCache, setNotesCache] = React.useState({}); // { [date]: { selectionCount, preview } }
+  const textAreaRef = React.useRef(null);
+  const todayISO = React.useMemo(() => new Date().toISOString().split('T')[0], []);
+  const isSelectedDateToday = selectedDate === todayISO;
   // Helpers for timeline labels and date ranges
   const formatDateLabel = React.useCallback((dateStr) => {
     try {
@@ -189,6 +192,7 @@ export function DailyNotesSection() {
 
   const handleDateChange = React.useCallback((date) => {
     setSelectedDate(date);
+    setEditingDailyNotes(false);
     loadDailyNotes(date);
   }, [loadDailyNotes]);
 
@@ -240,78 +244,59 @@ export function DailyNotesSection() {
 
   // Function to render content with icons and clickable links
   const renderContentWithLinks = React.useCallback((content) => {
-    if (!content) return content;
+    if (!content) return null;
 
-    // Split content into lines for processing
     const lines = content.split('\n');
 
-    // Group content by URL/source and separate manual notes
     const autoGroups = [];
     let currentGroup = null;
-    let manualNotes = [];
+    const manualNotes = [];
 
-    lines.forEach((line, lineIndex) => {
+    lines.forEach((line) => {
       if (!line.trim()) {
-        return; // Skip empty lines for grouping
+        return;
       }
 
-      // Check if line is auto-captured (contains "From [domain](url):")
       const autoCaptureRegex = /^\[(\d{1,2}:\d{2})\]\s+From\s+\[([^\]]+)\]\(([^)]+)\):\s*$/;
       const autoCaptureMatch = line.match(autoCaptureRegex);
-
-      // Check if line contains quoted text (auto-captured selection)
       const isQuotedText = line.startsWith('"') && line.endsWith('"') && line.length > 2;
 
       if (autoCaptureMatch) {
-        // Save current auto-capture group if exists
         if (currentGroup) {
           autoGroups.push(currentGroup);
         }
 
-        // Start new auto-capture group
         const [, time, domain, url] = autoCaptureMatch;
         currentGroup = {
-          type: 'auto',
           time,
-          timeValue: convertTimeToMinutes(time), // For sorting
+          timeValue: convertTimeToMinutes(time),
           domain,
           url,
           selections: []
         };
       } else if (isQuotedText && currentGroup) {
-        // Add to current auto-capture group
         currentGroup.selections.push(line);
       } else {
-        // Add to manual notes
-        if (line.trim()) {
-          manualNotes.push(line);
-        }
+        manualNotes.push(line);
       }
     });
 
-    // Save any remaining auto-capture group
     if (currentGroup) {
       autoGroups.push(currentGroup);
     }
 
-    // Sort auto groups by time (earliest first)
     autoGroups.sort((a, b) => a.timeValue - b.timeValue);
 
-    // Render grouped content
-    const processedLines = [];
+    const rendered = [];
 
-    // 1. First render manual notes at the top
     if (manualNotes.length > 0) {
-      manualNotes.forEach((line, lineIndex) => {
-        // Process markdown links
+      manualNotes.forEach((line, index) => {
         const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
         const parts = [];
         let lastIndex = 0;
         let match;
-        let hasLinks = false;
 
         while ((match = linkRegex.exec(line)) !== null) {
-          hasLinks = true;
           if (match.index > lastIndex) {
             parts.push(line.substring(lastIndex, match.index));
           }
@@ -320,7 +305,7 @@ export function DailyNotesSection() {
           const url = match[2];
           parts.push(
             <button
-              key={match.index}
+              key={`${index}-${match.index}`}
               onClick={(e) => {
                 e.stopPropagation();
                 openUrl(url);
@@ -352,52 +337,59 @@ export function DailyNotesSection() {
           parts.push(line.substring(lastIndex));
         }
 
-        const lineContent = hasLinks ? parts : line;
-        processedLines.push(
-          <div key={`manual-${lineIndex}`} style={{
-            margin: '6px 0',
-            lineHeight: 1.5,
-            color: '#ffffff'
-          }}>
-            {lineContent}
+        rendered.push(
+          <div
+            key={`manual-${index}`}
+            style={{
+              margin: '6px 0',
+              lineHeight: 1.5,
+              color: '#ffffff'
+            }}
+          >
+            {parts.length > 0 ? parts : line}
           </div>
         );
       });
 
-      // Add separator between manual notes and auto-captured content
       if (autoGroups.length > 0) {
-        processedLines.push(
-          <div key="separator" style={{
-            margin: '16px 0',
-            height: 1,
-            background: 'rgba(255, 255, 255, 0.1)'
-          }} />
+        rendered.push(
+          <div
+            key="manual-auto-separator"
+            style={{
+              margin: '16px 0',
+              height: 1,
+              background: 'rgba(255, 255, 255, 0.1)'
+            }}
+          />
         );
       }
     }
 
-    // 2. Then render auto-captured groups sorted by time
     autoGroups.forEach((group, groupIndex) => {
       const faviconUrl = getFaviconUrl(group.url, 16);
 
-      // Group header with favicon
-      processedLines.push(
-        <div key={`auto-${groupIndex}`} style={{
-          margin: '12px 0 8px 0',
-          padding: '8px 12px',
-          background: 'rgba(52, 199, 89, 0.03)',
-          border: '1px solid rgba(52, 199, 89, 0.1)',
-          borderRadius: 8
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            marginBottom: 8,
-            color: 'rgba(255, 255, 255, 0.7)',
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 500
-          }}>
+      rendered.push(
+        <div
+          key={`auto-${groupIndex}`}
+          style={{
+            margin: '12px 0 8px 0',
+            padding: '8px 12px',
+            background: 'rgba(52, 199, 89, 0.03)',
+            border: '1px solid rgba(52, 199, 89, 0.1)',
+            borderRadius: 8
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginBottom: 8,
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 500
+            }}
+          >
             <FontAwesomeIcon
               icon={faGlobe}
               style={{
@@ -450,27 +442,31 @@ export function DailyNotesSection() {
                 style={{ fontSize: 'calc(var(--font-size-xs) * 0.75)', opacity: 0.7 }}
               />
             </button>
-            <span style={{
-              fontSize: 'var(--font-size-xs)',
-              color: 'rgba(255, 255, 255, 0.5)',
-              background: 'rgba(52, 199, 89, 0.1)',
-              padding: '2px 6px',
-              borderRadius: 4,
-              marginLeft: 'auto'
-            }}>
+            <span
+              style={{
+                fontSize: 'var(--font-size-xs)',
+                color: 'rgba(255, 255, 255, 0.5)',
+                background: 'rgba(52, 199, 89, 0.1)',
+                padding: '2px 6px',
+                borderRadius: 4,
+                marginLeft: 'auto'
+              }}
+            >
               {group.selections.length} selection{group.selections.length !== 1 ? 's' : ''}
             </span>
           </div>
 
-          {/* Render selections */}
           {group.selections.map((selection, selIndex) => (
-            <div key={selIndex} style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 6,
-              margin: '4px 0',
-              paddingLeft: 8
-            }}>
+            <div
+              key={selIndex}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 6,
+                margin: '4px 0',
+                paddingLeft: 8
+              }}
+            >
               <FontAwesomeIcon
                 icon={faLink}
                 style={{
@@ -480,12 +476,14 @@ export function DailyNotesSection() {
                   flexShrink: 0
                 }}
               />
-              <span style={{
-                fontStyle: 'italic',
-                color: 'rgba(255, 255, 255, 0.9)',
-                lineHeight: 1.4,
-                fontSize: 'var(--font-size-base)'
-              }}>
+              <span
+                style={{
+                  fontStyle: 'italic',
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  lineHeight: 1.4,
+                  fontSize: 'var(--font-size-base)'
+                }}
+              >
                 {selection}
               </span>
             </div>
@@ -494,8 +492,33 @@ export function DailyNotesSection() {
       );
     });
 
-    return processedLines.length > 0 ? processedLines : content;
-  }, [openUrl]);
+    if (rendered.length === 0) {
+      return content;
+    }
+
+    return rendered;
+  }, [convertTimeToMinutes, openUrl]);
+
+  const startEditing = React.useCallback(() => {
+    setDailyNotesText(dailyNotes?.content ?? '');
+    setEditingDailyNotes(true);
+  }, [dailyNotes]);
+
+  const cancelEditing = React.useCallback(() => {
+    setDailyNotesText(dailyNotes?.content ?? '');
+    setEditingDailyNotes(false);
+  }, [dailyNotes]);
+
+  React.useEffect(() => {
+    if (editingDailyNotes && textAreaRef.current) {
+      try {
+        const el = textAreaRef.current;
+        el.focus();
+        const len = el.value.length;
+        el.setSelectionRange(len, len);
+      } catch { }
+    }
+  }, [editingDailyNotes]);
 
   // Auto-load today's notes on mount
   React.useEffect(() => {
@@ -519,34 +542,51 @@ export function DailyNotesSection() {
       unsubscribe();
     };
   }, [loadDailyNotes, selectedDate]);
+
+  const autoSelectionCount = dailyNotes?.metadata?.selectionCount ?? 0;
+  const hasManualContent = Boolean(dailyNotes?.content && dailyNotes.content.trim());
+  const hasAnyContent = hasManualContent || autoSelectionCount > 0;
+  const editButtonLabel = hasManualContent ? 'Edit notes' : 'Write notes';
+  const textareaPlaceholder = isSelectedDateToday ? 'Write something about today…' : `Write notes for ${selectedDate}`;
+
   return (
-    <div style={{
-      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
-    }}>
+    <div
+      style={{
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+      }}
+    >
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-        padding: '0 4px'
-      }}>
-        <h2 style={{
-          fontSize: 'var(--font-size-2xl)',
-          fontWeight: 600,
-          margin: 0,
-          color: '#ffffff',
-          letterSpacing: '-0.5px',
+      <div
+        style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8
-        }}>
+          justifyContent: 'space-between',
+          marginBottom: 16,
+          padding: '0 4px',
+          gap: 12
+        }}
+      >
+        <h2
+          style={{
+            fontSize: 'var(--font-size-2xl)',
+            fontWeight: 600,
+            margin: 0,
+            color: '#ffffff',
+            letterSpacing: '-0.5px'
+          }}
+        >
           Thoughts
-          {/* Timeline toggle button */}
+        </h2>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}
+        >
           <button
             onClick={() => setShowTimeline(!showTimeline)}
             style={{
-              marginLeft: 'auto',
               padding: '6px 12px',
               borderRadius: 8,
               border: '1px solid rgba(255,255,255,0.15)',
@@ -568,20 +608,43 @@ export function DailyNotesSection() {
               style={{ fontSize: 'var(--font-size-xs)' }}
             />
           </button>
-        </h2>
-
+          {!editingDailyNotes && (
+            <button
+              onClick={startEditing}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(255,255,255,0.12)',
+                color: '#ffffff',
+                cursor: 'pointer',
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 500,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {editButtonLabel}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Layout: Vertical timeline left, notes right */}
-      <div style={{ display: 'flex', flexDirection: 'row', gap: 16 }}>
-
+      {/* Layout */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          gap: 16
+        }}
+      >
         {showTimeline && (
-          <div style={{
-            minWidth: 180,
-            maxWidth: 220,
-            animation: 'slideIn 0.3s ease-out',
-            right: 0
-          }}>
+          <div
+            style={{
+              minWidth: 180,
+              maxWidth: 220,
+              animation: 'slideIn 0.3s ease-out'
+            }}
+          >
             <VerticalTimeline
               dates={timelineDates}
               notesCache={notesCache}
@@ -591,9 +654,74 @@ export function DailyNotesSection() {
           </div>
         )}
 
-
         <div style={{ flex: 1 }}>
-          {(dailyNotes?.content && dailyNotes.content.trim()) || (dailyNotes?.metadata?.selectionCount > 0) ? (
+          {editingDailyNotes ? (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12
+              }}
+            >
+              <textarea
+                ref={textAreaRef}
+                value={dailyNotesText}
+                onChange={(e) => setDailyNotesText(e.target.value)}
+                placeholder={textareaPlaceholder}
+                style={{
+                  width: '100%',
+                  minHeight: 220,
+                  padding: 16,
+                  borderRadius: 12,
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  background: 'rgba(255,255,255,0.07)',
+                  color: '#ffffff',
+                  fontSize: 'var(--font-size-base)',
+                  lineHeight: 1.5,
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  boxShadow: '0 6px 18px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)'
+                }}
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 8
+                }}
+              >
+                <button
+                  onClick={cancelEditing}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'transparent',
+                    color: 'rgba(255,255,255,0.75)',
+                    cursor: 'pointer',
+                    fontSize: 'var(--font-size-sm)'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveDailyNotes}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 8,
+                    border: '1px solid rgba(52,199,89,0.4)',
+                    background: 'rgba(52,199,89,0.15)',
+                    color: '#34C759',
+                    cursor: 'pointer',
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: 600
+                  }}
+                >
+                  Save Notes
+                </button>
+              </div>
+            </div>
+          ) : hasAnyContent ? (
             <div
               className="daily-notes-scrollable-container"
               style={{
@@ -613,7 +741,54 @@ export function DailyNotesSection() {
             >
               {dailyNotes?.content ? renderContentWithLinks(dailyNotes.content) : null}
             </div>
-          ) : null}
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+                alignItems: 'flex-start',
+                padding: 24,
+                borderRadius: 12,
+                border: '1px dashed rgba(255,255,255,0.18)',
+                background: 'rgba(255,255,255,0.04)',
+                color: 'rgba(255,255,255,0.8)'
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 'var(--font-size-lg)',
+                  fontWeight: 600
+                }}
+              >
+                No notes yet for {isSelectedDateToday ? 'today' : selectedDate}
+              </div>
+              <div
+                style={{
+                  fontSize: 'var(--font-size-base)',
+                  maxWidth: 420,
+                  lineHeight: 1.5
+                }}
+              >
+                Start a quick journal entry or capture highlights from your browsing session.
+              </div>
+              <button
+                onClick={startEditing}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  background: 'rgba(255,255,255,0.1)',
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 500
+                }}
+              >
+                Write notes
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

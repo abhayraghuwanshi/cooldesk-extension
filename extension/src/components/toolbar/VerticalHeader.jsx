@@ -141,7 +141,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useRef, useState } from 'react';
 import { getUIState, saveUIState } from '../../db/index.js';
 import { triggerAutoCategorize } from '../../utils/messaging';
-import VoiceNavigation from './VoiceNavigation';
+// import VoiceNavigation from './VoiceNavigation';
 
 export function VerticalHeader({
   search,
@@ -571,23 +571,6 @@ export function VerticalHeader({
           {effectiveCollapsed ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : timeStr}
         </div>
       </div>
-
-      {/* VoiceNavigation Component */}
-      {showVoiceNavigation && (
-        <div style={{
-          position: 'fixed',
-          left: effectiveCollapsed ? '80px' : '300px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          zIndex: 1999,
-          maxWidth: '600px',
-          width: 'calc(100vw - ' + (effectiveCollapsed ? '100px' : '320px') + ')',
-          maxHeight: '80vh',
-          overflow: 'auto'
-        }}>
-          <VoiceNavigation />
-        </div>
-      )}
     </div>
   );
 }

@@ -1,10 +1,10 @@
 import React from 'react';
 import { getUIState, saveUIState } from '../../db/unified-api.js';
 import { ErrorBoundary } from '../ErrorBoundary';
+import VoiceNavigationChatGPT from '../toolbar/VoiceNavigationChatGPT';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { DailyNotesSection } from './DailyNotesSection';
 import { NotesSection } from './NotesSection';
-import VoiceNavigationChatGPT from '../toolbar/VoiceNavigationChatGPT';
 
 export function ActivityPanel({ activeSection = 0 }) {
   // State for preview modal
@@ -197,7 +197,17 @@ export function ActivityPanel({ activeSection = 0 }) {
   // Define sections array matching Header navigation
   const sections = [
     { name: 'Current Tabs', component: <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /> },
-    { name: 'Voice Navigation', component: <VoiceNavigationChatGPT /> },
+    {
+      name: 'Voice Navigation', component: <div>
+        <h2
+          className="coolDesk-section-title"
+          style={{ cursor: 'help' }}
+        >
+          Voice Navigation
+        </h2>
+        <VoiceNavigationChatGPT />
+      </div>
+    },
     { name: 'Notes', component: <NotesSection /> },
     { name: 'Daily Notes', component: <DailyNotesSection /> }
   ];
@@ -232,6 +242,51 @@ export function ActivityPanel({ activeSection = 0 }) {
         if (showNotesSideBySide && (index === notesIndex || index === dailyNotesIndex)) {
           // Only render this container once for the first section (Notes)
           if (index === notesIndex) {
+            const renderSideSection = (sectionConfig, sectionIndex) => {
+              const isHiddenSide = !!hiddenSections[sectionConfig.name];
+              const refCallback = el => {
+                sectionRefs.current[sectionIndex] = el;
+              };
+
+              if (isHiddenSide) {
+                return (
+                  <div
+                    key={`${sectionConfig.name}-hidden`}
+                    onDoubleClick={() => toggleHidden(sectionConfig.name)}
+                    ref={refCallback}
+                    style={{
+                      minWidth: 0,
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: '1px dashed var(--border-primary, rgba(255,255,255,0.15))',
+                      color: 'var(--text-secondary, rgba(255,255,255,0.7))',
+                      background: 'var(--surface-1, rgba(255,255,255,0.03))',
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                    title="Double-click to show this section again"
+                  >
+                    Hidden: {sectionConfig.name} (double-click to show)
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={sectionConfig.name}
+                  onDoubleClick={() => toggleHidden(sectionConfig.name)}
+                  ref={refCallback}
+                  style={{
+                    minWidth: 0,
+                    cursor: 'pointer'
+                  }}
+                  title="Double-click to hide this section"
+                >
+                  {sectionConfig.component}
+                </div>
+              );
+            };
+
             return (
               <ErrorBoundary key="notes-daily-container">
                 <div
@@ -249,25 +304,23 @@ export function ActivityPanel({ activeSection = 0 }) {
                     pointerEvents: isAllMode ? 'auto' : (isCurrentSection || index === (activeSection - 1) ? 'auto' : 'none')
                   }}
                 >
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: isNarrowScreen ? '1fr' : '1fr 1fr',
-                    gap: isNarrowScreen ? 24 : 16
-                  }}>
-                    <div style={{ minWidth: 0 }}>
-                      {sections[notesIndex].component}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      {sections[dailyNotesIndex].component}
-                    </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: isNarrowScreen ? '1fr' : '1fr 1fr',
+                      gap: isNarrowScreen ? 24 : 16
+                    }}
+                  >
+                    {renderSideSection(sections[notesIndex], notesIndex)}
+                    {renderSideSection(sections[dailyNotesIndex], dailyNotesIndex)}
                   </div>
                 </div>
               </ErrorBoundary>
             );
-          } else {
-            // Skip rendering Daily Notes separately since it's included in the container above
-            return null;
           }
+
+          // Skip rendering Daily Notes separately since it's included in the container above
+          return null;
         }
 
         // Regular single-section display with hide/show on double-click

@@ -91,16 +91,17 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Main App Component
 export default function App() {
   const { data, loading, refreshing, populate } = useDashboardData()
   const [workspace, setWorkspace] = useState('All')
   const [search, setSearch] = useState('')
   const [focusSearchTick, setFocusSearchTick] = useState(0)
-  const [showSettings, setShowSettings] = useState(false)
+  const [showDeskMetaReminder, setShowDeskMetaReminder] = useState(false);
+  const [workspaceHidden, setWorkspaceHidden] = useState(false);
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' })
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
   const [addingToWorkspace, setAddingToWorkspace] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   const [showAddLinkModal, setShowAddLinkModal] = useState(false)
   const [workspaceForLinkAdd, setWorkspaceForLinkAdd] = useState(null)
@@ -118,6 +119,7 @@ export default function App() {
 
   // Pinned workspaces
   const [pinnedWorkspaces, setPinnedWorkspaces] = useState([])
+  const [activePinnedWorkspace, setActivePinnedWorkspace] = useState(null)
 
 
   // Auto-reset active section after 5 seconds of inactivity
@@ -361,6 +363,12 @@ export default function App() {
   const savePinnedWorkspaces = async (list) => {
     try { await storageSet({ pinnedWorkspaces: list }); } catch { }
   };
+
+  useEffect(() => {
+    if (!activePinnedWorkspace) return;
+    if (!Array.isArray(pinnedWorkspaces) || pinnedWorkspaces.includes(activePinnedWorkspace)) return;
+    setActivePinnedWorkspace(pinnedWorkspaces[0] ?? null);
+  }, [pinnedWorkspaces, activePinnedWorkspace]);
 
   const togglePinWorkspace = (name) => {
     if (!name || typeof name !== 'string') return;
@@ -1406,8 +1414,8 @@ export default function App() {
           <div>
             <PinnedWorkspace
               items={pinnedWorkspaces}
-              active={workspace}
-              onSelect={(name) => setWorkspace(name)}
+              active={activePinnedWorkspace}
+              onSelect={(name) => setActivePinnedWorkspace(name)}
               onUnpin={unpinWorkspace}
               workspaces={savedWorkspaces}
               onReorder={(order) => {
@@ -1420,20 +1428,50 @@ export default function App() {
           </div>
         </ErrorBoundary>
 
-        {/* Filters */}
-        <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {/* <span style={{ fontSize: 12, opacity: 0.8 }}>Workspace:</span> */}
-            <WorkspaceFilters
-              items={filterItems}
-              active={workspace}
-              onChange={setWorkspace}
-              onWorkspaceCreated={createWorkspace}
-              onPinWorkspace={togglePinWorkspace}
-              pinnedWorkspaces={pinnedWorkspaces}
-            />
+        {workspaceHidden ? (
+          <div
+            className="coolDesk-section"
+            onDoubleClick={() => setWorkspaceHidden(false)}
+            style={{
+              marginTop: 16,
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px dashed var(--border-primary, rgba(255,255,255,0.2))',
+              color: 'var(--text-secondary, rgba(255,255,255,0.7))',
+              background: 'var(--surface-1, rgba(255,255,255,0.05))',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}
+            title="Double-click to show workspace filters"
+          >
+            Hidden: Workspace Filters (double-click to show)
           </div>
-        </div>
+        ) : (
+          <>
+            <h2
+              className="coolDesk-section-title"
+              style={{ cursor: 'help' }}
+              onDoubleClick={() => setWorkspaceHidden(true)}
+              title="Double-click to hide workspace filters"
+            >
+              Workspace
+            </h2>
+            {/* Filters */}
+            <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <WorkspaceFilters
+                  items={filterItems}
+                  active={workspace}
+                  onChange={setWorkspace}
+                  onWorkspaceCreated={createWorkspace}
+                  onPinWorkspace={togglePinWorkspace}
+                  pinnedWorkspaces={pinnedWorkspaces}
+                />
+              </div>
+            </div>
+          </>
+        )}
 
 
 

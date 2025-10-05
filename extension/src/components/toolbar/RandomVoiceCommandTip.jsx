@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faLightbulb } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 // A lightweight tip component that periodically shows a random voice command
 // Usage: <RandomVoiceCommandTip />
@@ -22,19 +22,19 @@ export default function RandomVoiceCommandTip({ commands, intervalMs = 8000, pau
       { text: '"close tab"', desc: 'close current tab' },
       { text: '"find tab gmail"', desc: 'search and switch to tab' },
       { text: '"search for cats"', desc: 'google search' },
-      { text: '"open youtube"', desc: 'open from workspace' },
       { text: '"scroll down"', desc: 'scroll page down' },
       { text: '"scroll up"', desc: 'scroll page up' },
       { text: '"go back"', desc: 'navigate back' },
-      { text: '"go forward"', desc: 'navigate forward' },
       { text: '"reload"', desc: 'reload page' },
-      { text: '"play"', desc: 'play media' },
-      { text: '"pause"', desc: 'pause media' },
       { text: '"spacebar"', desc: 'toggle play/pause' },
+      { text: '"add note: remember to check email"', desc: 'add a note with context' },
+      { text: '"add todo: review project proposal"', desc: 'create a todo item' },
+      { text: '"save url to workspace"', desc: 'save current page to workspace' },
+      { text: '"pin this page"', desc: 'add current page to pins' }
     ]
   ), []);
 
-  const list = commands && Array.isArray(commands) && commands.length > 0 ? commands : defaultCommands;
+  const list = (commands && Array.isArray(commands) && commands.length > 0) ? commands : defaultCommands;
 
   const [index, setIndex] = useState(() => Math.floor(Math.random() * list.length));
   const timerRef = useRef(null);
