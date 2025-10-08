@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "cooldesk",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "action": {
     "default_title": "Open CoolDesk Sidebar"
   },
@@ -30,8 +30,11 @@
     "contextMenus",
     "sessions"
   ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.google.com https://*.gstatic.com https://speech.googleapis.com https://*.googleapis.com http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: https: http:; media-src 'self' data: blob:; font-src 'self' data:;"
   },
   "web_accessible_resources": [
     {
@@ -40,7 +43,8 @@
         "index.html",
         "logo.png",
         "src/footerBar.js",
-        "src/contentInteractions.js"
+        "src/contentInteractions.js",
+        "dist/*"
       ],
       "matches": [
         "<all_urls>"

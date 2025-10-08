@@ -1,22 +1,28 @@
-import React from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { 
-  faArrowDown, 
-  faArrowLeft, 
-  faArrowRight, 
-  faArrowUp, 
-  faExchangeAlt, 
-  faHashtag, 
-  faLightbulb, 
-  faPlay, 
-  faPause,
-  faPlus, 
-  faRedo, 
-  faSearch, 
-  faTimes 
+import {
+  faArrowDown,
+  faArrowLeft,
+  faBoxOpen,
+  faHashtag, faLightbulb,
+  faPlus
 } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import React, { useState } from 'react';
 
 export default function VoiceNavigationHelp() {
+  const [showAll, setShowAll] = useState(false);
+
+  // All commands
+  const commands = [
+    { icon: faHashtag, text: '"show numbers"', desc: 'mark clickable elements', related_command: 'hide numbers, click [num]' },
+    { icon: faBoxOpen, text: '"open [query]"', desc: 'open in new tab', related_command: 'close tab, search for [query]', eg: "open google" },
+    { icon: faPlus, text: '"search tab [query]"', desc: 'search in tabs', eg: "search tab google, find tab google" },
+    { icon: faArrowDown, text: '"scroll down"', desc: 'scroll page down', related_command: 'scroll up' },
+    { icon: faArrowLeft, text: "go back", desc: "go back", related_command: "go forward" },
+
+  ];
+
+  const visibleCommands = showAll ? commands : commands.slice(0, 4);
+
   return (
     <div className="command-help">
       <div className="help-header">
@@ -25,101 +31,31 @@ export default function VoiceNavigationHelp() {
       </div>
 
       <div className="command-list">
-        {/* Element Interaction */}
-        <div className="command-category">Element Interaction</div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faHashtag} className="command-icon" />
-          <span className="command-text">"show numbers"</span> → <span className="command-desc">mark clickable elements</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faHashtag} className="command-icon" />
-          <span className="command-text">"hide numbers"</span> → <span className="command-desc">clear element markers</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faHashtag} className="command-icon" />
-          <span className="command-text">"click 3"</span> → <span className="command-desc">click numbered element</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faHashtag} className="command-icon" />
-          <span className="command-text">"click on [text]"</span> → <span className="command-desc">click element by text</span>
-        </div>
-
-        {/* Tab Management */}
-        <div className="command-category">Tab Management</div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faExchangeAlt} className="command-icon" />
-          <span className="command-text">"switch to tab 2"</span> → <span className="command-desc">switch to tab by number</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faExchangeAlt} className="command-icon" />
-          <span className="command-text">"next tab"</span> → <span className="command-desc">go to next tab</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faExchangeAlt} className="command-icon" />
-          <span className="command-text">"previous tab"</span> → <span className="command-desc">go to previous tab</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faPlus} className="command-icon" />
-          <span className="command-text">"new tab"</span> → <span className="command-desc">create new tab</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faTimes} className="command-icon" />
-          <span className="command-text">"close tab"</span> → <span className="command-desc">close current tab</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faSearch} className="command-icon" />
-          <span className="command-text">"find tab [name]"</span> → <span className="command-desc">search and switch to tab</span>
-        </div>
-
-        {/* Search & Open */}
-        <div className="command-category">Search & Open</div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faSearch} className="command-icon" />
-          <span className="command-text">"search for [query]"</span> → <span className="command-desc">google search</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faExchangeAlt} className="command-icon" />
-          <span className="command-text">"open [site]"</span> → <span className="command-desc">open from workspace</span>
-        </div>
-
-        {/* Page Navigation */}
-        <div className="command-category">Page Navigation</div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faArrowDown} className="command-icon" />
-          <span className="command-text">"scroll down"</span> → <span className="command-desc">scroll page down</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faArrowUp} className="command-icon" />
-          <span className="command-text">"scroll up"</span> → <span className="command-desc">scroll page up</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faArrowLeft} className="command-icon" />
-          <span className="command-text">"go back"</span> → <span className="command-desc">navigate back</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faArrowRight} className="command-icon" />
-          <span className="command-text">"go forward"</span> → <span className="command-desc">navigate forward</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faRedo} className="command-icon" />
-          <span className="command-text">"reload" / "refresh"</span> → <span className="command-desc">reload page</span>
-        </div>
-
-        {/* Media Controls */}
-        <div className="command-category">Media Controls</div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faPlay} className="command-icon" />
-          <span className="command-text">"play"</span> → <span className="command-desc">play media</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faPause} className="command-icon" />
-          <span className="command-text">"pause"</span> → <span className="command-desc">pause media</span>
-        </div>
-        <div className="command-item">
-          <FontAwesomeIcon icon={faPlay} className="command-icon" />
-          <span className="command-text">"spacebar"</span> → <span className="command-desc">toggle play/pause</span>
-        </div>
+        {visibleCommands.map((cmd, index) => (
+          <div key={index} className="command-item">
+            <FontAwesomeIcon icon={cmd.icon} className="command-icon" />
+            <div className="command-content">
+              <span className="command-text">{cmd.text}</span>
+              <div className="command-meta">
+                <span className="command-desc">{cmd.desc}</span>
+                {cmd.related_command && (
+                  <span className="command-related">Related: {cmd.related_command}</span>
+                )}
+                {cmd.eg && (
+                  <span className="command-eg">Example: {cmd.eg}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
+
+      <button
+        className="toggle-btn"
+        onClick={() => setShowAll(!showAll)}
+      >
+        {showAll ? 'Show Less' : 'Show All Commands'}
+      </button>
 
       <style jsx>{`
         .command-help {
@@ -158,90 +94,131 @@ export default function VoiceNavigationHelp() {
           display: flex;
           flex-direction: column;
           gap: 4px;
+          transition: all 0.3s ease;
         }
-        .command-category {
-          font-size: 11px;
-          font-weight: 700;
-          color: var(--accent-primary, #34c759);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-top: 12px;
-          margin-bottom: 4px;
-          padding-left: 4px;
-          border-left: 2px solid var(--accent-primary, #34c759);
-        }
-        .command-category:first-child {
-          margin-top: 0;
-        }
-        .command-item { 
-          display: grid;
-          grid-template-columns: 18px 1fr;
-          align-items: start;
-          column-gap: 8px;
-          row-gap: 2px;
-          color: var(--text, #e5e7eb); 
-          font-size: 12px;
-          padding: 6px 8px;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid var(--border-secondary, rgba(255,255,255,0.08));
-          border-radius: 8px;
-          transition: all 0.2s ease;
-          line-height: 1.25;
-        }
-        .command-item:hover {
-          background: rgba(255, 255, 255, 0.08);
-          border-color: var(--border-accent, rgba(52, 199, 89, 0.3));
-          transform: translateX(2px);
-        }
-        .command-icon { 
-          width: 16px; 
-          opacity: 0.9;
-          color: var(--accent-blue, #60a5fa);
-          grid-column: 1 / 2;
-          grid-row: 1 / 3;
-        }
-        .command-text { 
-          font-weight: 600;
-          color: var(--accent-primary, #34c759);
-          font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-          font-size: 11px;
-          display: inline;
-        }
-        .command-desc { 
-          opacity: 0.8;
-          color: var(--text-secondary, #9ca3af);
-          font-size: 10.5px;
-          display: block;
-          margin-top: 2px;
-        }
+        /* Container and basic alignment */
+.command-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px; 
+  transition: background 0.15s ease;
+}
+.command-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
 
+/* Icon a touch larger for balance */
+.command-icon {
+  color: #6366f1;              /* indigo-500 */
+  min-width: 18px;
+  margin-top: 2px;
+  font-size: 14px;             /* was default; bump for visibility */
+}
+
+/* Make the command label bigger and brighter */
+.command-text {
+  font-weight: 700;            /* bolder */
+  font-size: 14px;             /* was smaller; increase size */
+  line-height: 1.25;
+  color: var(--text-primary, #fff);  /* better contrast on dark bg */
+}
+/* Content column next to the icon */
+.command-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Meta section under the main command text */
+.command-meta {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+/* Reveal meta only on hover */
+.command-item:hover .command-meta {
+  display: flex;
+}
+
+/* Stack meta lines under the main text and align with it */
+.command-desc,
+.command-related {
+  display: block;
+  line-height: 1.25;
+}
+
+/* Description line */
+.command-desc {
+  color: #6b7280;              /* gray-500 */
+  font-size: 14px;             /* Increased for readability */
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+  /* Related command pill */
+.command-related {
+  font-size: 14px;             /* Increased for readability */
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  padding: 3px 10px;           /* slightly larger touch target */
+  width: fit-content;
+  margin-top: 4px;
+}
+  }
+
+  /* Toggle button styling */
+  .toggle-btn {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: linear-gradient(
+      180deg,
+      rgba(52, 199, 89, 0.18) 0%,
+      rgba(52, 199, 89, 0.12) 100%
+    );
+    border: 1px solid rgba(52, 199, 89, 0.35);
+    color: var(--accent-primary, #34c759);
+    font-weight: 700;
+    font-size: 12.5px;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(6px);
+  }
+
+  .toggle-btn:hover {
+    background: linear-gradient(
+      180deg,
+      rgba(52, 199, 89, 0.26) 0%,
+      rgba(52, 199, 89, 0.18) 100%
+    );
+    border-color: rgba(52, 199, 89, 0.5);
+    transform: translateY(-1px);
+  }
+
+  .toggle-btn:active {
+    transform: translateY(0);
+    background: rgba(52, 199, 89, 0.22);
+  }
+
+  .toggle-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.25);
+    border-color: rgba(52, 199, 89, 0.6);
+  }
+  
         @media (max-width: 768px) {
           .command-help {
             padding-left: 0;
             margin-left: 0;
-            border-left: none;
             border-top: 1px solid var(--border-primary, rgba(255,255,255,0.1));
             padding-top: 12px;
             width: 100%;
             max-height: 400px;
-          }
-        }
-
-        @media (max-width: 600px) {
-          .command-item {
-            grid-template-columns: 16px 1fr;
-            padding: 4px 6px;
-            font-size: 11px;
-          }
-          .command-text {
-            font-size: 10px;
-          }
-          .command-desc {
-            font-size: 9.5px;
-          }
-          .command-category {
-            font-size: 10px;
-            margin-top: 8px;
           }
         }
       `}</style>

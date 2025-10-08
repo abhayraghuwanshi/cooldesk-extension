@@ -169,7 +169,7 @@ body,
 }
 
 .popup-wrap * {
-  max-width: 100%;
+  /* max-width: 100%; */
   word-wrap: break-word;
 }
 
@@ -1147,8 +1147,15 @@ body,
 
 /* Workspace switch animations */
 @keyframes ws-fade-slide-in {
-  0% { opacity: 0; transform: translateY(8px) scale(0.995); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .suggestion-controls button {

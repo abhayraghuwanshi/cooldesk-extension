@@ -1,7 +1,7 @@
-import * as pageInteraction from './pageInteractionService.js';
+import { addUrlToWorkspace, listWorkspaces, saveNote } from '../db/index.js';
 import { fuzzySearch } from '../utils/searchUtils.js';
 import { voiceResponse } from '../utils/voiceResponse.js';
-import { saveNote, listWorkspaces, addUrlToWorkspace } from '../db/index.js';
+import * as pageInteraction from './pageInteractionService.js';
 
 export class VoiceCommandProcessor {
   constructor(showFeedback, workspaceData = null) {
@@ -234,42 +234,28 @@ export class VoiceCommandProcessor {
       const tabs = await chrome.tabs.query({});
       const cleanSearchTerm = searchTerm.replace(/^(go to|switch to)\s+/, '').trim();
 
-      // Enhanced matching with multiple strategies
-      const matchingTab = tabs.find(tab => {
-        const title = tab.title.toLowerCase();
-        const url = tab.url.toLowerCase();
-        const search = cleanSearchTerm.toLowerCase();
-
-        // Strategy 2: Starts with match
-        const startsWithMatch = title.startsWith(search) ||
-          title.split(' ').some(word => word.startsWith(search));
-
-        // Strategy 1: Direct word match (word boundaries)
-        const wordMatch = new RegExp(`\\b${search}\\b`, 'i').test(title) ||
-          new RegExp(`\\b${search}\\b`, 'i').test(url);
-
-        // Strategy 3: Contains match (original)
-        const containsMatch = title.includes(search) || url.includes(search);
-
-        return wordMatch || startsWithMatch || containsMatch;
+      // Use fuzzy search for tab matching (title and url)
+      const matches = fuzzySearch(tabs, cleanSearchTerm, ['title', 'url'], {
+        threshold: 0.3,
+        includeScore: true
       });
 
-      if (matchingTab) {
-        await chrome.tabs.update(matchingTab.id, { active: true });
-        await chrome.windows.update(matchingTab.windowId, { focused: true });
-        this.showFeedback(`Switched to: ${matchingTab.title}`);
+      if (matches && matches.length > 0) {
+        const best = matches[0];
+        await chrome.tabs.update(best.id, { active: true });
+        await chrome.windows.update(best.windowId, { focused: true });
+        this.showFeedback(`Switched to: ${best.title}`);
       } else {
-        // Enhanced error message with suggestions
-        const similarTabs = tabs.filter(tab => {
-          const title = tab.title.toLowerCase();
-          return title.split(' ').some(word =>
-            word.includes(cleanSearchTerm.toLowerCase()) ||
-            cleanSearchTerm.toLowerCase().includes(word.substring(0, 3))
-          );
+        // Suggestions using a more relaxed fuzzy search
+        const relaxed = fuzzySearch(tabs, cleanSearchTerm, ['title', 'url'], {
+          threshold: 0.5,
+          includeScore: true
         }).slice(0, 3);
 
-        if (similarTabs.length > 0) {
-          const suggestions = similarTabs.map(tab => `"${tab.title.split(' ')[0]}"`).join(', ');
+        if (relaxed.length > 0) {
+          const suggestions = relaxed
+            .map(tab => `"${(tab.title || '').split(' ')[0]}"`)
+            .join(', ');
           this.showFeedback(`No exact match for "${cleanSearchTerm}". Try: ${suggestions}`, 'error');
         } else {
           this.showFeedback(`No tab found matching "${cleanSearchTerm}"`, 'error');
