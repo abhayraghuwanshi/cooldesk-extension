@@ -636,7 +636,13 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       backdropFilter: 'blur(10px)',
                       position: 'relative',
                     }}
-                    onClick={() => handleToggleGroup(hostname)}
+                    onClick={() => {
+                      if (groupTabs.length === 1) {
+                        focusTab(firstTab);
+                      } else {
+                        handleToggleGroup(hostname);
+                      }
+                    }}
                   >
                     <img
                       src={getFaviconUrl(firstTab.url, 64) || '/logo.png'}

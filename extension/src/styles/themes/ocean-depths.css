@@ -26,8 +26,12 @@
 }
 
 .bg-ocean-depths .header {
-  background: rgba(12, 20, 38, 0.8);
-  border-bottom: 1px solid var(--border);
+  background: rgba(20, 32, 54, 0.72);
+  /* deeper, less murky */
+  border-bottom: 1px solid color-mix(in oklab, var(--border), transparent 40%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text);
 }
 
 .bg-ocean-depths .workspace-item {

@@ -1,4 +1,4 @@
-import { faBullseye, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
+import { faBullseye, faFileExport, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { getPersonaUrlCount, personas, validatePersona } from '../../data/personas';
@@ -7,9 +7,11 @@ import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet } from '../../services/extensionApi';
 import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontSize } from '../../utils/fontUtils';
+import ExportData from '../settings/ExportData';
 import PersonasTab from '../settings/PersonasTab';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
+
 
 export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFontSizeChange }) {
   const [localSettings, setLocalSettings] = useState(settings)
@@ -694,6 +696,9 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
               onFontSizeChange={handleFontSizeChange}
               onFontFamilyChange={handleFontFamilyChange}
             />
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faFileExport} style={{ marginRight: '8px' }} />Export Data</>}>
+            <ExportData />
           </TabItem>
           {/* <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>
             <AccountTab />
