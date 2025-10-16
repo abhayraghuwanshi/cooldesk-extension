@@ -111,7 +111,11 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
       'bg-neon-cyberpunk',
       'bg-white-cred',
       'bg-orange-warm',
-      'bg-brown-earth'
+      'bg-brown-earth',
+      'bg-royal-purple',
+      'bg-golden-honey',
+      'bg-mint-sage',
+      'bg-crimson-fire'
     ];
 
     // Remove all theme classes
@@ -658,7 +662,6 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
             marginBottom: 24,
             color: '#ff6b6b',
             fontSize: '14px',
-            background: 'rgba(255, 107, 107, 0.1)',
             border: '1px solid rgba(255, 107, 107, 0.2)',
             padding: '16px 20px',
             borderRadius: '12px',

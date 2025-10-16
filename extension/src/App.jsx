@@ -97,7 +97,14 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [focusSearchTick, setFocusSearchTick] = useState(0)
   const [showDeskMetaReminder, setShowDeskMetaReminder] = useState(false);
-  const [workspaceHidden, setWorkspaceHidden] = useState(false);
+  const [workspaceHidden, setWorkspaceHidden] = useState(() => {
+    try {
+      const saved = localStorage.getItem('workspaceHidden');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' })
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
   const [addingToWorkspace, setAddingToWorkspace] = useState(null);
@@ -119,7 +126,14 @@ export default function App() {
 
   // Pinned workspaces
   const [pinnedWorkspaces, setPinnedWorkspaces] = useState([])
-  const [activePinnedWorkspace, setActivePinnedWorkspace] = useState(null)
+  const [activePinnedWorkspace, setActivePinnedWorkspace] = useState(() => {
+    try {
+      const saved = localStorage.getItem('activePinnedWorkspace');
+      return saved || null;
+    } catch {
+      return null;
+    }
+  })
 
 
   // Auto-reset active section after 5 seconds of inactivity
@@ -433,6 +447,24 @@ export default function App() {
   const savePinnedWorkspaces = async (list) => {
     try { await storageSet({ pinnedWorkspaces: list }); } catch { }
   };
+
+  // Persist active workspace to localStorage
+  useEffect(() => {
+    try {
+      if (activePinnedWorkspace) {
+        localStorage.setItem('activePinnedWorkspace', activePinnedWorkspace);
+      } else {
+        localStorage.removeItem('activePinnedWorkspace');
+      }
+    } catch { }
+  }, [activePinnedWorkspace]);
+
+  // Persist workspaceHidden state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('workspaceHidden', String(workspaceHidden));
+    } catch { }
+  }, [workspaceHidden]);
 
   useEffect(() => {
     if (!activePinnedWorkspace) return;
@@ -1419,53 +1451,6 @@ export default function App() {
       {/* Main Content Area with conditional wrapper */}
       <div>
 
-        {/* Warning: Require Gemini API key for AI features */}
-        {/* {(() => {
-          const missingApi = !(settings?.geminiApiKey || '').trim();
-          const shouldShow = missingApi && !dismissedSettingsWarning;
-          if (!shouldShow) return null;
-          return (
-            <div
-              role="alert"
-              style={{
-                margin: '8px 0 4px',
-                padding: '8px 12px',
-                borderRadius: 8,
-                background: 'rgba(255, 193, 7, 0.12)',
-                border: '1px solid rgba(255, 193, 7, 0.35)',
-                color: 'rgb(255, 213, 0)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FontAwesomeIcon icon={faTriangleExclamation} />
-                <div style={{ fontSize: 13, lineHeight: 1.3, color: '#ffd500' }}>Customize your cool desk.</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  className="add-link-btn"
-                  style={{ padding: '4px 8px' }}
-                  onClick={() => setShowSettings(true)}
-                >
-                  Open Customization
-                </button>
-                <button
-                  className="icon-btn"
-                  aria-label="Dismiss"
-                  title="Dismiss"
-                  onClick={() => setDismissedSettingsWarning(true)}
-                  style={{ padding: '4px 8px' }}
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          );
-        })()} */}
-
         {/* Pins and Cool Feed Side by Side */}
         <ErrorBoundary>
           <div style={{
@@ -1509,15 +1494,29 @@ export default function App() {
               marginTop: 16,
               padding: '10px 12px',
               borderRadius: 8,
-              border: '1px dashed var(--border-primary, rgba(255,255,255,0.2))',
-              color: 'var(--text-secondary, rgba(255,255,255,0.7))',
-              background: 'var(--surface-1, rgba(255,255,255,0.05))',
+              border: '1px dashed var(--border-primary)',
+              color: 'var(--text-secondary)',
+              background: 'var(--glass-bg)',
               cursor: 'pointer',
-              userSelect: 'none'
+              userSelect: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.2s ease',
+              fontStyle: 'italic'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--interactive-hover)';
+              e.currentTarget.style.borderColor = 'var(--border-accent)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'var(--glass-bg)';
+              e.currentTarget.style.borderColor = 'var(--border-primary)';
             }}
             title="Double-click to show workspace filters"
           >
-            Hidden: Workspace Filters (double-click to show)
+            <span style={{ opacity: 0.8 }}>Hidden: Workspace Filters</span>
+            <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
           </div>
         ) : (
           <>

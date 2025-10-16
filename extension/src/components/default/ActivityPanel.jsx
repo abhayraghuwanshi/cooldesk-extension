@@ -10,14 +10,20 @@ export function ActivityPanel({ activeSection = 0 }) {
   // State for preview modal
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [previewLoading, setPreviewLoading] = React.useState(false);
-  const [previewError, setPreviewError] = React.useState('');
   const [previewData, setPreviewData] = React.useState(null);
 
   // State for responsive layout
   const [isNarrowScreen, setIsNarrowScreen] = React.useState(false);
 
-  // Hidden sections persistence (double-click to toggle) using unified DB UI_STATE
-  const [hiddenSections, setHiddenSections] = React.useState({});
+  // Hidden sections persistence (double-click to toggle) using localStorage + unified DB
+  const [hiddenSections, setHiddenSections] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem('activityPanel_hiddenSections');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const uiStateRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -27,7 +33,9 @@ export function ActivityPanel({ activeSection = 0 }) {
         const ui = await getUIState();
         if (cancelled) return;
         uiStateRef.current = ui || { id: 'default' };
-        setHiddenSections(ui?.hiddenActivitySections || {});
+        // Merge with localStorage (localStorage takes precedence for immediate feedback)
+        const dbHidden = ui?.hiddenActivitySections || {};
+        setHiddenSections(prev => ({ ...dbHidden, ...prev }));
       } catch (e) {
         console.warn('[ActivityPanel] Failed to load UI state for hidden sections', e);
       }
@@ -35,9 +43,24 @@ export function ActivityPanel({ activeSection = 0 }) {
     return () => { cancelled = true; };
   }, []);
 
+  // Persist to localStorage on change
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('activityPanel_hiddenSections', JSON.stringify(hiddenSections));
+    } catch (e) {
+      console.warn('[ActivityPanel] Failed to save to localStorage', e);
+    }
+  }, [hiddenSections]);
+
   const toggleHidden = React.useCallback(async (name) => {
     setHiddenSections((prev) => {
       const next = { ...prev, [name]: !prev?.[name] };
+      // Save to both localStorage (immediate) and unified DB (persistent)
+      try {
+        localStorage.setItem('activityPanel_hiddenSections', JSON.stringify(next));
+      } catch (e) {
+        console.warn('[ActivityPanel] Failed to save to localStorage', e);
+      }
       // Fire-and-forget save to unified DB
       const base = uiStateRef.current || { id: 'default' };
       uiStateRef.current = { ...base, hiddenActivitySections: next };
@@ -208,8 +231,16 @@ export function ActivityPanel({ activeSection = 0 }) {
         <VoiceNavigationChatGPT />
       </div>
     },
-    { name: 'Notes', component: <NotesSection /> },
-    { name: 'Daily Notes', component: <DailyNotesSection /> }
+    {
+      name: 'Notes', component: <div>
+        <NotesSection />
+      </div>
+    },
+    {
+      name: 'Daily Notes', component: <div>
+        <DailyNotesSection />
+      </div>
+    }
   ];
 
   // Check if we should show notes side-by-side
@@ -252,21 +283,36 @@ export function ActivityPanel({ activeSection = 0 }) {
                 return (
                   <div
                     key={`${sectionConfig.name}-hidden`}
+                    className="activity-section-hidden"
                     onDoubleClick={() => toggleHidden(sectionConfig.name)}
                     ref={refCallback}
                     style={{
                       minWidth: 0,
                       padding: '10px 12px',
-                      borderRadius: 8,
-                      border: '1px dashed var(--border-primary, rgba(255,255,255,0.15))',
-                      color: 'var(--text-secondary, rgba(255,255,255,0.7))',
-                      background: 'var(--surface-1, rgba(255,255,255,0.03))',
+                      borderRadius: '8px',
+                      border: '1px dashed var(--border-primary)',
+                      color: 'var(--text-secondary)',
+                      background: 'var(--glass-bg)',
                       cursor: 'pointer',
-                      userSelect: 'none'
+                      userSelect: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.2s ease',
+                      fontStyle: 'italic'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--interactive-hover)';
+                      e.currentTarget.style.borderColor = 'var(--border-accent)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'var(--glass-bg)';
+                      e.currentTarget.style.borderColor = 'var(--border-primary)';
                     }}
                     title="Double-click to show this section again"
                   >
-                    Hidden: {sectionConfig.name} (double-click to show)
+                    <span style={{ opacity: 0.8 }}>Hidden: {sectionConfig.name}</span>
+                    <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
                   </div>
                 );
               }
@@ -329,21 +375,37 @@ export function ActivityPanel({ activeSection = 0 }) {
           <ErrorBoundary key={section.name}>
             {isHidden ? (
               <div
+                className="activity-section-hidden"
                 onDoubleClick={() => toggleHidden(section.name)}
                 ref={el => sectionRefs.current[index] = el}
                 style={{
                   marginTop: index === 0 ? 16 : 32,
                   padding: '10px 12px',
-                  borderRadius: 8,
-                  border: '1px dashed var(--border-primary, rgba(255,255,255,0.15))',
-                  color: 'var(--text-secondary, rgba(255,255,255,0.7))',
-                  background: 'var(--surface-1, rgba(255,255,255,0.03))',
+                  borderRadius: '8px',
+                  border: '1px dashed var(--border-primary)',
+                  color: 'var(--text-secondary)',
+                  background: 'var(--glass-bg)',
                   cursor: 'pointer',
-                  userSelect: 'none'
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s ease',
+                  fontStyle: 'italic',
+                  minWidth: 0
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--interactive-hover)';
+                  e.currentTarget.style.borderColor = 'var(--border-accent)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--glass-bg)';
+                  e.currentTarget.style.borderColor = 'var(--border-primary)';
                 }}
                 title="Double-click to show this section again"
               >
-                Hidden: {section.name} (double-click to show)
+                <span style={{ opacity: 0.8 }}>Hidden: {section.name}</span>
+                <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
               </div>
             ) : (
               <div

@@ -14,6 +14,7 @@
   --secondary-color: #ff851b;
   --accent-color: #ffcc02;
   --text-primary: #fff7ed;
+  --text: #fff7ed;
   --text-secondary: #fed7aa;
   --text-muted: #fdba74;
   --background-primary: #2d1b0e;
@@ -21,9 +22,16 @@
   --background-tertiary: #4d2500;
   --border-color: rgba(255, 102, 0, 0.3);
   --border-hover: rgba(255, 102, 0, 0.5);
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --border-primary: rgba(255, 102, 0, 0.2);
+  --border-secondary: rgba(255, 102, 0, 0.1);
+  --border-accent: rgba(255, 204, 2, 0.4);
+  --glass-bg: rgba(255, 102, 0, 0.05);
+  --glass-border: rgba(255, 102, 0, 0.15);
+  --glass-backdrop: blur(20px);
   --shadow-color: rgba(255, 102, 0, 0.4);
+  --interactive-hover: rgba(255, 102, 0, 0.15);
+  --interactive-active: rgba(255, 102, 0, 0.25);
+  --interactive-disabled: rgba(255, 255, 255, 0.05);
 
   /* Font size variables */
   --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);

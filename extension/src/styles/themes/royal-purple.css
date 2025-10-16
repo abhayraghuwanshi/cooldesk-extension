@@ -14,6 +14,7 @@
   --secondary-color: #a855f7;
   --accent-color: #fbbf24;
   --text-primary: #f3f4f6;
+  --text: #f3f4f6;
   --text-secondary: #d1d5db;
   --text-muted: #9ca3af;
   --background-primary: #1e1b3a;
@@ -21,15 +22,21 @@
   --background-tertiary: #44337a;
   --border-color: rgba(139, 92, 246, 0.3);
   --border-hover: rgba(139, 92, 246, 0.5);
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --border-primary: rgba(139, 92, 246, 0.2);
+  --border-secondary: rgba(139, 92, 246, 0.1);
+  --border-accent: rgba(251, 191, 36, 0.4);
+  --glass-bg: rgba(139, 92, 246, 0.05);
+  --glass-border: rgba(139, 92, 246, 0.15);
+  --glass-backdrop: blur(20px);
   --shadow-color: rgba(139, 92, 246, 0.4);
+  --interactive-hover: rgba(139, 92, 246, 0.15);
+  --interactive-active: rgba(139, 92, 246, 0.25);
+  --interactive-disabled: rgba(255, 255, 255, 0.05);
 
   /* Font size variables */
   --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);
   --font-size-sm: calc(var(--base-font-size, 14px) * 0.875);
   --font-size-base: var(--base-font-size, 14px);
-  --font-size-lg: calc(var(--base-font-size, 14px) * 1.125);
   --font-size-xl: calc(var(--base-font-size, 14px) * 1.25);
   --font-size-2xl: calc(var(--base-font-size, 14px) * 1.5);
   --font-size-3xl: calc(var(--base-font-size, 14px) * 1.875);

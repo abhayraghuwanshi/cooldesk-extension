@@ -7,6 +7,25 @@
     overflow-x: hidden;
 }
 
+.pinnedws-hidden {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px dashed var(--border-primary, rgba(255, 255, 255, 0.15));
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.pinnedws-hidden:hover {
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    border-color: var(--border-secondary, rgba(255, 255, 255, 0.25));
+}
+
 .pinnedws-pills {
     display: flex;
     flex-direction: row;

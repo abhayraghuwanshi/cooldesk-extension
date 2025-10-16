@@ -14,6 +14,7 @@
   --secondary-color: #334155;
   --accent-color: #0ea5e9;
   --text-primary: #0f172a;
+  --text: #0f172a;
   --text-secondary: #334155;
   --text-muted: #64748b;
   --background-primary: #ffffff;
@@ -21,9 +22,16 @@
   --background-tertiary: #f1f5f9;
   --border-color: rgba(226, 232, 240, 0.8);
   --border-hover: rgba(15, 23, 42, 0.2);
-  --glass-bg: rgba(255, 255, 255, 0.8);
-  --glass-border: rgba(226, 232, 240, 0.6);
+  --border-primary: rgba(15, 23, 42, 0.15);
+  --border-secondary: rgba(15, 23, 42, 0.08);
+  --border-accent: rgba(14, 165, 233, 0.3);
+  --glass-bg: rgba(15, 23, 42, 0.03);
+  --glass-border: rgba(15, 23, 42, 0.1);
+  --glass-backdrop: blur(20px);
   --shadow-color: rgba(15, 23, 42, 0.1);
+  --interactive-hover: rgba(15, 23, 42, 0.08);
+  --interactive-active: rgba(15, 23, 42, 0.12);
+  --interactive-disabled: rgba(15, 23, 42, 0.03);
 
   /* Font size variables */
   --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);

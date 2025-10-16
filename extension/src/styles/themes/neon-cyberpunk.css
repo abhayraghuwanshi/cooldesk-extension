@@ -6,8 +6,25 @@
   --primary: #ec4899;
   --accent: #06b6d4;
   --text: #f0f0ff;
+  --text-secondary: #c084fc;
+  --text-muted: #9b6fd9;
   --text-dim: #c084fc;
   --border: #7c3aed;
+  
+  /* Interactive Colors */
+  --interactive-hover: rgba(236, 72, 153, 0.15);
+  --interactive-active: rgba(236, 72, 153, 0.25);
+  --interactive-disabled: rgba(255, 255, 255, 0.05);
+  
+  /* Border Colors */
+  --border-primary: rgba(236, 72, 153, 0.2);
+  --border-secondary: rgba(236, 72, 153, 0.1);
+  --border-accent: rgba(6, 182, 212, 0.4);
+  
+  /* Glass Effect */
+  --glass-bg: rgba(236, 72, 153, 0.05);
+  --glass-border: rgba(236, 72, 153, 0.15);
+  --glass-backdrop: blur(20px);
 
   /* Font size variables */
   --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);

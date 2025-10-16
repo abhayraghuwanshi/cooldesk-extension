@@ -5,7 +5,23 @@ import { getFaviconUrl } from '../../utils';
 export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspaces = [], onReorder }) {
     const [hovered, setHovered] = React.useState(null);
     const [dragOverName, setDragOverName] = React.useState(null);
-    const [isHidden, setIsHidden] = React.useState(false);
+
+    // Load hidden state from localStorage
+    const [isHidden, setIsHidden] = React.useState(() => {
+        try {
+            const saved = localStorage.getItem('pinnedWorkspace_hidden');
+            return saved === 'true';
+        } catch {
+            return false;
+        }
+    });
+
+    // Persist hidden state to localStorage
+    React.useEffect(() => {
+        try {
+            localStorage.setItem('pinnedWorkspace_hidden', String(isHidden));
+        } catch { }
+    }, [isHidden]);
 
     const list = Array.isArray(items) ? items.slice(0, 24) : [];
 
@@ -55,15 +71,29 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                     marginTop: 12,
                     padding: '10px 12px',
                     borderRadius: 8,
-                    border: '1px dashed var(--border-primary, rgba(255,255,255,0.15))',
-                    color: 'var(--text-secondary, rgba(255,255,255,0.7))',
-                    background: 'var(--surface-1, rgba(255,255,255,0.03))',
+                    border: '1px dashed var(--border-primary)',
+                    color: 'var(--text-secondary)',
+                    background: 'var(--glass-bg)',
                     cursor: 'pointer',
-                    userSelect: 'none'
+                    userSelect: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.2s ease',
+                    fontStyle: 'italic'
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--interactive-hover)';
+                    e.currentTarget.style.borderColor = 'var(--border-accent)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--glass-bg)';
+                    e.currentTarget.style.borderColor = 'var(--border-primary)';
                 }}
                 title="Double-click to show pinned workspaces again"
             >
-                Hidden: Pinned Workspace (double-click to show)
+                <span style={{ opacity: 0.8 }}>Hidden: Pinned Workspace</span>
+                <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
             </div>
         );
     }

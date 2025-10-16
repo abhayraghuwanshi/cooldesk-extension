@@ -12,6 +12,7 @@
   --secondary-color: #8b5cf6;
   --accent-color: #a855f7;
   --text-primary: #e5e7eb;
+  --text: #e5e7eb;
   --text-secondary: #9ca3af;
   --text-muted: #6b7280;
   --background-primary: #1f2937;
@@ -19,9 +20,16 @@
   --background-tertiary: #374151;
   --border-color: rgba(99, 102, 241, 0.2);
   --border-hover: rgba(99, 102, 241, 0.4);
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --border-primary: rgba(99, 102, 241, 0.2);
+  --border-secondary: rgba(99, 102, 241, 0.1);
+  --border-accent: rgba(168, 85, 247, 0.4);
+  --glass-bg: rgba(99, 102, 241, 0.05);
+  --glass-border: rgba(99, 102, 241, 0.15);
+  --glass-backdrop: blur(20px);
   --shadow-color: rgba(99, 102, 241, 0.3);
+  --interactive-hover: rgba(99, 102, 241, 0.15);
+  --interactive-active: rgba(99, 102, 241, 0.25);
+  --interactive-disabled: rgba(255, 255, 255, 0.05);
 
   /* Font size variables */
   --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);
