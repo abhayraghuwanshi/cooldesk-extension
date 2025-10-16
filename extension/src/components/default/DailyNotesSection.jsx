@@ -1,9 +1,10 @@
-import { faCalendarAlt, faChevronLeft, faChevronRight, faExternalLinkAlt, faGlobe, faLink } from '@fortawesome/free-solid-svg-icons';
+import { faCalendarAlt, faCheck, faChevronLeft, faChevronRight, faExternalLinkAlt, faGlobe, faLink } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { subscribeDailyNotesChanges } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils.js';
 import VerticalTimeline from '../timeline/VerticalTimeline.jsx';
+import '../../styles/default/DailyNotesSection.css';
 export function DailyNotesSection() {
   // Daily notes state
   const [dailyNotes, setDailyNotes] = React.useState(null);
@@ -31,15 +32,8 @@ export function DailyNotesSection() {
     }
   }, []);
 
-  // Timeline visibility state (hidden by default, persisted in localStorage)
-  const [showTimeline, setShowTimeline] = React.useState(() => {
-    try {
-      const saved = localStorage.getItem('dailyNotes_showTimeline');
-      return saved === 'true';
-    } catch {
-      return false;
-    }
-  });
+  // Timeline always visible
+  const showTimeline = true;
 
   const getDateNDaysAgo = React.useCallback((n) => {
     const d = new Date();
@@ -114,7 +108,7 @@ export function DailyNotesSection() {
 
         if (response?.ok) {
           setDailyNotes(response.dailyNotes);
-          setDailyNotesText(response.dailyNotes.content || '');
+          // Don't populate textarea - keep it empty for new notes
           return; // Success, exit the loop
         } else if (response?.error) {
           console.warn('[DailyNotesSection] Failed to load daily notes (attempt ' + (retries + 1) + ' of ' + (maxRetries + 1) + '):', response.error);
@@ -154,18 +148,28 @@ export function DailyNotesSection() {
     console.log('[DailyNotesSection] selectedDate:', selectedDate);
     console.log('[DailyNotesSection] dailyNotesText:', dailyNotesText);
 
-    if (!selectedDate) {
-      console.error('[DailyNotesSection] No selected date');
+    if (!selectedDate || !dailyNotesText.trim()) {
+      console.error('[DailyNotesSection] No selected date or empty text');
       return;
     }
 
     try {
+      // Add timestamp marker to the new note
+      const timestamp = Date.now();
+      const timestampedNote = `[${timestamp}] ${dailyNotesText.trim()}`;
+      
+      // Append new note to existing content
+      const existingContent = dailyNotes?.content || '';
+      const newContent = existingContent 
+        ? `${existingContent}\n\n${timestampedNote}`
+        : timestampedNote;
+
       console.log('[DailyNotesSection] Sending updateDailyNotes message...');
       const response = await new Promise((resolve, reject) => {
         chrome.runtime.sendMessage({
           type: 'updateDailyNotes',
           date: selectedDate,
-          content: dailyNotesText
+          content: newContent
         }, (response) => {
           if (chrome.runtime.lastError) {
             console.error('[DailyNotesSection] Chrome runtime error:', chrome.runtime.lastError);
@@ -178,7 +182,8 @@ export function DailyNotesSection() {
       });
 
       if (response?.ok) {
-        console.log('[DailyNotesSection] Save successful, reloading notes...');
+        console.log('[DailyNotesSection] Save successful, clearing input and reloading notes...');
+        setDailyNotesText(''); // Clear the input
         await loadDailyNotes(selectedDate);
         setEditingDailyNotes(false);
         console.log('[DailyNotesSection] Save process completed');
@@ -188,7 +193,7 @@ export function DailyNotesSection() {
     } catch (e) {
       console.error('[DailyNotesSection] Exception during save:', e);
     }
-  }, [selectedDate, dailyNotesText, loadDailyNotes]);
+  }, [selectedDate, dailyNotesText, dailyNotes, loadDailyNotes]);
 
   const handleDateChange = React.useCallback((date) => {
     setSelectedDate(date);
@@ -548,6 +553,58 @@ export function DailyNotesSection() {
   const hasAnyContent = hasManualContent || autoSelectionCount > 0;
   const editButtonLabel = hasManualContent ? 'Edit notes' : 'Write notes';
   const textareaPlaceholder = isSelectedDateToday ? 'Write something about today…' : `Write notes for ${selectedDate}`;
+  
+  // Parse notes into individual entries (split by double newline or timestamp pattern)
+  const noteEntries = React.useMemo(() => {
+    if (!dailyNotes?.content) return [];
+    const content = dailyNotes.content.trim();
+    if (!content) return [];
+    
+    // Split by double newlines to separate entries
+    const entries = content.split(/\n\n+/).filter(e => e.trim());
+    const baseTimestamp = dailyNotes.updatedAt || dailyNotes.createdAt || Date.now();
+    
+    const mapped = entries.map((entry, idx) => {
+      // Try to extract timestamp from [timestamp] prefix
+      const timestampMatch = entry.match(/^\[(\d+)\]\s*/);
+      let timestamp;
+      let text = entry.trim();
+      
+      if (timestampMatch) {
+        // Has embedded timestamp - use it
+        timestamp = parseInt(timestampMatch[1], 10);
+        text = entry.substring(timestampMatch[0].length).trim();
+      } else {
+        // No timestamp - estimate based on position (older entries further back)
+        // Assume entries are in chronological order, space them 5 minutes apart
+        timestamp = baseTimestamp - (idx * 5 * 60 * 1000);
+      }
+      
+      return {
+        id: idx,
+        text: text,
+        timestamp: timestamp
+      };
+    });
+    
+    // Sort by timestamp, newest first
+    return mapped.sort((a, b) => b.timestamp - a.timestamp);
+  }, [dailyNotes]);
+  
+  // Format time ago
+  const formatTimeAgo = React.useCallback((timestamp) => {
+    const now = Date.now();
+    const diffMs = now - timestamp;
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 1) return 'now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return `${Math.floor(diffDays / 7)}w ago`;
+  }, []);
 
   return (
     <div
@@ -562,8 +619,7 @@ export function DailyNotesSection() {
           alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: 16,
-          padding: '0 4px',
-          gap: 12
+          padding: '0 4px'
         }}
       >
         <h2
@@ -577,216 +633,176 @@ export function DailyNotesSection() {
         >
           Thoughts
         </h2>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8
-          }}
-        >
-          <button
-            onClick={() => setShowTimeline(!showTimeline)}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.15)',
-              background: showTimeline ? 'rgba(52,199,89,0.12)' : 'rgba(255,255,255,0.08)',
-              color: '#ffffff',
-              cursor: 'pointer',
-              fontSize: 'var(--font-size-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transition: 'all 0.2s ease'
-            }}
-            title={showTimeline ? 'Hide timeline' : 'Show timeline'}
-          >
-            <FontAwesomeIcon icon={faCalendarAlt} style={{ fontSize: 'var(--font-size-sm)' }} />
-            <span>{showTimeline ? 'Hide' : 'Show'} Timeline</span>
-            <FontAwesomeIcon
-              icon={showTimeline ? faChevronLeft : faChevronRight}
-              style={{ fontSize: 'var(--font-size-xs)' }}
-            />
-          </button>
-          {!editingDailyNotes && (
-            <button
-              onClick={startEditing}
-              style={{
-                padding: '6px 14px',
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(255,255,255,0.12)',
-                color: '#ffffff',
-                cursor: 'pointer',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 500,
-                transition: 'all 0.2s ease'
-              }}
-            >
-              {editButtonLabel}
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Layout */}
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'row',
-          gap: 16
-        }}
-      >
-        {showTimeline && (
+      <div>
+        <div style={{ width: '100%' }}>
+          {/* Input area - always visible */}
           <div
             style={{
-              minWidth: 180,
-              maxWidth: 220,
-              animation: 'slideIn 0.3s ease-out'
+              marginBottom: 16,
+              background: 'rgba(255, 255, 255, 0.07)',
+              borderRadius: 12,
+              padding: 16,
+              border: '1px solid rgba(255, 255, 255, 0.16)',
+              transition: 'all 0.2s ease'
             }}
           >
-            <VerticalTimeline
-              dates={timelineDates}
-              notesCache={notesCache}
-              selectedDate={selectedDate}
-              onSelect={(d) => handleDateChange(d)}
-            />
-          </div>
-        )}
-
-        <div style={{ flex: 1 }}>
-          {editingDailyNotes ? (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12
-              }}
-            >
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
               <textarea
                 ref={textAreaRef}
                 value={dailyNotesText}
                 onChange={(e) => setDailyNotesText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    if (dailyNotesText.trim()) saveDailyNotes();
+                  }
+                }}
                 placeholder={textareaPlaceholder}
                 style={{
-                  width: '100%',
-                  minHeight: 220,
-                  padding: 16,
-                  borderRadius: 12,
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  background: 'rgba(255,255,255,0.07)',
+                  flex: 1,
+                  minHeight: 60,
+                  padding: 0,
+                  border: 'none',
+                  background: 'transparent',
                   color: '#ffffff',
                   fontSize: 'var(--font-size-base)',
                   lineHeight: 1.5,
-                  resize: 'vertical',
+                  resize: 'none',
                   fontFamily: 'inherit',
-                  boxShadow: '0 6px 18px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)'
+                  outline: 'none'
+                }}
+                rows={1}
+                onInput={(e) => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.max(60, e.target.scrollHeight) + 'px';
                 }}
               />
-              <div
+              <button
+                onClick={saveDailyNotes}
+                disabled={!dailyNotesText.trim()}
                 style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: 8
+                  height: 32,
+                  minWidth: 32,
+                  padding: '0 12px',
+                  borderRadius: 16,
+                  border: 'none',
+                  background: dailyNotesText.trim() ? 'rgba(52,199,89,0.15)' : 'rgba(255,255,255,0.05)',
+                  color: dailyNotesText.trim() ? '#34C759' : 'rgba(255,255,255,0.4)',
+                  cursor: dailyNotesText.trim() ? 'pointer' : 'not-allowed',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 600,
+                  transition: 'all 0.2s ease',
+                  flexShrink: 0
                 }}
+                title="Add note (Cmd+Enter)"
               >
-                <button
-                  onClick={cancelEditing}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 8,
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    background: 'transparent',
-                    color: 'rgba(255,255,255,0.75)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--font-size-sm)'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveDailyNotes}
-                  style={{
-                    padding: '6px 14px',
-                    borderRadius: 8,
-                    border: '1px solid rgba(52,199,89,0.4)',
-                    background: 'rgba(52,199,89,0.15)',
-                    color: '#34C759',
-                    cursor: 'pointer',
-                    fontSize: 'var(--font-size-sm)',
-                    fontWeight: 600
-                  }}
-                >
-                  Save Notes
-                </button>
-              </div>
+                <FontAwesomeIcon icon={faCheck} />
+              </button>
             </div>
-          ) : hasAnyContent ? (
+          </div>
+
+          {/* Notes display */}
+          {hasAnyContent && (
             <div
               className="daily-notes-scrollable-container"
               style={{
                 minHeight: 100,
                 maxHeight: '420px',
-                padding: 16,
-                color: '#ffffff',
-                fontSize: 'var(--font-size-lg)',
-                lineHeight: 1.4,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
                 overflowY: 'auto',
-                background: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: 12,
-                border: '1px solid rgba(255, 255, 255, 0.1)'
+                position: 'relative',
+                paddingLeft: 20
               }}
             >
-              {dailyNotes?.content ? renderContentWithLinks(dailyNotes.content) : null}
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-                alignItems: 'flex-start',
-                padding: 24,
-                borderRadius: 12,
-                border: '1px dashed rgba(255,255,255,0.18)',
-                background: 'rgba(255,255,255,0.04)',
-                color: 'rgba(255,255,255,0.8)'
-              }}
-            >
+              {/* Vertical timeline line */}
               <div
                 style={{
-                  fontSize: 'var(--font-size-lg)',
-                  fontWeight: 600
+                  position: 'absolute',
+                  left: 6,
+                  top: 0,
+                  bottom: 0,
+                  width: 2,
+                  background: 'rgba(255, 255, 255, 0.15)'
                 }}
-              >
-                No notes yet for {isSelectedDateToday ? 'today' : selectedDate}
+              />
+              
+              {/* Chat-like note entries */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {noteEntries.map((entry, idx) => (
+                  <div
+                    key={entry.id}
+                    style={{
+                      position: 'relative',
+                      paddingLeft: 16
+                    }}
+                  >
+                    {/* Timeline dot with timestamp */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: -14,
+                        top: 6,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: '#34C759',
+                          border: '2px solid rgba(52, 199, 89, 0.3)'
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: 'var(--font-size-xs)',
+                          color: 'rgba(255, 255, 255, 0.5)',
+                          fontWeight: 500,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {formatTimeAgo(entry.timestamp)}
+                      </span>
+                    </div>
+                    
+                    {/* Message bubble */}
+                    <div
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        borderRadius: 12,
+                        padding: 12,
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.09)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: '#ffffff',
+                          fontSize: 'var(--font-size-base)',
+                          lineHeight: 1.5,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word'
+                        }}
+                      >
+                        {renderContentWithLinks(entry.text)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div
-                style={{
-                  fontSize: 'var(--font-size-base)',
-                  maxWidth: 420,
-                  lineHeight: 1.5
-                }}
-              >
-                Start a quick journal entry or capture highlights from your browsing session.
-              </div>
-              <button
-                onClick={startEditing}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 8,
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  background: 'rgba(255,255,255,0.1)',
-                  color: '#ffffff',
-                  cursor: 'pointer',
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 500
-                }}
-              >
-                Write notes
-              </button>
             </div>
           )}
         </div>

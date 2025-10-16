@@ -1,0 +1,47 @@
+/* Daily Notes Scrollable Container */
+.daily-notes-scrollable-container {
+    position: relative;
+}
+
+.daily-notes-scrollable-container::after {
+    content: 'Double-click to edit';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: var(--font-size-xs);
+    color: rgba(255, 255, 255, 0);
+    background: rgba(0, 0, 0, 0.7);
+    padding: 4px 8px;
+    border-radius: 6px;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    opacity: 0;
+}
+
+.daily-notes-scrollable-container:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.daily-notes-scrollable-container:hover::after {
+    color: rgba(255, 255, 255, 0.8);
+    opacity: 1;
+}
+
+/* Scrollbar styling */
+.daily-notes-scrollable-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.daily-notes-scrollable-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.daily-notes-scrollable-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+.daily-notes-scrollable-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+}

@@ -6,68 +6,41 @@ import '../../styles/default/NotesSections.css';
 // Simple utility functions at module level to avoid hoisting issues
 // Every note becomes a checklist - all content is actionable
 const parseCheckboxText = (text) => {
-  const lines = text.split('\n').filter(line => line.trim()); // Remove empty lines
+  // Check if the entire note has a checkbox prefix
+  const checkboxPattern = /^(\s*)([-*]?\s*)?(\[([\sxX])\]|[☐☑])\s*(.*)/s;
+  const match = text.match(checkboxPattern);
 
-  const parsedLines = lines.map(line => {
-    const checkboxPattern = /^(\s*)([-*]?\s*)?(\[([\sxX])\]|[☐☑])\s*(.*)/;
-    const match = line.match(checkboxPattern);
+  let isChecked = false;
+  let content = text;
 
-    if (match) {
-      // Already has checkbox format
-      const indent = match[1] || '';
-      const bullet = match[2] || '';
-      const checkbox = match[3] || '';
-      const checkState = match[4] || '';
-      const content = match[5] || '';
-      const isChecked = checkState === 'x' || checkState === 'X' || checkbox === '☑';
-
-      return {
-        type: 'checkbox',
-        indent: indent,
-        bullet: bullet,
-        checked: isChecked,
-        content: content,
-        originalLine: line
-      };
-    }
-
-    // Convert regular text to checkbox format
-    return {
-      type: 'checkbox',
-      indent: '',
-      bullet: '',
-      checked: false, // All new items start unchecked
-      content: line.trim(),
-      originalLine: line
-    };
-  });
-
-  return { lines: parsedLines, hasCheckboxes: true }; // Always has checkboxes now
-};
-
-const CheckboxLine = ({ line, lineIndex, onToggle }) => {
-  if (line.type === 'checkbox') {
-    return (
-      <div key={lineIndex} className="checkbox-line" style={{
-        paddingLeft: line.indent.length * 16
-      }}>
-        <button
-          onClick={() => onToggle(lineIndex)}
-          className={`checkbox-toggle ${line.checked ? 'is-checked' : ''}`}
-          title={line.checked ? 'Mark as incomplete' : 'Mark as complete'}
-        >
-          <FontAwesomeIcon icon={line.checked ? faSquareCheck : faSquare} />
-        </button>
-        <span className={`checkbox-text ${line.checked ? 'is-checked' : ''}`}>
-          {line.content}
-        </span>
-      </div>
-    );
+  if (match) {
+    // Already has checkbox format
+    const checkState = match[4] || '';
+    isChecked = checkState === 'x' || checkState === 'X' || match[3] === '☑';
+    content = match[5] || text;
   }
 
+  return { isChecked, content, hasCheckbox: true };
+};
+
+const NoteCheckbox = ({ isChecked, content, onToggle }) => {
   return (
-    <div key={lineIndex} className="checkbox-text">
-      {line.content}
+    <div className="checkbox-line">
+      <button
+        onClick={onToggle}
+        className={`checkbox-toggle ${isChecked ? 'is-checked' : ''}`}
+        title={isChecked ? 'Mark as incomplete' : 'Mark as complete'}
+      >
+        <FontAwesomeIcon icon={isChecked ? faSquareCheck : faSquare} />
+      </button>
+      <span className={`checkbox-text ${isChecked ? 'is-checked' : ''}`}>
+        {content.split('\n').map((line, i) => (
+          <React.Fragment key={i}>
+            {line}
+            {i < content.split('\n').length - 1 && <br />}
+          </React.Fragment>
+        ))}
+      </span>
     </div>
   );
 };
@@ -107,44 +80,24 @@ const formatSmartDate = (timestamp) => {
 
 const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlaying }) => {
   const [isHovered, setIsHovered] = React.useState(false);
-  const handleToggleCheckbox = async (lineIndex) => {
-    const { lines } = parseCheckboxText(note.text || '');
-    if (lineIndex >= 0 && lineIndex < lines.length && lines[lineIndex].type === 'checkbox') {
-      lines[lineIndex].checked = !lines[lineIndex].checked;
-
-      // Sort: incomplete first, completed last
-      const checkboxLines = lines.filter(line => line.type === 'checkbox');
-      const textLines = lines.filter(line => line.type === 'text');
-      const sortedCheckboxLines = [
-        ...checkboxLines.filter(line => !line.checked),
-        ...checkboxLines.filter(line => line.checked)
-      ];
-      const allSortedLines = [...textLines, ...sortedCheckboxLines];
-
-      const updatedText = allSortedLines.map(line => {
-        if (line.type === 'checkbox') {
-          const checkSymbol = line.checked ? '[x]' : '[ ]';
-          return `${line.indent}${line.bullet}${checkSymbol} ${line.content}`;
-        }
-        return line.content;
-      }).join('\n');
-
-      onToggleCheckbox(note.id, updatedText);
-    }
+  const handleToggleCheckbox = async () => {
+    const { isChecked, content } = parseCheckboxText(note.text || '');
+    const newCheckedState = !isChecked;
+    const checkSymbol = newCheckedState ? '[x]' : '[ ]';
+    const updatedText = `${checkSymbol} ${content}`;
+    onToggleCheckbox(note.id, updatedText);
   };
 
   const renderNoteContent = () => {
-    const { lines } = parseCheckboxText(note.text || '');
+    const { isChecked, content } = parseCheckboxText(note.text || '');
 
-    // All content is now checkbox-based
-    return lines.map((line, lineIndex) => (
-      <CheckboxLine
-        key={lineIndex}
-        line={line}
-        lineIndex={lineIndex}
+    return (
+      <NoteCheckbox
+        isChecked={isChecked}
+        content={content}
         onToggle={handleToggleCheckbox}
       />
-    ));
+    );
   };
 
   return (
@@ -234,17 +187,14 @@ export function NotesSection() {
     const t = (noteText || '').trim();
     if (!t) return;
 
-    // Convert all new text to checkbox format automatically
-    const lines = t.split('\n').filter(line => line.trim());
-    const checkboxText = lines.map(line => {
-      // If already has checkbox format, keep it
-      const checkboxPattern = /^(\s*)([-*]?\s*)?(\[([\sxX])\]|[☐☑])\s*(.*)/;
-      if (checkboxPattern.test(line)) {
-        return line;
-      }
-      // Convert to checkbox format
-      return `[ ] ${line.trim()}`;
-    }).join('\n');
+    // Add single checkbox prefix to the entire note
+    const checkboxPattern = /^(\s*)([-*]?\s*)?(\[([\sxX])\]|[☐☑])\s*/;
+    let checkboxText = t;
+    
+    // Only add checkbox if it doesn't already have one at the start
+    if (!checkboxPattern.test(t)) {
+      checkboxText = `[ ] ${t}`;
+    }
 
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const note = {
@@ -506,19 +456,12 @@ export function NotesSection() {
     notes.forEach(note => {
       // Count by completion status
       const text = note.text || '';
-      const { lines } = parseCheckboxText(text);
+      const { isChecked } = parseCheckboxText(text);
 
-      const hasIncomplete = lines.some(line => line.type === 'checkbox' && !line.checked);
-      const hasCompleted = lines.some(line => line.type === 'checkbox' && line.checked);
-
-      if (hasIncomplete && !hasCompleted) {
-        counts.incomplete++;
-      } else if (hasCompleted && !hasIncomplete) {
+      if (isChecked) {
         counts.completed++;
-      } else if (hasIncomplete && hasCompleted) {
-        // Mixed notes count for both
+      } else {
         counts.incomplete++;
-        counts.completed++;
       }
     });
 
@@ -529,15 +472,13 @@ export function NotesSection() {
   const filteredNotes = React.useMemo(() => {
     return notes.filter(note => {
       const text = note.text || '';
-      const { lines } = parseCheckboxText(text);
+      const { isChecked } = parseCheckboxText(text);
 
       switch (notesFilter) {
-        case 'incomplete': {
-          return lines.some(line => line.type === 'checkbox' && !line.checked);
-        }
-        case 'completed': {
-          return lines.some(line => line.type === 'checkbox' && line.checked);
-        }
+        case 'incomplete':
+          return !isChecked;
+        case 'completed':
+          return isChecked;
         default:
           return true;
       }
@@ -631,21 +572,6 @@ export function NotesSection() {
             )}
           </div>
         </div>
-
-        {(isRecording || text.length > 0) && (
-          <div className="notes-statusRow">
-            <span>
-              {isRecording ? (
-                <span className="notes-statusRecording">
-                  🔴 Recording {formatRecordingTime(recordingTime)}{transcribedText && ' • Transcribing...'}
-                </span>
-              ) : (
-                'Cmd+Enter to save'
-              )}
-            </span>
-            <span className="notes-charCount">{text.length} chars</span>
-          </div>
-        )}
       </div>
 
       {/* Notes List */}

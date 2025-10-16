@@ -103,10 +103,10 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                         Right-click a workspace to pin it here
                     </div>
                 ) : (
-                    list.map((name) => (
+                    list.map((name, index) => (
                         <div
                             key={name}
-                            className={`coolDesk-ping-item pinnedws-pill ${name === active ? 'pinnedws-pill--active' : ''} ${dragOverName === name ? 'pinnedws-pill--dragover' : ''}`}
+                            className={`coolDesk-ping-item pinnedws-pill ${visibleWorkspaces.includes(name) ? 'pinnedws-pill--active' : ''} ${dragOverName === name ? 'pinnedws-pill--dragover' : ''}`}
                             onClick={() => onSelect && onSelect(name)}
                             onMouseEnter={() => setHovered(name)}
                             onMouseLeave={() => setHovered(null)}

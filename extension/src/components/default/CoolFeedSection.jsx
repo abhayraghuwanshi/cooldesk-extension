@@ -1,10 +1,10 @@
-import { faGlobe, faRotateRight, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
+import { faEyeSlash, faGlobe, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { getUIState, saveUIState } from '../../db/unified-api.js';
-import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../../services/extensionApi';
 import { getActivityData } from '../../services/activityService';
+import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils';
 
 export function CoolFeedSection({ tabs, pings }) {
@@ -12,7 +12,7 @@ export function CoolFeedSection({ tabs, pings }) {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [sortBy, setSortBy] = React.useState('all'); // 'all' | 'time' | 'clicks' | 'scroll' | 'forms'
-  const [maxFeed, setMaxFeed] = React.useState(12);
+  const [maxFeed, setMaxFeed] = React.useState(10);
   const [hiddenUrls, setHiddenUrls] = React.useState(() => new Set());
   const uiStateRef = React.useRef(null);
   const [ctxMenu, setCtxMenu] = React.useState({ show: false, x: 0, y: 0, url: null });
@@ -316,7 +316,7 @@ export function CoolFeedSection({ tabs, pings }) {
       .filter(r => {
         try { return !hiddenUrls.has(new URL(r.url).href); } catch { return !hiddenUrls.has(r.url); }
       })
-      .slice(0, Math.max(1, Number(maxFeed) || 12)),
+      .slice(0, Math.max(1, Number(maxFeed) || 10)),
     [suggestions, maxFeed, hiddenUrls]
   );
 
@@ -376,46 +376,7 @@ export function CoolFeedSection({ tabs, pings }) {
             <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 'var(--font-size-base)' }} />
           </button>
 
-          {/* <select
-            value={maxFeed}
-            onChange={(e) => setMaxFeed(parseInt(e.target.value, 10))}
-            style={{
-              padding: '6px 10px',
-              borderRadius: 8,
-              border: 'none',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#ffffff',
-              fontSize: 'var(--font-size-sm)',
-              cursor: 'pointer',
-              fontFamily: 'inherit'
-            }}
-            title="Max items"
-          >
-            <option value={12}>12</option>
-            <option value={15}>15</option>
-          </select> */}
 
-          {/* <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            style={{
-              padding: '6px 10px',
-              borderRadius: 8,
-              border: 'none',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#ffffff',
-              fontSize: 'var(--font-size-sm)',
-              cursor: 'pointer',
-              fontFamily: 'inherit'
-            }}
-            title="Sort by"
-          >
-            <option value="all">All</option>
-            <option value="time">Time</option>
-            <option value="clicks">Clicks</option>
-            <option value="scroll">Scroll</option>
-            <option value="forms">Forms</option>
-          </select> */}
         </div>
       </div>
       {

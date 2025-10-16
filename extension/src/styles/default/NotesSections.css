@@ -109,6 +109,11 @@
 .notes-textarea::placeholder {
     color: rgba(255, 255, 255, 0.4);
     opacity: 1;
+    transition: opacity 0.2s ease;
+}
+
+.notes-textarea:focus::placeholder {
+    opacity: 0;
 }
 
 .notes-inlineActions {
