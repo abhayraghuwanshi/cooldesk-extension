@@ -2,7 +2,7 @@ import { faCheck, faMicrophone, faPause, faPlay, faSquare, faSquareCheck, faStop
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
-
+import '../../styles/default/NotesSections.css';
 // Simple utility functions at module level to avoid hoisting issues
 // Every note becomes a checklist - all content is actionable
 const parseCheckboxText = (text) => {
@@ -48,36 +48,17 @@ const parseCheckboxText = (text) => {
 const CheckboxLine = ({ line, lineIndex, onToggle }) => {
   if (line.type === 'checkbox') {
     return (
-      <div key={lineIndex} style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: 8,
-        marginBottom: 4,
+      <div key={lineIndex} className="checkbox-line" style={{
         paddingLeft: line.indent.length * 16
       }}>
         <button
           onClick={() => onToggle(lineIndex)}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 0,
-            marginTop: 2,
-            color: line.checked ? '#34C759' : 'rgba(255, 255, 255, 0.6)',
-            fontSize: 'var(--font-size-lg)',
-            transition: 'color 0.2s ease'
-          }}
+          className={`checkbox-toggle ${line.checked ? 'is-checked' : ''}`}
           title={line.checked ? 'Mark as incomplete' : 'Mark as complete'}
         >
           <FontAwesomeIcon icon={line.checked ? faSquareCheck : faSquare} />
         </button>
-        <span style={{
-          color: line.checked ? 'rgba(255, 255, 255, 0.5)' : '#ffffff',
-          textDecoration: line.checked ? 'line-through' : 'none',
-          flex: 1,
-          lineHeight: 1.4,
-          fontSize: 'var(--font-size-lg)'
-        }}>
+        <span className={`checkbox-text ${line.checked ? 'is-checked' : ''}`}>
           {line.content}
         </span>
       </div>
@@ -85,12 +66,7 @@ const CheckboxLine = ({ line, lineIndex, onToggle }) => {
   }
 
   return (
-    <div key={lineIndex} style={{
-      marginBottom: 4,
-      color: '#ffffff',
-      lineHeight: 1.4,
-      fontSize: 'var(--font-size-lg)'
-    }}>
+    <div key={lineIndex} className="checkbox-text">
       {line.content}
     </div>
   );
@@ -173,45 +149,21 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
 
   return (
     <div
-      style={{
-        background: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 10,
-        padding: 12,
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(10px)',
-        transition: 'all 0.2s ease'
-      }}
+      className="note-card"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="note-row">
+        <div className="note-content">
           {/* All notes show content the same way - just checkboxes */}
-          <div style={{
-            fontSize: 'var(--font-size-lg)',
-            color: '#ffffff',
-            lineHeight: 1.4,
-            fontWeight: 400
-          }}>
+          <div className="note-contentText">
             {renderNoteContent()}
           </div>
         </div>
 
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          opacity: isHovered ? 1 : 0,
-          transform: isHovered ? 'translateX(0)' : 'translateX(8px)',
-          transition: 'all 0.2s ease'
-        }}>
+        <div className={`note-sideActions ${isHovered ? 'is-visible' : ''}`}>
           {/* Date display inline with buttons */}
-          <span style={{
-            fontSize: 'calc(var(--font-size-xs) * 0.85)',
-            color: 'rgba(255, 255, 255, 0.4)',
-            fontWeight: 500,
-            whiteSpace: 'nowrap'
-          }}>
+          <span className="note-date">
             {formatSmartDate(note.createdAt)}
           </span>
           {(note.type === 'voice' || note.type === 'voice-text') && note.audioData && (
@@ -220,18 +172,7 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
                 e.stopPropagation();
                 onPlay(note);
               }}
-              style={{
-                height: 32,
-                borderRadius: 16,
-                border: 'none',
-                background: isPlaying ? '#FF9500' : 'rgba(255, 255, 255, 0.1)',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
+              className={`note-voiceBtn ${isPlaying ? 'is-playing' : ''}`}
               title={isPlaying ? "Stop playback" : "Play voice note"}
             >
               <FontAwesomeIcon
@@ -246,30 +187,8 @@ const NoteDisplay = ({ note, onToggleCheckbox, onDelete, onEdit, onPlay, isPlayi
               e.stopPropagation();
               onDelete(note.id);
             }}
-            style={{
-              height: 32,
-              borderRadius: 16,
-              border: 'none',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#FF3B30',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              opacity: 0.7
-            }}
+            className="note-deleteBtn"
             title="Delete note"
-            onMouseEnter={(e) => {
-              e.target.style.background = '#FF3B30';
-              e.target.style.color = 'white';
-              e.target.style.opacity = '1';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-              e.target.style.color = '#FF3B30';
-              e.target.style.opacity = '0.7';
-            }}
           >
             <FontAwesomeIcon icon={faTrash} style={{ fontSize: 'var(--font-size-sm)' }} />
           </button>
@@ -654,48 +573,14 @@ export function NotesSection() {
   }, [isRecording, mediaRecorder, speechRecognition]);
 
   return (
-    <div style={{
-      marginBottom: 16,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
-    }}>
+    <div className="notes-root">
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-        padding: '0 4px'
-      }}>
-        <h2 style={{
-          fontSize: 'var(--font-size-2xl)',
-          fontWeight: 600,
-          margin: 0,
-          color: '#ffffff',
-          letterSpacing: '-0.5px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8
-        }}>
-          {/* <FontAwesomeIcon icon={faListCheck} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
-          Todos
-        </h2>
+      <div className="notes-header">
+        <h2 className="notes-title">Todos</h2>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <button
             onClick={() => setNotesFilter(notesFilter === 'incomplete' ? 'completed' : 'incomplete')}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 16,
-              border: 'none',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: 'rgba(255, 255, 255, 0.8)',
-              fontSize: 'var(--font-size-xs)',
-              fontWeight: 500,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              transition: 'all 0.2s ease'
-            }}
+            className="notes-filterBtn"
             title={`Switch to ${notesFilter === 'incomplete' ? 'completed' : 'incomplete'} todos`}
           >
             <FontAwesomeIcon
@@ -706,20 +591,8 @@ export function NotesSection() {
           </button>
         </div>
       </div>
-
-      {/* Input Area */}
-      <div style={{
-        background: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-        border: '1px solid rgba(255, 255, 255, 0.1)'
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          gap: 8
-        }}>
+      <div className="notes-input">
+        <div className="notes-inputRow">
           <textarea
             className="notes-textarea"
             value={text}
@@ -731,175 +604,54 @@ export function NotesSection() {
               }
             }}
             placeholder="Add a todo item..."
-            style={{
-              flex: 1,
-              minHeight: 40,
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              color: '#ffffff',
-              fontSize: 'var(--font-size-lg)',
-              lineHeight: 1.4,
-              fontFamily: 'inherit',
-              resize: 'none',
-              outline: 'none'
-            }}
             rows={1}
             onInput={(e) => {
               e.target.style.height = 'auto';
               e.target.style.height = Math.max(40, e.target.scrollHeight) + 'px';
             }}
           />
-
-          {/* Inline Action Buttons */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexShrink: 0
-          }}>
-            {/* Recording Button */}
+          <div className="notes-inlineActions">
             <button
               onClick={isRecording ? stopRecording : startRecording}
-              style={{
-                height: 32,
-                borderRadius: 16,
-                border: '1px solid',
-                borderColor: isRecording ? '#FF3B30' : 'var(--border-color, rgba(255, 255, 255, 0.2))',
-                background: isRecording
-                  ? 'linear-gradient(135deg, #FF3B30, #FF6B60)'
-                  : 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-                color: isRecording ? 'white' : 'var(--text-primary, #ffffff)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                fontSize: '16px',
-                transition: 'all 0.2s ease',
-                backdropFilter: 'blur(10px)',
-                boxShadow: isRecording ? '0 0 20px rgba(255, 59, 48, 0.4)' : '0 2px 8px rgba(0, 0, 0, 0.1)'
-              }}
-              title={isRecording ? `Stop recording ${formatRecordingTime(recordingTime)}` : "Start voice recording"}
-              onMouseEnter={(e) => {
-                if (!isRecording) {
-                  e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.15))';
-                  e.target.style.borderColor = 'var(--primary, #60a5fa)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isRecording) {
-                  e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.1))';
-                  e.target.style.borderColor = 'var(--border-color, rgba(255, 255, 255, 0.2))';
-                }
-              }}
+              className={`note-voiceBtn ${isRecording ? 'is-playing' : ''}`}
+              title={isRecording ? `Stop recording ${formatRecordingTime(recordingTime)}` : 'Start voice recording'}
             >
-              <FontAwesomeIcon
-                icon={isRecording ? faStop : faMicrophone}
-                style={{ color: 'currentColor' }}
-              />
+              <FontAwesomeIcon icon={isRecording ? faStop : faMicrophone} style={{ color: 'currentColor' }} />
             </button>
 
-            {/* Save Button */}
             {!isRecording && (
               <button
-                onClick={() => {
-                  if (text.trim()) addNote();
-                }}
+                onClick={() => { if (text.trim()) addNote(); }}
                 disabled={!text.trim()}
-                style={{
-                  height: 32,
-                  borderRadius: 16,
-                  border: '1px solid',
-                  borderColor: text.trim() ? '#34C759' : 'var(--border-color, rgba(255, 255, 255, 0.1))',
-                  background: text.trim()
-                    ? 'linear-gradient(135deg, #34C759, #4CD964)'
-                    : 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
-                  color: text.trim() ? 'white' : 'var(--text-dim, rgba(255, 255, 255, 0.4))',
-                  cursor: text.trim() ? 'pointer' : 'not-allowed',
-                  fontSize: '16px',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backdropFilter: 'blur(10px)',
-                  boxShadow: text.trim() ? '0 2px 8px rgba(52, 199, 89, 0.2)' : '0 1px 4px rgba(0, 0, 0, 0.1)'
-                }}
+                className="note-voiceBtn"
                 title="Save note as checklist"
-                onMouseEnter={(e) => {
-                  if (text.trim()) {
-                    e.target.style.background = 'linear-gradient(135deg, #4CD964, #5DE75A)';
-                    e.target.style.transform = 'translateY(-1px)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (text.trim()) {
-                    e.target.style.background = 'linear-gradient(135deg, #34C759, #4CD964)';
-                    e.target.style.transform = 'translateY(0)';
-                  }
-                }}
               >
-                <FontAwesomeIcon
-                  icon={faCheck}
-                  style={{ color: 'currentColor' }}
-                />
+                <FontAwesomeIcon icon={faCheck} style={{ color: 'currentColor' }} />
               </button>
             )}
           </div>
         </div>
 
-        {/* Status Row */}
         {(isRecording || text.length > 0) && (
-          <div style={{
-            marginTop: 8,
-            fontSize: 'var(--font-size-xs)',
-            color: 'rgba(255, 255, 255, 0.5)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
+          <div className="notes-statusRow">
             <span>
               {isRecording ? (
-                <span style={{ color: '#FF3B30', fontWeight: 600 }}>
-                  🔴 Recording {formatRecordingTime(recordingTime)}
-                  {transcribedText && ' • Transcribing...'}
+                <span className="notes-statusRecording">
+                  🔴 Recording {formatRecordingTime(recordingTime)}{transcribedText && ' • Transcribing...'}
                 </span>
               ) : (
                 'Cmd+Enter to save'
               )}
             </span>
-            <span style={{ opacity: 0.7 }}>
-              {text.length} chars
-            </span>
+            <span className="notes-charCount">{text.length} chars</span>
           </div>
         )}
       </div>
 
       {/* Notes List */}
-      <div
-        className="notes-scrollable-container"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-          maxHeight: '350px',
-          overflowY: 'auto',
-          paddingRight: '4px',
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'rgba(255, 255, 255, 0.3) transparent'
-        }}
-      >
+      <div className="notes-scrollable-container">
         {filteredNotes.length === 0 && (
-          <div style={{
-            textAlign: 'center',
-            color: 'rgba(255, 255, 255, 0.5)',
-            fontSize: 'var(--font-size-lg)',
-            fontWeight: 400,
-            padding: '40px 20px',
-            fontStyle: 'italic'
-          }}>
-            {`No ${notesFilter} todos found`}
-          </div>
+          <div className="notes-emptyState">{`No ${notesFilter} todos found`}</div>
         )}
 
         {filteredNotes.map(note => (

@@ -14,6 +14,7 @@ import { initializeData } from './data.js';
 import { handleSetAutoCleanup, initializeTabCleanup } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
+import { setupRealTimeCategorizor } from '../utils/realTimeCategorizor.js';
 
 // Auto-save selected text to daily notes
 async function saveToDailyNotes(selectionData) {
@@ -181,6 +182,48 @@ async function main() {
   } catch (e) {
     console.error('[Background] Error initializing Tab Cleanup module:', e);
   }
+
+  // Enable real-time URL categorization (tabs listeners) for chats and other platforms
+  try {
+    const rtc = setupRealTimeCategorizor();
+    rtc?.enable?.();
+    console.log('[Background] Real-time categorization enabled');
+  } catch (e) {
+    console.warn('[Background] Failed to enable real-time categorization:', e);
+  }
+
+  // Bridge DB change broadcasts to UI: when RTC updates workspaces, refresh dashboard
+  try {
+    const bc = new BroadcastChannel('ws_db_changes');
+    bc.onmessage = (ev) => {
+      try {
+        if (ev?.data?.type === 'workspacesChanged') {
+          chrome?.runtime?.sendMessage?.({ action: 'updateData', realTime: true });
+        }
+      } catch (e) {
+        console.debug('[Background] Failed to forward updateData message:', e);
+      }
+    };
+    console.log('[Background] Broadcast bridge for ws_db_changes is active');
+  } catch (e) {
+    console.debug('[Background] BroadcastChannel not available for workspace change bridge');
+  }
+
+  // Also refresh UI on chat tab updates to catch URL appends (when RTC may not broadcast)
+  try {
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.status !== 'complete' || !tab?.url) return;
+      try {
+        const u = new URL(tab.url);
+        const host = u.hostname.replace('www.', '');
+        const isChatHost = ['chat.openai.com', 'chatgpt.com', 'claude.ai', 'gemini.google.com', 'perplexity.ai'].includes(host);
+        const isConversationPath = u.pathname.includes('/c/') || u.pathname.includes('/chat/') || host === 'perplexity.ai';
+        if (isChatHost && isConversationPath) {
+          chrome?.runtime?.sendMessage?.({ action: 'updateData', realTime: true });
+        }
+      } catch {}
+    });
+  } catch {}
 
   chrome.runtime.onInstalled.addListener(async () => {
     console.log('[Background] Extension installed - populating data')
@@ -755,7 +798,7 @@ async function main() {
       (async () => {
         try {
           const senderTab = sender?.tab;
-          const windowId = senderTab?.windowId;
+          let windowId = senderTab?.windowId;
 
           // First attempt: Try to open side panel directly (same as working sample.js)
           // 🚨 WORKING CODE - DO NOT ADD setOptions() calls here - they break functionality
@@ -783,6 +826,26 @@ async function main() {
               windowId,
               sender: sender?.tab
             });
+          }
+
+          // Fallback attempt: if no windowId (e.g., invoked from extension page/popup) or first attempt failed,
+          // try to recover a valid windowId using the current window.
+          if (chrome?.sidePanel?.open && !windowId) {
+            try {
+              console.log('[Background] Attempting to get current windowId as fallback...');
+              const currentWin = await chrome.windows.getCurrent();
+              if (currentWin?.id) {
+                windowId = currentWin.id;
+                console.log('[Background] Fallback windowId acquired:', windowId);
+                await chrome.sidePanel.open({ windowId });
+                console.log('[Background] Side panel opened successfully via fallback windowId!');
+                sendResponse({ ok: true, method: 'sidePanel', via: 'getCurrent' });
+                cleanup();
+                return;
+              }
+            } catch (fallbackErr) {
+              console.warn('[Background] Fallback open via getCurrent() failed:', fallbackErr);
+            }
           }
 
           // Fallback: Open in tab

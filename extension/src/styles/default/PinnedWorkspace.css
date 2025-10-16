@@ -1,0 +1,174 @@
+/* PinnedWorkspace styles */
+
+.pinnedws-container {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+}
+
+.pinnedws-pills {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    white-space: nowrap;
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 8px;
+    gap: 10px;
+    padding-bottom: 4px;
+}
+
+.pinnedws-pill {
+    position: relative;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 12px;
+    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    flex: 0 0 auto;
+    max-width: calc(100vw - 80px);
+}
+
+.pinnedws-pill--active {
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.pinnedws-pill--dragover {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pinnedws-pill-title {
+    font-size: 13px;
+    max-width: min(180px, 60vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.pinnedws-itemsGrid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.pinnedws-listCard {
+    background: rgba(28, 28, 33, 0.50);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    padding: 10px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pinnedws-urlChips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pinnedws-urlChip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    flex: 0 0 auto;
+    max-width: calc(100vw - 80px);
+}
+
+.pinnedws-urlTitle {
+    max-width: min(220px, 60vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: #fff;
+    min-width: 0;
+}
+
+/* Medium-small screens: pre-empt overflow before 600px rules */
+@media (max-width: 700px) {
+    .pinnedws-pills {
+        gap: 10px;
+        padding: 0 8px 6px;
+        scrollbar-gutter: stable both-edges;
+        box-sizing: border-box;
+    }
+
+    .pinnedws-pill {
+        max-width: 100%;
+    }
+
+    .pinnedws-pill-title {
+        max-width: 100%;
+    }
+
+    .pinnedws-urlChip {
+        max-width: 100%;
+    }
+
+    .pinnedws-urlTitle {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 600px) {
+    .pinnedws-pills {
+        gap: 8px;
+    }
+}
+
+/* Tweak layout slightly earlier for narrow devices */
+@media (max-width: 500px) {
+    .pinnedws-pills {
+        gap: 8px;
+        padding: 0 8px 6px;
+        scrollbar-gutter: stable both-edges;
+        box-sizing: border-box;
+    }
+
+    .pinnedws-pill {
+        max-width: 100%;
+    }
+
+    .pinnedws-pill-title {
+        max-width: 100%;
+    }
+
+    .pinnedws-urlChip {
+        max-width: 100%;
+    }
+
+    .pinnedws-urlTitle {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .pinnedws-pill-title {
+        max-width: min(160px, 55vw);
+    }
+
+    .pinnedws-urlTitle {
+        max-width: min(180px, 55vw);
+    }
+}

@@ -2,6 +2,7 @@ import { faBroom, faGear, faHistory, faLayerGroup, faRotateRight } from '@fortaw
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { getHostTabs } from '../../services/extensionApi';
+import '../../styles/default/CurrentTabsSection.css';
 import { getFaviconUrl } from '../../utils';
 
 export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
@@ -393,165 +394,59 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   }, [groupedTabs, tabs, autoOrganizeEnabled]);
 
   return (
-    <div style={{
-      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
-    }}>
-      <style>
-        {`
-          .tab-group-container, .popover-list-item {
-            transition: all 0.2s ease-in-out;
-          }
-          .tab-group-container:hover {
-            transform: translateY(-2px);
-          }
-          .popover-list-item:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-          }
-          .popover-list {
-            animation: fadeIn 0.2s ease-out;
-          }
-          .recent-sort-select {
-            appearance: none;
-            -webkit-appearance: none;
-            background-color: rgba(255, 255, 255, 0.08);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            border-radius: 8px;
-            padding: 4px 24px 4px 8px;
-            background-position: right 8px center;
-            background-repeat: no-repeat;
-          }
-          .recent-sort-select:hover {
-            background-color: rgba(255, 255, 255, 0.12);
-            border-color: rgba(255, 255, 255, 0.28);
-          }
-          .recent-sort-select:focus {
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
-            border-color: rgba(0, 122, 255, 0.6);
-          }
-          .recent-sort-select option {
-            background-color: #1f1f25;
-            color: #fff;
-          }
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-5px) scale(0.98); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-          }
-        `}
-      </style>
+    <div className="currentTabs-root">
 
       {/* Header remains the same */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-        padding: '0 4px'
-      }}>
-        <h2 style={{
-          fontSize: 'var(--font-size-2xl)',
-          fontWeight: 600,
-          margin: 0,
-          color: '#ffffff',
-          letterSpacing: '-0.5px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8
-        }}>
+      <div className="currentTabs-header">
+        <h2 className="currentTabs-headerTitle">
           Tabs
         </h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+        <div className="currentTabs-headerActions">
           <button
             onClick={() => setShowRecentlyClosed(!showRecentlyClosed)}
-            style={{
-              height: 32,
-              borderRadius: '50%',
-              border: 'none',
-              background: showRecentlyClosed ? 'rgba(255, 149, 0, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-              color: showRecentlyClosed ? '#FF9500' : '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
+            className="currentTabs-iconBtn"
+            style={{ background: showRecentlyClosed ? 'rgba(255,149,0,0.2)' : undefined, color: showRecentlyClosed ? '#FF9500' : undefined }}
             title="Recently closed"
           >
-            <FontAwesomeIcon icon={faHistory} style={{ fontSize: '12px' }} />
+            <FontAwesomeIcon icon={faHistory} className="currentTabs-icon" />
           </button>
           {/* Settings button and popover */}
-          <div ref={settingsRef} style={{ position: 'relative' }}>
+          <div ref={settingsRef} className="currentTabs-settingsWrap">
             <button
               onClick={() => setShowSettings(s => !s)}
-              style={{
-                height: 32,
-                borderRadius: '50%',
-                border: 'none',
-                background: showSettings ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                color: '#ffffff',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
+              className="currentTabs-iconBtn"
+              style={{ background: showSettings ? 'rgba(255,255,255,0.2)' : undefined }}
               title="Settings"
             >
-              <FontAwesomeIcon icon={faGear} style={{ fontSize: '12px' }} />
+              <FontAwesomeIcon icon={faGear} className="currentTabs-icon" />
             </button>
             {showSettings && (
-              <div style={{
-                position: 'absolute',
-                top: '40px',
-                right: 0,
-                width: 320,
-                maxWidth: '90vw',
-                maxHeight: 320,
-                overflowY: 'auto',
-                background: 'rgba(28, 28, 33, 0.96)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                borderRadius: 14,
-                padding: 14,
-                boxShadow: '0 12px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)',
-                backdropFilter: 'blur(14px)',
-                zIndex: 200
-              }}>
-                <div style={{
-                  color: '#fff',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  letterSpacing: '-0.2px',
-                  marginBottom: 10
-                }}>
+              <div className="currentTabs-settingsPopover" style={{ maxWidth: '90vw', maxHeight: 320, overflowY: 'auto' }}>
+                <div className="currentTabs-settingsTitle" style={{ marginBottom: 10 }}>
                   Settings
                 </div>
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0 10px 0' }} />
+                <div className="currentTabs-divider" style={{ margin: '8px 0 10px 0' }} />
 
-                <div
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff',
-                    padding: '8px 6px', borderRadius: 10
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <FontAwesomeIcon icon={faBroom} style={{ fontSize: 12, color: '#34C759' }} />
+                <div className="currentTabs-settingRow">
+                  <div className="currentTabs-settingLabel">
+                    <FontAwesomeIcon icon={faBroom} className="currentTabs-icon" style={{ color: '#34C759' }} />
                     <span style={{ fontSize: 13 }}>Auto-cleanup</span>
                   </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={!!autoCleanupEnabled} onChange={toggleAutoCleanup} style={{ transform: 'scale(1.1)' }} />
+                  <label className="currentTabs-toggle">
+                    <input type="checkbox" checked={!!autoCleanupEnabled} onChange={toggleAutoCleanup} />
                     <span>{autoCleanupEnabled ? 'On' : 'Off'}</span>
                   </label>
                 </div>
 
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '6px 0' }} />
+                <div className="currentTabs-divider" style={{ background: 'rgba(255,255,255,0.06)', margin: '6px 0' }} />
 
-                <div
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff',
-                    padding: '8px 6px', borderRadius: 10
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <FontAwesomeIcon icon={faLayerGroup} style={{ fontSize: 12, color: '#007AFF' }} />
+                <div className="currentTabs-settingRow">
+                  <div className="currentTabs-settingLabel">
+                    <FontAwesomeIcon icon={faLayerGroup} className="currentTabs-icon" style={{ color: '#007AFF' }} />
                     <span style={{ fontSize: 13 }}>Auto-organize</span>
                   </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={!!autoOrganizeEnabled} onChange={toggleAutoOrganize} style={{ transform: 'scale(1.1)' }} />
+                  <label className="currentTabs-toggle">
+                    <input type="checkbox" checked={!!autoOrganizeEnabled} onChange={toggleAutoOrganize} />
                     <span>{autoOrganizeEnabled ? 'On' : 'Off'}</span>
                   </label>
                 </div>
@@ -560,18 +455,10 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
           </div>
           <button
             onClick={refreshTabs}
-            style={{
-              height: 32,
-              borderRadius: '50%',
-              border: 'none',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#ffffff',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
+            className="currentTabs-iconBtn"
             title="Reload tabs"
           >
-            <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: '12px' }} />
+            <FontAwesomeIcon icon={faRotateRight} className="currentTabs-icon" />
           </button>
         </div>
       </div>
@@ -590,22 +477,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
         </div>
       ) : (
         // *** REVISED RENDERING LOGIC FOR GROUPED TABS ***
-        <div ref={groupsContainerRef} style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          alignItems: 'flex-start',
-          gap: '16px',
-          padding: '20px 16px',
-          background: 'rgba(255, 255, 255, 0.03)',
-          borderRadius: '20px',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(10px)',
-          minHeight: '100px',
-          boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 20px rgba(0, 0, 0, 0.1)'
-        }}>
+        <div ref={groupsContainerRef} className="currentTabs-groupsRow">
           {Object.keys(groupedTabs).length === 0 ? (
-            <div style={{ width: '100%', textAlign: 'center', color: 'rgba(255, 255, 255, 0.5)', fontStyle: 'italic' }}>
+            <div className="currentTabs-emptyState">
               No tabs found
             </div>
           ) : (
@@ -619,23 +493,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                 <div key={hostname} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   {/* Collapsed State */}
                   <div
-                    className="tab-group-container"
-                    style={{
-                      width: '80px',
-                      height: '80px',
-                      padding: '8px',
-                      borderRadius: '18px',
-                      background: 'rgba(45, 45, 50, 0.7)',
-                      border: hasActive ? '1px solid rgba(0, 122, 255, 0.8)' : '1px solid rgba(70, 70, 75, 0.5)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      boxShadow: hasActive ? '0 0 0 2px rgba(0,122,255,0.25), 0 4px 15px rgba(0, 0, 0, 0.3)' : '0 4px 15px rgba(0, 0, 0, 0.3)',
-                      backdropFilter: 'blur(10px)',
-                      position: 'relative',
-                    }}
+                    className={`tab-group-container currentTabs-hostCard ${hasActive ? 'is-active' : ''}`}
                     onClick={() => {
                       if (groupTabs.length === 1) {
                         focusTab(firstTab);
@@ -649,26 +507,14 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       alt={`${hostname} favicon`}
                       width={32}
                       height={32}
-                      style={{ borderRadius: '8px', marginBottom: '4px' }}
+                      className="currentTabs-hostFavicon"
                       onError={(e) => { e.currentTarget.src = '/logo.png'; }}
                     />
-                    <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '11px', textAlign: 'center', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div className="currentTabs-hostLabel">
                       {hostname}
                     </div>
                     {/* Count Badge */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '-5px',
-                      right: '-5px',
-                      background: '#007aff',
-                      color: 'white',
-                      borderRadius: '10px',
-                      padding: '2px 7px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      boxShadow: '0 2px 5px rgba(0, 0, 0, 0.2)',
-                    }}>
+                    <div className="currentTabs-badge">
                       {groupTabs.length}
                     </div>
 
@@ -676,35 +522,13 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
 
                   {/* Expanded State (Popover) */}
                   {isExpanded && (
-                    <div className="popover-list" style={{
-                      position: 'absolute',
-                      bottom: '90px',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: '320px',
-                      background: 'rgba(35, 35, 40, 0.95)',
-                      backdropFilter: 'blur(20px)',
-                      borderRadius: '14px',
-                      border: '1px solid rgba(70, 70, 75, 0.7)',
-                      boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
-                      pointerEvents: 'auto',
-                      zIndex: 10000,
-                      padding: '8px'
-                    }}>
+                    <div
+                      className="popover-list currentTabs-popover is-positioned"
+                    >
                       {groupTabs.map(tab => (
                         <div
                           key={tab.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px',
-                            padding: '8px 10px',
-                            borderRadius: '10px',
-                            cursor: 'pointer',
-                            color: 'rgba(255, 255, 255, 0.9)',
-                            border: tab.active ? '1px solid rgba(0,122,255,0.5)' : '1px solid transparent',
-                            background: tab.active ? 'rgba(0,122,255,0.12)' : 'transparent'
-                          }}
+                          className={`currentTabs-listItem ${tab.active ? 'is-active' : ''}`}
                           title={`${tab.title || ''}${tab.url ? ` — ${tab.url}` : ''}`}
                           onClick={() => focusTab(tab)}
                         >
@@ -713,10 +537,38 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                             alt=""
                             width={18}
                             height={18}
-                            style={{ borderRadius: '4px', flexShrink: 0 }}
+                            className="currentTabs-favicon"
                             title={tab.title || tab.url || ''}
                             onError={(e) => { e.currentTarget.src = '/logo.png'; }}
                           />
+                          {/* Smart text to differentiate tabs */}
+                          {(() => {
+                            let displayTitle = tab?.title || '';
+                            let displayMeta = '';
+                            try {
+                              const u = new URL(tab?.url || '');
+                              const host = u.hostname.replace(/^www\./, '');
+                              if (!displayTitle) {
+                                const segs = u.pathname.split('/').filter(Boolean);
+                                displayTitle = segs[segs.length - 1] || host || 'Tab';
+                              }
+                              const shortPath = u.pathname.length > 1 ? u.pathname : '';
+                              const qp = u.search ? new URLSearchParams(u.search) : null;
+                              let qHint = '';
+                              if (qp && [...qp.keys()].length > 0) {
+                                const keys = [...qp.keys()].slice(0, 2).join(',');
+                                qHint = keys ? ` ?${keys}` : '';
+                              }
+                              const hashHint = u.hash ? ' #' : '';
+                              displayMeta = `${host}${shortPath}${qHint}${hashHint}`;
+                            } catch { }
+                            return (
+                              <div className="currentTabs-tabText">
+                                <div className="currentTabs-tabTitle">{displayTitle}</div>
+                                {displayMeta ? (<div className="currentTabs-tabMeta">{displayMeta}</div>) : null}
+                              </div>
+                            );
+                          })()}
                           <button
                             onClick={(e) => {
                               e.stopPropagation(); // Prevent focusTab from firing
@@ -724,10 +576,8 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                               removeTab(tab);
                             }}
                             title="Close tab"
-                            style={{
-                              background: 'none', border: 'none', color: tab.active ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255, 255, 255, 0.6)', cursor: tab.active ? 'not-allowed' : 'pointer',
-                              fontSize: '16px', padding: '0 5px', lineHeight: 1
-                            }}
+                            className="currentTabs-closeBtn"
+                            style={{ color: tab.active ? 'rgba(255, 255, 255, 0.25)' : undefined, cursor: tab.active ? 'not-allowed' : undefined }}
                             disabled={!!tab.active}
                           >
                             &times;
@@ -746,17 +596,8 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
       {/* Recently Closed Section: Timeline + Sort Controls */}
       {showRecentlyClosed && (
         <div style={{ marginTop: 24 }}>
-          <h3 style={{
-            fontSize: 'var(--font-size-lg)',
-            fontWeight: 600,
-            margin: '0 0 12px 0',
-            color: '#ffffff',
-            letterSpacing: '-0.3px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8
-          }}>
-            <FontAwesomeIcon icon={faHistory} style={{ color: '#FF9500', fontSize: '14px' }} />
+          <h3 className="currentTabs-sectionTitle">
+            <FontAwesomeIcon icon={faHistory} className="currentTabs-sectionIcon" />
             Recently Closed
           </h3>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '8px 0 12px 0', gap: 8 }}>
@@ -768,10 +609,6 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                   value={recentSortKey}
                   onChange={(e) => setRecentSortKey(e.target.value)}
                   className="recent-sort-select"
-                  style={{
-                    background: 'rgba(255,255,255,0.08)', color: '#fff', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)',
-                    padding: '4px 8px', fontSize: 12, outline: 'none'
-                  }}
                 >
                   <option value="time_desc">Newest first</option>
                   <option value="time_asc">Oldest first</option>
@@ -782,26 +619,12 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
               <div style={{ display: 'flex', gap: 6 }}>
                 <button
                   onClick={() => setRecentView('icons')}
-                  style={{
-                    height: 24,
-                    padding: '0 8px',
-                    borderRadius: 6,
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    background: recentView === 'icons' ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
-                    color: '#fff', cursor: 'pointer', fontSize: 12
-                  }}
+                  className={`currentTabs-toggleBtn ${recentView === 'icons' ? 'currentTabs-toggleBtn--active' : ''}`}
                   title="Icon view"
                 >Icons</button>
                 <button
                   onClick={() => setRecentView('list')}
-                  style={{
-                    height: 24,
-                    padding: '0 8px',
-                    borderRadius: 6,
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    background: recentView === 'list' ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
-                    color: '#fff', cursor: 'pointer', fontSize: 12
-                  }}
+                  className={`currentTabs-toggleBtn ${recentView === 'list' ? 'currentTabs-toggleBtn--active' : ''}`}
                   title="List view"
                 >List</button>
               </div>
@@ -824,14 +647,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                             key={`${item.tab?.sessionId || index}-${item.tab?.url}`}
                             onClick={() => restoreTab(item.tab?.sessionId)}
                             title={`${item.tab?.title || ''}${item.tab?.url ? ` — ${item.tab.url}` : ''}`}
-                            style={{
-                              width: 40, height: 40,
-                              borderRadius: 10,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              cursor: 'pointer',
-                              background: 'rgba(255,255,255,0.05)',
-                              border: '1px solid rgba(255,255,255,0.1)'
-                            }}
+                            className="currentTabs-iconTile"
                           >
                             <img src={getFaviconUrl(item.tab?.url, 32)} alt="" width={16} height={16} style={{ borderRadius: 4 }} onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }} />
                           </div>
@@ -842,16 +658,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                         {groupedRecentlyClosed[section].map((item, index) => (
                           <div
                             key={`${item.tab?.sessionId || index}-${item.tab?.url}`}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'auto 1fr auto',
-                              alignItems: 'center',
-                              gap: 10,
-                              padding: '6px 8px',
-                              borderRadius: 8,
-                              background: 'rgba(255, 255, 255, 0.04)',
-                              border: '1px solid rgba(255, 255, 255, 0.08)'
-                            }}
+                            className="currentTabs-listRow"
                             title={`${item.tab?.title || ''}${item.tab?.url ? ` — ${item.tab.url}` : ''}`}
                           >
                             <img src={getFaviconUrl(item.tab?.url, 32)} alt="" width={16} height={16} style={{ borderRadius: 3 }} onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }} />
@@ -863,16 +670,7 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                             </div>
                             <button
                               onClick={() => restoreTab(item.tab?.sessionId)}
-                              style={{
-                                height: 24,
-                                padding: '0 10px',
-                                borderRadius: 6,
-                                border: '1px solid rgba(255,255,255,0.18)',
-                                background: 'rgba(255,255,255,0.08)',
-                                color: '#fff',
-                                cursor: 'pointer',
-                                fontSize: 12
-                              }}
+                              className="currentTabs-restoreBtn"
                               title="Restore tab"
                             >
                               Restore

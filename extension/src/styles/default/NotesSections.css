@@ -1,0 +1,338 @@
+/* Root */
+.notes-root {
+    margin-bottom: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+
+/* Header */
+.notes-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 0 4px;
+}
+
+.notes-title {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    margin: 0;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notes-filterBtn {
+    padding: 6px 12px;
+    border-radius: 16px;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.notes-filterBtn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 1);
+}
+
+/* Input Area */
+.notes-input {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+}
+
+.notes-input:focus-within {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.notes-inputRow {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.notes-textarea {
+    flex: 1;
+    min-height: 40px;
+    padding: 0;
+    border: none !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #ffffff !important;
+    font-size: var(--font-size-lg);
+    line-height: 1.4;
+    font-family: inherit;
+    resize: none;
+    outline: none !important;
+    box-shadow: none !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+.notes-textarea:focus,
+.notes-textarea:focus-visible,
+.notes-textarea:active,
+.notes-textarea:invalid,
+.notes-textarea:valid {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+.notes-textarea:-webkit-autofill,
+.notes-textarea:-webkit-autofill:hover,
+.notes-textarea:-webkit-autofill:focus,
+.notes-textarea:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px transparent inset !important;
+    -webkit-text-fill-color: #ffffff !important;
+    background-color: transparent !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+.notes-textarea::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+    opacity: 1;
+}
+
+.notes-inlineActions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.notes-statusRow {
+    margin-top: 8px;
+    font-size: var(--font-size-xs);
+    color: rgba(255, 255, 255, 0.5);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.notes-statusRecording {
+    color: #FF3B30;
+    font-weight: 600;
+}
+
+.notes-charCount {
+    opacity: 0.7;
+}
+
+/* Notes List */
+.notes-scrollable-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 350px;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.notes-scrollable-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notes-scrollable-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.notes-scrollable-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+.notes-scrollable-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.notes-emptyState {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: var(--font-size-lg);
+    font-weight: 400;
+    padding: 40px 20px;
+    font-style: italic;
+}
+
+/* Note card */
+.note-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
+    animation: noteSlideIn 0.3s ease-out;
+}
+
+@keyframes noteSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.note-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.note-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.note-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.note-contentText {
+    font-size: var(--font-size-lg);
+    color: #ffffff;
+    line-height: 1.4;
+    font-weight: 400;
+}
+
+.note-sideActions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    opacity: 0;
+    transform: translateX(8px);
+}
+
+.note-sideActions.is-visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.note-date {
+    font-size: calc(var(--font-size-xs) * 0.85);
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.note-voiceBtn,
+.note-deleteBtn {
+    height: 32px;
+    border-radius: 16px;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.note-voiceBtn {
+    background: var(--glass-bg, rgba(255, 255, 255, 0.1));
+    color: var(--text-primary, #ffffff);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.2));
+    backdrop-filter: blur(10px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    width: 32px;
+    padding: 0;
+}
+
+.note-voiceBtn:hover:not(.is-playing):not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.note-voiceBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.note-voiceBtn.is-playing {
+    background: #FF9500;
+    color: #fff;
+    border-color: #FF9500;
+    box-shadow: 0 0 20px rgba(255, 59, 48, 0.4);
+}
+
+.note-deleteBtn {
+    background: rgba(255, 255, 255, 0.1);
+    color: #FF3B30;
+    opacity: 0.7;
+    width: 32px;
+    padding: 0;
+}
+
+.note-deleteBtn:hover {
+    background: #FF3B30;
+    color: #fff;
+    opacity: 1;
+}
+
+/* Checkbox line */
+.checkbox-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.checkbox-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    margin-top: 2px;
+    font-size: var(--font-size-lg);
+    transition: color 0.2s ease;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.checkbox-toggle.is-checked {
+    color: #34C759;
+}
+
+.checkbox-toggle:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.checkbox-toggle.is-checked:hover {
+    color: #30D158;
+}
+
+.checkbox-text {
+    color: #ffffff;
+    flex: 1;
+    line-height: 1.4;
+    font-size: var(--font-size-lg);
+}
+
+.checkbox-text.is-checked {
+    color: rgba(255, 255, 255, 0.5);
+    text-decoration: line-through;
+}

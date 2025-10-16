@@ -51,10 +51,10 @@ export default function VoiceNavigationHelp() {
       </div>
 
       <button
-        className="toggle-btn"
+        className="toggle-btn" style={{ marginTop: '15px' }}
         onClick={() => setShowAll(!showAll)}
       >
-        {showAll ? 'Show Less' : 'Show All Commands'}
+        {showAll ? 'Less' : 'More'}
       </button>
 
       <style jsx>{`
@@ -172,16 +172,10 @@ export default function VoiceNavigationHelp() {
 
   /* Toggle button styling */
   .toggle-btn {
-    margin-top: 12px;
+    margin-top:100px;
     padding: 8px 12px;
     border-radius: 10px;
-    background: linear-gradient(
-      180deg,
-      rgba(52, 199, 89, 0.18) 0%,
-      rgba(52, 199, 89, 0.12) 100%
-    );
-    border: 1px solid rgba(52, 199, 89, 0.35);
-    color: var(--accent-primary, #34c759);
+    background: transparent; 
     font-weight: 700;
     font-size: 12.5px;
     letter-spacing: 0.2px;

@@ -1259,16 +1259,22 @@
     line-height: 1.2;
 }
 
-.status-display {
-    position: absolute;
-    bottom: 15%;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 10;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    pointer-events: none;
+/* Responsive tweaks for small screens */
+@media (max-width: 500px) {
+    .voice-navigation-chatgpt {
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+        align-items: center;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none;
+    }
+
 }
 
 .status-message {

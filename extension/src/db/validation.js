@@ -376,10 +376,13 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.TYPE]: 'string'
         },
         lastAutoCreateHash: {
-            [ValidationRules.TYPE]: 'string'
+          [ValidationRules.TYPE]: 'string'
+        },
+        categoryLastCheck: {
+          [ValidationRules.TYPE]: 'object'
         },
         lastWorkspace: {
-            [ValidationRules.TYPE]: 'string'
+          [ValidationRules.TYPE]: 'string'
         },
         autoSync: {
             [ValidationRules.TYPE]: 'boolean'

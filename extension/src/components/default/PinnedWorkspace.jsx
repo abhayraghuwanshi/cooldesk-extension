@@ -1,4 +1,5 @@
 import React from 'react';
+import '../../styles/default/PinnedWorkspace.css';
 import { getFaviconUrl } from '../../utils';
 
 export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspaces = [], onReorder }) {
@@ -68,7 +69,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
     }
 
     return (
-        <div className="coolDesk-section">
+        <div className="coolDesk-section pinnedws-container">
             <h2
                 className="coolDesk-section-title"
                 title={list.length > 2 ? "Scroll through the pills to see all pinned workspaces" : "Pin workspaces by right-clicking them"}
@@ -90,8 +91,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
             </h2>
             {/* Pills row */}
             <div
-                className="coolDesk-pings-container"
-                style={{ display: 'flex', flexDirection: 'row', overflowX: 'auto', whiteSpace: 'nowrap', width: '100%', maxWidth: '100%', marginBottom: 8 }}
+                className="coolDesk-pings-container pinnedws-pills"
                 title={list.length > 2 ? "← Scroll to see all pinned workspaces →" : ""}
                 onDragOver={(e) => {
                     // Allow dropping between chips
@@ -106,30 +106,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                     list.map((name) => (
                         <div
                             key={name}
-                            className="coolDesk-ping-item"
-                            style={{
-                                marginRight: '10px',
-                                position: 'relative',
-                                cursor: 'pointer',
-                                padding: '6px 10px',
-                                borderRadius: '12px',
-                                transition: 'background-color 0.2s, border-color 0.2s, box-shadow 0.2s',
-                                background: name === active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)',
-                                border: name === active ? '1px solid rgba(255,255,255,0.28)' : '1px solid rgba(255,255,255,0.14)',
-                                color: '#fff',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                backdropFilter: 'blur(10px)',
-                                WebkitBackdropFilter: 'blur(10px)',
-                                boxShadow: (
-                                    name === active
-                                        ? '0 6px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)'
-                                        : (dragOverName === name
-                                            ? '0 0 0 2px rgba(255,255,255,0.35), 0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)'
-                                            : '0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)')
-                                )
-                            }}
+                            className={`coolDesk-ping-item pinnedws-pill ${name === active ? 'pinnedws-pill--active' : ''} ${dragOverName === name ? 'pinnedws-pill--dragover' : ''}`}
                             onClick={() => onSelect && onSelect(name)}
                             onMouseEnter={() => setHovered(name)}
                             onMouseLeave={() => setHovered(null)}
@@ -164,7 +141,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                                 }
                             }}
                         >
-                            <span style={{ fontSize: 13, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span className="pinnedws-pill-title">
                                 {name}
                             </span>
                             {hovered === name && (
@@ -201,20 +178,12 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
             </div>
 
             {/* Items lists per pinned workspace (max 2 visible) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+            <div className="pinnedws-itemsGrid">
                 {visibleWorkspaces.map((name) => {
                     const ws = Array.isArray(workspaces) ? workspaces.find(w => (w?.name || '').trim().toLowerCase() === String(name).trim().toLowerCase()) : null;
                     const urls = Array.isArray(ws?.urls) ? ws.urls.slice(0, 12) : [];
                     return (
-                        <div key={`list-${name}`} style={{
-                            background: 'rgba(28, 28, 33, 0.50)',
-                            border: '1px solid rgba(255,255,255,0.14)',
-                            borderRadius: 14,
-                            padding: 10,
-                            backdropFilter: 'blur(14px)',
-                            WebkitBackdropFilter: 'blur(14px)',
-                            boxShadow: '0 12px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06)'
-                        }}>
+                        <div key={`list-${name}`} className="pinnedws-listCard">
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                                 <div style={{ fontWeight: 600, color: '#fff', fontSize: 13 }}>{name}</div>
                                 <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)' }}>• {urls.length} item{urls.length === 1 ? '' : 's'}</div>
@@ -222,18 +191,9 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                             {urls.length === 0 ? (
                                 <div style={{ color: 'rgba(255,255,255,0.7)', fontStyle: 'italic', fontSize: 12 }}>No items yet</div>
                             ) : (
-                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                <div className="pinnedws-urlChips">
                                     {urls.map((u, idx) => (
-                                        <div key={`${name}-${idx}`} style={{
-                                            display: 'flex', alignItems: 'center', gap: 6,
-                                            padding: '6px 8px', borderRadius: 10,
-                                            background: 'rgba(255,255,255,0.10)',
-                                            border: '1px solid rgba(255,255,255,0.16)',
-                                            backdropFilter: 'blur(8px)',
-                                            WebkitBackdropFilter: 'blur(8px)',
-                                            boxShadow: '0 6px 18px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.06)',
-                                            cursor: 'pointer'
-                                        }}
+                                        <div key={`${name}-${idx}`} className="pinnedws-urlChip"
                                             title={u.title || u.url}
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -248,7 +208,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                                                 style={{ borderRadius: 4, objectFit: 'cover', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
                                                 onError={(e) => { e.currentTarget.src = '/logo.png'; }}
                                             />
-                                            <span style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: '#fff' }}>
+                                            <span className="pinnedws-urlTitle">
                                                 {u.title || (() => { try { return new URL(u.url).hostname; } catch { return u.url; } })()}
                                             </span>
                                         </div>

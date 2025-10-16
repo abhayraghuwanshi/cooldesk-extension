@@ -1,0 +1,402 @@
+/* Groups container responsive padding tweaks */
+.currentTabs-groupsWrap {
+  box-sizing: border-box;
+}
+
+@media (max-width: 700px) {
+  .currentTabs-groupsWrap {
+    padding-right: 24px !important;
+  }
+}
+/* CurrentTabsSection styles */
+
+.currentTabs-container {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+/* Grid for grouped hosts (optional hook if added in JSX) */
+.currentTabs-groupsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+/* Small host card (favicon + count) */
+.currentTabs-hostCard {
+  height: 80px;
+  padding: 8px;
+  border-radius: 18px;
+  background: rgba(45, 45, 50, 0.7);
+  border: 1px solid rgba(70, 70, 75, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  position: relative;
+}
+
+/* Expanded list styles */
+.currentTabs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.currentTabs-listItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s ease-in-out;
+}
+
+.currentTabs-listItem:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Hover/transition on host cards */
+.tab-group-container {
+  transition: all 0.2s ease-in-out;
+}
+.tab-group-container:hover {
+  transform: translateY(-2px);
+}
+
+/* Sort select styling */
+.recent-sort-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  padding: 4px 24px 4px 8px;
+  background-position: right 8px center;
+  background-repeat: no-repeat;
+}
+.recent-sort-select:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.recent-sort-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
+  border-color: rgba(0, 122, 255, 0.6);
+}
+.recent-sort-select option {
+  background-color: #1f1f25;
+  color: #fff;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Popover container for expanded group */
+.currentTabs-popover {
+  background: rgba(35, 35, 40, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 14px;
+  border: 1px solid rgba(70, 70, 75, 0.7);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+  z-index: 10000;
+  padding: 8px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.currentTabs-favicon {
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.currentTabs-closeBtn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 5px;
+  line-height: 1;
+}
+
+/* ========== New utility and layout classes (migrated from inline styles) ========== */
+
+/* Root wrapper */
+.currentTabs-root {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+
+/* Header */
+.currentTabs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+.currentTabs-headerTitle {
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  margin: 0;
+}
+.currentTabs-headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+/* Icon buttons */
+.currentTabs-iconBtn {
+  height: 32px;
+  width: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.currentTabs-iconBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.currentTabs-icon {
+  font-size: 12px;
+}
+
+/* Settings popover */
+.currentTabs-settingsWrap { position: relative; }
+.currentTabs-settingsPopover {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  width: 240px;
+  background: rgba(20, 20, 24, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px;
+  backdrop-filter: blur(14px);
+  z-index: 200;
+}
+.currentTabs-settingsTitle {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.currentTabs-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 8px 0;
+}
+.currentTabs-settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fff;
+  padding: 8px 6px;
+  border-radius: 10px;
+}
+.currentTabs-settingLabel { display: flex; align-items: center; gap: 8px; }
+.currentTabs-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
+.currentTabs-toggle input { transform: scale(1.1); }
+
+/* Groups container row */
+.currentTabs-groupsRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  row-gap: 14px;
+  padding: 10px 8px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Empty state */
+.currentTabs-emptyState { width: 100%; text-align: center; color: rgba(255,255,255,0.5); font-style: italic; }
+
+/* Host card active modifier */
+.currentTabs-hostCard.is-active {
+  border: 1px solid rgba(0, 122, 255, 0.8);
+  box-shadow: 0 0 0 2px rgba(0,122,255,0.25), 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+.currentTabs-hostFavicon { border-radius: 8px; margin-bottom: 4px; }
+.currentTabs-hostLabel {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Popover positioning */
+.currentTabs-popover.is-positioned {
+  position: absolute;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 260px;
+  max-width: 90vw;
+}
+
+/* List item active state */
+.currentTabs-listItem.is-active {
+  border: 1px solid rgba(0,122,255,0.5);
+  background: rgba(0,122,255,0.12);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Smart tab text within list items */
+.currentTabs-tabText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.currentTabs-tabTitle {
+  font-size: 12.5px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.currentTabs-tabMeta {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Toggle buttons for Recently Closed view (icons/list) */
+.currentTabs-toggleBtn {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+.currentTabs-toggleBtn--active {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Icon tile for recently closed (icons view) */
+.currentTabs-iconTile {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* List row container for recently closed (list view) */
+.currentTabs-listRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Restore button */
+.currentTabs-restoreBtn {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* Section title (e.g., Recently Closed) */
+.currentTabs-sectionTitle {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.currentTabs-sectionIcon {
+  color: #FF9500;
+  font-size: 14px;
+}
+
+/* Count badge on host card */
+.currentTabs-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #007aff;
+  color: #fff;
+  border-radius: 10px;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* Text truncation utility */
+.ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Responsive tweaks */
+@media (max-width: 700px) {
+  .currentTabs-groupsGrid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+}
+
+@media (max-width: 600px) {
+  .currentTabs-groupsGrid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .currentTabs-groupsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

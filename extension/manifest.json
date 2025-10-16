@@ -22,12 +22,9 @@
     "bookmarks",
     "tabs",
     "windows",
-    "contextMenus",
-    "search",
     "scripting",
     "idle",
     "activeTab",
-    "contextMenus",
     "sessions"
   ],
   "host_permissions": [

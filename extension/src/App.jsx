@@ -168,10 +168,15 @@ export default function App() {
   // UI state: dismissible settings warning
   const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)
 
-  // Helper function to create category-based workspaces
-  const createCategoryBasedWorkspaces = (urls, existingWorkspaces) => {
+  // Helper function to create/append category-based workspaces with incremental support
+  // options: { urlTimes: Map<string, number>, categoryLastCheck: Record<string, number> }
+  const createCategoryBasedWorkspaces = (urls, existingWorkspaces, options = {}) => {
     const categoryGroups = new Map();
     const existingNames = new Set(existingWorkspaces.map(ws => ws.name?.toLowerCase()));
+    const urlTimes = options.urlTimes instanceof Map ? options.urlTimes : new Map();
+    const categoryLastCheck = (options && typeof options === 'object' && options.categoryLastCheck) ? options.categoryLastCheck : {};
+    const maxTimeByCategory = new Map();
+    const urlsToAppendByName = new Map(); // workspaceName -> Set(url)
 
     // Group URLs by category
     urls.forEach(url => {
@@ -187,10 +192,12 @@ export default function App() {
       const parsed = GenericUrlParser.parse(url);
       if (parsed) return;
 
-      const categoryDisplayName = category.charAt(0).toUpperCase() + category.slice(1);
+      // Incremental: only include URLs newer than the last processed timestamp for this category
+      const t = Number(urlTimes.get(url) || 0);
+      const lastT = Number(categoryLastCheck?.[category] || 0);
+      if (t && lastT && t <= lastT) return;
 
-      // Skip if workspace already exists
-      if (existingNames.has(categoryDisplayName.toLowerCase())) return;
+      const categoryDisplayName = category.charAt(0).toUpperCase() + category.slice(1);
 
       if (!categoryGroups.has(category)) {
         categoryGroups.set(category, {
@@ -204,6 +211,18 @@ export default function App() {
       if (!group.urls.some(u => u === url)) {
         group.urls.push(url);
       }
+
+      // Track max timestamp seen per category so caller can persist progress
+      if (t) {
+        const prev = Number(maxTimeByCategory.get(category) || 0);
+        if (t > prev) maxTimeByCategory.set(category, t);
+      }
+
+      // If workspace already exists, also collect URLs to append later
+      if (existingNames.has(categoryDisplayName.toLowerCase())) {
+        if (!urlsToAppendByName.has(categoryDisplayName)) urlsToAppendByName.set(categoryDisplayName, new Set());
+        urlsToAppendByName.get(categoryDisplayName).add(url);
+      }
     });
 
     // Convert groups to workspace configurations
@@ -212,23 +231,30 @@ export default function App() {
       if (group.urls.length === 0) continue;
 
       const categoryData = categoryManager.getCategory(category);
-      const workspaceConfig = {
-        name: group.displayName,
-        description: `${group.displayName} websites`,
-        gridType: 'ItemGrid',
-        urls: group.urls.map(url => ({
-          url,
-          title: new URL(url).hostname,
-          addedAt: Date.now(),
-          favicon: getFaviconUrl(url, 32)
-        }))
-      };
+      // Only create a new workspace if it doesn't already exist
+      if (!existingNames.has(group.displayName.toLowerCase())) {
+        const workspaceConfig = {
+          name: group.displayName,
+          description: `${group.displayName} websites`,
+          gridType: 'ItemGrid',
+          urls: group.urls.map(url => ({
+            url,
+            title: new URL(url).hostname,
+            addedAt: Date.now(),
+            favicon: getFaviconUrl(url, 32)
+          }))
+        };
 
-      workspacesToCreate.push(workspaceConfig);
-      existingNames.add(group.displayName.toLowerCase());
+        workspacesToCreate.push(workspaceConfig);
+        existingNames.add(group.displayName.toLowerCase());
+      }
     }
 
-    return workspacesToCreate;
+    // Flatten url sets to arrays for caller
+    const urlsToAppend = {};
+    urlsToAppendByName.forEach((set, name) => { urlsToAppend[name] = Array.from(set); });
+
+    return { workspacesToCreate, maxTimeByCategory, urlsToAppend };
   };
 
   // Auto-create platform-based workspaces from URLs in history/bookmarks
@@ -245,15 +271,22 @@ export default function App() {
           return;
         }
 
-        // Check if we've already run auto-creation for this data set
+        // Compute dataset hash now, but don't early-return yet. We'll only skip later
+        // if there is nothing new to create (platform or category) AND hash matches.
         const dataHash = JSON.stringify(data.map(item => item.url).filter(Boolean).sort()).slice(0, 50);
         const lastHash = ui?.lastAutoCreateHash;
-        if (lastHash === dataHash) {
-          console.log('⏭️ Auto-workspace creation already ran for this data set');
-          return;
-        }
 
+        // Build URL list and a timestamp map per URL for incremental processing
         const urls = data.map(item => item.url).filter(Boolean);
+        const urlTimes = new Map();
+        for (const it of (Array.isArray(data) ? data : [])) {
+          const u = it?.url;
+          if (!u) continue;
+          const t = Number(it?.lastVisitTime || it?.dateAdded || 0) || 0;
+          // Keep max timestamp per URL
+          const prev = Number(urlTimes.get(u) || 0);
+          if (t > prev) urlTimes.set(u, t);
+        }
         const workspacesResult = await listWorkspaces();
         const existingWorkspaces = workspacesResult?.success ? workspacesResult.data : [];
 
@@ -269,8 +302,43 @@ export default function App() {
         // Filter URLs that should use generic categorization (not handled by GenericUrlParser)
         const urlsForCategorization = urls.filter(url => GenericUrlParser.shouldUseGenericCategorization(url));
 
-        // Create category-based workspaces (Social, Shopping, etc.) for remaining URLs
-        const categoryWorkspacesToCreate = createCategoryBasedWorkspaces(urlsForCategorization, [...existingWorkspaces, ...platformWorkspacesToCreate]);
+        // Load last per-category checkpoint from UI state (support nested shape)
+        const categoryLastCheck = (ui?.categoryLastCheck) || (ui?.data?.categoryLastCheck) || {};
+
+        // Create category-based workspaces (Social, Shopping, etc.) for remaining URLs, incrementally
+        const { workspacesToCreate: categoryWorkspacesToCreate, maxTimeByCategory, urlsToAppend } = createCategoryBasedWorkspaces(
+          urlsForCategorization,
+          [...existingWorkspaces, ...platformWorkspacesToCreate],
+          { urlTimes, categoryLastCheck }
+        );
+
+        // Append new URLs to existing category workspaces (incremental)
+        let appendedCount = 0;
+        if (urlsToAppend && typeof urlsToAppend === 'object') {
+          for (const [wsName, list] of Object.entries(urlsToAppend)) {
+            if (!Array.isArray(list) || list.length === 0) continue;
+            const target = existingWorkspaces.find(w => (w?.name || '').toLowerCase() === wsName.toLowerCase());
+            if (!target || !target.id) continue;
+            for (const url of list) {
+              try {
+                await addUrlToWorkspace(url, target.id, {
+                  title: new URL(url).hostname,
+                  favicon: getFaviconUrl(url, 32),
+                  addedAt: Date.now()
+                });
+                appendedCount++;
+              } catch (e) {
+                console.warn(`Failed to append URL to workspace ${wsName}:`, e);
+              }
+            }
+          }
+        }
+
+        // If nothing to create/append and dataset hasn't changed, skip
+        if ((platformWorkspacesToCreate.length === 0 && categoryWorkspacesToCreate.length === 0 && appendedCount === 0) && lastHash === dataHash) {
+          console.log('⏭️ Nothing new to auto-create for this dataset');
+          return;
+        }
 
         // Combine both types
         const workspacesToCreate = [...platformWorkspacesToCreate, ...categoryWorkspacesToCreate];
@@ -314,8 +382,10 @@ export default function App() {
           setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
         }
 
-        // Remember that we processed this data set
-        await saveUIState({ ...ui, lastAutoCreateHash: dataHash });
+        // Remember that we processed this data set and advance per-category checkpoints
+        const maxMapObj = (() => { try { return Object.fromEntries(maxTimeByCategory); } catch { return {}; } })();
+        const mergedCategoryLastCheck = { ...(ui?.categoryLastCheck || ui?.data?.categoryLastCheck || {}), ...maxMapObj };
+        await saveUIState({ ...ui, lastAutoCreateHash: dataHash, categoryLastCheck: mergedCategoryLastCheck });
       } catch (error) {
         console.warn('Failed to auto-create platform workspaces:', error);
       }
@@ -955,7 +1025,6 @@ export default function App() {
 
 
 
-
   const handleAddItemToWorkspace = async (item, workspaceName) => {
     try {
       try { console.log('[App] handleAddItemToWorkspace: start', { itemId: item?.id, url: item?.url, workspaceName }); } catch { }
@@ -1262,30 +1331,34 @@ export default function App() {
     switch (gridType) {
       case 'ProjectGrid':
         return (
-          <ProjectGrid
-            items={items}
-            workspaces={savedWorkspaces}
-            onAddRelated={handleAddRelated}
-            onAddLink={() => handleOpenAddLinkModal(workspace)}
-            onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
-          />
+          <div className="workspace-grid">
+            <ProjectGrid
+              items={items}
+              workspaces={savedWorkspaces}
+              onAddRelated={handleAddRelated}
+              onAddLink={() => handleOpenAddLinkModal(workspace)}
+              onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+            />
+          </div>
         );
 
       case 'ItemGrid':
       default:
         return (
-          <ItemGrid
-            items={items}
-            workspaces={savedWorkspaces}
-            onAddRelated={handleAddRelated}
-            onAddLink={() => handleOpenAddLinkModal(workspace)}
-            onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
-            allItems={data}
-            savedItems={savedUrlsFlat}
-            currentWorkspace={workspace}
-            onAddItem={handleAddItemToWorkspace}
-            onAddSavedItem={handleAddSavedUrlToWorkspace}
-          />
+          <div className="workspace-grid">
+            <ItemGrid
+              items={items}
+              workspaces={savedWorkspaces}
+              onAddRelated={handleAddRelated}
+              onAddLink={() => handleOpenAddLinkModal(workspace)}
+              onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+              allItems={data}
+              savedItems={savedUrlsFlat}
+              currentWorkspace={workspace}
+              onAddItem={handleAddItemToWorkspace}
+              onAddSavedItem={handleAddSavedUrlToWorkspace}
+            />
+          </div>
         );
     }
   }
