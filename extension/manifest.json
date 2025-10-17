@@ -58,6 +58,18 @@
         "src/interactionContent.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "src/chatScraper.js"
+      ],
+      "run_at": "document_idle"
     }
   ]
 }

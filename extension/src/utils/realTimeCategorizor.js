@@ -2,9 +2,9 @@
  * Real-time URL categorization on tab changes
  */
 
+import categoryManager from '../data/categories.js';
 import { addUrlToWorkspace, listWorkspaces, saveWorkspace } from '../db/index.js';
 import GenericUrlParser from './GenericUrlParser.js';
-import categoryManager from '../data/categories.js';
 
 /**
  * Set up real-time URL categorization
@@ -252,25 +252,25 @@ export function setupRealTimeCategorizor() {
       let enhancedTitle = title;
 
       // Debug logging before enrichment
-      console.log('[realTimeCategorizor] Before enrichWithHistory:', {
-        url,
-        originalTitle: title,
-        enhancedTitle,
-        hasBrowserAPI: !!browserAPI,
-        hasHistoryAPI: !!browserAPI?.history
-      });
+      // console.log('[realTimeCategorizor] Before enrichWithHistory:', {
+      //   url,
+      //   originalTitle: title,
+      //   enhancedTitle,
+      //   hasBrowserAPI: !!browserAPI,
+      //   hasHistoryAPI: !!browserAPI?.history
+      // });
 
       // Enrich with history for *all* URLs, not just ChatGPT
       const enriched = await GenericUrlParser.enrichWithHistory(url, enhancedTitle, browserAPI);
       enhancedTitle = enriched.title;
 
-      // Debug logging after enrichment
-      console.log('[realTimeCategorizor] After enrichWithHistory:', {
-        url,
-        originalTitle: title,
-        enrichedTitle: enhancedTitle,
-        titleChanged: enhancedTitle !== title
-      });
+      // // Debug logging after enrichment
+      // console.log('[realTimeCategorizor] After enrichWithHistory:', {
+      //   url,
+      //   originalTitle: title,
+      //   enrichedTitle: enhancedTitle,
+      //   titleChanged: enhancedTitle !== title
+      // });
 
       // Categorize URL using category manager
       const category = categoryManager.categorizeUrl(url);
@@ -300,7 +300,7 @@ export function setupRealTimeCategorizor() {
           console.log(`🔧 No platform parser found for ${url}, using category: ${category}`);
           const categoryDisplayName = category.charAt(0).toUpperCase() + category.slice(1);
           console.log(`🏗️ Creating category-based workspace: ${categoryDisplayName}`);
-          
+
           // Create a generic parsed object for category-based workspace
           const categoryParsed = {
             url: url,
@@ -324,7 +324,7 @@ export function setupRealTimeCategorizor() {
             favicon: `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`,
             timestamp: Date.now()
           };
-          
+
           // Use the category-based parsed object
           parsed = categoryParsed;
           console.log(`✅ Created category-based parsed object:`, parsed);
@@ -333,11 +333,12 @@ export function setupRealTimeCategorizor() {
           return;
         }
       }
-      
+
       console.log(`Detected ${parsed.platform.name} URL: ${url}`, parsed);
 
       // Check if workspace already exists
-      const existingWorkspaces = await listWorkspaces();
+      const workspacesResult = await listWorkspaces();
+      const existingWorkspaces = workspacesResult?.success ? workspacesResult.data : [];
       console.log(`🔍 Checking existing workspaces for: ${parsed.workspace}`, {
         existingCount: existingWorkspaces.length,
         existingNames: existingWorkspaces.map(ws => ws.name)
@@ -429,15 +430,15 @@ export function setupRealTimeCategorizor() {
         (changeInfo.status === 'complete' && tab.url) ||
         (changeInfo.url && tab.url) // URL changed (SPA navigation)
       );
-      
+
       if (shouldCategorize) {
-        console.log('[realTimeCategorizor] Tab updated:', {
-          tabId,
-          url: tab.url,
-          title: tab.title,
-          status: changeInfo.status,
-          urlChanged: !!changeInfo.url
-        });
+        // console.log('[realTimeCategorizor] Tab updated:', {
+        //   tabId,
+        //   url: tab.url,
+        //   title: tab.title,
+        //   status: changeInfo.status,
+        //   urlChanged: !!changeInfo.url
+        // });
         categorizeUrl(tab.url, tab.title, tabId);
       }
     });
@@ -468,13 +469,13 @@ export function setupRealTimeCategorizor() {
         const [activeTab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
         if (activeTab?.url && !isInternalUrl(activeTab.url)) {
           // Only categorize chat platforms that use SPA navigation
-          const isChatPlatform = 
+          const isChatPlatform =
             activeTab.url.includes('chat.openai.com') ||
             activeTab.url.includes('chatgpt.com') ||
             activeTab.url.includes('claude.ai') ||
             activeTab.url.includes('gemini.google.com') ||
             activeTab.url.includes('perplexity.ai');
-          
+
           if (isChatPlatform) {
             categorizeUrl(activeTab.url, activeTab.title, activeTab.id);
           }
@@ -556,7 +557,7 @@ if (browserAPI) {
 function testCategoryManager() {
   console.log('🧪 Testing Category Manager:');
   console.log('Available categories:', categoryManager.getAllCategories());
-  
+
   const testUrls = [
     'https://facebook.com',
     'https://twitter.com',
@@ -568,7 +569,7 @@ function testCategoryManager() {
     'https://gmail.com',
     'https://example.com'
   ];
-  
+
   testUrls.forEach(url => {
     const category = categoryManager.categorizeUrl(url);
     console.log(`${url} -> ${category}`);
@@ -578,7 +579,7 @@ function testCategoryManager() {
 // Manual categorization test function
 async function manualCategorizeTest(testUrl = 'https://facebook.com') {
   console.log(`🔧 Manually testing categorization for: ${testUrl}`);
-  
+
   const categorizer = setupRealTimeCategorizor();
   if (categorizer) {
     try {
@@ -592,12 +593,16 @@ async function manualCategorizeTest(testUrl = 'https://facebook.com') {
   }
 }
 
-// Export for console usage
-if (typeof window !== 'undefined') {
-  window.realTimeCategorizor = {
-    setup: setupRealTimeCategorizor,
-    categorizeNow: categorizeCurrentTab,
-    testCategories: testCategoryManager,
-    manualTest: manualCategorizeTest
-  };
+// Export for console usage (safely handle service worker context)
+try {
+  if (typeof window !== 'undefined' && window) {
+    window.realTimeCategorizor = {
+      setup: setupRealTimeCategorizor,
+      categorizeNow: categorizeCurrentTab,
+      testCategories: testCategoryManager,
+      manualTest: manualCategorizeTest
+    };
+  }
+} catch (e) {
+  // Silently ignore in service worker context where window doesn't exist
 }

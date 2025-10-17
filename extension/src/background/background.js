@@ -1,8 +1,10 @@
 // MV3 background service worker (type: module)
 import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats } from '../db/index.js';
+import { DB_CONFIG, getUnifiedDB } from '../db/unified-db.js';
 import { storageGetWithTTL } from '../services/extensionApi.js';
 import { populateAndStore } from './data.js';
 // Modular background pieces - these initialize their own message handlers
+// NOTE: realTimeCategorizor is lazy-loaded to avoid window reference errors in service worker
 import {
   handleActivityContentScriptMessage,
   handleCleanupTimeSeriesData,
@@ -14,7 +16,6 @@ import { initializeData } from './data.js';
 import { handleSetAutoCleanup, initializeTabCleanup } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
-import { setupRealTimeCategorizor } from '../utils/realTimeCategorizor.js';
 
 // Auto-save selected text to daily notes
 async function saveToDailyNotes(selectionData) {
@@ -183,14 +184,9 @@ async function main() {
     console.error('[Background] Error initializing Tab Cleanup module:', e);
   }
 
-  // Enable real-time URL categorization (tabs listeners) for chats and other platforms
-  try {
-    const rtc = setupRealTimeCategorizor();
-    rtc?.enable?.();
-    console.log('[Background] Real-time categorization enabled');
-  } catch (e) {
-    console.warn('[Background] Failed to enable real-time categorization:', e);
-  }
+  // Real-time categorization DISABLED - using scraping mechanism instead
+  // The scraping mechanism is more reliable and doesn't interfere with other features
+  console.log('[Background] Real-time categorization disabled (using scraping mechanism)');
 
   // Bridge DB change broadcasts to UI: when RTC updates workspaces, refresh dashboard
   try {
@@ -221,9 +217,9 @@ async function main() {
         if (isChatHost && isConversationPath) {
           chrome?.runtime?.sendMessage?.({ action: 'updateData', realTime: true });
         }
-      } catch {}
+      } catch { }
     });
-  } catch {}
+  } catch { }
 
   chrome.runtime.onInstalled.addListener(async () => {
     console.log('[Background] Extension installed - populating data')
@@ -261,6 +257,19 @@ async function main() {
   chrome.runtime.onStartup?.addListener(async () => {
     console.log('[Background] Startup - ensuring data present')
     try {
+      // Clean up corrupted UI state (flatten nested data structures)
+      try {
+        const { getUIState, saveUIState } = await import('../db/index.js');
+        const uiState = await getUIState();
+        // getUIState now automatically flattens, so just save it back to persist the fix
+        if (uiState) {
+          await saveUIState(uiState);
+          console.log('[Background] UI state cleaned up on startup');
+        }
+      } catch (e) {
+        console.warn('[Background] Failed to cleanup UI state:', e);
+      }
+
       // Check cache with TTL (30 minutes)
       const { data: dashboardData, expired } = await storageGetWithTTL('dashboardData', 30 * 60 * 1000);
       if (expired || !dashboardData || (!dashboardData.bookmarks?.length && !dashboardData.history?.length)) {
@@ -520,15 +529,16 @@ async function main() {
     }
 
     // Handle activity tracking messages from content scripts
-    if (msg.type && sender.tab) {
+    // Skip activity handling for chat scraping messages
+    if (msg.type && sender.tab && msg.type !== 'AUTO_SCRAPED_CHATS') {
       console.log('[Background Debug] Potential activity message:', { type: msg.type, url: sender.tab?.url });
-    }
 
-    const activityHandled = handleActivityContentScriptMessage(msg, sender);
-    if (activityHandled) {
-      console.log('[Background Debug] Message handled by activity content script handler');
-      cleanup();
-      return false; // Don't send response for content script activity messages
+      const activityHandled = handleActivityContentScriptMessage(msg, sender);
+      if (activityHandled) {
+        console.log('[Background Debug] Message handled by activity content script handler');
+        cleanup();
+        return false; // Don't send response for content script activity messages
+      }
     }
 
     if (msg?.ping === 'bg') {
@@ -659,6 +669,452 @@ async function main() {
         });
 
       return true; // Keep message channel open for async response
+    }
+
+
+    // Get last scrape time from UI_STATE store
+    if (msg?.type === 'GET_LAST_SCRAPE_TIME') {
+      console.log('[Background] Getting last scrape time for:', msg.data?.platform);
+      (async () => {
+        try {
+          const { platform } = msg.data || {};
+          if (!platform) {
+            sendResponse({ timestamp: 0 });
+            cleanup();
+            return;
+          }
+
+          const { getUnifiedDB, DB_CONFIG } = await import('../db/unified-db.js');
+          const db = await getUnifiedDB();
+
+          const tx = db.transaction([DB_CONFIG.STORES.UI_STATE], 'readonly');
+          const store = tx.objectStore(DB_CONFIG.STORES.UI_STATE);
+          const stateKey = `lastScrape_${platform}`;
+
+          const state = await new Promise((resolve, reject) => {
+            const request = store.get(stateKey);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+
+          const timestamp = state?.timestamp || 0;
+          console.log(`[Background] Last scrape time for ${platform}: ${timestamp ? new Date(timestamp).toLocaleString() : 'Never'}`);
+          sendResponse({ timestamp });
+        } catch (error) {
+          console.error('[Background] Error getting last scrape time:', error);
+          sendResponse({ timestamp: 0 });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Update last scrape time in UI_STATE store
+    if (msg?.type === 'UPDATE_LAST_SCRAPE_TIME') {
+      console.log('[Background] Updating last scrape time');
+      (async () => {
+        try {
+          const { platform, timestamp } = msg.data || {};
+          if (!platform || !timestamp) {
+            sendResponse({ success: false, error: 'Missing platform or timestamp' });
+            cleanup();
+            return;
+          }
+
+          const { getUnifiedDB, DB_CONFIG } = await import('../db/unified-db.js');
+          const db = await getUnifiedDB();
+
+          const tx = db.transaction([DB_CONFIG.STORES.UI_STATE], 'readwrite');
+          const store = tx.objectStore(DB_CONFIG.STORES.UI_STATE);
+          const stateKey = `lastScrape_${platform}`;
+
+          await new Promise((resolve, reject) => {
+            const request = store.put({
+              id: stateKey,
+              timestamp,
+              platform,
+              updatedAt: Date.now()
+            });
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+          });
+
+          await new Promise((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+
+          console.log(`[Background] ✅ Updated last scrape time for ${platform}: ${new Date(timestamp).toLocaleString()}`);
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('[Background] Error updating last scrape time:', error);
+          sendResponse({ success: false, error: error.message });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Handle auto-scraped chats from content script
+    if (msg?.type === 'AUTO_SCRAPED_CHATS') {
+      console.log('[Background] 🔔 AUTO_SCRAPED_CHATS message received!');
+      console.log('[Background] Handling auto-scraped chats');
+      (async () => {
+        try {
+          const result = msg.data;
+          console.log('[Background] Received data:', {
+            success: result.success,
+            platform: result.platform,
+            chatsCount: result.chats?.length,
+            newChatsCount: result.newChatsCount
+          });
+
+          if (result.success && result.chats && result.chats.length > 0) {
+            console.log('[Background] Processing chats...');
+            
+            // Use top-level imports (same pattern as activity.js)
+            console.log('[Background] Step 1: Opening database...');
+            const db = await getUnifiedDB();
+            console.log('[Background] Step 2: Database opened successfully');
+
+            // Get existing chats to deduplicate
+            console.log('[Background] Step 4: Creating read transaction...');
+            const readTx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS], 'readonly');
+            const readStore = readTx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
+            const index = readStore.index('by_platform');
+
+            console.log('[Background] Step 5: Querying existing chats...');
+            const existingChats = await new Promise((resolve, reject) => {
+              const request = index.getAll(result.platform);
+              request.onsuccess = () => resolve(request.result || []);
+              request.onerror = () => reject(request.error);
+            });
+
+            console.log(`[Background] Step 6: Found ${existingChats.length} existing chats for ${result.platform}`);
+
+            // Create a map of existing chat IDs
+            const existingChatIds = new Set(existingChats.map(chat => chat.chatId));
+
+            // Filter out chats that already exist
+            const newChats = result.chats.filter(chat => !existingChatIds.has(chat.chatId));
+
+            console.log(`[Background] Step 7: After deduplication: ${newChats.length} new chats (${result.chats.length - newChats.length} duplicates)`);
+
+            if (newChats.length === 0) {
+              console.log(`[Background] ℹ️ No new chats to store (all ${result.chats.length} already exist)`);
+              return;
+            }
+
+            console.log(`[Background] Step 8: Storing ${newChats.length} new chats...`);
+
+            // Store only new chats in IndexedDB
+            const writeTx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS, DB_CONFIG.STORES.UI_STATE], 'readwrite');
+            const writeStore = writeTx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
+
+            for (const chat of newChats) {
+              await new Promise((resolve, reject) => {
+                const request = writeStore.put(chat);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+              });
+            }
+
+            // Update last scrape time in UI_STATE
+            const uiStateStore = writeTx.objectStore(DB_CONFIG.STORES.UI_STATE);
+            const stateKey = `lastScrape_${result.platform}`;
+            await new Promise((resolve, reject) => {
+              const request = uiStateStore.put({
+                id: stateKey,
+                timestamp: result.scrapedAt,
+                platform: result.platform,
+                updatedAt: Date.now()
+              });
+              request.onsuccess = () => resolve();
+              request.onerror = () => reject(request.error);
+            });
+
+            await new Promise((resolve, reject) => {
+              writeTx.oncomplete = () => resolve();
+              writeTx.onerror = () => reject(writeTx.error);
+            });
+
+            console.log(`[Background] ✅ Auto-stored ${newChats.length} new ${result.platform} chats (${result.chats.length - newChats.length} duplicates skipped)`);
+          }
+        } catch (error) {
+          console.error('[Background] Error handling auto-scraped chats:', error);
+        }
+      })();
+      return false; // No response needed for auto-scrape
+    }
+
+    // Handle chat scraping requests
+    if (msg?.type === 'SCRAPE_CHATS_REQUEST') {
+      console.log('[Background] Handling chat scrape request');
+      (async () => {
+        try {
+          const { tabId, platform } = msg.data || {};
+
+          if (!tabId) {
+            sendResponse({ success: false, error: 'No tab ID provided' });
+            cleanup();
+            return;
+          }
+
+          // Send message to content script to scrape
+          const result = await chrome.tabs.sendMessage(tabId, {
+            type: 'SCRAPE_CHATS'
+          });
+
+          if (result.success && result.chats) {
+            // Import DB dynamically
+            const { getUnifiedDB, DB_CONFIG } = await import('../db/unified-db.js');
+            const db = await getUnifiedDB();
+
+            // Store scraped chats in IndexedDB
+            const tx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS], 'readwrite');
+            const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
+            const index = store.index('by_platform');
+
+            // Get existing chats for this platform
+            const existingChats = await new Promise((resolve, reject) => {
+              const request = index.getAll(result.platform);
+              request.onsuccess = () => resolve(request.result || []);
+              request.onerror = () => reject(request.error);
+            });
+
+            // Deduplicate by chatId
+            const chatMap = new Map();
+            existingChats.forEach(chat => chatMap.set(chat.chatId, chat));
+
+            // Add new scraped chats
+            let newCount = 0;
+            for (const chat of result.chats) {
+              if (!chatMap.has(chat.chatId)) {
+                newCount++;
+              }
+              chatMap.set(chat.chatId, chat);
+
+              // Store in IndexedDB
+              await new Promise((resolve, reject) => {
+                const request = store.put(chat);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+              });
+            }
+
+            await new Promise((resolve, reject) => {
+              tx.oncomplete = () => resolve();
+              tx.onerror = () => reject(tx.error);
+            });
+
+            console.log(`[Background] Stored ${newCount} new chats (${chatMap.size} total for ${result.platform})`);
+
+            sendResponse({
+              success: true,
+              count: newCount,
+              total: chatMap.size,
+              platform: result.platform,
+            });
+          } else {
+            sendResponse(result);
+          }
+        } catch (error) {
+          console.error('[Background] Error handling scrape request:', error);
+          sendResponse({ success: false, error: error.message });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Handle get scraped chats requests
+    if (msg?.type === 'GET_SCRAPED_CHATS') {
+      console.log('[Background] Getting scraped chats:', msg.data);
+      (async () => {
+        try {
+          const { platform, limit, sortBy = 'scrapedAt' } = msg.data || {};
+
+          // Import DB dynamically
+          const { getUnifiedDB, DB_CONFIG } = await import('../db/unified-db.js');
+          const db = await getUnifiedDB();
+
+          const tx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS], 'readonly');
+          const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
+
+          let chats = [];
+
+          if (platform) {
+            // Get chats for specific platform
+            const index = store.index('by_platform');
+            chats = await new Promise((resolve, reject) => {
+              const request = index.getAll(platform);
+              request.onsuccess = () => resolve(request.result || []);
+              request.onerror = () => reject(request.error);
+            });
+          } else {
+            // Get all chats
+            chats = await new Promise((resolve, reject) => {
+              const request = store.getAll();
+              request.onsuccess = () => resolve(request.result || []);
+              request.onerror = () => reject(request.error);
+            });
+          }
+
+          // Sort chats
+          if (sortBy === 'scrapedAt') {
+            chats.sort((a, b) => b.scrapedAt - a.scrapedAt); // Newest first
+          } else if (sortBy === 'title') {
+            chats.sort((a, b) => a.title.localeCompare(b.title));
+          }
+
+          // Apply limit if specified
+          if (limit && limit > 0) {
+            chats = chats.slice(0, limit);
+          }
+
+          // Group by platform for stats
+          const byPlatform = {};
+          chats.forEach(chat => {
+            if (!byPlatform[chat.platform]) {
+              byPlatform[chat.platform] = 0;
+            }
+            byPlatform[chat.platform]++;
+          });
+
+          console.log(`[Background] Retrieved ${chats.length} scraped chats`);
+
+          sendResponse({
+            success: true,
+            chats,
+            total: chats.length,
+            byPlatform,
+          });
+        } catch (error) {
+          console.error('[Background] Error getting scraped chats:', error);
+          sendResponse({ success: false, error: error.message });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Handle delete scraped chat request
+    if (msg?.type === 'DELETE_SCRAPED_CHAT') {
+      console.log('[Background] Deleting scraped chat:', msg.data);
+      (async () => {
+        try {
+          const { chatId } = msg.data || {};
+
+          if (!chatId) {
+            sendResponse({ success: false, error: 'Chat ID is required' });
+            cleanup();
+            return;
+          }
+
+          // Import DB dynamically
+          const { getUnifiedDB, DB_CONFIG } = await import('../db/unified-db.js');
+          const db = await getUnifiedDB();
+
+          const tx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS], 'readwrite');
+          const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
+
+          await new Promise((resolve, reject) => {
+            const request = store.delete(chatId);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+          });
+
+          await new Promise((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+
+          console.log(`[Background] Deleted scraped chat: ${chatId}`);
+
+          sendResponse({
+            success: true,
+            deleted: chatId,
+          });
+        } catch (error) {
+          console.error('[Background] Error deleting scraped chat:', error);
+          sendResponse({ success: false, error: error.message });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Handle clear scraped chats for platform
+    if (msg?.type === 'CLEAR_SCRAPED_CHATS') {
+      console.log('[Background] Clearing scraped chats:', msg.data);
+      (async () => {
+        try {
+          const { platform } = msg.data || {};
+
+          // Import DB dynamically
+          const { getUnifiedDB, DB_CONFIG } = await import('../db/unified-db.js');
+          const db = await getUnifiedDB();
+
+          const tx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS], 'readwrite');
+          const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
+
+          if (platform) {
+            // Clear chats for specific platform
+            const index = store.index('by_platform');
+            const chats = await new Promise((resolve, reject) => {
+              const request = index.getAll(platform);
+              request.onsuccess = () => resolve(request.result || []);
+              request.onerror = () => reject(request.error);
+            });
+
+            for (const chat of chats) {
+              await new Promise((resolve, reject) => {
+                const request = store.delete(chat.chatId);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+              });
+            }
+
+            console.log(`[Background] Cleared ${chats.length} chats for ${platform}`);
+
+            sendResponse({
+              success: true,
+              cleared: chats.length,
+              platform,
+            });
+          } else {
+            // Clear all scraped chats
+            await new Promise((resolve, reject) => {
+              const request = store.clear();
+              request.onsuccess = () => resolve();
+              request.onerror = () => reject(request.error);
+            });
+
+            console.log('[Background] Cleared all scraped chats');
+
+            sendResponse({
+              success: true,
+              cleared: 'all',
+            });
+          }
+
+          await new Promise((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+        } catch (error) {
+          console.error('[Background] Error clearing scraped chats:', error);
+          sendResponse({ success: false, error: error.message });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
     }
 
     // Get daily notes summary

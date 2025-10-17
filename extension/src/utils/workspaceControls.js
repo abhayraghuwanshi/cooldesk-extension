@@ -133,18 +133,22 @@ export async function getWorkspaceSettings() {
   }
 }
 
-// Export for console usage
-if (typeof window !== 'undefined') {
-  window.workspaceControls = {
-    enable: () => setAutoCreateWorkspaces(true),
-    disable: () => setAutoCreateWorkspaces(false),
-    isEnabled: isAutoCreateEnabled,
-    createNow: manualCreateWorkspaces,
-    reset: resetAutoCreateHash,
-    settings: getWorkspaceSettings,
-    scanHistory: async (days = 30) => {
-      const urls = await GenericUrlParser.scanBrowserHistory(days);
-      return manualCreateWorkspaces(urls.map(url => ({ url })));
-    }
-  };
+// Export for console usage (safely handle service worker context)
+try {
+  if (typeof window !== 'undefined' && window) {
+    window.workspaceControls = {
+      enable: () => setAutoCreateWorkspaces(true),
+      disable: () => setAutoCreateWorkspaces(false),
+      isEnabled: isAutoCreateEnabled,
+      createNow: manualCreateWorkspaces,
+      reset: resetAutoCreateHash,
+      settings: getWorkspaceSettings,
+      scanHistory: async (days = 30) => {
+        const urls = await GenericUrlParser.scanBrowserHistory(days);
+        return manualCreateWorkspaces(urls.map(url => ({ url })));
+      }
+    };
+  }
+} catch (e) {
+  // Silently ignore in service worker context where window doesn't exist
 }

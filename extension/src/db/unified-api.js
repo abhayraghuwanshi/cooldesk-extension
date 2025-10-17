@@ -521,7 +521,22 @@ export const getUIState = withErrorHandling(async () => {
         request.onerror = () => reject(request.error)
     })
     
-    return result || {
+    // Flatten any nested 'data' properties to fix corrupted state
+    const flattenData = (obj) => {
+        if (!obj || typeof obj !== 'object') return obj
+        
+        let flattened = { ...obj }
+        while (flattened.data && typeof flattened.data === 'object' && !Array.isArray(flattened.data)) {
+            const { data, ...rest } = flattened
+            flattened = { ...rest, ...data }
+        }
+        
+        return flattened
+    }
+    
+    const flattened = result ? flattenData(result) : null
+    
+    return flattened || {
         id: 'default',
         selectedTab: null,
         selectedWorkspace: null,
@@ -545,26 +560,57 @@ export const getUIState = withErrorHandling(async () => {
  * Save UI state
  */
 export const saveUIState = withErrorHandling(async (uiStateData) => {
-    // Merge with existing UI state to avoid overwriting unrelated keys
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.UI_STATE, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.UI_STATE)
 
-    const existing = await new Promise((resolve) => {
-        try {
-            const getReq = store.get('default')
-            getReq.onsuccess = () => resolve(getReq.result || null)
-            getReq.onerror = () => resolve(null)
-        } catch {
-            resolve(null)
+    // Flatten any nested 'data' properties to prevent tree-like nesting
+    const flattenData = (obj) => {
+        if (!obj || typeof obj !== 'object') return obj
+        
+        // If there's a nested 'data' property, flatten it
+        let flattened = { ...obj }
+        while (flattened.data && typeof flattened.data === 'object' && !Array.isArray(flattened.data)) {
+            const { data, ...rest } = flattened
+            flattened = { ...rest, ...data }
         }
-    })
+        
+        return flattened
+    }
 
-    const merged = {
-        id: 'default',
-        ...(existing || {}),
-        ...(uiStateData || {}),
-        updatedAt: Date.now()
+    const flatNew = flattenData(uiStateData)
+
+    // Check if this is a partial update (only a few fields) or full state (has id)
+    // If it's a full state object, don't merge - just replace
+    const isFullState = flatNew && flatNew.id === 'default'
+    
+    let merged
+    if (isFullState) {
+        // Full state replacement - don't merge to avoid double-nesting
+        merged = {
+            ...flatNew,
+            updatedAt: Date.now()
+        }
+    } else {
+        // Partial update - merge with existing
+        const existing = await new Promise((resolve) => {
+            try {
+                const getReq = store.get('default')
+                getReq.onsuccess = () => resolve(getReq.result || null)
+                getReq.onerror = () => resolve(null)
+            } catch {
+                resolve(null)
+            }
+        })
+        
+        const flatExisting = flattenData(existing)
+        
+        merged = {
+            id: 'default',
+            ...(flatExisting || {}),
+            ...(flatNew || {}),
+            updatedAt: Date.now()
+        }
     }
 
     const uiState = validateAndSanitize(merged, 'uiState')

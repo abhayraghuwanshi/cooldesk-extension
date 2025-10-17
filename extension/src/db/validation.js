@@ -347,6 +347,38 @@ export const VALIDATION_SCHEMAS = {
         }
     },
 
+    // Scraped chat validation schema
+    scrapedChat: {
+        chatId: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MIN_LENGTH]: 1,
+            [ValidationRules.MAX_LENGTH]: 200
+        },
+        url: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.URL]: true,
+            [ValidationRules.MAX_LENGTH]: 2000
+        },
+        title: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MIN_LENGTH]: 1,
+            [ValidationRules.MAX_LENGTH]: 500
+        },
+        platform: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.ENUM]: ['ChatGPT', 'Claude', 'Gemini']
+        },
+        scrapedAt: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        }
+    },
+
     // UI state validation schema
     uiState: {
         id: {
@@ -389,6 +421,15 @@ export const VALIDATION_SCHEMAS = {
         },
         success: {
             [ValidationRules.TYPE]: 'boolean'
+        },
+        // Chat scraping state fields
+        timestamp: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        platform: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.ENUM]: ['ChatGPT', 'Claude', 'Gemini']
         },
         updatedAt: {
             [ValidationRules.TYPE]: 'number',
