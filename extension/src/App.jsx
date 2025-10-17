@@ -135,6 +135,24 @@ export default function App() {
     }
   })
 
+  // Visibility state for Pings and Feed sections
+  const [showPingsSection, setShowPingsSection] = useState(() => {
+    try {
+      const saved = localStorage.getItem('showPingsSection');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  })
+  const [showFeedSection, setShowFeedSection] = useState(() => {
+    try {
+      const saved = localStorage.getItem('showFeedSection');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  })
+
 
   // Auto-reset active section after 5 seconds of inactivity
   useEffect(() => {
@@ -465,6 +483,19 @@ export default function App() {
       localStorage.setItem('workspaceHidden', String(workspaceHidden));
     } catch { }
   }, [workspaceHidden]);
+
+  // Persist Pings and Feed section visibility to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('showPingsSection', String(showPingsSection));
+    } catch { }
+  }, [showPingsSection]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('showFeedSection', String(showFeedSection));
+    } catch { }
+  }, [showFeedSection]);
 
   useEffect(() => {
     if (!activePinnedWorkspace) return;
@@ -1460,10 +1491,48 @@ export default function App() {
             marginBottom: 16
           }}>
             <div style={{ minWidth: 0 }}>
-              <PingsSection tabs={[]} />
+              {showPingsSection ? (
+                <div onDoubleClick={() => setShowPingsSection(false)}>
+                  <PingsSection tabs={[]} />
+                </div>
+              ) : (
+                <div
+                  className="coolDesk-section"
+                  onDoubleClick={() => setShowPingsSection(true)}
+                  style={{
+                    padding: '12px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    opacity: 0.6,
+                    border: '1px dashed var(--border-color)',
+                    borderRadius: '8px'
+                  }}
+                >
+                  <span style={{ fontSize: '0.9em' }}>Double-click to show Pins</span>
+                </div>
+              )}
             </div>
             <div style={{ minWidth: 0 }}>
-              <CoolFeedSection />
+              {showFeedSection ? (
+                <div onDoubleClick={() => setShowFeedSection(false)}>
+                  <CoolFeedSection />
+                </div>
+              ) : (
+                <div
+                  className="coolDesk-section"
+                  onDoubleClick={() => setShowFeedSection(true)}
+                  style={{
+                    padding: '12px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    opacity: 0.6,
+                    border: '1px dashed var(--border-color)',
+                    borderRadius: '8px'
+                  }}
+                >
+                  <span style={{ fontSize: '0.9em' }}>Double-click to show Feed</span>
+                </div>
+              )}
             </div>
           </div>
         </ErrorBoundary>
