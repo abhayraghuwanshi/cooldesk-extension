@@ -40,6 +40,13 @@ export {
     addUrlToWorkspace,
     listWorkspaceUrls,
     
+    // Scraped Chats operations
+    listScrapedChats,
+    getScrapedChat,
+    saveScrapedChat,
+    deleteScrapedChat,
+    deleteScrapedChatsByPlatform,
+    
     // Notes operations
     listNotes,
     saveNote,

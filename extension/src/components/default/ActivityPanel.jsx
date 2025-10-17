@@ -2,6 +2,7 @@ import React from 'react';
 import { getUIState, saveUIState } from '../../db/unified-api.js';
 import { ErrorBoundary } from '../ErrorBoundary';
 import VoiceNavigationChatGPT from '../toolbar/VoiceNavigationChatGPT';
+import { AIChatsSection } from './AIChats';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { DailyNotesSection } from './DailyNotesSection';
 import { NotesSection } from './NotesSection';
@@ -232,6 +233,11 @@ export function ActivityPanel({ activeSection = 0 }) {
       </div>
     },
     {
+      name: 'AI Chats', component: <div>
+        <AIChatsSection />
+      </div>
+    },
+    {
       name: 'Notes', component: <div>
         <NotesSection />
       </div>
@@ -246,8 +252,8 @@ export function ActivityPanel({ activeSection = 0 }) {
   // Check if we should show notes side-by-side
   const showNotesSideBySide = React.useMemo(() => {
     const isAllMode = activeSection === 0;
-    const notesIndex = 2; // Notes section index (adjusted for VoiceNavigation)
-    const dailyNotesIndex = 3; // Daily Notes section index (adjusted for VoiceNavigation)
+    const notesIndex = 3; // Notes section index (after Current Tabs, Voice Navigation, AI Chats)
+    const dailyNotesIndex = 4; // Daily Notes section index
 
     // Show side-by-side only in "All" mode or when either Notes or Daily Notes is active
     return isAllMode || activeSection === (notesIndex + 1) || activeSection === (dailyNotesIndex + 1);
@@ -266,8 +272,8 @@ export function ActivityPanel({ activeSection = 0 }) {
         const isAllMode = activeSection === 0;
         const isCurrentSection = index === (activeSection - 1); // Adjust for "All" being index 0
         const isVisible = isAllMode || isCurrentSection;
-        const notesIndex = 2; // Notes section index (adjusted for VoiceNavigation)
-        const dailyNotesIndex = 3; // Daily Notes section index (adjusted for VoiceNavigation)
+        const notesIndex = 3; // Notes section index (after Current Tabs, Voice Navigation, AI Chats)
+        const dailyNotesIndex = 4; // Daily Notes section index
 
         // Handle side-by-side display for Notes and Daily Notes
         if (showNotesSideBySide && (index === notesIndex || index === dailyNotesIndex)) {

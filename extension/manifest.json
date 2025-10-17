@@ -64,7 +64,8 @@
         "https://chat.openai.com/*",
         "https://chatgpt.com/*",
         "https://claude.ai/*",
-        "https://gemini.google.com/*"
+        "https://gemini.google.com/*",
+        "https://grok.com/*"
       ],
       "js": [
         "src/chatScraper.js"

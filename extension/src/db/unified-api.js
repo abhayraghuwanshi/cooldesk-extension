@@ -314,6 +314,173 @@ export const listWorkspaceUrls = withErrorHandling(async (workspaceId, options =
     fallbackFunction: () => []
 })
 
+// ===== SCRAPED CHATS OPERATIONS =====
+
+/**
+ * List all scraped AI chats with optional filtering
+ */
+export const listScrapedChats = withErrorHandling(async (options = {}) => {
+    const { platform, limit, offset, sortBy = 'scrapedAt', sortOrder = 'desc' } = options
+    
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
+    
+    let results = []
+    
+    if (platform) {
+        // Filter by platform using index
+        const index = store.index('by_platform')
+        const request = index.getAll(platform)
+        results = await new Promise((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result || [])
+            request.onerror = () => reject(request.error)
+        })
+    } else {
+        // Get all chats
+        const request = store.getAll()
+        results = await new Promise((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result || [])
+            request.onerror = () => reject(request.error)
+        })
+    }
+    
+    // Sort results
+    if (sortBy === 'scrapedAt') {
+        results.sort((a, b) => {
+            const aTime = a.scrapedAt || 0
+            const bTime = b.scrapedAt || 0
+            return sortOrder === 'desc' ? bTime - aTime : aTime - bTime
+        })
+    } else if (sortBy === 'title') {
+        results.sort((a, b) => {
+            const aTitle = (a.title || '').toLowerCase()
+            const bTitle = (b.title || '').toLowerCase()
+            return sortOrder === 'desc' ? bTitle.localeCompare(aTitle) : aTitle.localeCompare(bTitle)
+        })
+    }
+    
+    // Apply pagination
+    if (offset) results = results.slice(offset)
+    if (limit) results = results.slice(0, limit)
+    
+    return results
+}, {
+    operation: 'listScrapedChats',
+    severity: ErrorSeverity.LOW,
+    strategy: ErrorStrategy.FALLBACK,
+    fallbackFunction: () => []
+})
+
+/**
+ * Get a single scraped chat by ID
+ */
+export const getScrapedChat = withErrorHandling(async (chatId) => {
+    if (!chatId) throw new Error('Chat ID is required')
+    
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
+    
+    const request = store.get(chatId)
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result || null)
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'getScrapedChat',
+    severity: ErrorSeverity.LOW
+})
+
+/**
+ * Save or update a scraped chat
+ */
+export const saveScrapedChat = withErrorHandling(async (chatData) => {
+    // Validate and sanitize data
+    const chat = validateAndSanitize(chatData, 'scrapedChat')
+    
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readwrite')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
+    
+    const request = store.put(chat)
+    
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+            console.log(`[Unified API] Saved scraped chat: ${chat.title} (${chat.chatId})`)
+            resolve(chat)
+        }
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'saveScrapedChat',
+    severity: ErrorSeverity.MEDIUM,
+    strategy: ErrorStrategy.RETRY,
+    maxRetries: 3
+})
+
+/**
+ * Delete a scraped chat by ID
+ */
+export const deleteScrapedChat = withErrorHandling(async (chatId) => {
+    if (!chatId) throw new Error('Chat ID is required')
+    
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readwrite')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
+    
+    const request = store.delete(chatId)
+    
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+            console.log(`[Unified API] Deleted scraped chat: ${chatId}`)
+            resolve(true)
+        }
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'deleteScrapedChat',
+    severity: ErrorSeverity.MEDIUM
+})
+
+/**
+ * Delete all scraped chats for a specific platform
+ */
+export const deleteScrapedChatsByPlatform = withErrorHandling(async (platform) => {
+    if (!platform) throw new Error('Platform is required')
+    
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readwrite')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
+    const index = store.index('by_platform')
+    
+    // Get all chats for this platform
+    const chatsRequest = index.getAll(platform)
+    
+    return new Promise((resolve, reject) => {
+        chatsRequest.onsuccess = () => {
+            const chats = chatsRequest.result || []
+            let deletedCount = 0
+            
+            // Delete each chat
+            chats.forEach(chat => {
+                const deleteReq = store.delete(chat.chatId)
+                deleteReq.onsuccess = () => deletedCount++
+            })
+            
+            tx.oncomplete = () => {
+                console.log(`[Unified API] Deleted ${deletedCount} chats from ${platform}`)
+                resolve(deletedCount)
+            }
+            tx.onerror = () => reject(tx.error)
+        }
+        chatsRequest.onerror = () => reject(chatsRequest.error)
+    })
+}, {
+    operation: 'deleteScrapedChatsByPlatform',
+    severity: ErrorSeverity.MEDIUM
+})
+
 // ===== NOTES OPERATIONS =====
 
 /**

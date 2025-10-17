@@ -38,12 +38,28 @@ const PLATFORM_CONFIGS = {
     name: 'Claude',
     selectors: {
       chatItems: 'a[href*="/chat/"]',
-      titleElement: '[data-testid="chat-title"], .chat-title, div[title]',
-      titleAttribute: 'title',
-      waitFor: '[data-testid="chat-history"], .sidebar, nav',
+      titleElement: '.truncate', // Title is in a div with class "truncate"
+      titleAttribute: null, // Title is in text content, not attribute
+      waitFor: 'a[href*="/chat/"]', // Wait for chat links to appear
     },
     extractChatId: (href) => {
+      // Extract UUID from /chat/1bca9c6a-4485-48d8-ac31-bbc36dd4b1c6
       const match = href.match(/\/chat\/([a-f0-9-]+)/);
+      return match ? match[1] : null;
+    },
+  },
+  
+  'grok.com': {
+    name: 'Grok',
+    selectors: {
+      chatItems: 'a[href*="/c/"], a[href^="/c/"]',
+      titleElement: '.truncate.text-primary, .truncate', // Title in truncate div with text-primary class
+      titleAttribute: null, // Title is in text content, not attribute
+      waitFor: 'a[href*="/c/"]', // Wait for chat links to appear
+    },
+    extractChatId: (href) => {
+      // Extract UUID from /c/9d107740-c550-4516-a7cf-9a84726df169
+      const match = href.match(/\/c\/([a-f0-9-]+)/);
       return match ? match[1] : null;
     },
   },
@@ -51,14 +67,24 @@ const PLATFORM_CONFIGS = {
   'gemini.google.com': {
     name: 'Gemini',
     selectors: {
-      chatItems: 'a[href*="/app/"]',
-      titleElement: '.conversation-title, [data-conversation-title], div[title]',
-      titleAttribute: 'title',
-      waitFor: '.conversation-list, [role="navigation"], nav',
+      // Gemini uses div elements with data-test-id="conversation" instead of links
+      chatItems: 'div[data-test-id="conversation"]',
+      titleElement: '.conversation-title',
+      titleAttribute: null, // Title is in text content, not attribute
+      waitFor: '.conversation-items-container, [role="navigation"], nav',
     },
-    extractChatId: (href) => {
-      const match = href.match(/\/app\/([a-f0-9-]+)/);
-      return match ? match[1] : null;
+    extractChatId: (element) => {
+      // Gemini chat IDs are in the jslog attribute
+      // Format: jslog="...BardVeMetadataKey:[...["c_9c0a297b5fef96b7",...]]..."
+      const jslog = element.getAttribute('jslog');
+      if (jslog) {
+        // Extract ID from jslog - the ID is after "c_"
+        const match = jslog.match(/["']c_([a-f0-9]+)["']/);
+        if (match) return match[1]; // Return just the hex ID without "c_" prefix
+      }
+      // Fallback: use a hash of the title as ID
+      const title = element.querySelector('.conversation-title')?.textContent?.trim();
+      return title ? `gemini_${title.replace(/\s+/g, '_').substring(0, 30)}` : null;
     },
   },
 };
@@ -158,21 +184,58 @@ async function scrapeChats() {
     // Find all chat items
     const chatElements = document.querySelectorAll(config.selectors.chatItems);
     console.log(`[ChatScraper] Found ${chatElements.length} chat elements`);
+    console.log(`[ChatScraper] Selector used: "${config.selectors.chatItems}"`);
+    console.log(`[ChatScraper] chatElements type:`, typeof chatElements, chatElements.constructor.name);
+    console.log(`[ChatScraper] First element:`, chatElements[0]);
+    
+    // Convert NodeList to Array for better compatibility
+    const chatElementsArray = Array.from(chatElements);
+    console.log(`[ChatScraper] Converted to array, length: ${chatElementsArray.length}`);
     
     const chats = [];
     const seenIds = new Set();
     
-    chatElements.forEach((element) => {
+    console.log(`[ChatScraper] Starting forEach loop...`);
+    chatElementsArray.forEach((element, index) => {
+      console.log(`[ChatScraper] Processing element ${index}/${chatElementsArray.length}`);
       try {
+        // Handle both link-based (ChatGPT, Claude) and div-based (Gemini) items
         const href = element.getAttribute('href');
-        if (!href) return;
+        let url, chatId;
         
-        // Build full URL
-        const url = href.startsWith('http') ? href : `${window.location.origin}${href}`;
+        if (href) {
+          // Link-based chat item (ChatGPT, Claude)
+          url = href.startsWith('http') ? href : `${window.location.origin}${href}`;
+          chatId = config.extractChatId(href);
+          console.log(`[ChatScraper] Chat ${index}: href="${href}", chatId="${chatId}"`);
+        } else {
+          // Div-based chat item (Gemini)
+          console.log(`[ChatScraper] Chat ${index}: No href, trying extractChatId on element`);
+          const jslog = element.getAttribute('jslog');
+          console.log(`[ChatScraper] Chat ${index}: jslog="${jslog?.substring(0, 100)}..."`);
+          
+          chatId = config.extractChatId(element);
+          console.log(`[ChatScraper] Chat ${index}: Extracted chatId="${chatId}"`);
+          
+          if (!chatId) {
+            console.log(`[ChatScraper] Chat ${index}: No chatId, skipping`);
+            return;
+          }
+          
+          // For Gemini, construct URL from current page or use a placeholder
+          // Gemini doesn't have direct chat URLs in the sidebar
+          url = `${window.location.origin}/app/${chatId}`;
+        }
         
-        // Extract chat ID
-        const chatId = config.extractChatId(href);
-        if (!chatId || seenIds.has(chatId)) return;
+        if (!chatId) {
+          console.log(`[ChatScraper] Chat ${index}: chatId is null/undefined, skipping`);
+          return;
+        }
+        
+        if (seenIds.has(chatId)) {
+          console.log(`[ChatScraper] Chat ${index}: Duplicate chatId="${chatId}", skipping`);
+          return;
+        }
         
         seenIds.add(chatId);
         
@@ -195,7 +258,9 @@ async function scrapeChats() {
         
         console.log(`[ChatScraper] ✓ ${title.substring(0, 50)}...`);
       } catch (err) {
-        console.warn('[ChatScraper] Error processing chat element:', err);
+        console.error(`[ChatScraper] Error processing element ${index}:`, err);
+        console.error('[ChatScraper] Element:', element);
+        console.error('[ChatScraper] Stack:', err.stack);
       }
     });
     
@@ -306,14 +371,23 @@ async function scrapeNewChats() {
     
     chatElements.forEach((element) => {
       try {
+        // Handle both link-based (ChatGPT, Claude) and div-based (Gemini) items
         const href = element.getAttribute('href');
-        if (!href) return;
+        let url, chatId;
         
-        // Build full URL
-        const url = href.startsWith('http') ? href : `${window.location.origin}${href}`;
+        if (href) {
+          // Link-based chat item (ChatGPT, Claude)
+          url = href.startsWith('http') ? href : `${window.location.origin}${href}`;
+          chatId = config.extractChatId(href);
+        } else {
+          // Div-based chat item (Gemini)
+          chatId = config.extractChatId(element);
+          if (!chatId) return;
+          
+          // For Gemini, construct URL from chat ID
+          url = `${window.location.origin}/app/${chatId}`;
+        }
         
-        // Extract chat ID
-        const chatId = config.extractChatId(href);
         if (!chatId || seenIds.has(chatId)) return;
         
         seenIds.add(chatId);
