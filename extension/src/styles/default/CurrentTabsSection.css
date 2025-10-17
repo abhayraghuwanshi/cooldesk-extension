@@ -27,6 +27,8 @@
 /* Small host card (favicon + count) */
 .currentTabs-hostCard {
   height: 80px;
+  min-width: 100px;
+  max-width: 160px;
   padding: 8px;
   border-radius: 18px;
   background: rgba(45, 45, 50, 0.7);
@@ -237,15 +239,22 @@
   border: 1px solid rgba(0, 122, 255, 0.8);
   box-shadow: 0 0 0 2px rgba(0,122,255,0.25), 0 4px 15px rgba(0, 0, 0, 0.3);
 }
-.currentTabs-hostFavicon { border-radius: 8px; margin-bottom: 4px; }
+.currentTabs-hostFavicon { 
+  border-radius: 8px; 
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
 .currentTabs-hostLabel {
   color: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
+  font-size: 10px;
   text-align: center;
   width: 100%;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.2;
+  padding: 0 4px;
 }
 
 /* Popover positioning */
@@ -360,16 +369,17 @@
 /* Count badge on host card */
 .currentTabs-badge {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -3px;
+  right: -3px;
   background: #007aff;
   color: #fff;
   border-radius: 10px;
   padding: 2px 7px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(45, 45, 50, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 10;
 }
 
 /* Text truncation utility */

@@ -23,6 +23,12 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
   const [showSettings, setShowSettings] = React.useState(false);
   const settingsRef = React.useRef(null);
 
+  // Helper function to truncate hostname to consistent length
+  const truncateHostname = (hostname, maxLength = 18) => {
+    if (!hostname || hostname.length <= maxLength) return hostname;
+    return hostname.substring(0, maxLength) + '...';
+  };
+
 
   const refreshTabs = React.useCallback(() => {
     setTabsError(null);
@@ -510,8 +516,8 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       className="currentTabs-hostFavicon"
                       onError={(e) => { e.currentTarget.src = '/logo.png'; }}
                     />
-                    <div className="currentTabs-hostLabel">
-                      {hostname}
+                    <div className="currentTabs-hostLabel" title={hostname}>
+                      {truncateHostname(hostname)}
                     </div>
                     {/* Count Badge */}
                     <div className="currentTabs-badge">

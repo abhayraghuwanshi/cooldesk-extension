@@ -422,8 +422,22 @@ export function setupRealTimeCategorizor() {
     isSetup = true;
 
     // Listen to tab updates (when URL changes)
+    // ENHANCED: Also capture URL changes for SPAs (ChatGPT, Claude) that use client-side routing
     browserAPI.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-      if (changeInfo.status === 'complete' && tab.url) {
+      // Trigger on URL change OR when page is complete
+      const shouldCategorize = (
+        (changeInfo.status === 'complete' && tab.url) ||
+        (changeInfo.url && tab.url) // URL changed (SPA navigation)
+      );
+      
+      if (shouldCategorize) {
+        console.log('[realTimeCategorizor] Tab updated:', {
+          tabId,
+          url: tab.url,
+          title: tab.title,
+          status: changeInfo.status,
+          urlChanged: !!changeInfo.url
+        });
         categorizeUrl(tab.url, tab.title, tabId);
       }
     });
@@ -447,7 +461,30 @@ export function setupRealTimeCategorizor() {
       }
     });
 
-    console.log('Real-time URL categorization enabled');
+    // ENHANCED: Periodically check active tab for SPA navigation that might be missed
+    // This catches ChatGPT/Claude chat changes that happen via history.pushState
+    const periodicCheck = setInterval(async () => {
+      try {
+        const [activeTab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
+        if (activeTab?.url && !isInternalUrl(activeTab.url)) {
+          // Only categorize chat platforms that use SPA navigation
+          const isChatPlatform = 
+            activeTab.url.includes('chat.openai.com') ||
+            activeTab.url.includes('chatgpt.com') ||
+            activeTab.url.includes('claude.ai') ||
+            activeTab.url.includes('gemini.google.com') ||
+            activeTab.url.includes('perplexity.ai');
+          
+          if (isChatPlatform) {
+            categorizeUrl(activeTab.url, activeTab.title, activeTab.id);
+          }
+        }
+      } catch (e) {
+        // Ignore errors from closed tabs
+      }
+    }, 5000); // Check every 5 seconds
+
+    console.log('✅ Real-time URL categorization enabled (with SPA support)');
   };
 
   // Helper function to detect internal/system URLs across browsers

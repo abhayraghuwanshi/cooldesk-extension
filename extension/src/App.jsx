@@ -45,7 +45,7 @@ import { PingsSection } from './components/default/PingsSection';
 import { PinnedWorkspace } from './components/default/PinnedWorkspace';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import categoryManager from './data/categories';
-import { addUrlToWorkspace, deleteWorkspaceById, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
+import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getFaviconUrl, getUrlParts } from './utils';
@@ -197,8 +197,6 @@ export default function App() {
     }
   }, []);
 
-  // UI state: dismissible settings warning
-  const [dismissedSettingsWarning, setDismissedSettingsWarning] = useState(false)
 
   // Helper function to create/append category-based workspaces with incremental support
   // options: { urlTimes: Map<string, number>, categoryLastCheck: Record<string, number> }
@@ -293,8 +291,6 @@ export default function App() {
   useEffect(() => {
     const autoCreatePlatformWorkspaces = async () => {
       try {
-        if (!data || !Array.isArray(data) || data.length === 0) return;
-
         // Check if auto-creation is enabled (default: true, but user can disable)
         const ui = await getUIState();
         const autoCreateEnabled = ui?.autoCreateWorkspaces !== false; // default true
@@ -303,22 +299,65 @@ export default function App() {
           return;
         }
 
-        // Compute dataset hash now, but don't early-return yet. We'll only skip later
-        // if there is nothing new to create (platform or category) AND hash matches.
-        const dataHash = JSON.stringify(data.map(item => item.url).filter(Boolean).sort()).slice(0, 50);
-        const lastHash = ui?.lastAutoCreateHash;
-
-        // Build URL list and a timestamp map per URL for incremental processing
-        const urls = data.map(item => item.url).filter(Boolean);
+        // ENHANCED: Scan browser history directly instead of relying only on dashboard data
+        let urls = [];
         const urlTimes = new Map();
-        for (const it of (Array.isArray(data) ? data : [])) {
-          const u = it?.url;
-          if (!u) continue;
-          const t = Number(it?.lastVisitTime || it?.dateAdded || 0) || 0;
-          // Keep max timestamp per URL
-          const prev = Number(urlTimes.get(u) || 0);
-          if (t > prev) urlTimes.set(u, t);
+        
+        // Try to get URLs from browser history API (for chat platforms)
+        const browserAPI = typeof chrome !== 'undefined' && chrome?.history ? chrome : null;
+        if (browserAPI) {
+          try {
+            const endTime = Date.now();
+            const startTime = endTime - (30 * 24 * 60 * 60 * 1000); // Last 30 days
+            
+            console.log('[AutoCreate] Scanning browser history for chat platforms...');
+            const historyItems = await browserAPI.history.search({
+              text: '',
+              startTime: startTime,
+              endTime: endTime,
+              maxResults: 2000
+            });
+            
+            console.log(`[AutoCreate] Found ${historyItems.length} history items`);
+            
+            // Extract URLs and timestamps
+            for (const item of historyItems) {
+              if (item.url) {
+                urls.push(item.url);
+                const t = item.lastVisitTime || Date.now();
+                const prev = urlTimes.get(item.url) || 0;
+                if (t > prev) urlTimes.set(item.url, t);
+              }
+            }
+            
+            console.log(`[AutoCreate] Extracted ${urls.length} URLs from history`);
+          } catch (err) {
+            console.warn('[AutoCreate] Failed to scan browser history:', err);
+          }
         }
+        
+        // Fallback: Also include URLs from dashboard data if history scan failed
+        if (urls.length === 0 && data && Array.isArray(data)) {
+          console.log('[AutoCreate] Falling back to dashboard data');
+          urls = data.map(item => item.url).filter(Boolean);
+          for (const it of data) {
+            const u = it?.url;
+            if (!u) continue;
+            const t = Number(it?.lastVisitTime || it?.dateAdded || 0) || 0;
+            const prev = Number(urlTimes.get(u) || 0);
+            if (t > prev) urlTimes.set(u, t);
+          }
+        }
+        
+        if (urls.length === 0) {
+          console.log('[AutoCreate] No URLs found to process');
+          return;
+        }
+
+        // Compute dataset hash
+        const dataHash = JSON.stringify(urls.slice().sort()).slice(0, 50);
+        const lastHash = ui?.lastAutoCreateHash;
+        // URL times already built above
         const workspacesResult = await listWorkspaces();
         const existingWorkspaces = workspacesResult?.success ? workspacesResult.data : [];
 
@@ -423,11 +462,9 @@ export default function App() {
       }
     };
 
-    if (data && data.length > 0) {
-      // Debounce the workspace creation to avoid excessive calls
-      const timeoutId = setTimeout(autoCreatePlatformWorkspaces, 3000);
-      return () => clearTimeout(timeoutId);
-    }
+    // Run on mount and when data changes
+    const timeoutId = setTimeout(autoCreatePlatformWorkspaces, 3000);
+    return () => clearTimeout(timeoutId);
   }, [data]);
 
 
@@ -521,7 +558,6 @@ export default function App() {
       return next;
     });
   };
-
 
 
   // Handle font size changes
@@ -1176,54 +1212,6 @@ export default function App() {
     }
   };
 
-  // Delete the currently selected workspace entirely
-  const handleDeleteWorkspace = async () => {
-    try {
-      const name = (workspace || '').trim();
-      if (!name || name.toLowerCase() === 'all') {
-        try { alert('Please select a specific workspace to delete.'); } catch { }
-        return;
-      }
-      const confirmMsg = `Delete workspace "${name}"? This cannot be undone.`;
-      const confirmed = (() => { try { return window.confirm(confirmMsg); } catch { return true; } })();
-      if (!confirmed) return;
-
-      const norm = (s) => (s || '').trim().toLowerCase();
-      const wsObj = savedWorkspaces.find(w => norm(w.name) === norm(name));
-      if (!wsObj) {
-        try { alert('Workspace not found.'); } catch { }
-        return;
-      }
-
-      // Recategorize underlying items tagged to this workspace to 'Unknown' (best-effort)
-      try {
-        const candidates = Array.isArray(data) ? data.filter(it => norm(it.workspaceGroup) === norm(name)) : [];
-        const valid = candidates.filter(it => typeof it?.id === 'string' && it.id);
-        await Promise.all(valid.map(it => updateItemWorkspace(it.id, 'Unknown')));
-        // Patch local storage/dashboard data optimistically
-        try {
-          const { dashboardData } = await storageGet(['dashboardData']);
-          if (dashboardData) {
-            const patch = (arr) => (Array.isArray(arr) ? arr.map(it => norm(it.workspaceGroup) === norm(name) ? { ...it, workspaceGroup: 'Unknown' } : it) : arr);
-            await storageSet({ dashboardData: { ...dashboardData, history: patch(dashboardData.history), bookmarks: patch(dashboardData.bookmarks) } });
-            await sendMessage({ action: 'updateData' });
-          }
-        } catch { }
-      } catch { }
-
-      // Delete workspace from IndexedDB/backup and broadcast
-      await deleteWorkspaceById(wsObj.id);
-
-      // Refresh list and switch to All
-      const refreshedResult = await listWorkspaces();
-      const refreshed = refreshedResult?.success ? refreshedResult.data : [];
-      setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
-      setWorkspace('All');
-    } catch (e) {
-      console.error('Failed to delete workspace:', e);
-      try { alert('Failed to delete workspace. See console for details.'); } catch { }
-    }
-  };
 
   const handleOpenAddLinkModal = (ws) => {
     try {
