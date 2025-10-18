@@ -52,13 +52,21 @@ const PLATFORM_CONFIGS = {
   'grok.com': {
     name: 'Grok',
     selectors: {
-      chatItems: 'a[href*="/c/"], a[href^="/c/"]',
+      // Select the parent container div that contains both link and title
+      chatItems: 'div[data-selected]',
       titleElement: '.truncate.text-primary, .truncate', // Title in truncate div with text-primary class
       titleAttribute: null, // Title is in text content, not attribute
-      waitFor: 'a[href*="/c/"]', // Wait for chat links to appear
+      waitFor: 'div[data-selected]', // Wait for chat containers to appear
     },
-    extractChatId: (href) => {
-      // Extract UUID from /c/9d107740-c550-4516-a7cf-9a84726df169
+    extractChatId: (element) => {
+      // Find the link inside the container
+      const link = element.querySelector('a[href*="/c/"]');
+      if (!link) return null;
+      
+      const href = link.getAttribute('href');
+      if (!href) return null;
+      
+      // Extract UUID from /c/39aab857-be5c-4bab-a7dc-e50c0d23f9f4
       const match = href.match(/\/c\/([a-f0-9-]+)/);
       return match ? match[1] : null;
     },
@@ -199,20 +207,18 @@ async function scrapeChats() {
     chatElementsArray.forEach((element, index) => {
       console.log(`[ChatScraper] Processing element ${index}/${chatElementsArray.length}`);
       try {
-        // Handle both link-based (ChatGPT, Claude) and div-based (Gemini) items
+        // Handle both link-based (ChatGPT, Claude) and div-based (Gemini, Grok) items
         const href = element.getAttribute('href');
         let url, chatId;
         
         if (href) {
-          // Link-based chat item (ChatGPT, Claude)
+          // Link-based chat item (ChatGPT, Claude) - element IS the link
           url = href.startsWith('http') ? href : `${window.location.origin}${href}`;
           chatId = config.extractChatId(href);
           console.log(`[ChatScraper] Chat ${index}: href="${href}", chatId="${chatId}"`);
         } else {
-          // Div-based chat item (Gemini)
-          console.log(`[ChatScraper] Chat ${index}: No href, trying extractChatId on element`);
-          const jslog = element.getAttribute('jslog');
-          console.log(`[ChatScraper] Chat ${index}: jslog="${jslog?.substring(0, 100)}..."`);
+          // Container-based chat item (Gemini, Grok) - element is a container
+          console.log(`[ChatScraper] Chat ${index}: No href on element, trying extractChatId on container`);
           
           chatId = config.extractChatId(element);
           console.log(`[ChatScraper] Chat ${index}: Extracted chatId="${chatId}"`);
@@ -222,9 +228,17 @@ async function scrapeChats() {
             return;
           }
           
-          // For Gemini, construct URL from current page or use a placeholder
-          // Gemini doesn't have direct chat URLs in the sidebar
-          url = `${window.location.origin}/app/${chatId}`;
+          // For Grok, find the link inside the container
+          const link = element.querySelector('a[href*="/c/"]');
+          if (link) {
+            const linkHref = link.getAttribute('href');
+            url = linkHref.startsWith('http') ? linkHref : `${window.location.origin}${linkHref}`;
+            console.log(`[ChatScraper] Chat ${index}: Found link in container, url="${url}"`);
+          } else {
+            // For Gemini or if no link found, construct URL from chat ID
+            url = `${window.location.origin}/app/${chatId}`;
+            console.log(`[ChatScraper] Chat ${index}: No link found, constructed url="${url}"`);
+          }
         }
         
         if (!chatId) {
@@ -371,21 +385,28 @@ async function scrapeNewChats() {
     
     chatElements.forEach((element) => {
       try {
-        // Handle both link-based (ChatGPT, Claude) and div-based (Gemini) items
+        // Handle both link-based (ChatGPT, Claude) and container-based (Gemini, Grok) items
         const href = element.getAttribute('href');
         let url, chatId;
         
         if (href) {
-          // Link-based chat item (ChatGPT, Claude)
+          // Link-based chat item (ChatGPT, Claude) - element IS the link
           url = href.startsWith('http') ? href : `${window.location.origin}${href}`;
           chatId = config.extractChatId(href);
         } else {
-          // Div-based chat item (Gemini)
+          // Container-based chat item (Gemini, Grok) - element is a container
           chatId = config.extractChatId(element);
           if (!chatId) return;
           
-          // For Gemini, construct URL from chat ID
-          url = `${window.location.origin}/app/${chatId}`;
+          // For Grok, find the link inside the container
+          const link = element.querySelector('a[href*="/c/"]');
+          if (link) {
+            const linkHref = link.getAttribute('href');
+            url = linkHref.startsWith('http') ? linkHref : `${window.location.origin}${linkHref}`;
+          } else {
+            // For Gemini or if no link found, construct URL from chat ID
+            url = `${window.location.origin}/app/${chatId}`;
+          }
         }
         
         if (!chatId || seenIds.has(chatId)) return;

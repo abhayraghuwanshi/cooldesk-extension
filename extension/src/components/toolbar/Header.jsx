@@ -1,16 +1,18 @@
 import {
   faArrowUpRightFromSquare,
   faCalendarDays,
-  faPalette,
+  faGear,
+  faQuestionCircle,
   faTableCellsLarge,
   faTableColumns
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { getUIState, saveUIState } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils';
 import { AddLinkFlow } from '../popups/AddLinkFlow.jsx';
+import { CoolHelpSection } from '../popups/CoolHelpSection.jsx';
 import MusicControls from './MusicControls';
 import { SearchBox } from './SearchBox.jsx';
 
@@ -38,6 +40,7 @@ export function Header({
   const [allItems, setAllItems] = useState([]);
   const [calendarFallback, setCalendarFallback] = useState(false);
   const [failedFavs, setFailedFavs] = useState(() => new Set());
+  const [showHelp, setShowHelp] = useState(false);
   // Load Auto Sync from UI state
   useEffect(() => {
     (async () => {
@@ -294,6 +297,17 @@ export function Header({
   };
   const iconImgStyle = { width: 20, height: 20, borderRadius: 4, objectFit: 'contain', display: 'block' };
 
+  // Separator component for visual grouping
+  const Separator = () => (
+    <div style={{
+      width: 1,
+      height: 24,
+      background: 'var(--border-primary, rgba(255, 255, 255, 0.15))',
+      margin: '0 4px',
+      flexShrink: 0
+    }} />
+  );
+
   return (
     <header className="header ai-header" style={{
       ...barStyle,
@@ -326,120 +340,27 @@ export function Header({
         <div style={{ position: 'relative', flex: 1, marginRight: '16px', maxWidth: '600px' }}>
           <SearchBox search={search} setSearch={setSearch} openInSidePanel={openInSidePanel} />
         </div>
-        {/* Navigation Arrows */}
-        {/* {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (() => {
-          // Define sections for ActivityPanel navigation - add 'All' as first option
-          const sections = ['All', 'Current Tabs', 'Pins', 'Notes', 'Daily Notes', 'Cool Feed'];
-          const isActivityNavigation = activeSection !== undefined && setActiveSection;
 
-          const currentLabel = isActivityNavigation
-            ? sections[activeSection] || 'Section'
-            : (activeTab === 'workspace' ? 'Workspace' : 'Saved');
-
-          const handlePrevious = () => {
-            if (isActivityNavigation) {
-              setActiveSection((prev) => (prev - 1 + sections.length) % sections.length);
-            } else {
-              setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
-            }
-          };
-
-  
-
-          const handleNext = () => {
-            if (isActivityNavigation) {
-              setActiveSection((prev) => (prev + 1) % sections.length);
-            } else {
-              setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
-            }
-          };
-
-          return (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              marginRight: '8px'
-            }}>
-              {isActivityNavigation ? (
-                <select
-                  value={activeSection}
-                  onChange={(e) => setActiveSection(parseInt(e.target.value))}
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    color: 'var(--text-primary, #ffffff)',
-                    background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
-                    border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
-                    borderRadius: '8px',
-                    padding: '8px 12px',
-                    minWidth: '130px',
-                    textAlign: 'center',
-                    backdropFilter: 'blur(12px)',
-                    cursor: 'pointer',
-                    outline: 'none',
-                    textTransform: 'capitalize',
-                    transition: 'all 0.2s ease',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.background = 'var(--primary-color, rgba(0, 122, 255, 0.1))';
-                    e.target.style.borderColor = 'var(--primary-color, rgba(0, 122, 255, 0.3))';
-                    e.target.style.transform = 'translateY(-1px)';
-                    e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.05))';
-                    e.target.style.borderColor = 'var(--border-color, rgba(255, 255, 255, 0.1))';
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
-                  }}
-                >
-                  {sections.map((section, index) => (
-                    <option
-                      key={index}
-                      value={index}
-                      style={{
-                        background: 'var(--background-primary, rgba(10, 10, 15, 0.95))',
-                        color: 'var(--text-primary, #ffffff)',
-                        padding: '8px 12px',
-                        fontSize: '12px'
-                      }}
-                    >
-                      {section}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div style={{
-                  fontSize: '12px',
-                  fontWeight: '500',
-                  color: 'var(--text-primary, #ffffff)',
-                  background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))',
-                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
-                  borderRadius: '8px',
-                  padding: '8px 12px',
-                  minWidth: '90px',
-                  textAlign: 'center',
-                  textTransform: 'capitalize',
-                  backdropFilter: 'blur(12px)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-                }}>
-                  {currentLabel}
-                </div>
-              )}
-            </div>
-          );
-        })()} */}
         <MusicControls />
 
+        <Separator />
+
+        <button
+          className="icon-btn"
+          onClick={() => setShowHelp(true)}
+          title="Help"
+          style={iconBtnStyle}
+        >
+          <FontAwesomeIcon icon={faQuestionCircle} />
+        </button>
 
         <button
           className="icon-btn"
           onClick={() => setShowSettings(true)}
-          title="Customization"
+          title="Settings"
           style={iconBtnStyle}
         >
-          <FontAwesomeIcon icon={faPalette} />
+          <FontAwesomeIcon icon={faGear} />
         </button>
         <button
           className="icon-btn"
@@ -508,6 +429,9 @@ export function Header({
             );
           })()}
         </button>
+
+        <Separator />
+
         <button
           className="icon-btn"
           onClick={openInSidePanel}
@@ -534,6 +458,9 @@ export function Header({
         >
           <FontAwesomeIcon icon={faTableCellsLarge} style={{ width: 20, height: 20 }} />
         </button>
+
+        <Separator />
+
         {/* Quick URL shortcuts (max 5) */}
         {/* <div style={{ color: 'var(--text, #e5e7eb)', opacity: 0.7, fontSize: 11, margin: '0 6px' }}>
           debug quickUrls: {Array.isArray(quickUrls) ? quickUrls.length : 'n/a'}
@@ -689,6 +616,8 @@ export function Header({
           <div style={{ fontSize: 12, opacity: 0.85 }}>{dateStr}</div>
         </div>
       </div>
+
+      <CoolHelpSection isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </header>
   );
 }

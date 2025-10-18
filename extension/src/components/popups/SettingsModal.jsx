@@ -1,14 +1,12 @@
-import { faBullseye, faFileExport, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
+import { faFileExport, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
-import { getPersonaUrlCount, personas, validatePersona } from '../../data/personas';
 import { listWorkspaces, saveWorkspace } from '../../db/index.js';
 import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet } from '../../services/extensionApi';
 import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontSize } from '../../utils/fontUtils';
 import ExportData from '../settings/ExportData';
-import PersonasTab from '../settings/PersonasTab';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
 
@@ -21,9 +19,6 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
   const [activeTab, setActiveTab] = useState(0)
   const [basicSaved, setBasicSaved] = useState(Boolean((settings?.geminiApiKey || '').trim()))
-  const [selectedPersona, setSelectedPersona] = useState(null)
-  const [selectedCategories, setSelectedCategories] = useState([])
-  const [creatingWorkspaces, setCreatingWorkspaces] = useState(false)
   // Auth is paused in this build; Firebase state removed
   const [selectedTheme, setSelectedTheme] = useState('ai-midnight-nebula')
   const [fontFamily, setFontFamily] = useState('system')
@@ -187,114 +182,6 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
     }
   };
 
-  const handlePersonaSelect = (persona) => {
-    // Validate persona structure
-    if (!validatePersona(persona)) {
-      setError('Invalid persona data. Please try again.');
-      return;
-    }
-
-    setSelectedPersona(persona);
-    setSelectedCategories(persona.workspaces.map((ws, idx) => ({
-      ...ws,
-      id: `${persona.title}-${idx}`,
-      selected: true,
-      originalName: ws.name,
-      editedName: ws.name
-    })));
-    setError(''); // Clear any existing errors
-  };
-
-  const handleCategoryToggle = (categoryId) => {
-    setSelectedCategories(cats =>
-      cats.map(cat =>
-        cat.id === categoryId
-          ? { ...cat, selected: !cat.selected }
-          : cat
-      )
-    );
-  };
-
-  const handleCategoryRename = (categoryId, newName) => {
-    setSelectedCategories(cats =>
-      cats.map(cat =>
-        cat.id === categoryId
-          ? { ...cat, editedName: newName.trim() || cat.originalName }
-          : cat
-      )
-    );
-  };
-
-  const createPersonaWorkspaces = async () => {
-    if (!selectedPersona || !selectedCategories.length) return;
-
-    setCreatingWorkspaces(true);
-    setError('');
-
-    try {
-      const selectedCats = selectedCategories.filter(cat => cat.selected);
-
-      let successCount = 0;
-      for (const category of selectedCats) {
-        const workspace = {
-          id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 8),
-          name: category.editedName,
-          description: category.description,
-          createdAt: Date.now(),
-          urls: category.urls.map(url => {
-            try {
-              return {
-                url,
-                title: url,
-                addedAt: Date.now(),
-                favicon: `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=16`
-              };
-            } catch (e) {
-              console.warn(`Invalid URL ${url}, using as-is`);
-              return {
-                url,
-                title: url,
-                addedAt: Date.now(),
-                favicon: ''
-              };
-            }
-          }),
-        };
-
-        try {
-          await saveWorkspace(workspace);
-          successCount++;
-          console.log(`Created workspace: ${category.editedName}`);
-        } catch (e) {
-          console.error(`Failed to create workspace ${category.editedName}:`, e);
-          setError(`Failed to create workspace "${category.editedName}": ${e.message}`);
-        }
-      }
-
-      if (successCount > 0) {
-        // Refresh the workspaces list
-        try {
-          const list = await listWorkspaces();
-          setWorkspaces(Array.isArray(list) ? list : []);
-        } catch (e) {
-          console.warn('Failed to refresh workspaces list:', e);
-        }
-
-        // Reset selection
-        setSelectedPersona(null);
-        setSelectedCategories([]);
-
-        // Show success message
-        setError(`Successfully created ${successCount} of ${selectedCats.length} workspaces!`);
-        setTimeout(() => setError(''), 3000);
-      }
-
-    } catch (e) {
-      setError(`Failed to create workspaces: ${e.message}`);
-    } finally {
-      setCreatingWorkspaces(false);
-    }
-  };
 
   useEffect(() => {
     setLocalSettings(settings)
@@ -675,21 +562,6 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
           onTabChange={handleTabChange}
           disabledTitles={[]} // Remove restrictions for better onboarding flow
         >
-          <TabItem title={<><FontAwesomeIcon icon={faBullseye} style={{ marginRight: '8px' }} />Personas</>}>
-            <PersonasTab
-              selectedPersona={selectedPersona}
-              selectedCategories={selectedCategories}
-              creatingWorkspaces={creatingWorkspaces}
-              personas={personas}
-              getPersonaUrlCount={getPersonaUrlCount}
-              handlePersonaSelect={handlePersonaSelect}
-              handleCategoryToggle={handleCategoryToggle}
-              handleCategoryRename={handleCategoryRename}
-              createPersonaWorkspaces={createPersonaWorkspaces}
-              setSelectedPersona={setSelectedPersona}
-              setSelectedCategories={setSelectedCategories}
-            />
-          </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
             <ThemesTab
               selectedTheme={selectedTheme}

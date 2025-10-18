@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "cooldesk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "action": {
     "default_title": "Open CoolDesk Sidebar"
   },
@@ -25,7 +25,8 @@
     "scripting",
     "idle",
     "activeTab",
-    "sessions"
+    "sessions",
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>"

@@ -1,7 +1,7 @@
 import { faMicrophone } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
 import { vDebug, vError, vInfo, vWarn } from '../../utils/logger.js';
 import { fuzzySearch } from '../../utils/searchUtils.js';
@@ -1729,24 +1729,6 @@ const VoiceNavigationChatGPT = () => {
             </div>
           )}
 
-          {/* <div className="button-label">
-            {isListening ? 'Listening...' : connectionExpired ? 'Session Expired - Click to Reconnect' : 'Voice Navigation'}
-          </div> */}
-
-          {/* Session Timer */}
-          {/* {(isListening || connectionExpired) && (
-            <div className="session-timer" style={{
-              fontSize: '12px',
-              color: connectionExpired ? '#ff4444' : timeRemaining < 60 ? '#ff6666' : '#888',
-              marginTop: '4px',
-              textAlign: 'center'
-            }}>
-              {connectionExpired
-                ? '⚠️ Session Expired'
-                : `⏱️ ${formatTime(timeRemaining)} remaining`
-              }
-            </div>
-          )} */}
 
         </div>
 

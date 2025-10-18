@@ -1,4 +1,4 @@
-import { faEyeSlash, faGlobe, faRotateRight } from '@fortawesome/free-solid-svg-icons';
+import { faEyeSlash, faGlobe } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { createPortal } from 'react-dom';
@@ -347,7 +347,7 @@ export function CoolFeedSection({ tabs, pings }) {
         </h2>
 
         {/* Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
             onClick={loadActivity}
             style={{
@@ -377,7 +377,7 @@ export function CoolFeedSection({ tabs, pings }) {
           </button>
 
 
-        </div>
+        </div> */}
       </div>
       {
         loading ? (
