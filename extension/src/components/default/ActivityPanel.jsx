@@ -6,6 +6,7 @@ import { AIChatsSection } from './AIChats';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { DailyNotesSection } from './DailyNotesSection';
 import { NotesSection } from './NotesSection';
+import { getDisplaySettings } from '../settings/DisplayData';
 
 export function ActivityPanel({ activeSection = 0 }) {
   // State for preview modal
@@ -15,6 +16,21 @@ export function ActivityPanel({ activeSection = 0 }) {
 
   // State for responsive layout
   const [isNarrowScreen, setIsNarrowScreen] = React.useState(false);
+
+  // Display settings state
+  const [displaySettings, setDisplaySettings] = React.useState(() => getDisplaySettings());
+
+  // Listen for display settings changes
+  React.useEffect(() => {
+    const handleDisplaySettingsChange = (event) => {
+      setDisplaySettings(event.detail || getDisplaySettings());
+    };
+
+    window.addEventListener('displaySettingsChanged', handleDisplaySettingsChange);
+    return () => {
+      window.removeEventListener('displaySettingsChanged', handleDisplaySettingsChange);
+    };
+  }, []);
 
   // Hidden sections persistence (double-click to toggle) using localStorage + unified DB
   const [hiddenSections, setHiddenSections] = React.useState(() => {
@@ -218,11 +234,17 @@ export function ActivityPanel({ activeSection = 0 }) {
     return () => clearTimeout(timer);
   }, [activeSection]);
 
-  // Define sections array matching Header navigation
-  const sections = [
-    { name: 'Current Tabs', component: <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /> },
+  // Define sections array matching Header navigation with display setting IDs
+  const allSections = [
+    { 
+      id: 'currentTabsSection',
+      name: 'Current Tabs', 
+      component: <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /> 
+    },
     {
-      name: 'Voice Navigation', component: <div>
+      id: 'voiceNavigationSection',
+      name: 'Voice Navigation', 
+      component: <div>
         <h2
           className="coolDesk-section-title"
           style={{ cursor: 'help' }}
@@ -233,31 +255,43 @@ export function ActivityPanel({ activeSection = 0 }) {
       </div>
     },
     {
-      name: 'AI Chats', component: <div>
+      id: 'aiChatsSection',
+      name: 'AI Chats', 
+      component: <div>
         <AIChatsSection />
       </div>
     },
     {
-      name: 'Notes', component: <div>
+      id: 'notesSection',
+      name: 'Notes', 
+      component: <div>
         <NotesSection />
       </div>
     },
     {
-      name: 'Daily Notes', component: <div>
+      id: 'dailyNotesSection',
+      name: 'Daily Notes', 
+      component: <div>
         <DailyNotesSection />
       </div>
     }
   ];
 
+  // Filter sections based on display settings
+  const sections = allSections.filter(section => displaySettings[section.id] !== false);
+
   // Check if we should show notes side-by-side
   const showNotesSideBySide = React.useMemo(() => {
     const isAllMode = activeSection === 0;
-    const notesIndex = 3; // Notes section index (after Current Tabs, Voice Navigation, AI Chats)
-    const dailyNotesIndex = 4; // Daily Notes section index
+    // Find the actual indices of Notes and Daily Notes in the filtered sections array
+    const notesIndex = sections.findIndex(s => s.id === 'notesSection');
+    const dailyNotesIndex = sections.findIndex(s => s.id === 'dailyNotesSection');
 
     // Show side-by-side only in "All" mode or when either Notes or Daily Notes is active
-    return isAllMode || activeSection === (notesIndex + 1) || activeSection === (dailyNotesIndex + 1);
-  }, [activeSection]);
+    return isAllMode || 
+           (notesIndex >= 0 && activeSection === (notesIndex + 1)) || 
+           (dailyNotesIndex >= 0 && activeSection === (dailyNotesIndex + 1));
+  }, [activeSection, sections]);
 
   return (
     <section
@@ -272,8 +306,9 @@ export function ActivityPanel({ activeSection = 0 }) {
         const isAllMode = activeSection === 0;
         const isCurrentSection = index === (activeSection - 1); // Adjust for "All" being index 0
         const isVisible = isAllMode || isCurrentSection;
-        const notesIndex = 3; // Notes section index (after Current Tabs, Voice Navigation, AI Chats)
-        const dailyNotesIndex = 4; // Daily Notes section index
+        // Find the actual indices of Notes and Daily Notes in the filtered sections array
+        const notesIndex = sections.findIndex(s => s.id === 'notesSection');
+        const dailyNotesIndex = sections.findIndex(s => s.id === 'dailyNotesSection');
 
         // Handle side-by-side display for Notes and Daily Notes
         if (showNotesSideBySide && (index === notesIndex || index === dailyNotesIndex)) {

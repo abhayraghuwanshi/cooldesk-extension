@@ -52,6 +52,7 @@ import { getFaviconUrl, getUrlParts } from './utils';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
+import { getDisplaySettings } from './components/settings/DisplayData';
 
 // Simple error boundary to prevent entire app crash due to child errors
 class ErrorBoundary extends React.Component {
@@ -153,6 +154,9 @@ export default function App() {
     }
   })
 
+  // Display settings state
+  const [displaySettings, setDisplaySettings] = useState(() => getDisplaySettings())
+
 
   // Auto-reset active section after 5 seconds of inactivity
   useEffect(() => {
@@ -195,6 +199,18 @@ export default function App() {
         document.body.setAttribute('tabindex', '-1');
       }
     }
+  }, []);
+
+  // Listen for display settings changes
+  useEffect(() => {
+    const handleDisplaySettingsChange = (event) => {
+      setDisplaySettings(event.detail || getDisplaySettings());
+    };
+
+    window.addEventListener('displaySettingsChanged', handleDisplaySettingsChange);
+    return () => {
+      window.removeEventListener('displaySettingsChanged', handleDisplaySettingsChange);
+    };
   }, []);
 
 
@@ -1478,128 +1494,136 @@ export default function App() {
             gap: windowWidth < 768 ? 24 : 16,
             marginBottom: 16
           }}>
-            <div style={{ minWidth: 0 }}>
-              {showPingsSection ? (
-                <div onDoubleClick={() => setShowPingsSection(false)}>
-                  <PingsSection tabs={[]} />
-                </div>
-              ) : (
-                <div
-                  className="coolDesk-section"
-                  onDoubleClick={() => setShowPingsSection(true)}
-                  style={{
-                    padding: '12px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    opacity: 0.6,
-                    border: '1px dashed var(--border-color)',
-                    borderRadius: '8px'
-                  }}
-                >
-                  <span style={{ fontSize: '0.9em' }}>Double-click to show Pins</span>
-                </div>
-              )}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              {showFeedSection ? (
-                <div onDoubleClick={() => setShowFeedSection(false)}>
-                  <CoolFeedSection />
-                </div>
-              ) : (
-                <div
-                  className="coolDesk-section"
-                  onDoubleClick={() => setShowFeedSection(true)}
-                  style={{
-                    padding: '12px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    opacity: 0.6,
-                    border: '1px dashed var(--border-color)',
-                    borderRadius: '8px'
-                  }}
-                >
-                  <span style={{ fontSize: '0.9em' }}>Double-click to show Feed</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </ErrorBoundary>
-
-        <ErrorBoundary>
-          <div>
-            <PinnedWorkspace
-              items={pinnedWorkspaces}
-              active={activePinnedWorkspace}
-              onSelect={(name) => setActivePinnedWorkspace(name)}
-              onUnpin={unpinWorkspace}
-              workspaces={savedWorkspaces}
-              onReorder={(order) => {
-                if (Array.isArray(order)) {
-                  setPinnedWorkspaces(order);
-                  try { savePinnedWorkspaces(order); } catch { }
-                }
-              }}
-            />
-          </div>
-        </ErrorBoundary>
-
-        {workspaceHidden ? (
-          <div
-            className="coolDesk-section"
-            onDoubleClick={() => setWorkspaceHidden(false)}
-            style={{
-              marginTop: 16,
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px dashed var(--border-primary)',
-              color: 'var(--text-secondary)',
-              background: 'var(--glass-bg)',
-              cursor: 'pointer',
-              userSelect: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              transition: 'all 0.2s ease',
-              fontStyle: 'italic'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--interactive-hover)';
-              e.currentTarget.style.borderColor = 'var(--border-accent)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'var(--glass-bg)';
-              e.currentTarget.style.borderColor = 'var(--border-primary)';
-            }}
-            title="Double-click to show workspace filters"
-          >
-            <span style={{ opacity: 0.8 }}>Hidden: Workspace Filters</span>
-            <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
-          </div>
-        ) : (
-          <>
-            <h2
-              className="coolDesk-section-title"
-              style={{ cursor: 'help' }}
-              onDoubleClick={() => setWorkspaceHidden(true)}
-              title="Double-click to hide workspace filters"
-            >
-              Workspace
-            </h2>
-            {/* Filters */}
-            <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <WorkspaceFilters
-                  items={filterItems}
-                  active={workspace}
-                  onChange={setWorkspace}
-                  onWorkspaceCreated={createWorkspace}
-                  onPinWorkspace={togglePinWorkspace}
-                  pinnedWorkspaces={pinnedWorkspaces}
-                />
+            {displaySettings.pingsSection !== false && (
+              <div style={{ minWidth: 0 }}>
+                {showPingsSection ? (
+                  <div onDoubleClick={() => setShowPingsSection(false)}>
+                    <PingsSection tabs={[]} />
+                  </div>
+                ) : (
+                  <div
+                    className="coolDesk-section"
+                    onDoubleClick={() => setShowPingsSection(true)}
+                    style={{
+                      padding: '12px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      opacity: 0.6,
+                      border: '1px dashed var(--border-color)',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    <span style={{ fontSize: '0.9em' }}>Double-click to show Pins</span>
+                  </div>
+                )}
               </div>
+            )}
+            {displaySettings.feedSection !== false && (
+              <div style={{ minWidth: 0 }}>
+                {showFeedSection ? (
+                  <div onDoubleClick={() => setShowFeedSection(false)}>
+                    <CoolFeedSection />
+                  </div>
+                ) : (
+                  <div
+                    className="coolDesk-section"
+                    onDoubleClick={() => setShowFeedSection(true)}
+                    style={{
+                      padding: '12px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      opacity: 0.6,
+                      border: '1px dashed var(--border-color)',
+                      borderRadius: '8px'
+                    }}
+                  >
+                    <span style={{ fontSize: '0.9em' }}>Double-click to show Feed</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </ErrorBoundary>
+
+        {displaySettings.pinnedWorkspaces !== false && (
+          <ErrorBoundary>
+            <div>
+              <PinnedWorkspace
+                items={pinnedWorkspaces}
+                active={activePinnedWorkspace}
+                onSelect={(name) => setActivePinnedWorkspace(name)}
+                onUnpin={unpinWorkspace}
+                workspaces={savedWorkspaces}
+                onReorder={(order) => {
+                  if (Array.isArray(order)) {
+                    setPinnedWorkspaces(order);
+                    try { savePinnedWorkspaces(order); } catch { }
+                  }
+                }}
+              />
             </div>
-          </>
+          </ErrorBoundary>
+        )}
+
+        {displaySettings.workspaceFilters !== false && (
+          workspaceHidden ? (
+            <div
+              className="coolDesk-section"
+              onDoubleClick={() => setWorkspaceHidden(false)}
+              style={{
+                marginTop: 16,
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px dashed var(--border-primary)',
+                color: 'var(--text-secondary)',
+                background: 'var(--glass-bg)',
+                cursor: 'pointer',
+                userSelect: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s ease',
+                fontStyle: 'italic'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--interactive-hover)';
+                e.currentTarget.style.borderColor = 'var(--border-accent)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--glass-bg)';
+                e.currentTarget.style.borderColor = 'var(--border-primary)';
+              }}
+              title="Double-click to show workspace filters"
+            >
+              <span style={{ opacity: 0.8 }}>Hidden: Workspace Filters</span>
+              <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
+            </div>
+          ) : (
+            <>
+              <h2
+                className="coolDesk-section-title"
+                style={{ cursor: 'help' }}
+                onDoubleClick={() => setWorkspaceHidden(true)}
+                title="Double-click to hide workspace filters"
+              >
+                Workspace
+              </h2>
+              {/* Filters */}
+              <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <WorkspaceFilters
+                    items={filterItems}
+                    active={workspace}
+                    onChange={setWorkspace}
+                    onWorkspaceCreated={createWorkspace}
+                    onPinWorkspace={togglePinWorkspace}
+                    pinnedWorkspaces={pinnedWorkspaces}
+                  />
+                </div>
+              </div>
+            </>
+          )
         )}
 
 
