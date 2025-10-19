@@ -44,15 +44,15 @@ import { CoolFeedSection } from './components/default/CoolFeedSection.jsx';
 import { PingsSection } from './components/default/PingsSection';
 import { PinnedWorkspace } from './components/default/PinnedWorkspace';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
+import { getDisplaySettings } from './components/settings/DisplayData';
 import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
-import { focusWindow, getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
+import { getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { getFaviconUrl, getUrlParts } from './utils';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
-import { getDisplaySettings } from './components/settings/DisplayData';
 
 // Simple error boundary to prevent entire app crash due to child errors
 class ErrorBoundary extends React.Component {
@@ -318,14 +318,14 @@ export default function App() {
         // ENHANCED: Scan browser history directly instead of relying only on dashboard data
         let urls = [];
         const urlTimes = new Map();
-        
+
         // Try to get URLs from browser history API (for chat platforms)
         const browserAPI = typeof chrome !== 'undefined' && chrome?.history ? chrome : null;
         if (browserAPI) {
           try {
             const endTime = Date.now();
             const startTime = endTime - (30 * 24 * 60 * 60 * 1000); // Last 30 days
-            
+
             console.log('[AutoCreate] Scanning browser history for chat platforms...');
             const historyItems = await browserAPI.history.search({
               text: '',
@@ -333,9 +333,9 @@ export default function App() {
               endTime: endTime,
               maxResults: 2000
             });
-            
+
             console.log(`[AutoCreate] Found ${historyItems.length} history items`);
-            
+
             // Extract URLs and timestamps
             for (const item of historyItems) {
               if (item.url) {
@@ -345,13 +345,13 @@ export default function App() {
                 if (t > prev) urlTimes.set(item.url, t);
               }
             }
-            
+
             console.log(`[AutoCreate] Extracted ${urls.length} URLs from history`);
           } catch (err) {
             console.warn('[AutoCreate] Failed to scan browser history:', err);
           }
         }
-        
+
         // Fallback: Also include URLs from dashboard data if history scan failed
         if (urls.length === 0 && data && Array.isArray(data)) {
           console.log('[AutoCreate] Falling back to dashboard data');
@@ -364,7 +364,7 @@ export default function App() {
             if (t > prev) urlTimes.set(u, t);
           }
         }
-        
+
         if (urls.length === 0) {
           console.log('[AutoCreate] No URLs found to process');
           return;
@@ -1566,87 +1566,83 @@ export default function App() {
         )}
 
         {displaySettings.workspaceFilters !== false && (
-          workspaceHidden ? (
-            <div
-              className="coolDesk-section"
-              onDoubleClick={() => setWorkspaceHidden(false)}
-              style={{
-                marginTop: 16,
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: '1px dashed var(--border-primary)',
-                color: 'var(--text-secondary)',
-                background: 'var(--glass-bg)',
-                cursor: 'pointer',
-                userSelect: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                transition: 'all 0.2s ease',
-                fontStyle: 'italic'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--interactive-hover)';
-                e.currentTarget.style.borderColor = 'var(--border-accent)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--glass-bg)';
-                e.currentTarget.style.borderColor = 'var(--border-primary)';
-              }}
-              title="Double-click to show workspace filters"
-            >
-              <span style={{ opacity: 0.8 }}>Hidden: Workspace Filters</span>
-              <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
-            </div>
-          ) : (
-            <>
-              <h2
-                className="coolDesk-section-title"
-                style={{ cursor: 'help' }}
-                onDoubleClick={() => setWorkspaceHidden(true)}
-                title="Double-click to hide workspace filters"
-              >
-                Workspace
-              </h2>
-              {/* Filters */}
-              <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <WorkspaceFilters
-                    items={filterItems}
-                    active={workspace}
-                    onChange={setWorkspace}
-                    onWorkspaceCreated={createWorkspace}
-                    onPinWorkspace={togglePinWorkspace}
-                    pinnedWorkspaces={pinnedWorkspaces}
-                  />
-                </div>
-              </div>
-            </>
-          )
-        )}
-
-
-
-        {/* Workspace section (only when a specific workspace is selected) */}
-        {workspace !== 'All' && (
           <>
-            {showCurrentWorkspace && (
+            {workspaceHidden ? (
+              <div
+                className="coolDesk-section"
+                onDoubleClick={() => setWorkspaceHidden(false)}
+                style={{
+                  marginTop: 16,
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px dashed var(--border-primary)',
+                  color: 'var(--text-secondary)',
+                  background: 'var(--glass-bg)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s ease',
+                  fontStyle: 'italic'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--interactive-hover)';
+                  e.currentTarget.style.borderColor = 'var(--border-accent)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--glass-bg)';
+                  e.currentTarget.style.borderColor = 'var(--border-primary)';
+                }}
+                title="Double-click to show workspace filters"
+              >
+                <span style={{ opacity: 0.8 }}>Hidden: Workspace Filters</span>
+                <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
+              </div>
+            ) : (
               <>
-                {workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
-                  <div key={`ws-${workspace}`} className="ws-animate-in">
-                    {renderWorkspaceGrid(
-                      savedWorkspaces.find(ws => ws.name === workspace),
-                      mergedWorkspaceItems
-                    )}
+                <h2
+                  className="coolDesk-section-title"
+                  style={{ cursor: 'help' }}
+                  onDoubleClick={() => setWorkspaceHidden(true)}
+                  title="Double-click to hide workspace filters"
+                >
+                  Workspace
+                </h2>
+                {/* Filters */}
+                <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <WorkspaceFilters
+                      items={filterItems}
+                      active={workspace}
+                      onChange={setWorkspace}
+                      onWorkspaceCreated={createWorkspace}
+                      onPinWorkspace={togglePinWorkspace}
+                      pinnedWorkspaces={pinnedWorkspaces}
+                    />
                   </div>
-                ) : (
-                  <div key={`ws-${workspace}`} className="ws-animate-in">
-                    {renderWorkspaceGrid(
-                      workspace === 'All' ? { name: 'All', gridType: 'ItemGrid' } : savedWorkspaces.find(ws => ws.name === workspace),
-                      workspace === 'All' ? allItemsCombined : mergedWorkspaceItems
+                </div>
+
+                {/* Workspace Grid Content */}
+                {workspace !== 'All' && displaySettings.workspaceFilters !== false && (
+                  <>
+                    {workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
+                      <div key={`ws-${workspace}`} className="ws-animate-in">
+                        {renderWorkspaceGrid(
+                          savedWorkspaces.find(ws => ws.name === workspace),
+                          mergedWorkspaceItems
+                        )}
+                      </div>
+                    ) : (
+                      <div key={`ws-${workspace}`} className="ws-animate-in">
+                        {renderWorkspaceGrid(
+                          workspace === 'All' ? { name: 'All', gridType: 'ItemGrid' } : savedWorkspaces.find(ws => ws.name === workspace),
+                          workspace === 'All' ? allItemsCombined : mergedWorkspaceItems
+                        )}
+                      </div>
                     )}
-                  </div>
+                  </>
                 )}
               </>
             )}
@@ -1654,63 +1650,6 @@ export default function App() {
         )}
 
         <>
-          {/* Running Apps (Electron/app mode) - show regardless of dashboard loading */}
-          {Array.isArray(processes) && processes.length > 0 && (
-            <section className="saved-workspaces" style={{ margin: '6px 0 10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <h3 style={{ margin: 0 }}>Running Apps</h3>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-                {processes.map((p, idx) => (
-                  <div
-                    key={p.pid || p.processId || idx}
-                    className="card"
-                    style={{ padding: 10, cursor: 'pointer', border: '1px solid #e5e7eb', borderRadius: 8 }}
-                    title="Click to focus this app"
-                    onClick={async () => {
-                      try { await focusWindow(p.pid ?? p.processId); } catch { }
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {p.iconUrl && (
-                          <img
-                            src={p.iconUrl}
-                            alt=""
-                            width={16}
-                            height={16}
-                            style={{ borderRadius: 3, objectFit: 'cover' }}
-                            onError={(e) => { try { e.currentTarget.style.display = 'none'; } catch { } }}
-                          />
-                        )}
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>
-                          {p.title || p.name || p.processName || 'Unknown App'}
-                        </div>
-                      </div>
-                      <button
-                        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #273043', background: '#1b2331', color: '#e5e7eb', cursor: 'pointer' }}
-                        title="Focus this app"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try { await focusWindow(p.pid ?? p.processId); } catch { }
-                        }}
-                      >
-                        Go
-                      </button>
-                    </div>
-                    <div style={{ fontSize: 12, opacity: 0.85 }}>
-                      PID: {p.pid ?? p.processId ?? 'n/a'}
-                    </div>
-                    {p.path && (
-                      <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.path}>
-                        {p.path?.split(/[\\/]/).pop()}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
 
           {/* Always render content; hydration refreshes in background */}
           <>

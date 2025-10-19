@@ -1,6 +1,7 @@
-import { faChartLine, faCheckCircle, faEye, faFilter, faLightbulb, faMapPin, faNewspaper, faRotateLeft, faSearch, faThumbtack, faTimesCircle } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faFilter, faMapPin, faNewspaper, faThumbtack, faCheckCircle } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useState } from 'react'
+import { applyViewMode, getCurrentViewMode, getViewModesList } from '../../config/viewModes'
 import './DisplayData.css'
 
 const DISPLAY_SETTINGS_KEY = 'cooldesk_display_settings'
@@ -89,8 +90,24 @@ export default function DisplayData() {
         }, {})
     })
 
-    const [searchQuery, setSearchQuery] = useState('')
-    const [selectedCategory, setSelectedCategory] = useState('All')
+    // View mode state
+    const [currentViewMode, setCurrentViewMode] = useState(() => getCurrentViewMode())
+    const viewModes = getViewModesList()
+
+    // Listen for view mode changes from other sources
+    useEffect(() => {
+        const handleViewModeChange = (event) => {
+            setCurrentViewMode(event.detail.modeId)
+            // Update display settings when view mode changes
+            if (event.detail.mode?.settings) {
+                setDisplaySettings(event.detail.mode.settings)
+            }
+        }
+
+        window.addEventListener('viewModeChanged', handleViewModeChange)
+        return () => window.removeEventListener('viewModeChanged', handleViewModeChange)
+    }, [])
+
 
     // Save to localStorage whenever settings change
     useEffect(() => {
@@ -110,44 +127,10 @@ export default function DisplayData() {
         }))
     }
 
-    const toggleAll = (visible) => {
-        const newSettings = {}
-        UI_COMPONENTS.forEach(comp => {
-            newSettings[comp.id] = visible
-        })
-        setDisplaySettings(newSettings)
+    const handleViewModeChange = (modeId) => {
+        applyViewMode(modeId)
+        setCurrentViewMode(modeId)
     }
-
-    const resetToDefaults = () => {
-        const defaults = UI_COMPONENTS.reduce((acc, comp) => {
-            acc[comp.id] = true
-            return acc
-        }, {})
-        setDisplaySettings(defaults)
-    }
-
-    // Get unique categories
-    const categories = ['All', ...new Set(UI_COMPONENTS.map(c => c.category))]
-
-    // Filter components
-    const filteredComponents = UI_COMPONENTS.filter(comp => {
-        const matchesSearch = comp.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            comp.description.toLowerCase().includes(searchQuery.toLowerCase())
-        const matchesCategory = selectedCategory === 'All' || comp.category === selectedCategory
-        return matchesSearch && matchesCategory
-    })
-
-    // Group by category
-    const groupedComponents = filteredComponents.reduce((acc, comp) => {
-        if (!acc[comp.category]) {
-            acc[comp.category] = []
-        }
-        acc[comp.category].push(comp)
-        return acc
-    }, {})
-
-    const visibleCount = Object.values(displaySettings).filter(Boolean).length
-    const totalCount = UI_COMPONENTS.length
 
     return (
         <div className="display-data-container">
@@ -158,104 +141,63 @@ export default function DisplayData() {
                 </p>
             </div>
 
-            <div className="display-stats">
-                <div className="stat-card">
-                    <FontAwesomeIcon icon={faEye} className="stat-icon" />
-                    <div className="stat-content">
-                        <div className="stat-value">{visibleCount}/{totalCount}</div>
-                        <div className="stat-label">Components Visible</div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="display-controls">
-                <div className="search-box">
-                    <FontAwesomeIcon icon={faSearch} className="search-icon" />
-                    <input
-                        type="text"
-                        placeholder="Search components..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="search-input"
-                    />
-                    {searchQuery && (
+            {/* View Mode Quick Select */}
+            <div className="view-mode-section">
+                <h3 className="section-title">View Modes</h3>
+                <p className="section-subtitle">Quick presets for different workflows</p>
+                
+                <div className="view-mode-grid">
+                    {viewModes.map(mode => (
                         <button
-                            className="clear-search"
-                            onClick={() => setSearchQuery('')}
-                            title="Clear search"
+                            key={mode.id}
+                            className={`view-mode-card ${currentViewMode === mode.id ? 'active' : ''}`}
+                            onClick={() => handleViewModeChange(mode.id)}
                         >
-                            ✕
-                        </button>
-                    )}
-                </div>
-
-                <div className="category-filters">
-                    {categories.map(cat => (
-                        <button
-                            key={cat}
-                            className={`category-btn ${selectedCategory === cat ? 'active' : ''}`}
-                            onClick={() => setSelectedCategory(cat)}
-                        >
-                            {cat}
+                            <span className="mode-icon-large">{mode.icon}</span>
+                            <div className="mode-info">
+                                <div className="mode-name">{mode.label}</div>
+                                <div className="mode-desc">{mode.description}</div>
+                            </div>
+                            {currentViewMode === mode.id && (
+                                <div className="mode-active-badge">
+                                    <FontAwesomeIcon icon={faCheckCircle} />
+                                </div>
+                            )}
                         </button>
                     ))}
                 </div>
-
-                <div className="bulk-actions">
-                    <button className="action-btn" onClick={() => toggleAll(true)}>
-                        <FontAwesomeIcon icon={faCheckCircle} /> Show All
-                    </button>
-                    <button className="action-btn" onClick={() => toggleAll(false)}>
-                        <FontAwesomeIcon icon={faTimesCircle} /> Hide All
-                    </button>
-                    <button className="action-btn secondary" onClick={resetToDefaults}>
-                        <FontAwesomeIcon icon={faRotateLeft} /> Reset
-                    </button>
-                </div>
             </div>
 
+            {/* Divider */}
+            <div className="settings-divider"></div>
+
+            {/* Component Toggles Header */}
+            <div className="components-header">
+                <h3 className="section-title">Individual Components</h3>
+                <p className="section-subtitle">Fine-tune component visibility</p>
+            </div>
+
+            {/* Simple component list */}
             <div className="components-list">
-                {Object.keys(groupedComponents).length === 0 ? (
-                    <div className="empty-state">
-                        <FontAwesomeIcon icon={faSearch} className="empty-icon" />
-                        <div className="empty-text">No components found</div>
-                        <div className="empty-hint">Try adjusting your search or filters</div>
-                    </div>
-                ) : (
-                    Object.entries(groupedComponents).map(([category, components]) => (
-                        <div key={category} className="component-category">
-                            <h3 className="category-title">{category}</h3>
-                            <div className="component-items">
-                                {components.map(comp => (
-                                    <div key={comp.id} className="component-item">
-                                        <div className="component-info">
-                                            <FontAwesomeIcon icon={comp.icon} className="component-icon" />
-                                            <div className="component-details">
-                                                <div className="component-label">{comp.label}</div>
-                                                <div className="component-description">{comp.description}</div>
-                                            </div>
-                                        </div>
-                                        <label className="toggle-switch">
-                                            <input
-                                                type="checkbox"
-                                                checked={displaySettings[comp.id] !== false}
-                                                onChange={() => toggleComponent(comp.id)}
-                                            />
-                                            <span className="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                ))}
+                {UI_COMPONENTS.map(comp => (
+                    <div key={comp.id} className="component-item">
+                        <div className="component-info">
+                            <FontAwesomeIcon icon={comp.icon} className="component-icon" />
+                            <div className="component-details">
+                                <div className="component-label">{comp.label}</div>
+                                <div className="component-description">{comp.description}</div>
                             </div>
                         </div>
-                    ))
-                )}
-            </div>
-
-            <div className="display-info">
-                <FontAwesomeIcon icon={faLightbulb} className="info-icon" />
-                <div className="info-content">
-                    <strong>Note:</strong> Changes take effect immediately. Hidden components can be re-enabled anytime from this settings page.
-                </div>
+                        <label className="toggle-switch">
+                            <input
+                                type="checkbox"
+                                checked={displaySettings[comp.id] !== false}
+                                onChange={() => toggleComponent(comp.id)}
+                            />
+                            <span className="toggle-slider"></span>
+                        </label>
+                    </div>
+                ))}
             </div>
         </div>
     )

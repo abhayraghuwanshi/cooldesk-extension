@@ -352,6 +352,170 @@
     color: var(--text-secondary, #666);
 }
 
+/* View Mode Section */
+.view-mode-section {
+    margin-bottom: 24px;
+}
+
+.section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary, #1a1a1a);
+    margin: 0 0 4px 0;
+}
+
+.section-subtitle {
+    font-size: 12px;
+    color: var(--text-secondary, #666);
+    margin: 0 0 16px 0;
+}
+
+.view-mode-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.view-mode-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    background: var(--bg-secondary, #f8f9fa);
+    border: 2px solid var(--border-color, #e0e0e0);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    text-align: center;
+}
+
+.view-mode-card:hover {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.view-mode-card.active {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+.mode-icon-large {
+    font-size: 32px;
+    line-height: 1;
+}
+
+.mode-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mode-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary, #1a1a1a);
+}
+
+.mode-desc {
+    font-size: 11px;
+    color: var(--text-secondary, #666);
+    line-height: 1.3;
+}
+
+.mode-active-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 16px;
+    color: #667eea;
+}
+
+.settings-divider {
+    height: 1px;
+    background: var(--border-color, #e0e0e0);
+    margin: 24px 0;
+}
+
+.components-header {
+    margin-bottom: 16px;
+}
+
+/* Layout Board Section */
+.layout-board-section {
+    padding: 16px;
+    background: var(--bg-primary, white);
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.layout-board-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.layout-board-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px;
+    background: var(--bg-secondary, #f8f9fa);
+    border: 2px solid var(--border-color, #e0e0e0);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    text-align: left;
+}
+
+.layout-board-card:hover {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.layout-board-card.active {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.1);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.board-icon {
+    font-size: 24px;
+    color: #667eea;
+    flex-shrink: 0;
+}
+
+.board-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.board-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary, #1a1a1a);
+    margin-bottom: 3px;
+}
+
+.board-description {
+    font-size: 12px;
+    color: var(--text-secondary, #666);
+    line-height: 1.4;
+}
+
+.board-checkmark {
+    font-size: 18px;
+    color: #667eea;
+    flex-shrink: 0;
+}
+
 /* Info Banner */
 .display-info {
     display: flex;
@@ -474,5 +638,64 @@
 
     .info-content {
         color: #90caf9;
+    }
+
+    .layout-board-section {
+        background: #2a2a2a;
+        border-color: #444;
+    }
+
+    .section-title {
+        color: #e0e0e0;
+    }
+
+    .section-subtitle {
+        color: #999;
+    }
+
+    .layout-board-card {
+        background: #1a1a1a;
+        border-color: #444;
+    }
+
+    .layout-board-card:hover {
+        background: rgba(102, 126, 234, 0.1);
+    }
+
+    .layout-board-card.active {
+        background: rgba(102, 126, 234, 0.15);
+    }
+
+    .board-label {
+        color: #e0e0e0;
+    }
+
+    .board-description {
+        color: #999;
+    }
+
+    .view-mode-card {
+        background: #1a1a1a;
+        border-color: #444;
+    }
+
+    .view-mode-card:hover {
+        background: rgba(102, 126, 234, 0.1);
+    }
+
+    .view-mode-card.active {
+        background: rgba(102, 126, 234, 0.15);
+    }
+
+    .mode-name {
+        color: #e0e0e0;
+    }
+
+    .mode-desc {
+        color: #999;
+    }
+
+    .settings-divider {
+        background: #444;
     }
 }

@@ -33,10 +33,18 @@ export default function ExportData() {
                 data.stores[storeName] = rows
             }
 
-            // Include chrome.storage.local keys that the app relies on (pins + daily notes)
+            // Include chrome.storage.local keys that the app relies on (pins + daily notes + view settings)
             try {
                 const { pinnedWorkspaces } = await storageGet(['pinnedWorkspaces'])
                 data.storageLocal.pinnedWorkspaces = Array.isArray(pinnedWorkspaces) ? pinnedWorkspaces : []
+                
+                // Export view mode and display settings
+                try {
+                    const viewMode = localStorage.getItem('cooldesk_view_mode') || 'default'
+                    const displaySettings = localStorage.getItem('cooldesk_display_settings')
+                    data.storageLocal.viewMode = viewMode
+                    data.storageLocal.displaySettings = displaySettings ? JSON.parse(displaySettings) : null
+                } catch { /* ignore */ }
                 // Collect daily notes keys
                 let notesByDate = {}
                 let dailyNotesSummary = {}
@@ -77,6 +85,8 @@ export default function ExportData() {
                 storageLocal: {
                     pinnedWorkspaces: (data.storageLocal?.pinnedWorkspaces || []).length,
                     dailyNotesDays: Object.keys(data.storageLocal?.dailyNotes?.notesByDate || {}).length,
+                    viewMode: data.storageLocal?.viewMode || 'default',
+                    displaySettingsCount: data.storageLocal?.displaySettings ? Object.keys(data.storageLocal.displaySettings).length : 0,
                 },
                 scrapedChats: storeCounts[DB_CONFIG.STORES.SCRAPED_CHATS] || 0
             })
@@ -158,10 +168,27 @@ export default function ExportData() {
                 }
             }
 
-            // Restore chrome.storage.local pins and daily notes
+            // Restore chrome.storage.local pins, daily notes, and view settings
             try {
                 if (parsed.storageLocal && Array.isArray(parsed.storageLocal.pinnedWorkspaces)) {
                     await storageSet({ pinnedWorkspaces: parsed.storageLocal.pinnedWorkspaces })
+                }
+                
+                // Restore view mode and display settings
+                if (parsed.storageLocal) {
+                    if (parsed.storageLocal.viewMode) {
+                        localStorage.setItem('cooldesk_view_mode', parsed.storageLocal.viewMode)
+                    }
+                    if (parsed.storageLocal.displaySettings) {
+                        localStorage.setItem('cooldesk_display_settings', JSON.stringify(parsed.storageLocal.displaySettings))
+                        // Dispatch event to update UI
+                        window.dispatchEvent(new CustomEvent('displaySettingsChanged', { 
+                            detail: parsed.storageLocal.displaySettings 
+                        }))
+                        window.dispatchEvent(new CustomEvent('viewModeChanged', { 
+                            detail: { modeId: parsed.storageLocal.viewMode || 'default' }
+                        }))
+                    }
                 }
                 if (parsed.storageLocal && parsed.storageLocal.dailyNotes && typeof parsed.storageLocal.dailyNotes === 'object') {
                     const dn = parsed.storageLocal.dailyNotes
@@ -178,7 +205,11 @@ export default function ExportData() {
             } catch { /* ignore storage errors */ }
 
             setMessage('Import complete')
-            setDetails({ counts: importCounts })
+            setDetails({ 
+                counts: importCounts,
+                viewMode: parsed.storageLocal?.viewMode || 'not included',
+                displaySettings: parsed.storageLocal?.displaySettings ? 'restored' : 'not included'
+            })
         } catch (err) {
             console.error('[ExportData] Import failed', err)
             setMessage(`Import failed: ${err.message || err}`)
@@ -259,6 +290,36 @@ export default function ExportData() {
                                 <div className="detail-value">{details.storageLocal?.dailyNotesDays || 0} days</div>
                             </div>
                         </div>
+                        
+                        {details.storageLocal?.viewMode && (
+                            <div className="detail-card">
+                                <div className="detail-icon">👁️</div>
+                                <div className="detail-content">
+                                    <div className="detail-label">View Mode</div>
+                                    <div className="detail-value">{details.storageLocal.viewMode}</div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {details.viewMode && (
+                            <div className="detail-card">
+                                <div className="detail-icon">👁️</div>
+                                <div className="detail-content">
+                                    <div className="detail-label">View Mode</div>
+                                    <div className="detail-value">{details.viewMode}</div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {details.displaySettings && (
+                            <div className="detail-card">
+                                <div className="detail-icon">⚙️</div>
+                                <div className="detail-content">
+                                    <div className="detail-label">Display Settings</div>
+                                    <div className="detail-value">{details.displaySettings}</div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {details.counts && (

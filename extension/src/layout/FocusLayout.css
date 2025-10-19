@@ -1,0 +1,59 @@
+/* Focus Layout Styles */
+.layout-focus-wrapper {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Hide distracting elements in focus mode */
+.layout-focus-wrapper .pings-section,
+.layout-focus-wrapper .feed-section,
+.layout-focus-wrapper [class*="PingsSection"],
+.layout-focus-wrapper [class*="CoolFeedSection"],
+.layout-focus-wrapper [class*="PinnedWorkspace"] {
+  display: none !important;
+}
+
+/* Optionally hide pinned workspaces */
+.layout-focus-wrapper .pinned-workspace {
+  display: none !important;
+}
+
+/* Center main content */
+.layout-focus-wrapper .popup-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Make workspace content full width but centered */
+.layout-focus-wrapper .workspace-grid {
+  max-width: 100%;
+  width: 100%;
+}
+
+/* Reduce activity panel width in focus mode */
+.layout-focus-wrapper .activity-panel {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* Simplify header in focus mode (optional) */
+.layout-focus-wrapper .header {
+  opacity: 0.9;
+}
+
+/* Add focus indicator */
+.layout-focus-wrapper::before {
+  content: '🎯 Focus Mode';
+  display: block;
+  text-align: center;
+  padding: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  letter-spacing: 0.5px;
+}

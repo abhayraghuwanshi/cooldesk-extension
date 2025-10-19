@@ -4,7 +4,7 @@ import {
   faGear,
   faQuestionCircle,
   faTableCellsLarge,
-  faTableColumns
+  faTableColumns,
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
@@ -15,6 +15,7 @@ import { AddLinkFlow } from '../popups/AddLinkFlow.jsx';
 import { CoolHelpSection } from '../popups/CoolHelpSection.jsx';
 import MusicControls from './MusicControls';
 import { SearchBox } from './SearchBox.jsx';
+import { ViewModeSelector } from './ViewModeSelector.jsx';
 
 
 export function Header({
@@ -344,24 +345,6 @@ export function Header({
         <MusicControls />
 
         <Separator />
-
-        <button
-          className="icon-btn"
-          onClick={() => setShowHelp(true)}
-          title="Help"
-          style={iconBtnStyle}
-        >
-          <FontAwesomeIcon icon={faQuestionCircle} />
-        </button>
-
-        <button
-          className="icon-btn"
-          onClick={() => setShowSettings(true)}
-          title="Settings"
-          style={iconBtnStyle}
-        >
-          <FontAwesomeIcon icon={faGear} />
-        </button>
         <button
           className="icon-btn"
           onClick={() => {
@@ -432,6 +415,30 @@ export function Header({
 
         <Separator />
 
+
+
+        {/* View Mode Selector */}
+        <ViewModeSelector />
+
+        <button
+          className="icon-btn"
+          onClick={() => setShowHelp(true)}
+          title="Help"
+          style={iconBtnStyle}
+        >
+          <FontAwesomeIcon icon={faQuestionCircle} />
+        </button>
+
+        <button
+          className="icon-btn"
+          onClick={() => setShowSettings(true)}
+          title="Settings"
+          style={iconBtnStyle}
+        >
+          <FontAwesomeIcon icon={faGear} />
+        </button>
+        <Separator />
+
         <button
           className="icon-btn"
           onClick={openInSidePanel}
@@ -461,79 +468,6 @@ export function Header({
 
         <Separator />
 
-        {/* Quick URL shortcuts (max 5) */}
-        {/* <div style={{ color: 'var(--text, #e5e7eb)', opacity: 0.7, fontSize: 11, margin: '0 6px' }}>
-          debug quickUrls: {Array.isArray(quickUrls) ? quickUrls.length : 'n/a'}
-        </div>
-        {quickUrls.map((url, idx) => {
-          const u = (() => { try { return new URL(url); } catch { return null; } })();
-          const candidates = [
-            u ? `${u.origin}/favicon.ico` : null,
-            getFaviconUrl(url, 32)
-          ].filter(Boolean);
-          try { console.debug('[Header] render quickUrl', { url, idx, candidates, failed: failedFavs.has(url) }); } catch {}
-          const hostInitial = (u?.hostname?.[0] || '•').toUpperCase();
-          const showFallback = failedFavs.has(url) || candidates.length === 0;
-          return (
-            <button
-              key={url + idx}
-              className="icon-btn"
-              onClick={() => openUrl(url)}
-              title={url}
-              style={{ ...iconBtnStyle, border: '1px solid rgba(255,0,0,0.4)' }}
-            >
-              {showFallback ? (
-                <div style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(255,255,255,0.08)',
-                  color: 'var(--text, #e5e7eb)',
-                  fontSize: 12,
-                  fontWeight: 700
-                }}>
-                  {hostInitial}
-                </div>
-              ) : (
-                <img
-                  src={candidates[0]}
-                  alt={u?.hostname || 'site'}
-                  style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain', display: 'block' }}
-                  onError={(e) => {
-                    const cur = e.currentTarget;
-                    const next = candidates.find((c) => c && c !== cur.src);
-                    if (next) {
-                      cur.src = next;
-                    } else {
-                      setFailedFavs((prev) => {
-                        const s = new Set(prev);
-                        s.add(url);
-                        return s;
-                      });
-                    }
-                  }}
-                />
-              )}
-            </button>
-          );
-        })} */}
-        {/* Add URL button (disabled at 5)
-        // <button
-        //   className="icon-btn"
-        //   onClick={addQuickUrl}
-        //   title={quickUrls.length >= 5 ? 'Max 5 shortcuts reached' : 'Add a URL shortcut'}
-        //   disabled={quickUrls.length >= 5}
-        //   style={{
-        //     ...iconBtnStyle,
-        //     opacity: quickUrls.length >= 5 ? 0.5 : 1,
-        //     cursor: quickUrls.length >= 5 ? 'not-allowed' : 'pointer'
-        //   }}
-        // >
-        //   <FontAwesomeIcon icon={faPlus} />
-        // </button> */}
         {showAddUrl && ReactDOM.createPortal(
           (
             <div
