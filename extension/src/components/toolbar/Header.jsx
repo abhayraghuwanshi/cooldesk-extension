@@ -12,7 +12,6 @@ import ReactDOM from 'react-dom';
 import { getUIState, saveUIState } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils';
 import { AddLinkFlow } from '../popups/AddLinkFlow.jsx';
-import { CoolHelpSection } from '../popups/CoolHelpSection.jsx';
 import MusicControls from './MusicControls';
 import { SearchBox } from './SearchBox.jsx';
 import { ViewModeSelector } from './ViewModeSelector.jsx';
@@ -41,7 +40,6 @@ export function Header({
   const [allItems, setAllItems] = useState([]);
   const [calendarFallback, setCalendarFallback] = useState(false);
   const [failedFavs, setFailedFavs] = useState(() => new Set());
-  const [showHelp, setShowHelp] = useState(false);
   // Load Auto Sync from UI state
   useEffect(() => {
     (async () => {
@@ -422,18 +420,10 @@ export function Header({
 
         <button
           className="icon-btn"
-          onClick={() => setShowHelp(true)}
-          title="Help"
-          style={iconBtnStyle}
-        >
-          <FontAwesomeIcon icon={faQuestionCircle} />
-        </button>
-
-        <button
-          className="icon-btn"
           onClick={() => setShowSettings(true)}
           title="Settings"
           style={iconBtnStyle}
+          data-onboarding="settings-button"
         >
           <FontAwesomeIcon icon={faGear} />
         </button>
@@ -444,6 +434,7 @@ export function Header({
           onClick={openInSidePanel}
           title="Open in Sidebar"
           style={iconBtnStyle}
+          data-onboarding="sidebar-button"
         >
           <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ width: 20, height: 20 }} />
         </button>
@@ -544,14 +535,41 @@ export function Header({
             minWidth: 'fit-content',
             color: 'var(--text, #e5e7eb)'
           }}
-          title={now.toLocaleString()}
-        >
-          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 0.5 }}>{clockStr}</div>
-          <div style={{ fontSize: 12, opacity: 0.85 }}>{dateStr}</div>
-        </div>
+          onAddSaved={(url) => {
+            // normalize and add
+            let u = url;
+            if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+            try { u = new URL(u).toString(); } catch { /* ignore invalid */ }
+            const next = (() => {
+              const base = quickUrls || [];
+              if (base.length >= 5) return base;
+              const list = base.includes(u) ? base : [...base, u];
+              return list.slice(0, 5);
+            })();
+            setQuickUrls(next);
+            try { saveUIState({ headerUrls: next }); } catch { }
+            setShowAddUrl(false);
+          }}
+          onCancel={() => setShowAddUrl(false)}
+        />
       </div>
 
-      <CoolHelpSection isOpen={showHelp} onClose={() => setShowHelp(false)} />
+      <div
+        style={{
+          marginLeft: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          lineHeight: 1.1,
+          flexShrink: 0,
+          minWidth: 'fit-content',
+          color: 'var(--text, #e5e7eb)'
+        }}
+        title={now.toLocaleString()}
+      >
+        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 0.5 }}>{clockStr}</div>
+        <div style={{ fontSize: 12, opacity: 0.85 }}>{dateStr}</div>
+      </div>
     </header>
   );
 }

@@ -44,8 +44,10 @@ import { CoolFeedSection } from './components/default/CoolFeedSection.jsx';
 import { PingsSection } from './components/default/PingsSection';
 import { PinnedWorkspace } from './components/default/PinnedWorkspace';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
+import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { getDisplaySettings } from './components/settings/DisplayData';
 import categoryManager from './data/categories';
+import { useOnboarding } from './hooks/useOnboarding';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
@@ -110,6 +112,9 @@ export default function App() {
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
   const [addingToWorkspace, setAddingToWorkspace] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Onboarding hook
+  const { shouldShowOnboarding, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
 
   const [showAddLinkModal, setShowAddLinkModal] = useState(false)
   const [workspaceForLinkAdd, setWorkspaceForLinkAdd] = useState(null)
@@ -1547,7 +1552,7 @@ export default function App() {
 
         {displaySettings.pinnedWorkspaces !== false && (
           <ErrorBoundary>
-            <div>
+            <div data-onboarding="pinned-workspaces">
               <PinnedWorkspace
                 items={pinnedWorkspaces}
                 active={activePinnedWorkspace}
@@ -1612,7 +1617,7 @@ export default function App() {
                 {/* Filters */}
                 <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} data-onboarding="workspace-filters">
                     <WorkspaceFilters
                       items={filterItems}
                       active={workspace}
@@ -1758,7 +1763,16 @@ export default function App() {
           onSave={saveSettings}
           fontSize={fontSize}
           onFontSizeChange={handleFontSizeChange}
+          onStartOnboarding={startOnboarding}
         />
+
+        {/* Onboarding Tour */}
+        {shouldShowOnboarding && (
+          <OnboardingTour
+            onComplete={completeOnboarding}
+            onSkip={skipOnboarding}
+          />
+        )}
       </div>
     </div>
   )

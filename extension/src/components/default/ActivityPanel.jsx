@@ -1,12 +1,12 @@
 import React from 'react';
 import { getUIState, saveUIState } from '../../db/unified-api.js';
 import { ErrorBoundary } from '../ErrorBoundary';
+import { getDisplaySettings } from '../settings/DisplayData';
 import VoiceNavigationChatGPT from '../toolbar/VoiceNavigationChatGPT';
 import { AIChatsSection } from './AIChats';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { DailyNotesSection } from './DailyNotesSection';
 import { NotesSection } from './NotesSection';
-import { getDisplaySettings } from '../settings/DisplayData';
 
 export function ActivityPanel({ activeSection = 0 }) {
   // State for preview modal
@@ -236,15 +236,15 @@ export function ActivityPanel({ activeSection = 0 }) {
 
   // Define sections array matching Header navigation with display setting IDs
   const allSections = [
-    { 
+    {
       id: 'currentTabsSection',
-      name: 'Current Tabs', 
-      component: <CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /> 
+      name: 'Current Tabs',
+      component: <div data-onboarding="current-tabs-section"><CurrentTabsSection onAddPing={addPing} onRequestPreview={requestPreview} /></div>
     },
     {
       id: 'voiceNavigationSection',
-      name: 'Voice Navigation', 
-      component: <div>
+      name: 'Voice Navigation',
+      component: <div data-onboarding="voice-navigation-section">
         <h2
           className="coolDesk-section-title"
           style={{ cursor: 'help' }}
@@ -256,22 +256,22 @@ export function ActivityPanel({ activeSection = 0 }) {
     },
     {
       id: 'aiChatsSection',
-      name: 'AI Chats', 
-      component: <div>
+      name: 'AI Chats',
+      component: <div data-onboarding="ai-chats-section">
         <AIChatsSection />
       </div>
     },
     {
       id: 'notesSection',
-      name: 'Notes', 
-      component: <div>
+      name: 'Notes',
+      component: <div data-onboarding="notes-section">
         <NotesSection />
       </div>
     },
     {
       id: 'dailyNotesSection',
-      name: 'Daily Notes', 
-      component: <div>
+      name: 'Daily Notes',
+      component: <div data-onboarding="daily-notes-section">
         <DailyNotesSection />
       </div>
     }
@@ -288,9 +288,9 @@ export function ActivityPanel({ activeSection = 0 }) {
     const dailyNotesIndex = sections.findIndex(s => s.id === 'dailyNotesSection');
 
     // Show side-by-side only in "All" mode or when either Notes or Daily Notes is active
-    return isAllMode || 
-           (notesIndex >= 0 && activeSection === (notesIndex + 1)) || 
-           (dailyNotesIndex >= 0 && activeSection === (dailyNotesIndex + 1));
+    return isAllMode ||
+      (notesIndex >= 0 && activeSection === (notesIndex + 1)) ||
+      (dailyNotesIndex >= 0 && activeSection === (dailyNotesIndex + 1));
   }, [activeSection, sections]);
 
   return (

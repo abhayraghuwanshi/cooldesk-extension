@@ -35,8 +35,8 @@ export function ViewModeSelector() {
       >
         <span className="mode-icon">{activeMode.icon}</span>
         <span className="mode-label">{activeMode.label}</span>
-        <FontAwesomeIcon 
-          icon={faChevronDown} 
+        <FontAwesomeIcon
+          icon={faChevronDown}
           className={`chevron ${isOpen ? 'open' : ''}`}
         />
       </button>
@@ -44,18 +44,18 @@ export function ViewModeSelector() {
       {isOpen && (
         <>
           {/* Backdrop */}
-          <div 
-            className="view-mode-backdrop" 
+          <div
+            className="view-mode-backdrop"
             onClick={() => setIsOpen(false)}
           />
-          
+
           {/* Dropdown */}
           <div className="view-mode-dropdown">
             <div className="dropdown-header">
               <FontAwesomeIcon icon={faEye} />
               <span>View Modes</span>
             </div>
-            
+
             {viewModes.map(mode => (
               <button
                 key={mode.id}

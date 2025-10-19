@@ -1,4 +1,4 @@
-import { faEye, faFileExport, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
+import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useState } from 'react';
 import { listWorkspaces, saveWorkspace } from '../../db/index.js';
@@ -12,7 +12,7 @@ import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
 
 
-export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFontSizeChange }) {
+export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFontSizeChange, onStartOnboarding }) {
   const [localSettings, setLocalSettings] = useState(settings)
   const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState('')
@@ -578,6 +578,189 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faEye} style={{ marginRight: '8px' }} />Display</>}>
             <DisplayData />
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faGraduationCap} style={{ marginRight: '8px' }} />Help</>}>
+            <div style={{ padding: '20px', maxHeight: '600px', overflowY: 'auto' }}>
+              {/* Getting Started Section */}
+              <div style={{ marginBottom: '32px' }}>
+                <h2 style={{ marginTop: 0, marginBottom: '12px', fontSize: '20px', fontWeight: 600 }}>
+                  Getting Started
+                </h2>
+                <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6 }}>
+                  Need help getting started with CoolDesk? Take a quick tour to learn about all the features.
+                </p>
+                
+                <button
+                  onClick={() => {
+                    if (onStartOnboarding) {
+                      onStartOnboarding();
+                      onClose();
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '14px 20px',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '15px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    fontFamily: 'inherit',
+                    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+                  }}
+                >
+                  <FontAwesomeIcon icon={faGraduationCap} style={{ fontSize: '18px' }} />
+                  Start Onboarding Tour
+                </button>
+              </div>
+
+              {/* Features Guide */}
+              <div style={{ marginBottom: '32px' }}>
+                <h2 style={{ marginTop: 0, marginBottom: '16px', fontSize: '20px', fontWeight: 600 }}>
+                  Features Guide
+                </h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {[
+                    {
+                      icon: faThumbtack,
+                      title: 'Pins',
+                      desc: 'Quick access to your most important links',
+                      howTo: 'Right-click any link → Pin. Pinned items appear at the top of your dashboard.',
+                    },
+                    {
+                      icon: faRocket,
+                      title: 'Pinned Workspaces',
+                      desc: 'Keep important workspaces at the top',
+                      howTo: 'Right-click any workspace → Pin to Pinned Workspaces.',
+                    },
+                    {
+                      icon: faFolder,
+                      title: 'Workspace List',
+                      desc: 'Organize tabs and links by project',
+                      howTo: 'Click + button to create workspace. Add current tab or paste URLs.',
+                    },
+                    {
+                      icon: faTableCellsLarge,
+                      title: 'Tabs',
+                      desc: 'Manage all open browser tabs',
+                      howTo: 'View all tabs in one place. Click to switch, close, or organize.',
+                    },
+                    {
+                      icon: faMicrophone,
+                      title: 'Voice Navigation',
+                      desc: 'Control browser with voice commands',
+                      howTo: 'Click microphone icon. Say "show numbers" to see clickable elements.',
+                    },
+                    {
+                      icon: faComments,
+                      title: 'AI Chats',
+                      desc: 'Auto-save ChatGPT, Claude, Gemini & Grok',
+                      howTo: 'Automatically scrapes chats when you visit AI platforms.',
+                    },
+                    {
+                      icon: faLightbulb,
+                      title: 'Notes & Daily Journal',
+                      desc: 'Daily notes and task management',
+                      howTo: 'Click date to add notes. Keep track of your daily thoughts and tasks.',
+                    },
+                  ].map((feature, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
+                        border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                        <FontAwesomeIcon
+                          icon={feature.icon}
+                          style={{
+                            fontSize: '20px',
+                            color: '#667eea',
+                            marginTop: '2px',
+                          }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
+                            {feature.title}
+                          </div>
+                          <div style={{ fontSize: '14px', color: 'var(--text-secondary, #999)', marginBottom: '8px', lineHeight: 1.5 }}>
+                            {feature.desc}
+                          </div>
+                          <div style={{ fontSize: '13px', color: 'var(--text-secondary, #999)', lineHeight: 1.6 }}>
+                            <span style={{ fontWeight: 600, color: '#667eea' }}>How to use:</span> {feature.howTo}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Support Section */}
+              <div style={{ 
+                padding: '20px', 
+                background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
+                borderRadius: '8px',
+                border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))'
+              }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600 }}>
+                  Need More Help?
+                </h3>
+                <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6, fontSize: '14px' }}>
+                  Found a bug or have a feature request? We'd love to hear from you!
+                </p>
+                <button
+                  onClick={() => {
+                    const subject = encodeURIComponent('CoolDesk Feedback');
+                    const body = encodeURIComponent('Please describe your issue or suggestion:\n\n');
+                    window.open(`mailto:support@cooldesk.com?subject=${subject}&body=${body}`, '_blank');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 16px',
+                    background: 'transparent',
+                    border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.2))',
+                    borderRadius: '6px',
+                    color: 'var(--text, #e5e7eb)',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.borderColor = '#667eea';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.borderColor = 'var(--border-primary, rgba(255, 255, 255, 0.2))';
+                  }}
+                >
+                  <FontAwesomeIcon icon={faEnvelope} />
+                  Report Bug or Request Feature
+                </button>
+              </div>
+            </div>
           </TabItem>
           {/* <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>
             <AccountTab />
