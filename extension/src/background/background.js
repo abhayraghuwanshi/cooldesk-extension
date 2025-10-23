@@ -1,4 +1,26 @@
 // MV3 background service worker (type: module)
+
+// Global error handlers to prevent connection errors from showing in extension UI
+self.addEventListener('unhandledrejection', (event) => {
+  const error = event.reason?.message || event.reason || '';
+  if (error.includes?.('Could not establish connection') || 
+      error.includes?.('Receiving end does not exist') ||
+      error.includes?.('message port closed')) {
+    console.debug('[Background] Suppressed connection error:', error);
+    event.preventDefault(); // Prevent the error from appearing in the console
+  }
+});
+
+self.addEventListener('error', (event) => {
+  const error = event.message || event.error?.message || '';
+  if (error.includes?.('Could not establish connection') || 
+      error.includes?.('Receiving end does not exist') ||
+      error.includes?.('message port closed')) {
+    console.debug('[Background] Suppressed connection error:', error);
+    event.preventDefault();
+  }
+});
+
 import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats } from '../db/index.js';
 import { DB_CONFIG, getUnifiedDB } from '../db/unified-db.js';
 import { storageGetWithTTL } from '../services/extensionApi.js';

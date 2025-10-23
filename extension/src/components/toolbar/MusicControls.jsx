@@ -7,6 +7,7 @@ export default function MusicControls() {
   const [activeApp, setActiveApp] = useState(null);
   const [mediaApps, setMediaApps] = useState([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [hasMediaTarget, setHasMediaTarget] = useState(false);
 
   const map = [
     // 🎵 Music Streaming
@@ -84,7 +85,14 @@ export default function MusicControls() {
       })
       .filter(Boolean);
     setMediaApps(media);
-    if (media.length && !activeApp) setActiveApp(media[0]);
+    setActiveApp(prev => {
+      if (prev) {
+        const match = media.find(m => m.id === prev.id);
+        if (match) return match;
+      }
+      return media[0] || null;
+    });
+    setHasMediaTarget(media.length > 0);
   };
 
   const sendMediaCommand = async (action, tabId) => {
@@ -99,15 +107,63 @@ export default function MusicControls() {
           }
           return false;
         };
+
+        const toggleMediaElement = (action) => {
+          const media = document.querySelector('video, audio');
+          if (!media) return false;
+
+          try {
+            if (action === 'play') {
+              const playPromise = media.play?.();
+              if (playPromise?.catch) playPromise.catch(() => {});
+            } else if (action === 'pause') {
+              if (!media.paused) media.pause();
+            }
+            return true;
+          } catch (error) {
+            console.warn('[MusicControls] Failed media toggle via element:', error);
+            return false;
+          }
+        };
+
         if (action === 'play' || action === 'pause') {
+          const handled = toggleMediaElement(action);
+
           if ('mediaSession' in navigator && navigator.mediaSession.playbackState) {
             navigator.mediaSession.playbackState = action === 'play' ? 'playing' : 'paused';
           }
-          tryClick(['.ytp-play-button', '[data-testid="control-button-playpause"]', '#play-pause-button']);
+
+          if (!handled) {
+            tryClick([
+              '.ytp-play-button',
+              '.ytp-play-button.ytp-button',
+              '[data-testid="control-button-playpause"]',
+              '#play-pause-button',
+              '.vjs-play-control',
+              '[data-testid*="play-pause"]',
+              'button[aria-label="Play"]',
+              'button[aria-label="Pause"]',
+              'button[aria-label="play"]',
+              'button[aria-label="pause"]',
+              'button[data-testid="hlt-player-play-pause-button"]',
+              '[data-testid="pause-icon"]',
+              '[data-testid="play-icon"]'
+            ]);
+          }
         } else if (action === 'nexttrack') {
-          tryClick(['.ytp-next-button', '[data-testid="control-button-skip-forward"]']);
+          tryClick([
+            '.ytp-next-button',
+            '[data-testid="control-button-skip-forward"]',
+            'button[aria-label*="Next"]',
+            'button[data-testid*="next"]'
+          ]);
         } else if (action === 'previoustrack') {
-          tryClick(['.ytp-prev-button', '[data-testid="control-button-skip-back"]']);
+          tryClick([
+            '.ytp-prev-button',
+            '[data-testid="control-button-skip-back"]',
+            'button[aria-label*="Previous"]',
+            'button[data-testid*="prev"]'
+          ]);
         }
       },
       args: [action],
@@ -120,18 +176,61 @@ export default function MusicControls() {
       const [result] = await chrome.scripting.executeScript({
         target: { tabId: activeApp.id },
         func: () => {
-          const el = document.querySelector('video, audio');
-          return el ? !el.paused : false;
+          const media = document.querySelector('video, audio');
+          let hasControlSurface = false;
+
+          if (media) {
+            hasControlSurface = true;
+            return { playing: !media.paused, hasControl: true };
+          }
+
+          if ('mediaSession' in navigator && navigator.mediaSession.playbackState) {
+            const state = navigator.mediaSession.playbackState;
+            if (state === 'playing') return { playing: true, hasControl: true };
+            if (state === 'paused') return { playing: false, hasControl: true };
+          }
+
+          const pauseSelectors = [
+            '[data-testid="pause-icon"]',
+            'button[aria-label="Pause"]',
+            'button[aria-label="pause"]',
+            '.vjs-play-control.vjs-playing',
+            'button[data-testid*="pause"]'
+          ];
+          const playSelectors = [
+            '[data-testid="play-icon"]',
+            'button[aria-label="Play"]',
+            'button[aria-label="play"]',
+            '.vjs-play-control.vjs-paused',
+            'button[data-testid*="play"]'
+          ];
+
+          const hasPause = pauseSelectors.some(sel => document.querySelector(sel));
+          const hasPlay = playSelectors.some(sel => document.querySelector(sel));
+
+          if (hasPause || hasPlay) {
+            hasControlSurface = true;
+          }
+
+          if (hasPause && !hasPlay) return { playing: true, hasControl: true };
+          if (hasPlay && !hasPause) return { playing: false, hasControl: true };
+
+          return { playing: null, hasControl: hasControlSurface };
         },
       });
-      setIsPlaying(Boolean(result?.result));
+
+      const inferred = result?.result || {};
+      if (typeof inferred.playing === 'boolean') {
+        setIsPlaying(inferred.playing);
+      }
+      setHasMediaTarget(Boolean(inferred.hasControl));
     } catch {
-      setIsPlaying(false);
+      setHasMediaTarget(false);
     }
   }, [activeApp]);
 
   const handlePlayPause = async () => {
-    if (!activeApp) return;
+    if (!activeApp || !hasMediaTarget) return;
     const newState = !isPlaying;
     setIsPlaying(newState);
     await sendMediaCommand(newState ? 'play' : 'pause', activeApp.id);

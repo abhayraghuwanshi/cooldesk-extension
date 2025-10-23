@@ -211,7 +211,17 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
             <div className="pinnedws-itemsGrid">
                 {visibleWorkspaces.map((name) => {
                     const ws = Array.isArray(workspaces) ? workspaces.find(w => (w?.name || '').trim().toLowerCase() === String(name).trim().toLowerCase()) : null;
-                    const urls = Array.isArray(ws?.urls) ? ws.urls.slice(0, 12) : [];
+                    
+                    // Deduplicate URLs by URL string (keep first occurrence)
+                    const allUrls = Array.isArray(ws?.urls) ? ws.urls : [];
+                    const seenUrls = new Set();
+                    const uniqueUrls = allUrls.filter(u => {
+                        if (!u?.url || seenUrls.has(u.url)) return false;
+                        seenUrls.add(u.url);
+                        return true;
+                    });
+                    const urls = uniqueUrls.slice(0, 12);
+                    
                     return (
                         <div key={`list-${name}`} className="pinnedws-listCard">
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>

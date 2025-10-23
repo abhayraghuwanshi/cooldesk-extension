@@ -299,6 +299,47 @@ async function scrapeChats() {
 }
 
 /**
+ * Send message to background with retry logic
+ */
+async function sendMessageWithRetry(message, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Check if runtime is available
+      if (!chrome?.runtime?.id) {
+        console.warn('[ChatScraper] Extension context invalidated');
+        return null;
+      }
+      
+      const result = await chrome.runtime.sendMessage(message);
+      
+      // Check for lastError after successful send
+      if (chrome.runtime.lastError) {
+        throw new Error(chrome.runtime.lastError.message);
+      }
+      
+      return result;
+    } catch (error) {
+      const isLastAttempt = attempt === maxRetries;
+      const isConnectionError = error.message?.includes('Could not establish connection') || 
+                                error.message?.includes('Receiving end does not exist') ||
+                                error.message?.includes('message port closed');
+      
+      if (isConnectionError && !isLastAttempt) {
+        console.log(`[ChatScraper] Connection error on attempt ${attempt}/${maxRetries}, retrying...`);
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt - 1)));
+        continue;
+      }
+      
+      // For last attempt or non-connection errors, log and return null
+      console.warn(`[ChatScraper] Message failed after ${attempt} attempts:`, error.message);
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Get last scrape timestamp from IndexedDB UI_STATE store
  */
 async function getLastScrapeTime() {
@@ -308,7 +349,7 @@ async function getLastScrapeTime() {
     if (!config) return 0;
     
     // Request last scrape time from background (which has DB access)
-    const result = await chrome.runtime.sendMessage({
+    const result = await sendMessageWithRetry({
       type: 'GET_LAST_SCRAPE_TIME',
       data: { platform: config.name }
     });
@@ -330,7 +371,7 @@ async function updateLastScrapeTime(timestamp) {
     if (!config) return;
     
     // Send update to background
-    await chrome.runtime.sendMessage({
+    const result = await sendMessageWithRetry({
       type: 'UPDATE_LAST_SCRAPE_TIME',
       data: { 
         platform: config.name,
@@ -338,7 +379,9 @@ async function updateLastScrapeTime(timestamp) {
       }
     });
     
-    console.log(`[ChatScraper] Updated last scrape time: ${new Date(timestamp).toLocaleString()}`);
+    if (result?.success) {
+      console.log(`[ChatScraper] Updated last scrape time: ${new Date(timestamp).toLocaleString()}`);
+    }
   } catch (error) {
     console.warn('[ChatScraper] Failed to update last scrape time:', error);
   }
@@ -480,7 +523,7 @@ async function autoScrape() {
     clearTimeout(autoScrapeTimeout);
   }
   
-  // Debounce: wait 3 seconds after page settles
+  // Debounce: wait 5 seconds after page settles to ensure background is ready
   autoScrapeTimeout = setTimeout(async () => {
     console.log('[ChatScraper] Auto-scraping new chats...');
     
@@ -490,20 +533,23 @@ async function autoScrape() {
       // Send new chats to background for storage
       try {
         console.log(`[ChatScraper] 📤 Sending ${result.newChatsCount} chats to background...`);
-        const response = await chrome.runtime.sendMessage({
+        const response = await sendMessageWithRetry({
           type: 'AUTO_SCRAPED_CHATS',
           data: result
         });
-        console.log(`[ChatScraper] ✅ Auto-scraped ${result.newChatsCount} new chats`);
-        console.log('[ChatScraper] Background response:', response);
+        
+        if (response !== null) {
+          console.log(`[ChatScraper] ✅ Auto-scraped ${result.newChatsCount} new chats`);
+        } else {
+          console.warn('[ChatScraper] ⚠️ Failed to send chats to background (no response)');
+        }
       } catch (error) {
         console.error('[ChatScraper] ❌ Failed to send auto-scraped chats:', error);
-        console.error('[ChatScraper] Error details:', error.message, error.stack);
       }
     } else if (result.success) {
       console.log('[ChatScraper] ℹ️ No new chats found');
     }
-  }, 3000);
+  }, 5000); // Wait 5 seconds to ensure background is ready
 }
 
 /**

@@ -1,15 +1,27 @@
 // Send user interactions to background script
 function sendInteraction(type, extra = {}) {
   try {
+    // Check if extension context is valid
+    if (!chrome?.runtime?.id) {
+      console.debug('[CoolDesk] Extension context invalidated, skipping interaction');
+      return;
+    }
+    
     chrome.runtime.sendMessage({ type, url: window.location.href, ...extra }, (response) => {
       // Handle response if needed, but don't expect one for most interactions
       if (chrome.runtime.lastError) {
-        // Ignore errors for fire-and-forget messages
-        console.debug('[CoolDesk] Interaction message error (expected for some messages):', chrome.runtime.lastError.message);
+        const error = chrome.runtime.lastError.message;
+        // Only log non-connection errors in debug mode
+        if (!error.includes('Could not establish connection') && 
+            !error.includes('Receiving end does not exist') &&
+            !error.includes('message port closed')) {
+          console.debug('[CoolDesk] Interaction message error:', error);
+        }
       }
     });
-  } catch { 
-    // Ignore errors for fire-and-forget messages
+  } catch (error) { 
+    // Silently ignore errors for fire-and-forget messages
+    console.debug('[CoolDesk] Failed to send interaction:', error?.message);
   }
 }
 

@@ -143,6 +143,16 @@ export const saveWorkspace = withErrorHandling(async (workspaceData) => {
     // Validate and sanitize data
     const workspace = validateAndSanitize(workspaceData, 'workspace')
     
+    // Deduplicate URLs array by URL string (keep first occurrence)
+    if (Array.isArray(workspace.urls) && workspace.urls.length > 0) {
+        const seenUrls = new Set()
+        workspace.urls = workspace.urls.filter(u => {
+            if (!u?.url || seenUrls.has(u.url)) return false
+            seenUrls.add(u.url)
+            return true
+        })
+    }
+    
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.WORKSPACES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACES)
@@ -780,7 +790,7 @@ export const saveUIState = withErrorHandling(async (uiStateData) => {
         }
     }
 
-    const uiState = validateAndSanitize(merged, 'uiState')
+    const uiState = validateAndSanitize(merged, 'uiState', { strict: false })
 
     const request = store.put(uiState)
 

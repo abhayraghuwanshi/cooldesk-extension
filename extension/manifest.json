@@ -29,10 +29,10 @@
     "sidePanel"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "https://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.google.com https://*.gstatic.com https://speech.googleapis.com https://*.googleapis.com http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: https: http:; media-src 'self' data: blob:; font-src 'self' data:;"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self'; img-src 'self' data: blob: https: http:; media-src 'self' data: blob:; font-src 'self' data:;"
   },
   "web_accessible_resources": [
     {
@@ -45,15 +45,14 @@
         "dist/*"
       ],
       "matches": [
-        "<all_urls>"
+        "https://*/*"
       ]
     }
   ],
   "content_scripts": [
     {
       "matches": [
-        "https://*/*",
-        "http://*/*"
+        "https://*/*"
       ],
       "js": [
         "src/interactionContent.js"

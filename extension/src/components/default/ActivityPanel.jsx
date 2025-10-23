@@ -5,8 +5,7 @@ import { getDisplaySettings } from '../settings/DisplayData';
 import VoiceNavigationChatGPT from '../toolbar/VoiceNavigationChatGPT';
 import { AIChatsSection } from './AIChats';
 import { CurrentTabsSection } from './CurrentTabsSection';
-import { DailyNotesSection } from './DailyNotesSection';
-import { NotesSection } from './NotesSection';
+import { SimpleNotes } from './SimpleNotes';
 
 export function ActivityPanel({ activeSection = 0 }) {
   // State for preview modal
@@ -265,14 +264,7 @@ export function ActivityPanel({ activeSection = 0 }) {
       id: 'notesSection',
       name: 'Notes',
       component: <div data-onboarding="notes-section">
-        <NotesSection />
-      </div>
-    },
-    {
-      id: 'dailyNotesSection',
-      name: 'Daily Notes',
-      component: <div data-onboarding="daily-notes-section">
-        <DailyNotesSection />
+        <SimpleNotes />
       </div>
     }
   ];
@@ -280,18 +272,7 @@ export function ActivityPanel({ activeSection = 0 }) {
   // Filter sections based on display settings
   const sections = allSections.filter(section => displaySettings[section.id] !== false);
 
-  // Check if we should show notes side-by-side
-  const showNotesSideBySide = React.useMemo(() => {
-    const isAllMode = activeSection === 0;
-    // Find the actual indices of Notes and Daily Notes in the filtered sections array
-    const notesIndex = sections.findIndex(s => s.id === 'notesSection');
-    const dailyNotesIndex = sections.findIndex(s => s.id === 'dailyNotesSection');
-
-    // Show side-by-side only in "All" mode or when either Notes or Daily Notes is active
-    return isAllMode ||
-      (notesIndex >= 0 && activeSection === (notesIndex + 1)) ||
-      (dailyNotesIndex >= 0 && activeSection === (dailyNotesIndex + 1));
-  }, [activeSection, sections]);
+  // Removed side-by-side logic - now using unified SimpleNotes component
 
   return (
     <section
@@ -305,110 +286,6 @@ export function ActivityPanel({ activeSection = 0 }) {
       {sections.map((section, index) => {
         const isAllMode = activeSection === 0;
         const isCurrentSection = index === (activeSection - 1); // Adjust for "All" being index 0
-        const isVisible = isAllMode || isCurrentSection;
-        // Find the actual indices of Notes and Daily Notes in the filtered sections array
-        const notesIndex = sections.findIndex(s => s.id === 'notesSection');
-        const dailyNotesIndex = sections.findIndex(s => s.id === 'dailyNotesSection');
-
-        // Handle side-by-side display for Notes and Daily Notes
-        if (showNotesSideBySide && (index === notesIndex || index === dailyNotesIndex)) {
-          // Only render this container once for the first section (Notes)
-          if (index === notesIndex) {
-            const renderSideSection = (sectionConfig, sectionIndex) => {
-              const isHiddenSide = !!hiddenSections[sectionConfig.name];
-              const refCallback = el => {
-                sectionRefs.current[sectionIndex] = el;
-              };
-
-              if (isHiddenSide) {
-                return (
-                  <div
-                    key={`${sectionConfig.name}-hidden`}
-                    className="activity-section-hidden"
-                    onDoubleClick={() => toggleHidden(sectionConfig.name)}
-                    ref={refCallback}
-                    style={{
-                      minWidth: 0,
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px dashed var(--border-primary)',
-                      color: 'var(--text-secondary)',
-                      background: 'var(--glass-bg)',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      transition: 'all 0.2s ease',
-                      fontStyle: 'italic'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'var(--interactive-hover)';
-                      e.currentTarget.style.borderColor = 'var(--border-accent)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'var(--glass-bg)';
-                      e.currentTarget.style.borderColor = 'var(--border-primary)';
-                    }}
-                    title="Double-click to show this section again"
-                  >
-                    <span style={{ opacity: 0.8 }}>Hidden: {sectionConfig.name}</span>
-                    <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
-                  </div>
-                );
-              }
-
-              return (
-                <div
-                  key={sectionConfig.name}
-                  onDoubleClick={() => toggleHidden(sectionConfig.name)}
-                  ref={refCallback}
-                  style={{
-                    minWidth: 0,
-                    cursor: 'pointer'
-                  }}
-                  title="Double-click to hide this section"
-                >
-                  {sectionConfig.component}
-                </div>
-              );
-            };
-
-            return (
-              <ErrorBoundary key="notes-daily-container">
-                <div
-                  ref={el => {
-                    // Set refs for both sections to this container
-                    sectionRefs.current[notesIndex] = el;
-                    sectionRefs.current[dailyNotesIndex] = el;
-                  }}
-                  style={{
-                    marginTop: index === 0 ? 16 : 32,
-                    opacity: isAllMode ? 1 : (isCurrentSection || index === (activeSection - 1) ? 1 : 0.3),
-                    transform: isAllMode ? 'scale(1)' : (isCurrentSection || index === (activeSection - 1) ? 'scale(1)' : 'scale(0.98)'),
-                    transition: 'all 0.3s ease',
-                    filter: isAllMode ? 'none' : (isCurrentSection || index === (activeSection - 1) ? 'none' : 'blur(1px)'),
-                    pointerEvents: isAllMode ? 'auto' : (isCurrentSection || index === (activeSection - 1) ? 'auto' : 'none')
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: isNarrowScreen ? '1fr' : '1fr 1fr',
-                      gap: isNarrowScreen ? 24 : 16
-                    }}
-                  >
-                    {renderSideSection(sections[notesIndex], notesIndex)}
-                    {renderSideSection(sections[dailyNotesIndex], dailyNotesIndex)}
-                  </div>
-                </div>
-              </ErrorBoundary>
-            );
-          }
-
-          // Skip rendering Daily Notes separately since it's included in the container above
-          return null;
-        }
 
         // Regular single-section display with hide/show on double-click
         const isHidden = !!hiddenSections[section.name];
