@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { clearStoredToken, connectDropbox } from '../../dropbox/auth.js'
 import { getDropboxStatus } from '../../dropbox/sync.js'
 
@@ -134,9 +135,14 @@ export function DropboxConfigModal({ isOpen, onClose, onConfigChange, currentCon
 
     if (!isOpen) return null
 
-    return (
+    return createPortal(
         <div
             style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100vw',
+                height: '100vh',
                 background: 'rgba(0,0,0,0.8)',
                 display: 'flex',
                 alignItems: 'center',
@@ -459,6 +465,7 @@ export function DropboxConfigModal({ isOpen, onClose, onConfigChange, currentCon
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     )
 }

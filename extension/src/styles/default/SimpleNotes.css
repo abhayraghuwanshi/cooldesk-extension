@@ -61,16 +61,6 @@
 /* Input Area */
 .simple-notes-input {
     margin-bottom: 16px;
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    padding: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    transition: all 0.2s ease;
-}
-
-.simple-notes-input:focus-within {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(52, 199, 89, 0.3);
 }
 
 .simple-notes-input-row {
@@ -80,6 +70,7 @@
 }
 
 .simple-notes-textarea {
+    border-radius: 6px;
     flex: 1;
     min-height: 40px;
     max-height: 120px;

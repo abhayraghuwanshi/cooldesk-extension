@@ -1,4 +1,4 @@
-import { faComments, faRobot, faSearch, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faComments, faRobot, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
@@ -135,8 +135,7 @@ export function AIChatsSection() {
 
       {/* Search and filters in one row */}
       <div className="ai-chats-controls">
-        <div className="search-box">
-          <FontAwesomeIcon icon={faSearch} className="search-icon" />
+        <div className="ai-search-box">
           <input
             type="text"
             placeholder="Search..."

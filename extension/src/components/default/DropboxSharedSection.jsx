@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import {
-  getGroupedSharedWorkspaces,
   listSharedWorkspaces,
   syncSharedWorkspacesFromDropbox
 } from '../../db/index.js'
@@ -26,6 +25,62 @@ export function DropboxSharedSection() {
   const [currentConfig, setCurrentConfig] = useState(DEFAULT_CONFIG)
   const [availableGroups, setAvailableGroups] = useState([])
   const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(null)
+
+  const computeGroupedData = (workspacesList = []) => {
+    const grouped = {
+      workspaces: [],
+      links: [],
+      apps: []
+    }
+
+    if (!Array.isArray(workspacesList)) {
+      return grouped
+    }
+
+    const linkItems = []
+
+    workspacesList.forEach(item => {
+      if (Array.isArray(item?.urls) && item.urls.length > 1) {
+        grouped.workspaces.push(item)
+      } else {
+        linkItems.push(item)
+      }
+    })
+
+    grouped.links = linkItems
+
+    const domainGroups = {}
+    linkItems.forEach(link => {
+      try {
+        const url = link.url || link.urls?.[0]?.url
+        if (!url) return
+        const domain = new URL(url).hostname.replace('www.', '')
+        if (!domainGroups[domain]) {
+          domainGroups[domain] = {
+            domain,
+            items: [],
+            favicon: link.favicon,
+            count: 0
+          }
+        }
+        domainGroups[domain].items.push(link)
+        domainGroups[domain].count += 1
+      } catch (e) {
+        if (!domainGroups.misc) {
+          domainGroups.misc = {
+            domain: 'misc',
+            items: [],
+            count: 0
+          }
+        }
+        domainGroups.misc.items.push(link)
+        domainGroups.misc.count += 1
+      }
+    })
+
+    grouped.apps = Object.values(domainGroups)
+    return grouped
+  }
 
   // Initialize - load configuration and data
   useEffect(() => {
@@ -159,24 +214,7 @@ export function DropboxSharedSection() {
       setSharedWorkspaces(items)
 
       // Also update grouped data
-      try {
-        const grouped = await getGroupedSharedWorkspaces()
-        console.log('[DropboxSharedSection] Grouped data raw:', grouped)
-
-        // Handle withErrorHandling wrapper format
-        let finalGrouped = { workspaces: [], links: [], apps: [] }
-        if (grouped?.success && grouped?.data) {
-          finalGrouped = grouped.data
-        } else if (grouped?.workspaces || grouped?.links || grouped?.apps) {
-          finalGrouped = grouped
-        }
-
-        console.log('[DropboxSharedSection] Final grouped data:', finalGrouped)
-        setGroupedData(finalGrouped)
-      } catch (groupError) {
-        console.error('[DropboxSharedSection] Grouping error:', groupError)
-        setGroupedData({ workspaces: [], links: [], apps: [] })
-      }
+      setGroupedData(computeGroupedData(workspaces))
 
       console.log('[DropboxSharedSection] Loaded from local DB:', { items: items.length })
     } catch (e) {
@@ -312,17 +350,27 @@ export function DropboxSharedSection() {
                 }
               }}
               style={{
-                padding: '4px 8px',
-                borderRadius: '4px',
-                border: '1px solid rgba(255,255,255,0.2)',
-                background: 'rgba(255,255,255,0.05)',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                background: 'var(--glass-bg, rgba(20, 20, 30, 0.95))',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
                 color: 'var(--text-primary)',
-                fontSize: '12px',
-                cursor: 'pointer'
+                fontSize: '13px',
+                cursor: 'pointer',
+                boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
+                appearance: 'none'
               }}
             >
               {availableGroups.map(group => (
-                <option key={group.key} value={group.key}>
+                <option
+                  key={group.key}
+                  value={group.key}
+                  style={{
+                    background: 'rgba(20, 20, 30, 0.95)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
                   📁 {group.name}
                 </option>
               ))}
@@ -384,11 +432,15 @@ export function DropboxSharedSection() {
 
       {loading && (
         <div style={{
-          padding: '16px',
-          textAlign: 'center',
-          color: 'var(--text-secondary)'
+          padding: '12px',
+          marginBottom: '12px',
+          borderRadius: '8px',
+          border: '1px dashed rgba(255,255,255,0.2)',
+          color: 'var(--text-secondary)',
+          fontSize: '12px',
+          textAlign: 'center'
         }}>
-          {connected ? 'Loading shared workspaces...' : 'Connecting to Dropbox...'}
+          {connected ? 'Syncing latest shared workspaces…' : 'Connecting to Dropbox…'}
         </div>
       )}
 
@@ -426,15 +478,15 @@ export function DropboxSharedSection() {
         </div>
       )}
 
-      {connected && !loading && sharedWorkspaces.length > 0 && (
+      {connected && sharedWorkspaces.length > 0 && (
         <div>
-          <div style={{
+          {/* <div style={{
             fontSize: '12px',
             color: 'var(--text-secondary)',
             marginBottom: '8px'
           }}>
             {sharedWorkspaces.length} shared item{sharedWorkspaces.length !== 1 ? 's' : ''}
-          </div>
+          </div> */}
 
 
 

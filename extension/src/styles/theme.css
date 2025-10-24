@@ -24,13 +24,13 @@
   --surface-2: #1a1a24;
   --surface-3: #242430;
   --surface-4: #2e2e3c;
-  
+
   /* Text Colors */
   --text: #e5e7eb;
   --text-secondary: #9ca3af;
   --text-muted: #6b7280;
   --text-accent: #34C759;
-  
+
   /* Accent Colors */
   --accent-primary: #34C759;
   --accent-secondary: #30D158;
@@ -38,23 +38,23 @@
   --accent-purple: #8b5cf6;
   --accent-warning: #fbbf24;
   --accent-error: #ef4444;
-  
+
   /* Interactive Colors */
   --interactive-hover: rgba(255, 255, 255, 0.1);
   --interactive-active: rgba(255, 255, 255, 0.15);
   --interactive-disabled: rgba(255, 255, 255, 0.05);
-  
+
   /* Border Colors */
   --border-primary: rgba(255, 255, 255, 0.1);
   --border-secondary: rgba(255, 255, 255, 0.05);
   --border-accent: rgba(52, 199, 89, 0.3);
-  
+
   /* Shadow Colors */
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.3);
   --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.4);
-  
+
   /* Glass Effect */
   --glass-bg: rgba(255, 255, 255, 0.05);
   --glass-border: rgba(255, 255, 255, 0.1);
@@ -68,9 +68,9 @@
 
 /* Main Theme Class */
 .bg-ai-midnight-nebula {
-  background-image: 
-    radial-gradient(60% 80% at 10% 10%, #60a5fa1f, #0000 60%), 
-    radial-gradient(50% 60% at 90% 20%, #8b5cf61f, #0000 60%), 
+  background-image:
+    radial-gradient(60% 80% at 10% 10%, #60a5fa1f, #0000 60%),
+    radial-gradient(50% 60% at 90% 20%, #8b5cf61f, #0000 60%),
     linear-gradient(180deg, var(--surface-0) 0%, var(--surface-1) 100%);
   color: var(--text);
   min-height: 100vh;
@@ -251,8 +251,15 @@
 
 /* Animations */
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 @keyframes slideIn {
@@ -260,6 +267,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -267,8 +275,13 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 /* Utility Classes */
@@ -402,8 +415,13 @@
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-skeleton {
@@ -414,8 +432,13 @@
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 /* Responsive Design */
@@ -424,27 +447,20 @@
     border-radius: 12px;
     margin: 8px;
   }
-  
-  .btn-primary, .btn-secondary {
+
+  .btn-primary,
+  .btn-secondary {
     padding: 10px 20px;
     font-size: 14px;
   }
-  
+
   .input-field {
     padding: 12px 16px;
     font-size: 14px;
   }
-  
+
   .modal-content {
     margin: 16px;
     border-radius: 16px;
-  }
-}
-
-/* Dark mode enhancements */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface-0: #000000;
-    --surface-1: #0a0a0a;
   }
 }

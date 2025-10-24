@@ -8,6 +8,7 @@
     padding-right: 24px !important;
   }
 }
+
 /* CurrentTabsSection styles */
 
 .currentTabs-container {
@@ -70,6 +71,7 @@
 .tab-group-container {
   transition: all 0.2s ease-in-out;
 }
+
 .tab-group-container:hover {
   transform: translateY(-2px);
 }
@@ -86,23 +88,33 @@
   background-position: right 8px center;
   background-repeat: no-repeat;
 }
+
 .recent-sort-select:hover {
   background-color: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.28);
 }
+
 .recent-sort-select:focus {
   outline: none;
   box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
   border-color: rgba(0, 122, 255, 0.6);
 }
+
 .recent-sort-select option {
   background-color: #1f1f25;
   color: #fff;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Popover container for expanded group */
@@ -148,11 +160,13 @@
   margin-bottom: 16px;
   padding: 0 4px;
 }
+
 .currentTabs-headerTitle {
   font-size: var(--font-size-2xl);
   font-weight: 600;
   margin: 0;
 }
+
 .currentTabs-headerActions {
   display: flex;
   align-items: center;
@@ -173,15 +187,20 @@
   align-items: center;
   justify-content: center;
 }
+
 .currentTabs-iconBtn:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+
 .currentTabs-icon {
   font-size: 12px;
 }
 
 /* Settings popover */
-.currentTabs-settingsWrap { position: relative; }
+.currentTabs-settingsWrap {
+  position: relative;
+}
+
 .currentTabs-settingsPopover {
   position: absolute;
   top: 40px;
@@ -194,17 +213,20 @@
   backdrop-filter: blur(14px);
   z-index: 200;
 }
+
 .currentTabs-settingsTitle {
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.2px;
 }
+
 .currentTabs-divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.08);
   margin: 8px 0;
 }
+
 .currentTabs-settingRow {
   display: flex;
   align-items: center;
@@ -213,9 +235,25 @@
   padding: 8px 6px;
   border-radius: 10px;
 }
-.currentTabs-settingLabel { display: flex; align-items: center; gap: 8px; }
-.currentTabs-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(255,255,255,0.85); cursor: pointer; }
-.currentTabs-toggle input { transform: scale(1.1); }
+
+.currentTabs-settingLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.currentTabs-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+
+.currentTabs-toggle input {
+  transform: scale(1.1);
+}
 
 /* Groups container row */
 .currentTabs-groupsRow {
@@ -232,18 +270,25 @@
 }
 
 /* Empty state */
-.currentTabs-emptyState { width: 100%; text-align: center; color: rgba(255,255,255,0.5); font-style: italic; }
+.currentTabs-emptyState {
+  width: 100%;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
 
 /* Host card active modifier */
 .currentTabs-hostCard.is-active {
   border: 1px solid rgba(0, 122, 255, 0.8);
-  box-shadow: 0 0 0 2px rgba(0,122,255,0.25), 0 4px 15px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.25), 0 4px 15px rgba(0, 0, 0, 0.3);
 }
-.currentTabs-hostFavicon { 
-  border-radius: 8px; 
+
+.currentTabs-hostFavicon {
+  border-radius: 8px;
   margin-bottom: 6px;
   flex-shrink: 0;
 }
+
 .currentTabs-hostLabel {
   color: rgba(255, 255, 255, 0.7);
   font-size: 10px;
@@ -269,8 +314,8 @@
 
 /* List item active state */
 .currentTabs-listItem.is-active {
-  border: 1px solid rgba(0,122,255,0.5);
-  background: rgba(0,122,255,0.12);
+  border: 1px solid rgba(0, 122, 255, 0.5);
+  background: rgba(0, 122, 255, 0.12);
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -282,6 +327,7 @@
   flex-direction: column;
   gap: 2px;
 }
+
 .currentTabs-tabTitle {
   font-size: 12.5px;
   color: #fff;
@@ -289,9 +335,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .currentTabs-tabMeta {
   font-size: 11px;
-  color: rgba(255,255,255,0.6);
+  color: rgba(255, 255, 255, 0.6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -308,6 +355,7 @@
   cursor: pointer;
   font-size: 12px;
 }
+
 .currentTabs-toggleBtn--active {
   background: rgba(255, 255, 255, 0.18);
 }
@@ -369,15 +417,14 @@
 /* Count badge on host card */
 .currentTabs-badge {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  background: #007aff;
+  top: -4px;
+  right: -4px;
   color: #fff;
   border-radius: 10px;
   padding: 2px 7px;
   font-size: 11px;
   font-weight: 600;
-  border: 2px solid rgba(45, 45, 50, 0.9);
+  border: 1px solid rgba(45, 45, 50, 0.9);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   z-index: 10;
 }

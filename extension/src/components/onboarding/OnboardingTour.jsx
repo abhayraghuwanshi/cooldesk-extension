@@ -12,10 +12,17 @@ const ONBOARDING_STEPS = [
     position: 'center'
   },
   {
-    id: 'view-modes',
-    title: '👁️ View Modes',
-    description: 'Switch between different view modes to customize your workspace. Try Focus Mode for distraction-free work!',
-    target: '.view-mode-selector',
+    id: 'current-pins-section',
+    title: 'Favourite Pins',
+    description: 'Quick access to your favorite Pins. Pin tabs you use frequently for instant access.',
+    target: '[data-onboarding="current-pins-section"]',
+    position: 'bottom'
+  },
+  {
+    id: 'activity-section',
+    title: 'Activity',
+    description: 'Quick access to your activity.',
+    target: '[data-onboarding="activity-section"]',
     position: 'bottom'
   },
   {
@@ -61,11 +68,18 @@ const ONBOARDING_STEPS = [
     position: 'left'
   },
   {
-    id: 'daily-notes',
-    title: '📅 Daily Notes',
-    description: 'Keep a daily journal with calendar navigation. Perfect for tracking your daily progress and thoughts.',
-    target: '[data-onboarding="daily-notes-section"]',
+    id: 'shared-workspace',
+    title: ' Shared Workspace',
+    description: 'Share Links and Workspace Across the browser',
+    target: '[data-onboarding="dropbox-shared-section"]',
     position: 'left'
+  },
+  {
+    id: 'view-modes',
+    title: '👁️ View Modes',
+    description: 'Switch between different view modes to customize your workspace. Try Focus Mode for distraction-free work!',
+    target: '.view-mode-selector',
+    position: 'top'
   },
   {
     id: 'settings',
@@ -108,7 +122,7 @@ export function OnboardingTour({ onComplete, onSkip }) {
 
     const updatePosition = () => {
       const element = document.querySelector(step.target);
-      
+
       // If element not found, retry after a short delay
       if (!element) {
         if (retryCount < maxRetries) {

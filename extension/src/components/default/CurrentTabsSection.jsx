@@ -1,4 +1,4 @@
-import { faBroom, faGear, faHistory, faLayerGroup, faRotateRight } from '@fortawesome/free-solid-svg-icons';
+import { faBroom, faClose, faGear, faHistory, faLayerGroup, faRotateRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { getHostTabs } from '../../services/extensionApi';
@@ -520,9 +520,24 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                       {truncateHostname(hostname)}
                     </div>
                     {/* Count Badge */}
-                    <div className="currentTabs-badge">
-                      {groupTabs.length}
-                    </div>
+                    {groupTabs.length > 1 ? (
+                      <div className="currentTabs-badge">
+                        {groupTabs.length}
+                      </div>
+                    ) : (
+                      <button
+                        className="currentTabs-badge"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (firstTab?.active) return
+                          removeTab(firstTab)
+                        }}
+                        title={firstTab?.active ? 'Cannot close active tab' : 'Close tab'}
+                        disabled={!!firstTab?.active}
+                      >
+                        <FontAwesomeIcon icon={faClose} />
+                      </button>
+                    )}
 
                   </div>
 
