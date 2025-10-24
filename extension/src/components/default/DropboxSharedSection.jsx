@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import {
   getGroupedSharedWorkspaces,
   listSharedWorkspaces,
-  saveSharedWorkspace,
   syncSharedWorkspacesFromDropbox
 } from '../../db/index.js'
 import { clearStoredToken, connectDropbox } from '../../dropbox/auth.js'
@@ -26,6 +25,7 @@ export function DropboxSharedSection() {
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [currentConfig, setCurrentConfig] = useState(DEFAULT_CONFIG)
   const [availableGroups, setAvailableGroups] = useState([])
+  const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(null)
 
   // Initialize - load configuration and data
   useEffect(() => {
@@ -109,20 +109,6 @@ export function DropboxSharedSection() {
   // Load shared workspaces from local database (instant)
   const loadLocalSharedWorkspaces = async () => {
     try {
-      // Test: Try to save a dummy item first to see if DB is working
-      console.log('[DropboxSharedSection] Testing database save...')
-      try {
-        await saveSharedWorkspace({
-          id: 'test-' + Date.now(),
-          name: 'Test Item',
-          url: 'https://test.com',
-          shared: true,
-          source: 'test'
-        })
-        console.log('[DropboxSharedSection] Test save successful')
-      } catch (testError) {
-        console.error('[DropboxSharedSection] Test save failed:', testError)
-      }
       const result = await listSharedWorkspaces()
       console.log('[DropboxSharedSection] Raw local result:', result)
       console.log('[DropboxSharedSection] Result.data type:', typeof result?.data)
@@ -153,18 +139,22 @@ export function DropboxSharedSection() {
       console.log('[DropboxSharedSection] Processed workspaces:', workspaces)
 
       // Transform to ItemGrid format
-      const items = workspaces.map(workspace => ({
-        id: workspace.id,
-        url: workspace.url || `#workspace-${workspace.id}`,
-        title: workspace.name || 'Untitled Workspace',
-        favicon: workspace.favicon || '',
-        dateAdded: workspace.createdAt || workspace.updatedAt || Date.now(),
-        lastVisitTime: workspace.updatedAt || workspace.createdAt || Date.now(),
-        type: 'workspace',
-        source: 'dropbox-shared',
-        workspace: workspace,
-        sharedBy: workspace.sharedBy || 'unknown'
-      }))
+      const items = workspaces.map(workspace => {
+        const primaryUrl = workspace.url || workspace.urls?.[0]?.url || `#workspace-${workspace.id}`
+        const primaryFavicon = workspace.favicon || workspace.urls?.[0]?.favicon || ''
+        return {
+          id: workspace.id,
+          url: primaryUrl,
+          title: workspace.name || 'Untitled Workspace',
+          favicon: primaryFavicon,
+          dateAdded: workspace.createdAt || workspace.updatedAt || Date.now(),
+          lastVisitTime: workspace.updatedAt || workspace.createdAt || Date.now(),
+          type: 'workspace',
+          source: 'dropbox-shared',
+          workspace,
+          sharedBy: workspace.sharedBy || 'unknown'
+        }
+      })
 
       setSharedWorkspaces(items)
 
@@ -446,37 +436,166 @@ export function DropboxSharedSection() {
             {sharedWorkspaces.length} shared item{sharedWorkspaces.length !== 1 ? 's' : ''}
           </div>
 
-          {/* Debug info */}
-          <div style={{ fontSize: '10px', color: 'yellow', marginBottom: '8px' }}>
-            Debug: apps={groupedData?.apps?.length || 0}, workspaces={groupedData?.workspaces?.length || 0}, links={groupedData?.links?.length || 0}
-          </div>
+
+
+          {/* Dedicated cards for shared workspaces with multiple items */}
+          {Array.isArray(groupedData?.workspaces) && groupedData.workspaces.length > 0 && (
+            <div style={{
+              gap: '16px',
+              padding: '14px',
+              margin: '0 auto 30px auto',
+              justifyContent: 'flex-start'
+            }}>
+              {groupedData.workspaces.map((workspace) => {
+                const urls = Array.isArray(workspace.urls) ? workspace.urls.filter(u => !!u?.url) : []
+                const isExpanded = expandedWorkspaceId === workspace.id
+                const previewItems = isExpanded ? urls : urls.slice(0, 3)
+                return (
+                  <div
+                    key={workspace.id}
+                    style={{
+                      marginLeft: '16px',
+                      marginRight: '16px',
+                      borderRadius: '18px',
+                      padding: '16px',
+                      transition: 'all 0.3s ease',
+                      width: '100%',
+                      maxWidth: '180px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      display: 'inline-flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      textAlign: 'center',
+                      marginBottom: '10px',
+                      color: 'var(--text-primary)'
+                    }}>
+                      {workspace.name || 'Untitled Workspace'}
+                    </div>
+
+                    {urls.length > 0 ? (
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                        marginBottom: '10px',
+                        justifyContent: 'center',
+                        justifyItems: 'center',
+                        width: '100%'
+                      }}>
+                        {previewItems.map((entry, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => window.open(entry.url, '_blank')}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '14px',
+                              background: entry.favicon ? `url(${entry.favicon}) center/cover` : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              border: '1px solid rgba(255,255,255,0.2)',
+                              transition: 'transform 0.2s ease',
+                              margin: '0 auto'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = 'scale(1.08)'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = 'scale(1)'
+                            }}
+                            title={entry.url || undefined}
+                          >
+                            {!entry.favicon && '🌐'}
+                          </div>
+                        ))}
+
+                        {!isExpanded && urls.length > 3 && (
+                          <div style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '14px',
+                            background: 'rgba(255,255,255,0.12)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            color: 'var(--text-secondary)',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            margin: '0 auto',
+                            cursor: 'pointer'
+                          }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setExpandedWorkspaceId(workspace.id)
+                            }}
+                            title="Show all links"
+                          >
+                            +{urls.length - 3}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{
+                        padding: '12px',
+                        borderRadius: '12px',
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px dashed rgba(255,255,255,0.2)',
+                        textAlign: 'center',
+                        fontSize: '12px',
+                        color: 'var(--text-secondary)'
+                      }}>
+                        No URLs shared yet
+                      </div>
+                    )}
+
+                    <div style={{
+                      textAlign: 'center',
+                      fontSize: '12px',
+                      color: 'var(--text-secondary)',
+                      opacity: 0.8
+                    }}>
+                      {urls.length} item{urls.length !== 1 ? 's' : ''}
+                      {isExpanded && urls.length > 3 && (
+                        <div
+                          style={{
+                            marginTop: '10px',
+                            fontSize: '11px',
+                            color: '#34C759',
+                            cursor: 'pointer'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setExpandedWorkspaceId(null)
+                          }}
+                        >
+                          Show less
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           {/* iOS App Library Style Grid */}
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            display: 'flex',
             gap: '16px',
-            marginBottom: '16px'
+            marginBottom: '30px'
           }}>
             {(groupedData?.apps || []).map(app => (
               <div
                 key={app.domain}
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
-                  borderRadius: '16px',
-                  padding: '16px',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  backdropFilter: 'blur(10px)',
-                  transition: 'all 0.3s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-4px)'
-                  e.target.style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)'
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)'
-                  e.target.style.boxShadow = 'none'
-                }}
               >
                 {/* Category Header */}
                 <div style={{
@@ -490,20 +609,21 @@ export function DropboxSharedSection() {
                   {app.domain.replace('.com', '').replace('.', ' ')}
                 </div>
 
-                {/* App Icons Grid */}
+                {/* App Icons Grid --- THIS IS THE FIXED BLOCK --- */}
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: app.items.length === 1 ? '1fr' : 'repeat(2, 1fr)',
+                  gridTemplateColumns: 'repeat(2, 32px)',
                   gap: '8px',
-                  marginBottom: '8px'
+                  marginBottom: '8px',
+                  justifyContent: 'center'
                 }}>
                   {app.items.slice(0, 4).map((item, idx) => (
                     <div
                       key={idx}
                       onClick={() => window.open(item.url || item.workspace?.url, '_blank')}
                       style={{
-                        width: '50px',
-                        height: '50px',
+                        width: '32px',
+                        height: '32px',
                         borderRadius: '12px',
                         background: item.favicon ?
                           `url(${item.favicon}) center/cover` :
@@ -513,7 +633,6 @@ export function DropboxSharedSection() {
                         justifyContent: 'center',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
-                        border: '1px solid rgba(255,255,255,0.2)',
                         fontSize: '20px',
                         margin: '0 auto'
                       }}
@@ -523,6 +642,7 @@ export function DropboxSharedSection() {
                       onMouseLeave={(e) => {
                         e.target.style.transform = 'scale(1)'
                       }}
+                      title={item.url || item.workspace?.url || undefined}
                     >
                       {!item.favicon && '🌐'}
                     </div>
@@ -531,10 +651,9 @@ export function DropboxSharedSection() {
                   {/* Show more indicator if there are more than 4 items */}
                   {app.items.length > 4 && (
                     <div style={{
-                      width: '50px',
-                      height: '50px',
+                      width: '32px',
+                      height: '32px',
                       borderRadius: '12px',
-                      background: 'rgba(255,255,255,0.1)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -543,7 +662,9 @@ export function DropboxSharedSection() {
                       color: 'var(--text-secondary)',
                       border: '1px solid rgba(255,255,255,0.2)',
                       margin: '0 auto'
-                    }}>
+                    }}
+                      title={`${app.items.length - 4} more`}
+                    >
                       +{app.items.length - 4}
                     </div>
                   )}
@@ -562,23 +683,20 @@ export function DropboxSharedSection() {
             ))}
           </div>
 
-          {/* Fallback: Show individual items if no grouped apps */}
-          {(!groupedData?.apps || groupedData.apps.length === 0) && (
+          {/* Fallback: Show individual items if no grouped data */}
+          {(!groupedData || ((groupedData.apps?.length || 0) === 0 && (groupedData.workspaces?.length || 0) === 0)) && (
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
               gap: '16px',
-              marginBottom: '16px'
+              marginBottom: '30px'
             }}>
               {sharedWorkspaces.map(item => (
                 <div
                   key={item.id}
                   style={{
-                    background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)',
                     borderRadius: '16px',
                     padding: '16px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    backdropFilter: 'blur(10px)',
                     transition: 'all 0.3s ease',
                     cursor: 'pointer'
                   }}
@@ -593,24 +711,23 @@ export function DropboxSharedSection() {
                   }}>
                     {item.title || 'Shared Item'}
                   </div>
-                  
+
                   <div style={{
-                    width: '50px',
-                    height: '50px',
+                    width: '32px',
+                    height: '32px',
                     borderRadius: '12px',
-                    background: item.favicon ? 
-                      `url(${item.favicon}) center/cover` : 
+                    background: item.favicon ?
+                      `url(${item.favicon}) center/cover` :
                       'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     margin: '0 auto 8px auto',
-                    border: '1px solid rgba(255,255,255,0.2)',
                     fontSize: '20px'
                   }}>
                     {!item.favicon && '🌐'}
                   </div>
-                  
+
                   <div style={{
                     textAlign: 'center',
                     fontSize: '11px',

@@ -161,6 +161,10 @@ export const getGroupedSharedWorkspaces = withErrorHandling(async () => {
   let workspaces = []
   if (Array.isArray(result)) {
     workspaces = result
+  } else if (result?.success && result?.data?.data && Array.isArray(result.data.data)) {
+    workspaces = result.data.data
+  } else if (result?.success && Array.isArray(result?.data)) {
+    workspaces = result.data
   } else if (result?.data && Array.isArray(result.data)) {
     workspaces = result.data
   } else if (result?.workspaces && Array.isArray(result.workspaces)) {

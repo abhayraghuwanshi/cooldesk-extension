@@ -1625,6 +1625,7 @@ export default function App() {
                       onWorkspaceCreated={createWorkspace}
                       onPinWorkspace={togglePinWorkspace}
                       pinnedWorkspaces={pinnedWorkspaces}
+                      workspaceData={savedWorkspaces}
                     />
                   </div>
                 </div>

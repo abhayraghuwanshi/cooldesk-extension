@@ -85,7 +85,7 @@ export function WorkspaceFilters({
       }
 
       // Build item list from saved workspace URLs (preferred source)
-      const workspaceItems = (workspaceObj?.urls || [])
+      let workspaceItems = (workspaceObj?.urls || [])
         .map(urlItem => ({
           url: urlItem?.url,
           title: urlItem?.title || urlItem?.name || urlItem?.url,
@@ -94,6 +94,22 @@ export function WorkspaceFilters({
         }))
         .filter(item => !!item.url)
 
+      if ((!workspaceItems || workspaceItems.length === 0) && workspaceObj?.urls) {
+        console.warn('[WorkspaceShare] Workspace URLs missing detailed data, falling back to items filter')
+      }
+
+      if (!workspaceItems || workspaceItems.length === 0) {
+        workspaceItems = items
+          .filter(item => item.workspaceGroup === workspaceName)
+          .map(item => ({
+            url: item.url || item.href || item.link,
+            title: item.title || item.name || item.url || item.href || 'Untitled',
+            favicon: item.favicon || getFaviconUrl(item.url || item.href),
+            addedAt: item.dateAdded || item.createdAt || item.addedAt || Date.now()
+          }))
+          .filter(item => !!item.url)
+      }
+
       console.log('[WorkspaceShare] Workspace object:', workspaceObj)
       console.log('[WorkspaceShare] Workspace items (processed):', workspaceItems)
 
@@ -101,6 +117,42 @@ export function WorkspaceFilters({
         alert('No items found in this workspace to share')
         return
       }
+
+      // Group URLs by domain to avoid sharing individual chat links
+      const domainGroups = {}
+      workspaceItems.forEach(item => {
+        try {
+          const urlObj = new URL(item.url)
+          const domain = urlObj.hostname.replace('www.', '')
+          if (!domainGroups[domain]) {
+            domainGroups[domain] = {
+              urls: [],
+              favicon: item.favicon,
+              addedAt: item.addedAt
+            }
+          }
+          domainGroups[domain].urls.push(item)
+        } catch (e) {
+          // Invalid URL, group under 'misc'
+          if (!domainGroups['misc']) {
+            domainGroups['misc'] = { urls: [], favicon: item.favicon, addedAt: item.addedAt }
+          }
+          domainGroups['misc'].urls.push(item)
+        }
+      })
+
+      // Create representative URLs (one per domain)
+      const groupedItems = Object.entries(domainGroups).map(([domain, group]) => {
+        const firstItem = group.urls[0]
+        return {
+          url: firstItem.url,
+          title: `${domain} (${group.urls.length} items)`,
+          favicon: firstItem.favicon || getFaviconUrl(firstItem.url),
+          addedAt: firstItem.addedAt
+        }
+      })
+
+      console.log('[WorkspaceShare] Grouped items by domain:', groupedItems)
 
       // Load saved groups or use default
       let shareGroups = []
@@ -140,7 +192,7 @@ export function WorkspaceFilters({
         name: workspaceName,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        urls: workspaceItems.map((item, idx) => {
+        urls: groupedItems.map((item, idx) => {
           const urlData = {
             url: item.url,
             title: item.title || item.name || item.url || 'Untitled',
@@ -191,12 +243,12 @@ export function WorkspaceFilters({
       })
 
       // Show success message
-      alert(`Workspace "${workspaceName}" shared to ${targetGroup.name} group!\nShared ${workspaceItems.length} items\nPath: ${filePath}`)
-      console.log(`Successfully shared workspace "${workspaceName}" with ${workspaceItems.length} items`)
+      alert(`Workspace "${workspaceName}" shared to ${targetGroup.name} group!\nShared ${groupedItems.length} domains (from ${workspaceItems.length} items)\nPath: ${filePath}`)
+      console.log(`Successfully shared workspace "${workspaceName}" with ${groupedItems.length} domains (from ${workspaceItems.length} items)`)
 
       // Trigger automatic refresh of shared workspaces
       window.dispatchEvent(new CustomEvent('dropboxItemShared', {
-        detail: { workspace: workspaceName, itemCount: workspaceItems.length, ...SHARING_CONFIG }
+        detail: { workspace: workspaceName, itemCount: groupedItems.length, totalItems: workspaceItems.length, ...SHARING_CONFIG }
       }))
 
     } catch (err) {
