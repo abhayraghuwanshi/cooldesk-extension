@@ -25,74 +25,8 @@
  * - Production monitoring and health checks
  */
 
-// Export all API functions
-export {
-    // Initialization
-    initializeDatabase,
-    
-    // Workspace operations
-    listWorkspaces,
-    getWorkspace, 
-    saveWorkspace,
-    deleteWorkspace,
-    
-    // Workspace URL operations
-    addUrlToWorkspace,
-    listWorkspaceUrls,
-    
-    // Scraped Chats operations
-    listScrapedChats,
-    getScrapedChat,
-    saveScrapedChat,
-    deleteScrapedChat,
-    deleteScrapedChatsByPlatform,
-    
-    // Notes operations
-    listNotes,
-    saveNote,
-    deleteNote,
-    upsertNote,
-    
-    // URL Notes operations  
-    getUrlNotes,
-    saveUrlNote,
-    deleteUrlNote,
-    
-    // Settings operations
-    getSettings,
-    saveSettings,
-    
-    // UI State operations
-    getUIState,
-    saveUIState,
-    
-    // Activity & Time Tracking operations
-    putActivityTimeSeriesEvent,
-    putActivityRow,
-    getAllActivity,
-    cleanupOldTimeSeriesData,
-    getTimeSeriesStorageStats,
-    
-    // Legacy compatibility functions
-    listAllUrls,
-    getUrlRecord,
-    upsertUrl,
-    listPings,
-    upsertPing,
-    deletePing,
-    deleteWorkspaceById,
-    updateWorkspaceGridType,
-    updateItemWorkspace,
-    
-    // Utility functions
-    getDatabaseHealth,
-    subscribeWorkspaceChanges,
-    subscribePinsChanges,
-    subscribeDailyNotesChanges,
-    subscribeSettingsChanges,
-    closeDatabaseConnection
-    
-} from './unified-api.js'
+// Export all database functions
+export * from './unified-api.js'
 
 // Export error handling utilities
 export {
@@ -234,3 +168,6 @@ export async function resetDatabase() {
 // - Automatic migration from legacy data
 //
 // Legacy files are backed up in ./legacy-backup/ if needed for reference.
+
+// Export shared database functions
+export * from './shared-db.js'

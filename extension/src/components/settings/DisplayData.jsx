@@ -1,4 +1,4 @@
-import { faChartLine, faFilter, faMapPin, faNewspaper, faThumbtack, faCheckCircle } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faFilter, faMapPin, faNewspaper, faThumbtack, faCheckCircle, faCloud } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useState } from 'react'
 import { applyViewMode, getCurrentViewMode, getViewModesList } from '../../config/viewModes'
@@ -48,6 +48,13 @@ const UI_COMPONENTS = [
         label: 'Notes Section',
         description: 'Quick notes and reminders',
         icon: faMapPin,
+        category: 'Activity Panel'
+    },
+    {
+        id: 'dropboxSharedSection',
+        label: 'Shared Workspaces Section',
+        description: 'Workspaces synced from Dropbox',
+        icon: faCloud,
         category: 'Activity Panel'
     },
     {

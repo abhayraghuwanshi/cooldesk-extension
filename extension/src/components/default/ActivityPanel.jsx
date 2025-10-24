@@ -6,6 +6,7 @@ import VoiceNavigationChatGPT from '../toolbar/VoiceNavigationChatGPT';
 import { AIChatsSection } from './AIChats';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { SimpleNotes } from './SimpleNotes';
+import { DropboxSharedSection } from './DropboxSharedSection';
 
 export function ActivityPanel({ activeSection = 0 }) {
   // State for preview modal
@@ -265,6 +266,13 @@ export function ActivityPanel({ activeSection = 0 }) {
       name: 'Notes',
       component: <div data-onboarding="notes-section">
         <SimpleNotes />
+      </div>
+    },
+    {
+      id: 'dropboxSharedSection',
+      name: 'Shared Workspaces',
+      component: <div data-onboarding="dropbox-shared-section">
+        <DropboxSharedSection />
       </div>
     }
   ];

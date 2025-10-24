@@ -10,6 +10,7 @@ import DisplayData from '../settings/DisplayData';
 import ExportData from '../settings/ExportData';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
+import DropboxSync from '../settings/DropboxSync.jsx';
 
 
 export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFontSizeChange, onStartOnboarding }) {
@@ -575,6 +576,9 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faFileExport} style={{ marginRight: '8px' }} />Export Data</>}>
             <ExportData />
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faFolder} style={{ marginRight: '8px' }} />Dropbox Sync</>}>
+            <DropboxSync />
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faEye} style={{ marginRight: '8px' }} />Display</>}>
             <DisplayData />

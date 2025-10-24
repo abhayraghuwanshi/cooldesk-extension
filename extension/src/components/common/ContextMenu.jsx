@@ -1,8 +1,9 @@
-import { faBookmark, faCopy, faExternalLinkAlt, faFolder, faFolderPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faFolder, faShare, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { listWorkspaces, addUrlToWorkspace } from '../../db/index.js';
+import { addUrlToWorkspace, listWorkspaces, saveWorkspace } from '../../db/index.js';
+import { downloadWorkspaces, getDropboxStatus, uploadWorkspaces } from '../../dropbox/sync.js';
 import { getFaviconUrl } from '../../utils';
 
 export function ContextMenu({
@@ -21,12 +22,15 @@ export function ContextMenu({
   const menuRef = useRef(null);
   const [workspaces, setWorkspaces] = useState([]);
   const [showWorkspaces, setShowWorkspaces] = useState(false);
+  const [showShareGroups, setShowShareGroups] = useState(false);
+  const [shareGroups, setShareGroups] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Load workspaces when component mounts
+  // Load workspaces and share groups when component mounts
   useEffect(() => {
     if (show) {
       loadWorkspaces();
+      loadShareGroups();
     }
   }, [show]);
 
@@ -41,6 +45,27 @@ export function ContextMenu({
       setWorkspaces([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadShareGroups = async () => {
+    try {
+      // Load saved groups from localStorage
+      const saved = localStorage.getItem('dropbox-groups');
+      if (saved) {
+        const parsedGroups = JSON.parse(saved);
+        setShareGroups(parsedGroups);
+      } else {
+        // Default groups if none saved
+        setShareGroups([
+          { key: 'public', name: 'Public', baseFolder: '/CoolDeskShared' },
+          { key: 'team', name: 'Team', baseFolder: '/CoolDeskShared' },
+          { key: 'family', name: 'Family', baseFolder: '/CoolDeskShared' }
+        ]);
+      }
+    } catch (err) {
+      console.error('Failed to load share groups:', err);
+      setShareGroups([]);
     }
   };
 
@@ -122,11 +147,112 @@ export function ContextMenu({
     onClose();
   };
 
+  const handleShareToGroup = async (shareGroup) => {
+    try {
+      // Check if Dropbox is connected
+      const status = await getDropboxStatus();
+      if (!status?.connected) {
+        alert('Please connect to Dropbox in Settings → Dropbox Sync to share items');
+        return;
+      }
+
+      // Use the selected group configuration
+      const SHARING_CONFIG = {
+        baseFolder: shareGroup.baseFolder || '/CoolDeskShared',
+        groupKey: shareGroup.key,
+        appKey: 'giehfgphh50abf5'
+      }
+
+      // Download existing shared workspaces
+      const existingData = await downloadWorkspaces(SHARING_CONFIG);
+      const existingWorkspaces = existingData?.workspaces || [];
+
+      // Create a new workspace for this specific item
+      const newWorkspace = {
+        id: `shared-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: title || 'Shared Item',
+        url: url,
+        favicon: getFaviconUrl(url),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        urls: [{
+          url: url,
+          title: title || url,
+          addedAt: Date.now()
+        }],
+        shared: true,
+        source: 'context-menu-share'
+      };
+
+      // Add to existing workspaces (avoid duplicates by URL)
+      const existingIndex = existingWorkspaces.findIndex(w =>
+        w.urls?.some(u => u.url === url) || w.url === url
+      );
+
+      let updatedWorkspaces;
+      if (existingIndex >= 0) {
+        // Update existing workspace
+        updatedWorkspaces = [...existingWorkspaces];
+        updatedWorkspaces[existingIndex] = {
+          ...updatedWorkspaces[existingIndex],
+          updatedAt: Date.now(),
+          title: title || updatedWorkspaces[existingIndex].title
+        };
+      } else {
+        // Add new workspace
+        updatedWorkspaces = [...existingWorkspaces, newWorkspace];
+      }
+
+      // Upload ONLY the shared workspaces to Dropbox (not all local workspaces)
+      // Create a custom upload for just shared items
+      const { getDropboxClient } = await import('../../dropbox/auth.js');
+      
+      const dbx = await getDropboxClient();
+      if (!dbx) throw new Error('Failed to get Dropbox client');
+
+      // Create the shared data structure
+      const sharedData = {
+        workspaces: updatedWorkspaces,
+        updatedAt: Date.now(),
+        sharedBy: 'context-menu'
+      };
+
+      // Upload only shared workspaces to Dropbox
+      const filePath = `${SHARING_CONFIG.baseFolder}/${SHARING_CONFIG.groupKey}/workspaces.json`;
+      
+      await dbx.filesUpload({
+        path: filePath,
+        contents: JSON.stringify(sharedData, null, 2),
+        mode: { '.tag': 'overwrite' }
+      });
+
+      // Show success message
+      alert(`Item "${title || 'Link'}" shared to ${shareGroup.name} group!\nPath: ${filePath}`);
+      console.log(`Successfully shared individual item to ${shareGroup.name} group`);
+
+      // Trigger automatic refresh of shared workspaces
+      window.dispatchEvent(new CustomEvent('dropboxItemShared', {
+        detail: { url, title, ...SHARING_CONFIG }
+      }));
+    } catch (err) {
+      console.error('Failed to share to Dropbox:', err);
+      alert(`Failed to share: ${err?.message || err}`);
+    }
+    onClose();
+  };
+
+  // Legacy function for default sharing (backwards compatibility)
+  const handleShare = async () => {
+    const defaultGroup = { key: 'public', name: 'Public', baseFolder: '/CoolDeskShared' };
+    await handleShareToGroup(defaultGroup);
+  };
+
   if (!show) return null;
 
   // Calculate position to keep menu on screen
-  const menuWidth = showWorkspaces ? 400 : 200;
-  const menuHeight = showWorkspaces ? Math.min(350, 80 + workspaces.length * 40) : 120;
+  const menuWidth = (showWorkspaces || showShareGroups) ? 400 : 200;
+  const menuHeight = showWorkspaces ? Math.min(350, 80 + workspaces.length * 40) : 
+                     showShareGroups ? Math.min(300, 80 + shareGroups.length * 40) : 120;
 
   const adjustedPosition = {
     x: Math.min(position.x, window.innerWidth - menuWidth - 10),
@@ -148,6 +274,14 @@ export function ContextMenu({
       action: () => setShowWorkspaces(!showWorkspaces),
       hasSubmenu: true,
       color: '#34C759'
+    },
+    {
+      id: 'share',
+      label: 'Share to Dropbox',
+      icon: faShare,
+      action: () => setShowShareGroups(!showShareGroups),
+      hasSubmenu: true,
+      color: '#007AFF'
     },
     {
       id: 'delete',
@@ -381,6 +515,100 @@ export function ContextMenu({
                       textOverflow: 'ellipsis'
                     }}>
                       {(workspace.urls || []).length} item{(workspace.urls || []).length !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Share Groups List */}
+        {showShareGroups && (
+          <div style={{
+            flex: '1',
+            borderLeft: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+            maxHeight: '280px',
+            overflowY: 'auto',
+            background: 'var(--glass-bg, rgba(255, 255, 255, 0.02))'
+          }}>
+            <div style={{
+              padding: '10px 12px 8px 12px',
+              fontSize: '11px',
+              color: 'var(--text-secondary, rgba(255, 255, 255, 0.7))',
+              fontWeight: '600',
+              borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+              background: 'var(--glass-bg, rgba(255, 255, 255, 0.05))'
+            }}>
+              🔗 Share Groups
+            </div>
+
+            {shareGroups.length === 0 ? (
+              <div style={{
+                padding: '20px',
+                textAlign: 'center',
+                fontSize: '12px',
+                color: 'var(--text-secondary, rgba(255, 255, 255, 0.6))'
+              }}>
+                No share groups available
+              </div>
+            ) : (
+              shareGroups.map((group) => (
+                <button
+                  key={group.key}
+                  onClick={() => handleShareToGroup(group)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    color: 'var(--text-primary, #ffffff)',
+                    fontSize: '13px',
+                    transition: 'background-color 0.1s ease',
+                    textAlign: 'left'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'var(--hover-bg, rgba(255, 255, 255, 0.1))';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'transparent';
+                  }}
+                >
+                  <div style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '4px',
+                    background: 'linear-gradient(135deg, #007AFF, #0056CC)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '10px',
+                    flexShrink: 0
+                  }}>
+                    🔗
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontWeight: '500',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      marginBottom: '2px'
+                    }}>
+                      {group.name}
+                    </div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: 'var(--text-secondary, rgba(255, 255, 255, 0.6))',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {group.baseFolder}/{group.key}
                     </div>
                   </div>
                 </button>

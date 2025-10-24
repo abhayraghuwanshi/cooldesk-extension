@@ -1,7 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateWorkspaceModal } from './popups/CreateWorkspaceModal';
+import { getDropboxStatus } from '../dropbox/sync.js';
+import { getFaviconUrl } from '../utils.js';
 
-export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, onPinWorkspace, onDeleteWorkspace, pinnedWorkspaces = [] }) {
+export function WorkspaceFilters({
+  items,
+  active,
+  onChange,
+  onWorkspaceCreated,
+  onPinWorkspace,
+  onDeleteWorkspace,
+  pinnedWorkspaces = [],
+  workspaceData = []
+}) {
   const workspaces = useMemo(() => {
     const set = new Set()
     items.forEach((i) => i.workspaceGroup && set.add(i.workspaceGroup))
@@ -50,6 +61,147 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, 
       setShowCreateModal(false)
     } catch (error) {
       console.error('Error creating workspace:', error)
+    }
+  }
+
+  const handleShareWorkspace = async (workspaceName) => {
+    try {
+      // Check if Dropbox is connected
+      const status = await getDropboxStatus()
+      if (!status?.connected) {
+        alert('Please connect to Dropbox in Settings → Dropbox Sync to share workspaces')
+        return
+      }
+
+      if (!workspaceName || workspaceName === 'All') {
+        alert('Please select a specific workspace to share')
+        return
+      }
+
+      const workspaceObj = workspaceData.find(ws => ws?.name === workspaceName)
+
+      if (!workspaceObj) {
+        console.warn('[WorkspaceShare] Workspace not found in workspaceData')
+      }
+
+      // Build item list from saved workspace URLs (preferred source)
+      const workspaceItems = (workspaceObj?.urls || [])
+        .map(urlItem => ({
+          url: urlItem?.url,
+          title: urlItem?.title || urlItem?.name || urlItem?.url,
+          favicon: urlItem?.favicon,
+          addedAt: urlItem?.addedAt || urlItem?.dateAdded || urlItem?.createdAt
+        }))
+        .filter(item => !!item.url)
+
+      console.log('[WorkspaceShare] Workspace object:', workspaceObj)
+      console.log('[WorkspaceShare] Workspace items (processed):', workspaceItems)
+
+      if (workspaceItems.length === 0) {
+        alert('No items found in this workspace to share')
+        return
+      }
+
+      // Load saved groups or use default
+      let shareGroups = []
+      try {
+        const saved = localStorage.getItem('dropbox-groups')
+        if (saved) {
+          shareGroups = JSON.parse(saved)
+        } else {
+          shareGroups = [
+            { key: 'public', name: 'Public', baseFolder: '/CoolDeskShared' }
+          ]
+        }
+      } catch (e) {
+        shareGroups = [{ key: 'public', name: 'Public', baseFolder: '/CoolDeskShared' }]
+      }
+
+      // For now, share to the first available group (or public by default)
+      const targetGroup = shareGroups[0] || { key: 'public', name: 'Public', baseFolder: '/CoolDeskShared' }
+
+      // Import Dropbox functions
+      const { downloadWorkspaces } = await import('../dropbox/sync.js')
+      const { getDropboxClient } = await import('../dropbox/auth.js')
+
+      const SHARING_CONFIG = {
+        baseFolder: targetGroup.baseFolder,
+        groupKey: targetGroup.key,
+        appKey: 'giehfgphh50abf5'
+      }
+
+      // Download existing shared workspaces
+      const existingData = await downloadWorkspaces(SHARING_CONFIG)
+      const existingWorkspaces = existingData?.workspaces || []
+
+      // Create a shared workspace object
+      const sharedWorkspace = {
+        id: `shared-workspace-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: workspaceName,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        urls: workspaceItems.map((item, idx) => {
+          const urlData = {
+            url: item.url,
+            title: item.title || item.name || item.url || 'Untitled',
+            favicon: item.favicon || getFaviconUrl(item.url),
+            addedAt: item.addedAt || Date.now()
+          }
+          console.log(`[WorkspaceShare] Processed URL ${idx}:`, urlData)
+          return urlData
+        }),
+        shared: true,
+        source: 'workspace-share',
+        workspaceGroup: workspaceName
+      }
+
+      // Add to existing workspaces (avoid duplicates by name)
+      const existingIndex = existingWorkspaces.findIndex(w => w.name === workspaceName && w.source === 'workspace-share')
+      
+      let updatedWorkspaces
+      if (existingIndex >= 0) {
+        // Update existing workspace
+        updatedWorkspaces = [...existingWorkspaces]
+        updatedWorkspaces[existingIndex] = {
+          ...updatedWorkspaces[existingIndex],
+          ...sharedWorkspace,
+          updatedAt: Date.now()
+        }
+      } else {
+        // Add new workspace
+        updatedWorkspaces = [...existingWorkspaces, sharedWorkspace]
+      }
+
+      // Upload to Dropbox
+      const dbx = await getDropboxClient()
+      if (!dbx) throw new Error('Failed to get Dropbox client')
+
+      const sharedData = {
+        workspaces: updatedWorkspaces,
+        updatedAt: Date.now(),
+        sharedBy: 'workspace-share'
+      }
+
+      const filePath = `${SHARING_CONFIG.baseFolder}/${SHARING_CONFIG.groupKey}/workspaces.json`
+      
+      await dbx.filesUpload({
+        path: filePath,
+        contents: JSON.stringify(sharedData, null, 2),
+        mode: { '.tag': 'overwrite' }
+      })
+
+      // Show success message
+      alert(`Workspace "${workspaceName}" shared to ${targetGroup.name} group!\nShared ${workspaceItems.length} items\nPath: ${filePath}`)
+      console.log(`Successfully shared workspace "${workspaceName}" with ${workspaceItems.length} items`)
+
+      // Trigger automatic refresh of shared workspaces
+      window.dispatchEvent(new CustomEvent('dropboxItemShared', {
+        detail: { workspace: workspaceName, itemCount: workspaceItems.length, ...SHARING_CONFIG }
+      }))
+
+    } catch (err) {
+      console.error('Failed to share workspace:', err)
+      alert(`Failed to share workspace: ${err?.message || err}`)
     }
   }
 
@@ -162,6 +314,33 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, 
           }}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Share Workspace */}
+          <button
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 12px',
+              textAlign: 'left',
+              background: 'transparent',
+              color: '#34C759',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13
+            }}
+            onClick={() => {
+              const ws = menu.ws
+              setMenu({ open: false, x: 0, y: 0, ws: null })
+              if (ws) {
+                handleShareWorkspace(ws)
+              }
+            }}
+          >
+            🔗 Share Workspace to Dropbox
+          </button>
+
+          {/* Divider */}
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '4px 0' }} />
+
           {/* Pin/Unpin */}
           {(() => {
             const isPinned = Array.isArray(pinnedWorkspaces) && pinnedWorkspaces.includes(menu.ws)
