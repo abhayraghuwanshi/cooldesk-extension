@@ -460,7 +460,7 @@ export function DropboxSharedSection() {
                       padding: '16px',
                       transition: 'all 0.3s ease',
                       width: '100%',
-                      maxWidth: '180px',
+                      maxWidth: '200px',
                       border: '1px solid rgba(255,255,255,0.1)',
                       display: 'inline-flex',
                       flexDirection: 'column',

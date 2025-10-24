@@ -1,6 +1,6 @@
 import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { listWorkspaces, saveWorkspace } from '../../db/index.js';
 import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet } from '../../services/extensionApi';
@@ -10,7 +10,6 @@ import DisplayData from '../settings/DisplayData';
 import ExportData from '../settings/ExportData';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
-import DropboxSync from '../settings/DropboxSync.jsx';
 
 
 export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFontSizeChange, onStartOnboarding }) {
@@ -577,9 +576,6 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
           <TabItem title={<><FontAwesomeIcon icon={faFileExport} style={{ marginRight: '8px' }} />Export Data</>}>
             <ExportData />
           </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faFolder} style={{ marginRight: '8px' }} />Dropbox Sync</>}>
-            <DropboxSync />
-          </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faEye} style={{ marginRight: '8px' }} />Display</>}>
             <DisplayData />
           </TabItem>
@@ -593,7 +589,7 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
                 <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6 }}>
                   Need help getting started with CoolDesk? Take a quick tour to learn about all the features.
                 </p>
-                
+
                 <button
                   onClick={() => {
                     if (onStartOnboarding) {
@@ -718,8 +714,8 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
               </div>
 
               {/* Support Section */}
-              <div style={{ 
-                padding: '20px', 
+              <div style={{
+                padding: '20px',
                 background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
                 borderRadius: '8px',
                 border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))'
