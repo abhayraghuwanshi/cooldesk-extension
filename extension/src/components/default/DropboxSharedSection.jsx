@@ -480,15 +480,6 @@ export function DropboxSharedSection() {
 
       {connected && sharedWorkspaces.length > 0 && (
         <div>
-          {/* <div style={{
-            fontSize: '12px',
-            color: 'var(--text-secondary)',
-            marginBottom: '8px'
-          }}>
-            {sharedWorkspaces.length} shared item{sharedWorkspaces.length !== 1 ? 's' : ''}
-          </div> */}
-
-
 
           {/* Dedicated cards for shared workspaces with multiple items */}
           {Array.isArray(groupedData?.workspaces) && groupedData.workspaces.length > 0 && (
