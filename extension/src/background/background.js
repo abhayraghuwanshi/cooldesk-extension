@@ -39,6 +39,57 @@ import { handleSetAutoCleanup, initializeTabCleanup } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== 'FETCH_URL_TEXT') {
+    return;
+  }
+
+  (async () => {
+    const rawUrl = typeof message.url === 'string' ? message.url.trim() : '';
+    if (!rawUrl) {
+      sendResponse({ success: false, error: 'Missing URL' });
+      return;
+    }
+
+    let normalized = rawUrl;
+    if (!/^https?:\/\//i.test(normalized)) {
+      normalized = `https://${normalized}`;
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(normalized);
+    } catch (err) {
+      sendResponse({ success: false, error: 'Invalid URL' });
+      return;
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      sendResponse({ success: false, error: 'Only http(s) URLs are supported' });
+      return;
+    }
+
+    try {
+      const response = await fetch(parsedUrl.toString(), {
+        credentials: 'omit',
+        redirect: 'follow'
+      });
+
+      if (!response.ok) {
+        sendResponse({ success: false, error: `Failed to fetch page (HTTP ${response.status})` });
+        return;
+      }
+
+      const html = await response.text();
+      sendResponse({ success: true, html, url: parsedUrl.toString() });
+    } catch (err) {
+      sendResponse({ success: false, error: err?.message || 'Network error' });
+    }
+  })();
+
+  return true;
+});
+
 // Auto-save selected text to daily notes
 async function saveToDailyNotes(selectionData) {
   try {

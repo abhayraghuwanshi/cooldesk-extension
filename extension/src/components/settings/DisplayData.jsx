@@ -1,4 +1,4 @@
-import { faChartLine, faFilter, faMapPin, faNewspaper, faThumbtack, faCheckCircle, faCloud } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faFilter, faMapPin, faNewspaper, faThumbtack, faCheckCircle, faCloud, faRobot } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useState } from 'react'
 import { applyViewMode, getCurrentViewMode, getViewModesList } from '../../config/viewModes'
@@ -41,6 +41,13 @@ const UI_COMPONENTS = [
         label: 'AI Chats Section',
         description: 'Scraped AI chat history from multiple platforms',
         icon: faNewspaper,
+        category: 'Activity Panel'
+    },
+    {
+        id: 'aiToolsSection',
+        label: 'AI Tools Section',
+        description: 'Summaries and AI-assisted workflows',
+        icon: faRobot,
         category: 'Activity Panel'
     },
     {

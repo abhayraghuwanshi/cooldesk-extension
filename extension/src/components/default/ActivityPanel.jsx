@@ -4,6 +4,7 @@ import { ErrorBoundary } from '../ErrorBoundary';
 import { getDisplaySettings } from '../settings/DisplayData';
 import VoiceNavigationChatGPT from '../toolbar/VoiceNavigationChatGPT';
 import { AIChatsSection } from './AIChats';
+import { AIToolPanel } from './AIToolPanel';
 import { CurrentTabsSection } from './CurrentTabsSection';
 import { SimpleNotes } from './SimpleNotes';
 import { DropboxSharedSection } from './DropboxSharedSection';
@@ -259,6 +260,13 @@ export function ActivityPanel({ activeSection = 0 }) {
       name: 'AI Chats',
       component: <div data-onboarding="ai-chats-section">
         <AIChatsSection />
+      </div>
+    },
+    {
+      id: 'aiToolsSection',
+      name: 'AI Tools',
+      component: <div data-onboarding="ai-tools-section">
+        <AIToolPanel />
       </div>
     },
     {
