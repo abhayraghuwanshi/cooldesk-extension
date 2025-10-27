@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { personas } from '../../data/personas.js';
 import { getUIState, listNotes, listWorkspaces, saveUIState } from '../../db/index.js';
 import { getHostTabs } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils.js';
@@ -23,7 +22,6 @@ const SearchModalComponent = function SearchModal({
     const [contentMatches, setContentMatches] = useState([]);
     const [notesMatches, setNotesMatches] = useState([]);
     const [dailyNotesMatches, setDailyNotesMatches] = useState([]);
-    const [personasMatches, setPersonasMatches] = useState([]);
     const [workspaceMatches, setWorkspaceMatches] = useState([]);
     const inputRef = useRef(null);
     const dataRef = useRef({ list: [] });
@@ -272,7 +270,6 @@ const SearchModalComponent = function SearchModal({
             setContentMatches([]);
             setNotesMatches([]);
             setDailyNotesMatches([]);
-            setPersonasMatches([]);
             setWorkspaceMatches([]);
             return;
         }
@@ -282,7 +279,6 @@ const SearchModalComponent = function SearchModal({
             setContentMatches([]);
             setNotesMatches([]);
             setDailyNotesMatches([]);
-            setPersonasMatches([]);
             setWorkspaceMatches([]);
             return;
         }
@@ -349,24 +345,6 @@ const SearchModalComponent = function SearchModal({
             return dailyNote.content.toLowerCase().includes(q.toLowerCase()) || inSelections;
         }).slice(0, 5); // Limit to 5 matches
         setDailyNotesMatches(dailyNoteMatches);
-
-        // Search in personas using fuzzy search
-        const personaResults = fuzzySearch(personas, q, ['title', 'description']);
-        const personaMatches = personaResults.map(persona => ({
-            type: 'persona',
-            title: persona.title,
-            description: persona.description,
-            icon: persona.icon,
-            workspaces: persona.workspaces
-        })).filter(persona => {
-            // Additional check for workspaces
-            let inWorkspaces = false;
-            if (persona.workspaces) {
-                inWorkspaces = fuzzySearch(persona.workspaces, q, ['name', 'description']).length > 0;
-            }
-            return persona.title.toLowerCase().includes(q.toLowerCase()) || persona.description.toLowerCase().includes(q.toLowerCase()) || inWorkspaces;
-        });
-        setPersonasMatches(personaMatches);
 
         // Search in workspaces using fuzzy search
         console.log('[SearchModal] Searching workspaces for:', q);
@@ -475,18 +453,38 @@ const SearchModalComponent = function SearchModal({
             setRecent(next);
         } catch { }
 
-        // Default to Google search in current tab
-        try {
-            if (chrome?.tabs?.update) {
-                // Navigate current tab to Google search
-                chrome.tabs.update({ url: `https://www.google.com/search?q=${encodeURIComponent(query)}` });
-            } else if (chrome?.tabs?.create) {
-                // Fallback to new tab if update isn't available
-                chrome.tabs.create({ url: `https://www.google.com/search?q=${encodeURIComponent(query)}` });
+        const launchFallbackSearch = () => {
+            try {
+                const fallbackUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+                if (chrome?.tabs?.update) {
+                    chrome.tabs.update({ url: fallbackUrl });
+                } else if (chrome?.tabs?.create) {
+                    chrome.tabs.create({ url: fallbackUrl });
+                }
+            } catch (err) {
+                console.error('[SearchModal] Failed to launch fallback search:', err);
             }
-        } catch (err) {
-            console.error('Failed to open Google search:', err);
+        };
+
+        const hasChromeSearch = typeof chrome !== 'undefined' && chrome?.search?.query;
+
+        if (hasChromeSearch) {
+            try {
+                chrome.search.query({ text: query, disposition: 'CURRENT_TAB' }, () => {
+                    const lastErr = chrome.runtime?.lastError;
+                    if (lastErr) {
+                        console.warn('[SearchModal] chrome.search.query error, using fallback search:', lastErr);
+                        launchFallbackSearch();
+                    }
+                });
+            } catch (err) {
+                console.warn('[SearchModal] chrome.search.query threw, using fallback search:', err);
+                launchFallbackSearch();
+            }
+        } else {
+            launchFallbackSearch();
         }
+
         onClose();
     };
 
@@ -551,14 +549,9 @@ const SearchModalComponent = function SearchModal({
             allItems.push({ type: 'dailyNote', value: item });
         });
 
-        // Add personas matches
-        personasMatches.forEach(item => {
-            allItems.push({ type: 'persona', value: item });
-        });
-
         // Add workspace matches
-        workspaceMatches.forEach(item => {
-            allItems.push({ type: 'workspace', value: item });
+        workspaceMatches.forEach(value => {
+            allItems.push({ type: 'workspace', value });
         });
 
         if (e.key === 'ArrowDown') {
@@ -627,22 +620,13 @@ const SearchModalComponent = function SearchModal({
                         } catch { }
                         onClose();
                         break;
-                    case 'persona':
-                        try {
-                            const persona = selectedItem.value;
-                            // Open persona creation or show persona details
-                            console.log('Selected persona:', persona.title);
-                            // Could trigger workspace creation from this persona
-                        } catch { }
-                        onClose();
-                        break;
                     case 'workspace':
                         try {
                             const workspace = selectedItem.value;
                             // Open side panel and switch to workspace
                             console.log('Selected workspace:', workspace.name);
                             if (openInSidePanel) {
-                                openInSidePanel(`workspace:${workspace.name}`);
+                                openInSidePanel(workspace.name);
                             }
                         } catch { }
                         onClose();
@@ -1084,7 +1068,7 @@ const SearchModalComponent = function SearchModal({
                         {/* Workspace Matches */}
                         {workspaceMatches.length > 0 && (
                             <div style={{
-                                borderTop: (filtered.length > 0 || contentMatches.length > 0 || personasMatches.length > 0) ? '1px solid var(--border-primary)' : 'none',
+                                borderTop: (filtered.length > 0 || contentMatches.length > 0) ? '1px solid var(--border-primary)' : 'none',
                                 padding: '0 20px'
                             }}>
                                 <div style={{
@@ -1102,8 +1086,7 @@ const SearchModalComponent = function SearchModal({
                                     const searchCount = search?.trim() ? 1 : 0;
                                     const recentCount = filtered.length;
                                     const contentCount = contentMatches.length;
-                                    const personasCount = personasMatches.length;
-                                    const workspaceIndex = searchCount + enginesCount + recentCount + contentCount + personasCount + i;
+                                    const workspaceIndex = searchCount + enginesCount + recentCount + contentCount + i;
                                     const isActive = activeIndex === workspaceIndex;
 
                                     return (
@@ -1260,8 +1243,7 @@ const SearchModalComponent = function SearchModal({
                                             const searchCount = search?.trim() ? 1 : 0;
                                             const recentCount = filtered.length;
                                             const contentCount = contentMatches.length;
-                                            const personasCount = personasMatches.length;
-                                            const noteIndex = searchCount + enginesCount + recentCount + contentCount + personasCount + i;
+                                            const noteIndex = searchCount + enginesCount + recentCount + contentCount + i;
                                             const isActive = activeIndex === noteIndex;
 
                                             return (
@@ -1352,9 +1334,8 @@ const SearchModalComponent = function SearchModal({
                                             const searchCount = search?.trim() ? 1 : 0;
                                             const recentCount = filtered.length;
                                             const contentCount = contentMatches.length;
-                                            const personasCount = personasMatches.length;
                                             const notesCount = notesMatches.length;
-                                            const dailyNoteIndex = searchCount + enginesCount + recentCount + contentCount + personasCount + notesCount + i;
+                                            const dailyNoteIndex = searchCount + enginesCount + recentCount + contentCount + notesCount + i;
                                             const isActive = activeIndex === dailyNoteIndex;
 
                                             return (

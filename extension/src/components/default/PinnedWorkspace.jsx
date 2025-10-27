@@ -39,7 +39,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
 
         // Fill remaining slots with first items from list (up to 2 total)
         for (const name of list) {
-            if (visible.length >= 2) break;
+            if (visible.length >= 1) break;
             if (!visible.includes(name)) {
                 visible.push(name);
             }
@@ -108,7 +108,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                 data-double-click-hint="Double-click to hide pinned workspaces"
             >
                 Pinned Workspace
-                {list.length > 2 && (
+                {list.length > 1 && (
                     <span style={{
                         marginLeft: 8,
                         fontSize: 'var(--font-size-xs)',
@@ -122,7 +122,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
             {/* Pills row */}
             <div
                 className="coolDesk-pings-container pinnedws-pills"
-                title={list.length > 2 ? "← Scroll to see all pinned workspaces →" : ""}
+                title={list.length > 1 ? "← Scroll to see all pinned workspaces →" : ""}
                 onDragOver={(e) => {
                     // Allow dropping between chips
                     e.preventDefault();
@@ -211,7 +211,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
             <div className="pinnedws-itemsGrid">
                 {visibleWorkspaces.map((name) => {
                     const ws = Array.isArray(workspaces) ? workspaces.find(w => (w?.name || '').trim().toLowerCase() === String(name).trim().toLowerCase()) : null;
-                    
+
                     // Deduplicate URLs by URL string (keep first occurrence)
                     const allUrls = Array.isArray(ws?.urls) ? ws.urls : [];
                     const seenUrls = new Set();
@@ -221,7 +221,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                         return true;
                     });
                     const urls = uniqueUrls.slice(0, 12);
-                    
+
                     return (
                         <div key={`list-${name}`} className="pinnedws-listCard">
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>

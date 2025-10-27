@@ -229,12 +229,43 @@ export default function App() {
     const maxTimeByCategory = new Map();
     const urlsToAppendByName = new Map(); // workspaceName -> Set(url)
 
+    const normalizeForCategory = (rawUrl) => {
+      if (!rawUrl) return null;
+      try {
+        const urlObj = rawUrl.startsWith('http') ? new URL(rawUrl) : new URL(`https://${rawUrl}`);
+        const hostname = urlObj.hostname.replace(/^www\./, '').toLowerCase();
+        if (!hostname) return null;
+        const protocol = urlObj.protocol === 'http:' ? 'https:' : urlObj.protocol;
+        const canonicalUrl = `${protocol}//${hostname}`;
+        return { hostname, canonicalUrl };
+      } catch {
+        return null;
+      }
+    };
+
+    const domainTimes = new Map();
+    if (urlTimes instanceof Map) {
+      urlTimes.forEach((ts, originalUrl) => {
+        const normalized = normalizeForCategory(originalUrl);
+        if (!normalized) return;
+        const timestamp = Number(ts) || 0;
+        if (timestamp <= 0) return;
+        const prev = Number(domainTimes.get(normalized.hostname) || 0);
+        if (timestamp > prev) {
+          domainTimes.set(normalized.hostname, timestamp);
+        }
+      });
+    }
+
     // Group URLs by category
     urls.forEach(url => {
       if (!url) return;
 
       // Filter out URLs that should be excluded (OAuth, login, settings, etc.)
       if (GenericUrlParser.shouldExclude(url)) return;
+
+      const normalized = normalizeForCategory(url);
+      if (!normalized) return;
 
       const category = categoryManager.categorizeUrl(url);
       if (category === 'uncategorized') return;
@@ -244,7 +275,7 @@ export default function App() {
       if (parsed) return;
 
       // Incremental: only include URLs newer than the last processed timestamp for this category
-      const t = Number(urlTimes.get(url) || 0);
+      const t = Number(domainTimes.get(normalized.hostname) || urlTimes.get(url) || 0);
       const lastT = Number(categoryLastCheck?.[category] || 0);
       if (t && lastT && t <= lastT) return;
 
@@ -254,25 +285,27 @@ export default function App() {
         categoryGroups.set(category, {
           category,
           displayName: categoryDisplayName,
-          urls: []
+          urls: [],
+          domains: new Set()
         });
       }
 
       const group = categoryGroups.get(category);
-      if (!group.urls.some(u => u === url)) {
-        group.urls.push(url);
+      if (!group.domains.has(normalized.hostname)) {
+        group.domains.add(normalized.hostname);
+        group.urls.push(normalized.canonicalUrl);
       }
 
       // Track max timestamp seen per category so caller can persist progress
       if (t) {
-        const prev = Number(maxTimeByCategory.get(category) || 0);
-        if (t > prev) maxTimeByCategory.set(category, t);
+        const prevCatTime = Number(maxTimeByCategory.get(category) || 0);
+        if (t > prevCatTime) maxTimeByCategory.set(category, t);
       }
 
       // If workspace already exists, also collect URLs to append later
       if (existingNames.has(categoryDisplayName.toLowerCase())) {
         if (!urlsToAppendByName.has(categoryDisplayName)) urlsToAppendByName.set(categoryDisplayName, new Set());
-        urlsToAppendByName.get(categoryDisplayName).add(url);
+        urlsToAppendByName.get(categoryDisplayName).add(normalized.canonicalUrl);
       }
     });
 
@@ -1624,6 +1657,7 @@ export default function App() {
                       onChange={setWorkspace}
                       onWorkspaceCreated={createWorkspace}
                       onPinWorkspace={togglePinWorkspace}
+                      onAddLink={handleOpenAddLinkModal}
                       pinnedWorkspaces={pinnedWorkspaces}
                     />
                   </div>

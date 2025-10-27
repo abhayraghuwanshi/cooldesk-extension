@@ -3,114 +3,63 @@
  * Defines different view modes and their display settings
  */
 
+const BASE_SETTINGS = {
+  pinnedWorkspaces: false,
+  workspaceFilters: false,
+  currentTabsSection: false,
+  voiceNavigationSection: false,
+  aiChatsSection: false,
+  notesSection: false,
+  dailyNotesSection: false,
+  pingsSection: false,
+  feedSection: false,
+};
+
+const ALL_ON_SETTINGS = Object.fromEntries(
+  Object.keys(BASE_SETTINGS).map((key) => [key, true]),
+);
+
+const createMode = ({ id, label, description, icon, overrides }) => ({
+  id,
+  label,
+  description,
+  icon,
+  settings: { ...BASE_SETTINGS, ...overrides },
+});
+
 export const VIEW_MODES = {
-  default: {
+  default: createMode({
     id: 'default',
     label: 'All Components',
     description: 'Show all UI components',
     icon: '📋',
-    settings: {
-      pinnedWorkspaces: true,
-      workspaceFilters: true,
-      currentTabsSection: true,
-      voiceNavigationSection: true,
-      aiChatsSection: true,
-      notesSection: true,
-      dailyNotesSection: true,
-      pingsSection: true,
-      feedSection: true,
-    }
-  },
+    overrides: ALL_ON_SETTINGS,
+  }),
 
-  focus: {
+  focus: createMode({
     id: 'focus',
     label: 'Focus Mode',
     description: 'Minimal distractions for focused work',
     icon: '🎯',
-    settings: {
-      pinnedWorkspaces: false,
+    overrides: {
       workspaceFilters: true,
-      currentTabsSection: false,
-      voiceNavigationSection: false,
-      aiChatsSection: false,
       notesSection: true,
       dailyNotesSection: true,
-      pingsSection: false,
-      feedSection: false,
-    }
-  },
+    },
+  }),
 
-  workspace: {
-    id: 'workspace',
-    label: 'Workspace Only',
-    description: 'Focus on workspace management',
-    icon: '💼',
-    settings: {
+  simple: createMode({
+    id: 'simple',
+    label: 'Simple View',
+    description: 'Keep only the essentials visible',
+    icon: '✨',
+    overrides: {
       pinnedWorkspaces: true,
       workspaceFilters: true,
-      currentTabsSection: false,
-      voiceNavigationSection: false,
-      aiChatsSection: false,
-      notesSection: false,
-      dailyNotesSection: false,
-      pingsSection: false,
-      feedSection: false,
-    }
-  },
-
-  activity: {
-    id: 'activity',
-    label: 'Activity View',
-    description: 'Focus on activity panel sections',
-    icon: '📊',
-    settings: {
-      pinnedWorkspaces: false,
-      workspaceFilters: false,
       currentTabsSection: true,
-      voiceNavigationSection: false,
-      aiChatsSection: true,
       notesSection: true,
-      dailyNotesSection: true,
-      pingsSection: false,
-      feedSection: false,
-    }
-  },
-
-  notes: {
-    id: 'notes',
-    label: 'Notes & Writing',
-    description: 'Focus on notes and daily journal',
-    icon: '📝',
-    settings: {
-      pinnedWorkspaces: false,
-      workspaceFilters: false,
-      currentTabsSection: false,
-      voiceNavigationSection: false,
-      aiChatsSection: false,
-      notesSection: true,
-      dailyNotesSection: true,
-      pingsSection: true,
-      feedSection: false,
-    }
-  },
-
-  minimal: {
-    id: 'minimal',
-    label: 'Minimal View',
-    description: 'Hand free mode',
-    icon: '⚡',
-    settings: {
-      pinnedWorkspaces: false,
-      workspaceFilters: false,
-      currentTabsSection: false,
-      voiceNavigationSection: true,
-      aiChatsSection: false,
-      notesSection: false,
-      dailyNotesSection: false,
-      pingsSection: false,
-      feedSection: false,
-    }
-  },
+    },
+  }),
 };
 
 // Get array of view modes for dropdown

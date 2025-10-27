@@ -248,8 +248,29 @@ export function setupRealTimeCategorizor() {
       return;
     }
 
+    const chatDomains = [
+      'chat.openai.com',
+      'chatgpt.com',
+      'claude.ai',
+      'gemini.google.com',
+      'perplexity.ai',
+      'research.google.com',
+    ];
+
     try {
       let enhancedTitle = title;
+
+      let hostname = '';
+      try {
+        hostname = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+      } catch {
+        hostname = '';
+      }
+
+      if (hostname && chatDomains.some((domain) => hostname.endsWith(domain))) {
+        console.log(`[realTimeCategorizor] Skipping auto-workspace creation for chat platform: ${hostname}`);
+        return;
+      }
 
       // Debug logging before enrichment
       // console.log('[realTimeCategorizor] Before enrichWithHistory:', {

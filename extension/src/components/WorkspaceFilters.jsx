@@ -1,7 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateWorkspaceModal } from './popups/CreateWorkspaceModal';
 
-export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, onPinWorkspace, onDeleteWorkspace, pinnedWorkspaces = [] }) {
+export function WorkspaceFilters({
+  items,
+  active,
+  onChange,
+  onWorkspaceCreated,
+  onPinWorkspace,
+  onDeleteWorkspace,
+  onAddLink,
+  pinnedWorkspaces = [],
+}) {
   const workspaces = useMemo(() => {
     const set = new Set()
     items.forEach((i) => i.workspaceGroup && set.add(i.workspaceGroup))
@@ -190,6 +199,29 @@ export function WorkspaceFilters({ items, active, onChange, onWorkspaceCreated, 
               </button>
             )
           })()}
+
+          {/* Add Link */}
+          <button
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 12px',
+              textAlign: 'left',
+              background: 'transparent',
+              color: '#34c759',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13
+            }}
+            onClick={() => {
+              setMenu({ open: false, x: 0, y: 0, ws: null })
+              if (typeof onAddLink === 'function' && menu.ws) {
+                onAddLink(menu.ws)
+              }
+            }}
+          >
+            Add link to workspace
+          </button>
 
           {/* Divider */}
           <div style={{ height: 1, background: 'rgba(255,255,255,0.12)', margin: '4px 0' }} />
