@@ -21,6 +21,7 @@ import { ProjectGrid } from './components/ProjectGrid';
 import { Header } from './components/toolbar/Header';
 import { VerticalHeader } from './components/toolbar/VerticalHeader';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
+import WorkspacePillList from './components/WorkspacePillList.jsx';
 import './search.css';
 import './styles/components.css';
 import './styles/themes/components-vars.css';
@@ -1448,6 +1449,31 @@ export default function App() {
         );
 
       case 'ItemGrid':
+        return (
+          <div style={{ marginTop: 16 }}>
+            <WorkspacePillList
+              items={items}
+              onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+              onPin={togglePinWorkspace}
+              onAddToWorkspace={(url, workspaceName) => {
+                if (!url || !workspaceName) return;
+                const primaryItem = Array.isArray(items) ? items.find((it) => it?.url === url) : null;
+                const itemForSave = primaryItem || {
+                  id: url,
+                  url,
+                  title: (() => {
+                    try { return new URL(url).hostname; } catch { return url; }
+                  })(),
+                  favicon: getFaviconUrl(url)
+                };
+                return handleAddItemToWorkspace(itemForSave, workspaceName);
+              }}
+              onAddToBookmarks={(chip) => handleAddRelated(chip.url, chip.title)}
+            />
+          </div>
+        );
+
+      case 'ItemGrid1':
       default:
         return (
           <div className="workspace-grid">

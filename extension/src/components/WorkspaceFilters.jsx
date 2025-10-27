@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateWorkspaceModal } from './popups/CreateWorkspaceModal';
 
 export function WorkspaceFilters({
@@ -147,7 +147,7 @@ export function WorkspaceFilters({
               }
             }}
             onContextMenu={(e) => {
-              try { e.preventDefault(); e.stopPropagation(); } catch {}
+              try { e.preventDefault(); e.stopPropagation(); } catch { }
               setMenu({ open: true, x: e.clientX, y: e.clientY, ws })
             }}
           >

@@ -108,16 +108,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                 data-double-click-hint="Double-click to hide pinned workspaces"
             >
                 Pinned Workspace
-                {list.length > 1 && (
-                    <span style={{
-                        marginLeft: 8,
-                        fontSize: 'var(--font-size-xs)',
-                        color: 'rgba(255,255,255,0.6)',
-                        fontWeight: 400
-                    }}>
-                        (showing {visibleWorkspaces.length} of {list.length})
-                    </span>
-                )}
+
             </h2>
             {/* Pills row */}
             <div
