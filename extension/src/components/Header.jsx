@@ -1,20 +1,19 @@
 import {
   faArrowUpRightFromSquare,
-  faCalendarDays,
   faGear,
-  faQuestionCircle,
   faTableCellsLarge,
-  faTableColumns,
+  faTableColumns
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { getUIState, saveUIState } from '../../db/index.js';
-import { getFaviconUrl } from '../../utils';
-import { AddLinkFlow } from '../popups/AddLinkFlow.jsx';
-import MusicControls from './MusicControls';
-import { SearchBox } from './SearchBox.jsx';
-import { ViewModeSelector } from './ViewModeSelector.jsx';
+import calendarIcon from '../../calendericon.svg';
+import { getUIState, saveUIState } from '../db/index.js';
+import { getFaviconUrl } from '../utils.js';
+import { AddLinkFlow } from './popups/AddLinkFlow.jsx';
+import MusicControls from './toolbar/MusicControls.jsx';
+import { SearchBox } from './toolbar/SearchBox.jsx';
+import { ViewModeSelector } from './toolbar/ViewModeSelector.jsx';
 
 
 export function Header({
@@ -38,7 +37,6 @@ export function Header({
   const [quickUrlsLoaded, setQuickUrlsLoaded] = useState(false);
   const [showAddUrl, setShowAddUrl] = useState(false);
   const [allItems, setAllItems] = useState([]);
-  const [calendarFallback, setCalendarFallback] = useState(false);
   const [failedFavs, setFailedFavs] = useState(() => new Set());
   // Load Auto Sync from UI state
   useEffect(() => {
@@ -295,6 +293,7 @@ export function Header({
     transition: 'all 0.15s ease'
   };
   const iconImgStyle = { width: 20, height: 20, borderRadius: 4, objectFit: 'contain', display: 'block' };
+  const iconImgStyle2 = { width: 30, height: 30, borderRadius: 4, objectFit: 'contain', display: 'block' };
 
   // Separator component for visual grouping
   const Separator = () => (
@@ -389,26 +388,11 @@ export function Header({
           title="Open Google Calendar"
           style={iconBtnStyle}
         >
-          {calendarFallback ? (
-            <FontAwesomeIcon icon={faCalendarDays} style={{ width: 20, height: 20 }} />
-          ) : (() => {
-            const url = 'https://calendar.google.com/';
-            const u = (() => { try { return new URL(url); } catch { return null; } })();
-            const candidates = [
-              'https://calendar.google.com/googlecalendar/images/favicons_2020q4/calendar_32_2x.png',
-              'https://calendar.google.com/googlecalendar/images/favicons_2020q4/calendar_16_2x.png',
-              u ? `${u.origin}/favicon.ico` : null,
-              getFaviconUrl(url, 32)
-            ].filter(Boolean);
-            return (
-              <img
-                src={candidates[0]}
-                alt="Google Calendar"
-                style={iconImgStyle}
-                onError={() => setCalendarFallback(true)}
-              />
-            );
-          })()}
+          <img
+            style={iconImgStyle2}
+            src={calendarIcon}
+            alt="Google Calendar"
+          />
         </button>
 
         <Separator />

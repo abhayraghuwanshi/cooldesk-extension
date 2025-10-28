@@ -61,57 +61,65 @@
 /* Input Area */
 .simple-notes-input {
     margin-bottom: 16px;
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-    padding: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    transition: all 0.2s ease;
-}
-
-.simple-notes-input:focus-within {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(52, 199, 89, 0.3);
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: var(--glass-bg, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--glass-border, var(--border-primary, rgba(255, 255, 255, 0.12)));
+    box-shadow: 0 12px 36px var(--shadow-color, rgba(0, 0, 0, 0.28));
+    backdrop-filter: var(--glass-backdrop, blur(12px));
 }
 
 .simple-notes-input-row {
     display: flex;
-    align-items: flex-end;
-    gap: 8px;
+    align-items: center;
+    gap: 12px;
 }
 
 .simple-notes-textarea {
     flex: 1;
-    min-height: 40px;
-    max-height: 120px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: #ffffff;
+    min-height: 48px;
+    max-height: 140px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.12));
+    background: var(--background-tertiary, rgba(255, 255, 255, 0.04));
+    color: var(--text, #ffffff);
     font-size: var(--font-size-base);
     line-height: 1.5;
     resize: none;
     font-family: inherit;
     outline: none;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.simple-notes-textarea:focus {
+    border-color: var(--accent-primary, rgba(52, 199, 89, 0.45));
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 12%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary, #34C759) 20%, transparent);
 }
 
 .simple-notes-textarea::placeholder {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-secondary, rgba(255, 255, 255, 0.4));
 }
 
 .simple-notes-input-actions {
-    display: flex;
-    gap: 6px;
+    display: inline-flex;
+    gap: 8px;
     align-items: center;
+    padding: 6px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--background-secondary, #000) 82%, transparent);
+    border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.08));
 }
 
 .simple-notes-type-toggle {
-    height: 28px;
-    width: 28px;
+    height: 32px;
+    width: 32px;
     padding: 0;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.05);
-    color: rgba(255, 255, 255, 0.6);
+    border-radius: 8px;
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.18));
+    background: color-mix(in srgb, var(--background-tertiary, #111827) 70%, transparent);
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
     cursor: pointer;
     font-size: var(--font-size-sm);
     transition: all 0.2s ease;
@@ -121,24 +129,24 @@
 }
 
 .simple-notes-type-toggle:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 12%, transparent);
+    color: var(--text, rgba(255, 255, 255, 0.95));
 }
 
 .simple-notes-type-toggle.is-todo {
-    background: rgba(52, 199, 89, 0.15);
-    color: #34C759;
-    border-color: rgba(52, 199, 89, 0.3);
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 22%, transparent);
+    color: var(--accent-primary, #34C759);
+    border-color: color-mix(in srgb, var(--accent-primary, #34C759) 45%, transparent);
 }
 
 .simple-notes-btn {
-    height: 24px;
-    min-width: 24px;
+    height: 32px;
+    min-width: 32px;
     padding: 0;
-    border-radius: 4px;
+    border-radius: 8px;
     border: none;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.5);
+    background: color-mix(in srgb, var(--background-tertiary, #111827) 65%, transparent);
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
     cursor: pointer;
     font-size: 12px;
     transition: all 0.2s ease;
@@ -149,23 +157,24 @@
 }
 
 .simple-notes-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.9);
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 18%, transparent);
+    color: var(--accent-primary, #34C759);
 }
 
 .simple-notes-btn.is-recording {
-    background: rgba(255, 59, 48, 0.15);
-    color: #FF3B30;
+    --danger-color: var(--accent-danger, #ff4d4f);
+    background: color-mix(in srgb, var(--danger-color) 22%, transparent);
+    color: var(--danger-color);
     animation: pulse 1.5s ease-in-out infinite;
 }
 
 .simple-notes-btn.simple-notes-save {
-    background: rgba(52, 199, 89, 0.15);
-    color: #34C759;
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 20%, transparent);
+    color: var(--accent-primary, #34C759);
 }
 
 .simple-notes-btn.simple-notes-save:hover:not(:disabled) {
-    background: rgba(52, 199, 89, 0.25);
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 32%, transparent);
 }
 
 .simple-notes-btn:disabled {

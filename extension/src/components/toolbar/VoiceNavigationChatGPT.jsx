@@ -3,10 +3,11 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import { useEffect, useRef, useState } from 'react';
 import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
+import '../../styles/voicenavigationstyles.css';
 import { vDebug, vError, vInfo, vWarn } from '../../utils/logger.js';
 import { fuzzySearch } from '../../utils/searchUtils.js';
 import VoiceNavigationHelp from './VoiceNavigationHelp.jsx';
-import './voicenavigationstyles.css';
+
 
 const VoiceNavigationChatGPT = () => {
   const [isListening, setIsListening] = useState(false);

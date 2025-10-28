@@ -299,6 +299,8 @@ const SearchModalComponent = function SearchModal({
         }
     };
 
+    const chromeSearchAvailable = () => typeof chrome !== 'undefined' && !!chrome?.search?.query;
+
     const openWithEngine = async (engineId, query, options = {}) => {
         const engine = engines.find((item) => item.id === engineId);
         if (!engine) return;
@@ -311,6 +313,27 @@ const SearchModalComponent = function SearchModal({
                 await navigator.clipboard.writeText(trimmed);
             } catch {
                 // Clipboard access can fail silently; ignore.
+            }
+        }
+
+        const disposition = options.disposition || 'CURRENT_TAB';
+
+        if (
+            engine.supportsQuery &&
+            engine.id === 'google' &&
+            trimmed &&
+            chromeSearchAvailable() &&
+            options.useChromeSearch !== false
+        ) {
+            try {
+                await chrome.search.query({ text: trimmed, disposition });
+                if (options.closeModal !== false) {
+                    onClose();
+                }
+                return;
+            } catch (error) {
+                console.error('[SearchModal] Failed to run chrome.search.query:', error);
+                // Fall back to manual URL navigation below.
             }
         }
 
@@ -573,7 +596,7 @@ const modal = (
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
+            background: 'color-mix(in srgb, var(--background-primary, #0a0a0f) 85%, transparent)',
             backdropFilter: 'blur(12px)',
             zIndex: 2147483647,
             display: 'flex',
@@ -589,11 +612,11 @@ const modal = (
             width: '90vw',
             maxWidth: '1200px',
             height: '70vh',
-            background: 'linear-gradient(180deg, var(--surface-1) 0%, var(--surface-2) 100%)',
+            background: 'linear-gradient(180deg, color-mix(in srgb, var(--background-primary, #121218) 94%, transparent) 0%, color-mix(in srgb, var(--background-secondary, #1f2937) 96%, transparent) 100%)',
             borderRadius: '16px',
             overflow: 'hidden',
             border: '1px solid var(--border-primary)',
-            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+            boxShadow: 'var(--shadow-xl, 0 20px 40px rgba(0, 0, 0, 0.4))',
             display: 'flex',
             flexDirection: 'column'
         }}>
@@ -604,7 +627,7 @@ const modal = (
                 display: 'flex',
                 alignItems: 'center',
                 gap: '16px',
-                background: 'var(--surface-0)'
+                background: 'var(--background-primary, #121218)'
             }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--text-secondary)">
                     <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
@@ -658,7 +681,7 @@ const modal = (
                     flex: (notesMatches.length > 0 || dailyNotesMatches.length > 0) ? '1' : '1',
                     overflowY: 'auto',
                     borderRight: (notesMatches.length > 0 || dailyNotesMatches.length > 0) ? '1px solid var(--border-primary)' : 'none',
-                    background: 'var(--surface-1)'
+                    background: 'color-mix(in srgb, var(--background-secondary, #1a1a24) 96%, transparent)'
                 }}>
                     {recent.length === 0 && !search && (
                         <div style={{
@@ -694,7 +717,7 @@ const modal = (
                                 width: '32px',
                                 height: '32px',
                                 borderRadius: '8px',
-                                background: 'rgba(66, 133, 244, 0.2)',
+                                background: 'color-mix(in srgb, var(--accent-blue, #60a5fa) 28%, transparent)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center'
@@ -705,7 +728,7 @@ const modal = (
                             </div>
                             <div>
                                 <div style={{ fontSize: '16px', fontWeight: '500' }}>Search Google</div>
-                                <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.5)' }}>"{search}"</div>
+                                <div style={{ fontSize: '14px', color: 'color-mix(in srgb, var(--text, #e5e7eb) 52%, transparent)' }}>&quot;{search}&quot;</div>
                             </div>
                         </div>
                     )}
@@ -748,7 +771,7 @@ const modal = (
                                                 justifyContent: 'center',
                                                 padding: '8px',
                                                 cursor: 'pointer',
-                                                background: isActive ? 'var(--interactive-hover)' : 'var(--surface-2)',
+                                                background: isActive ? 'var(--interactive-hover)' : 'color-mix(in srgb, var(--background-tertiary, #242430) 92%, transparent)',
                                                 borderRadius: '8px',
                                                 border: `1px solid ${isActive ? 'var(--border-primary)' : 'var(--border-secondary)'}`,
                                                 transition: 'all 0.2s ease',
@@ -958,9 +981,9 @@ const modal = (
                                                     borderRadius: '4px',
                                                     fontWeight: '600',
                                                     textTransform: 'uppercase',
-                                                    background: m.type === 'tab' ? 'rgba(96, 165, 250, 0.2)' :
-                                                        m.type === 'bookmark' ? 'rgba(251, 191, 36, 0.2)' :
-                                                            'var(--surface-3)',
+                                                    background: m.type === 'tab' ? 'color-mix(in srgb, var(--accent-blue, #60a5fa) 24%, transparent)' :
+                                                        m.type === 'bookmark' ? 'color-mix(in srgb, var(--accent-warning, #fbbf24) 24%, transparent)' :
+                                                            'color-mix(in srgb, var(--background-tertiary, #2e2e3c) 92%, transparent)',
                                                     color: m.type === 'tab' ? 'var(--accent-blue)' :
                                                         m.type === 'bookmark' ? 'var(--accent-warning)' :
                                                             'var(--text-muted)'
@@ -1076,7 +1099,7 @@ const modal = (
                                                     borderRadius: '4px',
                                                     fontWeight: '600',
                                                     textTransform: 'uppercase',
-                                                    background: 'rgba(52, 199, 89, 0.2)',
+                                                    background: 'color-mix(in srgb, var(--accent-primary, #34C759) 24%, transparent)',
                                                     color: 'var(--accent-primary)'
                                                 }}>
                                                     {workspace.gridType === 'ProjectGrid' ? 'PROJECT' : 'WORKSPACE'}

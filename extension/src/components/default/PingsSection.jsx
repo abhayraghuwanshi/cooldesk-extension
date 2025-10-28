@@ -1,7 +1,7 @@
+import { faPlus } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus } from '@fortawesome/free-solid-svg-icons';
 import { deletePing as dbDeletePing, listPings as dbListPings, upsertPing as dbUpsertPing, subscribePinsChanges } from '../../db/index.js';
 import { enqueueOpenInChrome } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils';
@@ -17,7 +17,7 @@ export function PingsSection({ tabs }) {
   const pingsRef = React.useRef([]);
   const [allItems, setAllItems] = React.useState([]);
 
-  const updateMenuPosition = React.useCallback(() => {}, []);
+  const updateMenuPosition = React.useCallback(() => { }, []);
 
   const loadPings = React.useCallback(async () => {
     try {
@@ -211,7 +211,7 @@ export function PingsSection({ tabs }) {
                       visitCount: r.visitCount || 0
                     }));
                   items.push(...hist);
-                } catch {}
+                } catch { }
                 resolve();
               });
             } catch { resolve(); }
@@ -240,7 +240,7 @@ export function PingsSection({ tabs }) {
                       });
                     }
                   }
-                } catch {}
+                } catch { }
                 resolve();
               });
             } catch { resolve(); }
@@ -257,7 +257,7 @@ export function PingsSection({ tabs }) {
   }, [showAddMenu, tabs]);
 
   return (
-    <div className="coolDesk-section">
+    <div className="coolDesk-section" data-onboarding="current-pins-section">
       <h2 className="coolDesk-section-title">Pins</h2>
       <div className="coolDesk-pings-container" style={{
         display: 'flex',

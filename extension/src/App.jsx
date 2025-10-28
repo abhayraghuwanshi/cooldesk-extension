@@ -13,12 +13,12 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import { Header } from './components/Header';
 import { ItemGrid } from './components/ItemGrid';
 import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
 import { SettingsModal } from './components/popups/SettingsModal';
 import { ProjectGrid } from './components/ProjectGrid';
-import { Header } from './components/toolbar/Header';
 import { VerticalHeader } from './components/toolbar/VerticalHeader';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 import WorkspacePillList from './components/WorkspacePillList.jsx';

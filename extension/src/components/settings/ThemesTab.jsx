@@ -1,5 +1,3 @@
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React from 'react';
 
 const ThemesTab = ({
   selectedTheme,
@@ -80,13 +78,6 @@ const ThemesTab = ({
       description: 'Futuristic cyberpunk with neon pink and cyan',
       preview: 'radial-gradient(60% 50% at 30% 20%, #ec489920, #0000 65%), radial-gradient(40% 60% at 70% 80%, #06b6d420, #0000 70%), linear-gradient(135deg, #0a0a0f 0%, #2a1a2a 100%)',
       fontFamily: 'jetbrains'
-    },
-    {
-      id: 'white-cred',
-      name: 'White Credential',
-      description: 'Clean white theme with subtle accents',
-      preview: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-      fontFamily: 'system'
     },
     {
       id: 'orange-warm',
@@ -194,96 +185,96 @@ const ThemesTab = ({
                 position: 'relative',
                 overflow: 'hidden'
               }}
-            onMouseEnter={(e) => {
-              if (selectedTheme !== theme.id) {
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (selectedTheme !== theme.id) {
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'none';
-              }
-            }}
-          >
-            <div style={{
-              width: '100%',
-              height: '50px',
-              background: theme.preview,
-              borderRadius: '8px',
-              marginBottom: '8px',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              position: 'relative',
-              overflow: 'hidden'
-            }}>
+              onMouseEnter={(e) => {
+                if (selectedTheme !== theme.id) {
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (selectedTheme !== theme.id) {
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }
+              }}
+            >
+              <div style={{
+                width: '100%',
+                height: '50px',
+                background: theme.preview,
+                borderRadius: '8px',
+                marginBottom: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                {selectedTheme === theme.id && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '4px',
+                    right: '4px',
+                    width: '18px',
+                    height: '18px',
+                    background: '#34C759',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontSize: '10px',
+                    fontWeight: '600'
+                  }}>
+                    ✓
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h5 style={{
+                  margin: '0 0 2px 0',
+                  color: '#e5e7eb',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  lineHeight: '1.2'
+                }}>
+                  {theme.name}
+                </h5>
+                <p style={{
+                  margin: '0',
+                  color: '#9ca3af',
+                  fontSize: '11px',
+                  lineHeight: '1.3'
+                }}>
+                  {theme.description}
+                </p>
+                {themeFontFamily && (
+                  <p style={{
+                    margin: '2px 0 0 0',
+                    color: '#6b7280',
+                    fontSize: '9px',
+                    fontFamily: themeFontFamily.family,
+                    fontStyle: 'italic'
+                  }}>
+                    {themeFontFamily.name}
+                  </p>
+                )}
+              </div>
+
               {selectedTheme === theme.id && (
                 <div style={{
                   position: 'absolute',
-                  top: '4px',
-                  right: '4px',
-                  width: '18px',
-                  height: '18px',
-                  background: '#34C759',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                  fontSize: '10px',
-                  fontWeight: '600'
-                }}>
-                  ✓
-                </div>
+                  top: '0',
+                  left: '0',
+                  right: '0',
+                  bottom: '0',
+                  background: 'rgba(52, 199, 89, 0.1)',
+                  borderRadius: '10px',
+                  pointerEvents: 'none'
+                }} />
               )}
             </div>
-
-            <div>
-              <h5 style={{
-                margin: '0 0 2px 0',
-                color: '#e5e7eb',
-                fontSize: '13px',
-                fontWeight: '600',
-                lineHeight: '1.2'
-              }}>
-                {theme.name}
-              </h5>
-              <p style={{
-                margin: '0',
-                color: '#9ca3af',
-                fontSize: '11px',
-                lineHeight: '1.3'
-              }}>
-                {theme.description}
-              </p>
-              {themeFontFamily && (
-                <p style={{
-                  margin: '2px 0 0 0',
-                  color: '#6b7280',
-                  fontSize: '9px',
-                  fontFamily: themeFontFamily.family,
-                  fontStyle: 'italic'
-                }}>
-                  {themeFontFamily.name}
-                </p>
-              )}
-            </div>
-
-            {selectedTheme === theme.id && (
-              <div style={{
-                position: 'absolute',
-                top: '0',
-                left: '0',
-                right: '0',
-                bottom: '0',
-                background: 'rgba(52, 199, 89, 0.1)',
-                borderRadius: '10px',
-                pointerEvents: 'none'
-              }} />
-            )}
-          </div>
           );
         })}
       </div>

@@ -14,6 +14,12 @@
   margin-bottom: 12px;
 }
 
+.ai-chats-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .chat-count {
   font-size: 14px;
   font-weight: normal;
@@ -46,12 +52,11 @@
 .ai-chats-controls {
   display: flex;
   flex-direction: row;
-  gap: 8px;
   align-items: center;
   margin-bottom: 12px;
 }
 
-.search-box {
+.ai-search-box {
   position: relative;
   display: flex;
   align-items: center;
@@ -59,7 +64,7 @@
   min-width: 0;
 }
 
-.search-icon {
+.ai-search-icon {
   position: absolute;
   left: 12px;
   color: var(--text-secondary, #999);
@@ -68,20 +73,16 @@
 
 .search-input {
   width: 100%;
-  padding: 10px 12px 10px 36px;
-  border: 1px solid var(--border-color, var(--border-primary));
-  border-radius: 8px;
   font-size: 14px;
   outline: none;
   transition: all 0.2s;
-  background: var(--background-secondary, var(--surface-1));
   color: var(--text);
 }
 
-.search-input:focus {
+/* .search-input:focus {
   border-color: var(--border-hover, var(--border-accent));
   background: var(--background-tertiary, var(--surface-2));
-}
+} */
 
 .platform-filter,
 .sort-filter {
@@ -115,7 +116,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 320px; /* Show ~5 chats before scrolling */
+  max-height: 320px;
+  /* Show ~5 chats before scrolling */
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -284,26 +286,4 @@
 
 .chat-date {
   color: var(--text-tertiary, #999);
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .search-input,
-  .platform-filter,
-  .sort-filter,
-  .chat-item {
-    background: var(--bg-primary-dark, #1e1e1e);
-    color: var(--text-primary-dark, #e0e0e0);
-    border-color: var(--border-color-dark, #404040);
-  }
-
-  .refresh-button:hover:not(:disabled),
-  .chat-item:hover {
-    background: var(--bg-hover-dark, #2a2a2a);
-  }
-
-  .ai-chats-stats,
-  .platform-header {
-    background: var(--bg-secondary-dark, #252525);
-  }
 }

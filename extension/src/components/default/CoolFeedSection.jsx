@@ -321,9 +321,10 @@ export function CoolFeedSection({ tabs, pings }) {
   );
 
   return (
-    <div style={{
-      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
-    }}>
+    <div data-onboarding="activity-section"
+      style={{
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+      }}>
       {/* Apple-style Header */}
       <div style={{
         display: 'flex',

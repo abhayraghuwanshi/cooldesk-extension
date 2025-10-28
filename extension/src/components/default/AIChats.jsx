@@ -1,4 +1,4 @@
-import { faComments, faRobot, faSearch, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faRobot, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
@@ -28,7 +28,6 @@ const PLATFORM_CONFIG = {
 export function AIChatsSection() {
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlatform, setSelectedPlatform] = useState('all');
   const [sortBy, setSortBy] = useState('recent'); // 'recent' or 'platform'
 
@@ -70,13 +69,6 @@ export function AIChatsSection() {
       // Platform filter
       if (selectedPlatform !== 'all' && chat.platform !== selectedPlatform) {
         return false;
-      }
-
-      // Search filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        return chat.title?.toLowerCase().includes(query) ||
-          chat.platform?.toLowerCase().includes(query);
       }
 
       return true;
@@ -125,38 +117,25 @@ export function AIChatsSection() {
       {/* Header with title and refresh */}
       <div className="ai-chats-header">
         <h2 className="coolDesk-section-title">
-          <FontAwesomeIcon icon={faComments} /> AI Chats
+          AI Chats
           <span className="chat-count">({filteredChats.length})</span>
         </h2>
-        <button className="refresh-button" onClick={loadChats} disabled={loading} title="Refresh">
-          <FontAwesomeIcon icon={faSync} spin={loading} />
-        </button>
-      </div>
-
-      {/* Search and filters in one row */}
-      <div className="ai-chats-controls">
-        <div className="search-box">
-          <FontAwesomeIcon icon={faSearch} className="search-icon" />
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="search-input"
-          />
+        <div className="ai-chats-header-actions">
+          <button className="refresh-button" onClick={loadChats} disabled={loading} title="Refresh">
+            <FontAwesomeIcon icon={faSync} spin={loading} />
+          </button>
+          <select
+            value={selectedPlatform}
+            onChange={(e) => setSelectedPlatform(e.target.value)}
+            className="platform-filter"
+          >
+            <option value="all">All</option>
+            {platforms.map(platform => (
+              <option key={platform} value={platform}>{platform}</option>
+            ))}
+          </select>
         </div>
-        <select value={selectedPlatform} onChange={(e) => setSelectedPlatform(e.target.value)} className="platform-filter">
-          <option value="all">All</option>
-          {platforms.map(platform => (
-            <option key={platform} value={platform}>{platform}</option>
-          ))}
-        </select>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-filter">
-          <option value="recent">Recent</option>
-          <option value="platform">Platform</option>
-        </select>
       </div>
-
 
 
       {/* Chats list */}

@@ -2,7 +2,7 @@ import { faChevronDown, faEye } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { applyViewMode, getCurrentViewMode, getViewModesList } from '../../config/viewModes';
-import './ViewModeSelector.css';
+import '../../styles/ViewModeSelector.css';
 
 export function ViewModeSelector() {
   const [currentMode, setCurrentMode] = useState(() => getCurrentViewMode());
