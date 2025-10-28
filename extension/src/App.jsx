@@ -1556,7 +1556,7 @@ export default function App() {
             display: 'grid',
             gridTemplateColumns: windowWidth < 768 ? '1fr' : '1fr 1fr',
             gap: windowWidth < 768 ? 24 : 16,
-            marginBottom: 16
+            marginBottom: 24
           }}>
             {displaySettings.pingsSection !== false && (
               <div style={{ minWidth: 0 }}>
@@ -1636,7 +1636,7 @@ export default function App() {
                 className="coolDesk-section"
                 onDoubleClick={() => setWorkspaceHidden(false)}
                 style={{
-                  marginTop: 16,
+                  marginTop: '24px',
                   padding: '10px 12px',
                   borderRadius: 8,
                   border: '1px dashed var(--border-primary)',
@@ -1667,14 +1667,14 @@ export default function App() {
               <>
                 <h2
                   className="coolDesk-section-title"
-                  style={{ cursor: 'help' }}
+                  style={{ cursor: 'help', marginTop: '24px' }}
                   onDoubleClick={() => setWorkspaceHidden(true)}
                   title="Double-click to hide workspace filters"
                 >
                   Workspace
                 </h2>
                 {/* Filters */}
-                <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0', marginTop: '16px' }}>
+                <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '24px 0 8px' }}>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} data-onboarding="workspace-filters">
                     <WorkspaceFilters

@@ -25,11 +25,15 @@ const PLATFORM_CONFIG = {
   }
 };
 
+const DEFAULT_VISIBLE_COUNT = 4;
+const LOAD_STEP = 4;
+
 export function AIChatsSection() {
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlatform, setSelectedPlatform] = useState('all');
   const [sortBy, setSortBy] = useState('recent'); // 'recent' or 'platform'
+  const [visibleCount, setVisibleCount] = useState(DEFAULT_VISIBLE_COUNT);
 
   // Load chats from IndexedDB using unified API
   const loadChats = useCallback(async () => {
@@ -63,6 +67,10 @@ export function AIChatsSection() {
     loadChats();
   }, [loadChats]);
 
+  useEffect(() => {
+    setVisibleCount(DEFAULT_VISIBLE_COUNT);
+  }, [selectedPlatform, sortBy, chats]);
+
   // Filter and sort chats
   const filteredChats = (Array.isArray(chats) ? chats : [])
     .filter(chat => {
@@ -80,11 +88,14 @@ export function AIChatsSection() {
       return (b.scrapedAt || 0) - (a.scrapedAt || 0);
     });
 
+  const totalCount = filteredChats.length;
+  const visibleChats = filteredChats.slice(0, Math.min(visibleCount, totalCount || DEFAULT_VISIBLE_COUNT));
+
   // Get unique platforms
   const platforms = [...new Set((Array.isArray(chats) ? chats : []).map(c => c.platform))].sort();
 
   // Group chats by platform for display
-  const groupedChats = filteredChats.reduce((acc, chat) => {
+  const groupedVisibleChats = visibleChats.reduce((acc, chat) => {
     const platform = chat.platform || 'Unknown';
     if (!acc[platform]) acc[platform] = [];
     acc[platform].push(chat);
@@ -118,7 +129,9 @@ export function AIChatsSection() {
       <div className="ai-chats-header">
         <h2 className="coolDesk-section-title">
           AI Chats
-          <span className="chat-count">({filteredChats.length})</span>
+          <span className="chat-count">
+            {totalCount === 0 ? '(0)' : `(${visibleChats.length}/${totalCount})`}
+          </span>
         </h2>
         <div className="ai-chats-header-actions">
           <button className="refresh-button" onClick={loadChats} disabled={loading} title="Refresh">
@@ -144,7 +157,7 @@ export function AIChatsSection() {
           <div className="loading-state">
             <FontAwesomeIcon icon={faSync} spin /> Loading chats...
           </div>
-        ) : filteredChats.length === 0 ? (
+        ) : totalCount === 0 ? (
           <div className="empty-state">
             <FontAwesomeIcon icon={faRobot} size="3x" />
             <p>No AI chats found</p>
@@ -152,7 +165,7 @@ export function AIChatsSection() {
           </div>
         ) : sortBy === 'platform' ? (
           // Group by platform
-          Object.entries(groupedChats).map(([platform, platformChats]) => (
+          Object.entries(groupedVisibleChats).map(([platform, platformChats]) => (
             <div key={platform} className="platform-group">
               <div className="platform-header">
                 {PLATFORM_CONFIG[platform]?.url ? (
@@ -187,7 +200,7 @@ export function AIChatsSection() {
           ))
         ) : (
           // Flat list
-          filteredChats.map(chat => (
+          visibleChats.map(chat => (
             <div
               key={chat.chatId}
               className="chat-item"
@@ -219,6 +232,23 @@ export function AIChatsSection() {
           ))
         )}
       </div>
+
+      {totalCount > DEFAULT_VISIBLE_COUNT && (
+        <div className="ai-chats-load-controls">
+          {visibleChats.length < totalCount ? (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((prev) => Math.min(prev + LOAD_STEP, totalCount))}
+            >
+              Load more
+            </button>
+          ) : (
+            <button type="button" onClick={() => setVisibleCount(DEFAULT_VISIBLE_COUNT)}>
+              Show less
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

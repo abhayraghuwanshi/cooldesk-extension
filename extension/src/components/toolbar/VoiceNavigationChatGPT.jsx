@@ -1,4 +1,4 @@
-import { faMicrophone } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faChevronUp, faMicrophone } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import { useEffect, useRef, useState } from 'react';
@@ -1535,218 +1535,251 @@ const VoiceNavigationChatGPT = () => {
     ? chrome.runtime.getURL('assets/Voice_Listening_Animation_Generation.mp4')
     : 'assets/Voice_Listening_Animation_Generation.mp4';
 
+  const [showHelpContent, setShowHelpContent] = useState(true);
+
   return (
-    <div className="voice-navigation-chatgpt">
-      {/* Background animation video (shown only while listening) */}
-      <div className="voice-content">
-        {/* Section Title */}
+    <div>
+      <div className="voice-navigation-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+        <h2
+          className="coolDesk-section-title"
+          style={{ cursor: 'help', margin: 0 }}
+        >
+          Voice Navigation
+        </h2>
+        <button
+          type="button"
+          className="voice-navigation-toggle"
+          onClick={() => setShowHelpContent((prev) => !prev)}
+          style={{
+            border: '1px solid var(--border-primary)',
+            borderRadius: '999px',
+            width: '34px',
+            height: '34px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--interactive-hover)',
+            color: 'var(--text)',
+            cursor: 'pointer'
+          }}
+          title={showHelpContent ? 'Hide help' : 'Show help'}
+        >
+          <FontAwesomeIcon icon={showHelpContent ? faChevronUp : faChevronDown} />
+        </button>
+      </div>
+      <div className="voice-navigation-chatgpt">
 
-        <div className="voice-button-container">
-          <button
-            className={`voice-sphere ${isListening ? 'listening' : ''}`}
-            onClick={isListening ? stopListening : startListening}
-            disabled={error === 'Microphone permission denied'}
-          >
-            {!isListening ? (
-              /* Simple Microphone Button */
-              <div className="mic-button-container">
-                <FontAwesomeIcon icon={faMicrophone} className="mic-button-icon" />
-              </div>
-            ) : (
-              /* Celestial Orb Animation */
-              <div className="sphere-container">
-                <div className="celestial-orb-container">
-                  {/* Enhanced celestrial rings with Dynamic Rotations */}
-                  <div className="celestial-ring ring-1"
-                    style={{
-                      width: '120px',
-                      height: '120px',
-                      transform: 'translate(-50%, -50%) rotateX(70deg)',
-                      opacity: 0.8 + voiceLevel * 0.4,
-                      boxShadow: `0 0 ${10 + voiceLevel * 20}px rgba(124, 58, 237, ${0.3 + voiceLevel * 0.3})`
-                    }}>
-                    <div className="ring-particles">
-                      {Array.from({ length: 8 }, (_, i) => (
-                        <div key={i} className="ring-particle"
-                          style={{ '--delay': `${i * 0.25}s`, '--angle': `${i * 45}deg` }} />
-                      ))}
+        {/* Background animation video (shown only while listening) */}
+        <div className="voice-content">
+          {/* Section Title */}
+
+          <div className="voice-button-container">
+            <button
+              className={`voice-sphere ${isListening ? 'listening' : ''}`}
+              onClick={isListening ? stopListening : startListening}
+              disabled={error === 'Microphone permission denied'}
+            >
+              {!isListening ? (
+                /* Simple Microphone Button */
+                <div className="mic-button-container">
+                  <FontAwesomeIcon icon={faMicrophone} className="mic-button-icon" />
+                </div>
+              ) : (
+                /* Celestial Orb Animation */
+                <div className="sphere-container">
+                  <div className="celestial-orb-container">
+                    {/* Enhanced celestrial rings with Dynamic Rotations */}
+                    <div className="celestial-ring ring-1"
+                      style={{
+                        width: '120px',
+                        height: '120px',
+                        transform: 'translate(-50%, -50%) rotateX(70deg)',
+                        opacity: 0.8 + voiceLevel * 0.4,
+                        boxShadow: `0 0 ${10 + voiceLevel * 20}px rgba(124, 58, 237, ${0.3 + voiceLevel * 0.3})`
+                      }}>
+                      <div className="ring-particles">
+                        {Array.from({ length: 8 }, (_, i) => (
+                          <div key={i} className="ring-particle"
+                            style={{ '--delay': `${i * 0.25}s`, '--angle': `${i * 45}deg` }} />
+                        ))}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="celestial-ring ring-2"
-                    style={{
-                      width: '100px',
-                      height: '100px',
-                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(60deg)',
-                      opacity: 0.6 + voiceLevel * 0.4,
-                      filter: `blur(${Math.max(0, 1 - voiceLevel * 2)}px)`
-                    }}>
-                    <div className="ring-glow"></div>
-                  </div>
-
-                  <div className="celestial-ring ring-3"
-                    style={{
-                      width: '140px',
-                      height: '140px',
-                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(120deg)',
-                      opacity: 0.7 + voiceLevel * 0.3
-                    }}>
-                    <div className="particle-orbit advanced-orbit">
-                      <div className="orbit-trail"></div>
+                    <div className="celestial-ring ring-2"
+                      style={{
+                        width: '100px',
+                        height: '100px',
+                        transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(60deg)',
+                        opacity: 0.6 + voiceLevel * 0.4,
+                        filter: `blur(${Math.max(0, 1 - voiceLevel * 2)}px)`
+                      }}>
+                      <div className="ring-glow"></div>
                     </div>
-                  </div>
 
-                  {/* Additional Dynamic Rings */}
-                  <div className="celestial-ring ring-4"
-                    style={{
-                      width: '80px',
-                      height: '80px',
-                      transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(-45deg)',
-                      opacity: 0.5 + voiceLevel * 0.5
-                    }}>
-                  </div>
-                  {/* Enhanced Central Orb */}
-                  <div className="sphere-core" style={{
-                    transform: `translate(-50%, -50%) scale(${1 + voiceLevel * 0.4})`,
-                    filter: `brightness(${1 + voiceLevel * 0.5}) saturate(${1 + voiceLevel * 0.3})`,
-                    animationDuration: `${Math.max(1.5, 4 - voiceLevel * 2.5)}s`,
-                    boxShadow: `
+                    <div className="celestial-ring ring-3"
+                      style={{
+                        width: '140px',
+                        height: '140px',
+                        transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(120deg)',
+                        opacity: 0.7 + voiceLevel * 0.3
+                      }}>
+                      <div className="particle-orbit advanced-orbit">
+                        <div className="orbit-trail"></div>
+                      </div>
+                    </div>
+
+                    {/* Additional Dynamic Rings */}
+                    <div className="celestial-ring ring-4"
+                      style={{
+                        width: '80px',
+                        height: '80px',
+                        transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(-45deg)',
+                        opacity: 0.5 + voiceLevel * 0.5
+                      }}>
+                    </div>
+                    {/* Enhanced Central Orb */}
+                    <div className="sphere-core" style={{
+                      transform: `translate(-50%, -50%) scale(${1 + voiceLevel * 0.4})`,
+                      filter: `brightness(${1 + voiceLevel * 0.5}) saturate(${1 + voiceLevel * 0.3})`,
+                      animationDuration: `${Math.max(1.5, 4 - voiceLevel * 2.5)}s`,
+                      boxShadow: `
                       inset 0 0 20px rgba(255, 255, 255, 0.2),
                       0 0 ${30 + voiceLevel * 40}px ${5 + voiceLevel * 15}px rgba(124, 58, 237, ${0.4 + voiceLevel * 0.4}),
                       0 0 ${15 + voiceLevel * 20}px ${2 + voiceLevel * 8}px rgba(255, 255, 255, ${0.1 + voiceLevel * 0.3})
                     `
-                  }}>
-                    {/* Voice-reactive surface patterns */}
-                    {voiceLevel > 0.2 && (
-                      <div className="voice-surface-effects">
-                        {Array.from({ length: 12 }, (_, i) => (
-                          <div
-                            key={i}
-                            className="surface-ripple"
-                            style={{
-                              '--angle': `${i * 30}deg`,
-                              '--intensity': voiceLevel,
-                              '--delay': `${i * 0.08}s`
-                            }}
-                          />
-                        ))}
+                    }}>
+                      {/* Voice-reactive surface patterns */}
+                      {voiceLevel > 0.2 && (
+                        <div className="voice-surface-effects">
+                          {Array.from({ length: 12 }, (_, i) => (
+                            <div
+                              key={i}
+                              className="surface-ripple"
+                              style={{
+                                '--angle': `${i * 30}deg`,
+                                '--intensity': voiceLevel,
+                                '--delay': `${i * 0.08}s`
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Enhanced Energy Wave Effects */}
+                  {showEnergyWave && (
+                    <div className="energy-wave-container">
+                      <div className="energy-wave energy-wave-1">
+                        <div className="wave-inner"></div>
                       </div>
-                    )}
-                  </div>
-                </div>
-                {/* Enhanced Energy Wave Effects */}
-                {showEnergyWave && (
-                  <div className="energy-wave-container">
-                    <div className="energy-wave energy-wave-1">
-                      <div className="wave-inner"></div>
+                      <div className="energy-wave energy-wave-2">
+                        <div className="wave-inner"></div>
+                      </div>
+                      <div className="energy-wave energy-wave-3">
+                        <div className="wave-inner"></div>
+                      </div>
+                      {/* Additional wave patterns */}
+                      <div className="energy-wave energy-wave-hex">
+                        <div className="hex-pattern"></div>
+                      </div>
+                      <div className="energy-wave energy-wave-spiral">
+                        <div className="spiral-pattern"></div>
+                      </div>
                     </div>
-                    <div className="energy-wave energy-wave-2">
-                      <div className="wave-inner"></div>
-                    </div>
-                    <div className="energy-wave energy-wave-3">
-                      <div className="wave-inner"></div>
-                    </div>
-                    {/* Additional wave patterns */}
-                    <div className="energy-wave energy-wave-hex">
-                      <div className="hex-pattern"></div>
-                    </div>
-                    <div className="energy-wave energy-wave-spiral">
-                      <div className="spiral-pattern"></div>
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Continuous subtle waves when listening */}
-                {isListening && (
-                  <div className="continuous-waves">
-                    <div className="wave-ring wave-ring-1"></div>
-                    <div className="wave-ring wave-ring-2"></div>
-                    <div className="wave-ring wave-ring-3"></div>
-                  </div>
-                )}
-                <div className="particle-field">
-                  {/* Enhanced Particle System with Multiple Types */}
-                  {Array.from({ length: 20 }, (_, i) => {
-                    const particleType = i % 4;
-                    const intensity = 0.5 + voiceLevel * 1.5;
-                    return (
+                  {/* Continuous subtle waves when listening */}
+                  {isListening && (
+                    <div className="continuous-waves">
+                      <div className="wave-ring wave-ring-1"></div>
+                      <div className="wave-ring wave-ring-2"></div>
+                      <div className="wave-ring wave-ring-3"></div>
+                    </div>
+                  )}
+                  <div className="particle-field">
+                    {/* Enhanced Particle System with Multiple Types */}
+                    {Array.from({ length: 20 }, (_, i) => {
+                      const particleType = i % 4;
+                      const intensity = 0.5 + voiceLevel * 1.5;
+                      return (
+                        <div
+                          key={i}
+                          className={`particle particle-type-${particleType}`}
+                          style={{
+                            '--delay': `${i * 0.15}s`,
+                            '--duration': `${1.5 + Math.random() * 2}s`,
+                            '--intensity': intensity,
+                            '--start-x': `${Math.random() * 100}%`,
+                            '--end-x': `${Math.random() * 100}%`,
+                            '--size': `${2 + voiceLevel * 3 + Math.random() * 2}px`,
+                            '--opacity': Math.max(0.3, voiceLevel + 0.2)
+                          }}
+                        />
+                      );
+                    })}
+
+                    {/* Spiral Particles */}
+                    {Array.from({ length: 6 }, (_, i) => (
                       <div
-                        key={i}
-                        className={`particle particle-type-${particleType}`}
+                        key={`spiral-${i}`}
+                        className="spiral-particle"
                         style={{
-                          '--delay': `${i * 0.15}s`,
-                          '--duration': `${1.5 + Math.random() * 2}s`,
-                          '--intensity': intensity,
-                          '--start-x': `${Math.random() * 100}%`,
-                          '--end-x': `${Math.random() * 100}%`,
-                          '--size': `${2 + voiceLevel * 3 + Math.random() * 2}px`,
-                          '--opacity': Math.max(0.3, voiceLevel + 0.2)
+                          '--angle': `${i * 60}deg`,
+                          '--radius': `${45 + voiceLevel * 20}px`,
+                          '--speed': `${3 + voiceLevel * 2}s`,
+                          '--delay': `${i * 0.5}s`
                         }}
                       />
-                    );
-                  })}
+                    ))}
 
-                  {/* Spiral Particles */}
-                  {Array.from({ length: 6 }, (_, i) => (
-                    <div
-                      key={`spiral-${i}`}
-                      className="spiral-particle"
-                      style={{
-                        '--angle': `${i * 60}deg`,
-                        '--radius': `${45 + voiceLevel * 20}px`,
-                        '--speed': `${3 + voiceLevel * 2}s`,
-                        '--delay': `${i * 0.5}s`
-                      }}
-                    />
-                  ))}
-
-                  {/* Voice-Reactive Burst Particles */}
-                  {voiceLevel > 0.3 && Array.from({ length: 8 }, (_, i) => (
-                    <div
-                      key={`burst-${i}`}
-                      className="burst-particle"
-                      style={{
-                        '--burst-angle': `${i * 45}deg`,
-                        '--burst-distance': `${40 + voiceLevel * 40}px`,
-                        '--burst-delay': `${i * 0.1}s`
-                      }}
-                    />
-                  ))}
+                    {/* Voice-Reactive Burst Particles */}
+                    {voiceLevel > 0.3 && Array.from({ length: 8 }, (_, i) => (
+                      <div
+                        key={`burst-${i}`}
+                        className="burst-particle"
+                        style={{
+                          '--burst-angle': `${i * 45}deg`,
+                          '--burst-distance': `${40 + voiceLevel * 40}px`,
+                          '--burst-delay': `${i * 0.1}s`
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
+              )}
+            </button>
+
+            {/* Input volume meter (uses waveformData) */}
+            {isListening && (
+              <div className="mic-level-meter" title="Input level">
+                {waveformData.map((v, i) => (
+                  <div
+                    key={i}
+                    className="mic-level-bar"
+                    style={{ height: `${8 + v * 24}px`, opacity: 0.6 + v * 0.4 }}
+                  />
+                ))}
               </div>
             )}
-          </button>
 
-          {/* Input volume meter (uses waveformData) */}
-          {isListening && (
-            <div className="mic-level-meter" title="Input level">
-              {waveformData.map((v, i) => (
-                <div
-                  key={i}
-                  className="mic-level-bar"
-                  style={{ height: `${8 + v * 24}px`, opacity: 0.6 + v * 0.4 }}
-                />
-              ))}
+
+          </div>
+
+
+          {/* Minimal Status Display */}
+          {feedback && (
+            <div className="status-display">
+              <div className="status-message feedback">
+                <span>{feedback}</span>
+              </div>
             </div>
           )}
-
-
         </div>
 
-
-        {/* Minimal Status Display */}
-        {feedback && (
-          <div className="status-display">
-            <div className="status-message feedback">
-              <span>{feedback}</span>
-            </div>
-          </div>
-        )}
+        {showHelpContent && <VoiceNavigationHelp />}
       </div>
-
-      <VoiceNavigationHelp />
-
     </div>
+
   );
 };
 

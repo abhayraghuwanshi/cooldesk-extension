@@ -16,6 +16,7 @@
   max-width: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
+  margin-top: 24px;
 }
 
 /* Grid for grouped hosts (optional hook if added in JSX) */
