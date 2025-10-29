@@ -1,186 +1,29 @@
-{/* Quick URL Shortcuts (read-only render) */ }
-// {!!quickUrls.length && (
-//   <div style={{
-//     borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
-//     borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
-//     padding: effectiveCollapsed ? '6px 4px' : '8px',
-//     display: 'flex',
-//     gap: '8px',
-//     justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
-//     alignItems: 'center',
-//     flexWrap: 'wrap'
-//   }}>
-//     {quickUrls.map((url, idx) => {
-//       const u = (() => { try { return new URL(url); } catch { return null; } })();
-//       const candidates = [
-//         u ? `${u.origin}/favicon.ico` : null,
-//         getFaviconUrl(url, 32)
-//       ].filter(Boolean);
-//       const showFallback = failedFavs.has(url) || candidates.length === 0;
-//       const hostInitial = (u?.hostname?.[0] || '•').toUpperCase();
-//       return (
-//         <button
-//           key={url + idx}
-//           className="icon-btn"
-//           onClick={() => {
-//             try { if (chrome?.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank'); } catch {}
-//           }}
-//           title={url}
-//           style={{
-//             background: 'none', border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
-//             borderRadius: 8, padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center'
-//           }}
-//         >
-//           {showFallback ? (
-//             <div style={{ width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)', color: 'var(--text, #e5e7eb)', fontSize: 12, fontWeight: 700 }}>
-//               {hostInitial}
-//             </div>
-//           ) : (
-//             <img
-//               src={candidates[0]}
-//               alt={u?.hostname || 'site'}
-//               style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain', display: 'block' }}
-//               onError={(e) => {
-//                 const cur = e.currentTarget;
-//                 const next = candidates.find((c) => c && c !== cur.src);
-//                 if (next) {
-//                   cur.src = next;
-//                 } else {
-//                   setFailedFavs((prev) => {
-//                     const s = new Set(prev); s.add(url); return s;
-//                   });
-//                 }
-//               }}
-//             />
-//           )}
-//         </button>
-//       );
-//     })}
-//   </div>
-// )}
-// {/* Quick URL Shortcuts (read-only render) */}
-// {!!quickUrls.length && (
-//   <div style={{
-//     borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
-//     borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
-//     padding: effectiveCollapsed ? '6px 4px' : '8px',
-//     display: 'flex',
-//     gap: '8px',
-//     justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
-//     alignItems: 'center',
-//     flexWrap: 'wrap'
-//   }}>
-//     {quickUrls.map((url, idx) => {
-//       const u = (() => { try { return new URL(url); } catch { return null; } })();
-//       const candidates = [
-//         u ? `${u.origin}/favicon.ico` : null,
-//         // Use same util as Header for consistency if available
-//         // Fallback to origin/favicon.ico only if util not imported here
-//       ].filter(Boolean);
-//       const showFallback = failedFavs.has(url) || candidates.length === 0;
-//       const hostInitial = (u?.hostname?.[0] || '•').toUpperCase();
-//       return (
-//         <button
-//           key={url + idx}
-//           className="icon-btn"
-//           onClick={() => {
-//             try { if (chrome?.tabs?.create) chrome.tabs.create({ url }); else window.open(url, '_blank'); } catch {}
-//           }}
-//           title={url}
-//           style={{
-//             background: 'none', border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
-//             borderRadius: 8, padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center'
-//           }}
-//         >
-//           {showFallback ? (
-//             <div style={{ width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.08)', color: 'var(--text, #e5e7eb)', fontSize: 12, fontWeight: 700 }}>
-//               {hostInitial}
-//             </div>
-//           ) : (
-//             <img
-//               src={candidates[0]}
-//               alt={u?.hostname || 'site'}
-//               style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'contain', display: 'block' }}
-//               onError={(e) => {
-//                 const cur = e.currentTarget;
-//                 const next = candidates.find((c) => c && c !== cur.src);
-//                 if (next) {
-//                   cur.src = next;
-//                 } else {
-//                   setFailedFavs((prev) => {
-//                     const s = new Set(prev); s.add(url); return s;
-//                   });
-//                 }
-//               }}
-//             />
-//           )}
-//         </button>
-//       );
-//     })}
-//   </div>
-// )}
 import {
   faArrowUpRightFromSquare,
   faBackward,
-  faCalendarDays,
-  faChevronDown,
-  faChevronUp,
-  faCircleQuestion,
-  faEnvelope,
   faForward,
-  faMicrophone,
-  faPalette,
+  faGear,
+  faMagnifyingGlass,
   faPause,
-  faPlay,
-  faPlus,
-  faRobot,
-  faSpinner,
-  faToggleOff
+  faPlay
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import calendarIcon from '../../../calendericon.svg';
 import { getUIState, saveUIState } from '../../db/index.js';
-import { triggerAutoCategorize } from '../../utils/messaging';
-// import VoiceNavigation from './VoiceNavigation';
 
 export function VerticalHeader({
   search,
   setSearch,
-  populate,
   setShowSettings,
-  openSyncControls,
-  progress,
-  setShowCreateWorkspace,
-  openInTab,
-  activeTab,
-  setActiveTab,
-  activeSection,
-  setActiveSection,
+  openInSidePanel: openInSidePanelProp,
 }) {
-  const [autoSync, setAutoSync] = useState(true);
   const [now, setNow] = useState(new Date());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  const [showVoiceNavigation, setShowVoiceNavigation] = useState(false);
-
-  // Load Auto Sync from UI state (default ON if missing)
-  useEffect(() => {
-    (async () => {
-      try {
-        const ui = await getUIState();
-        if (typeof ui?.autoSync === 'boolean') {
-          setAutoSync(ui.autoSync);
-        } else {
-          setAutoSync(true);
-          try { await saveUIState({ ...ui, autoSync: true }); } catch { /* noop */ }
-        }
-      } catch {
-        setAutoSync(true);
-      }
-    })();
-  }, []);
+  const [layoutChoice, setLayoutChoice] = useState('default');
 
   // Live clock for local date/time
   useEffect(() => {
@@ -249,7 +92,7 @@ export function VerticalHeader({
     hour12: true,
   });
 
-  const openInSidePanel = async (overrideQuery) => {
+  const openInSidePanel = openInSidePanelProp ?? (async (overrideQuery) => {
     try {
       const q = (overrideQuery != null ? String(overrideQuery) : search || '').trim();
       try { await chrome.storage.local.set({ pendingQuery: q }); } catch { }
@@ -268,31 +111,168 @@ export function VerticalHeader({
         if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' });
       } catch { }
     }
-  };
+  });
 
-  // Navigation logic
-  const sections = ['All', 'Current Tabs', 'Pins', 'Notes', 'Daily Notes', 'Cool Feed'];
-  const isActivityNavigation = activeSection !== undefined && setActiveSection;
+  const openSplitScreen = async () => {
+    try {
+      if (!chrome?.windows?.getCurrent || !chrome?.windows?.update || !chrome?.windows?.create) {
+        if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' });
+        return;
+      }
+      const cur = await chrome.windows.getCurrent();
+      const availW = window.screen?.availWidth || 1200;
+      const availH = window.screen?.availHeight || 800;
+      const halfW = Math.max(600, Math.floor(availW / 2));
+      const leftBounds = { left: 0, top: 0, width: halfW, height: availH, state: 'normal' };
+      const rightBounds = { left: halfW, top: 0, width: availW - halfW, height: availH, state: 'normal' };
 
-  const currentLabel = isActivityNavigation
-    ? sections[activeSection] || 'Section'
-    : (activeTab === 'workspace' ? 'Workspace' : 'Saved');
-
-  const handlePreviousNav = () => {
-    if (isActivityNavigation) {
-      setActiveSection((prev) => (prev - 1 + sections.length) % sections.length);
-    } else {
-      setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
+      await chrome.windows.update(cur.id, leftBounds);
+      await chrome.windows.create({ url: 'index.html', focused: true, ...rightBounds });
+    } catch (err) {
+      console.error('Split screen failed:', err);
+      try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch { }
     }
   };
 
-  const handleNextNav = () => {
-    if (isActivityNavigation) {
-      setActiveSection((prev) => (prev + 1) % sections.length);
-    } else {
-      setActiveTab(activeTab === 'workspace' ? 'saved' : 'workspace');
+  const openTripleScreen = async () => {
+    try {
+      if (!chrome?.windows?.getCurrent || !chrome?.windows?.update || !chrome?.windows?.create) {
+        try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch { }
+        try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch { }
+        return;
+      }
+      const cur = await chrome.windows.getCurrent();
+      const availW = window.screen?.availWidth || 1440;
+      const availH = window.screen?.availHeight || 900;
+      const halfW = Math.max(600, Math.floor(availW / 2));
+      const left = { left: 0, top: 0, width: halfW, height: availH, state: 'normal' };
+      const rightW = availW - halfW;
+      const topRight = { left: halfW, top: 0, width: rightW, height: Math.floor(availH / 2), state: 'normal' };
+      const bottomRight = {
+        left: halfW,
+        top: Math.floor(availH / 2),
+        width: rightW,
+        height: availH - Math.floor(availH / 2),
+        state: 'normal'
+      };
+
+      await chrome.windows.update(cur.id, left);
+      await chrome.windows.create({ url: 'index.html', focused: false, ...topRight });
+      await chrome.windows.create({ url: 'index.html', focused: true, ...bottomRight });
+    } catch (err) {
+      console.error('Triple screen failed:', err);
+      try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch { }
+      try { if (chrome?.tabs?.create) chrome.tabs.create({ url: 'index.html' }); } catch { }
     }
   };
+
+  const openGmail = () => {
+    try {
+      const url = 'https://mail.google.com/mail/u/0/#inbox';
+      if (chrome?.tabs?.create) chrome.tabs.create({ url });
+      else window.open(url, '_blank');
+    } catch { }
+  };
+
+  const openCalendar = () => {
+    try {
+      const url = 'https://calendar.google.com/';
+      if (chrome?.tabs?.create) chrome.tabs.create({ url });
+      else window.open(url, '_blank');
+    } catch { }
+  };
+
+  const handleLayoutSelect = (value) => {
+    if (value === 'split') {
+      openSplitScreen();
+    } else if (value === 'triple') {
+      openTripleScreen();
+    }
+    setTimeout(() => setLayoutChoice('default'), 0);
+  };
+
+  const handleLayoutChange = (event) => {
+    const { value } = event.target;
+    setLayoutChoice(value);
+    if (value !== 'default') {
+      handleLayoutSelect(value);
+    }
+  };
+
+  const handleQuickSearch = () => {
+    window.dispatchEvent(new Event('verticalSearch:focus'));
+  };
+
+  const renderGmailIcon = (collapsedState) => {
+    const iconSize = collapsedState ? 20 : 18;
+    const candidates = [
+      'https://mail.google.com/favicon.ico',
+      'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico',
+      'https://mail.google.com/mail/u/0/favicon.ico'
+    ];
+
+    return (
+      <img
+        src={candidates[0]}
+        alt="Gmail"
+        data-icon-index="0"
+        style={{
+          width: iconSize,
+          height: iconSize,
+          borderRadius: 4,
+          objectFit: 'contain',
+          display: 'block'
+        }}
+        onError={(event) => {
+          const target = event.currentTarget;
+          const currentIndex = Number(target.dataset.iconIndex || '0');
+          const nextIndex = currentIndex + 1;
+          if (nextIndex < candidates.length) {
+            target.dataset.iconIndex = String(nextIndex);
+            target.src = candidates[nextIndex];
+          }
+        }}
+      />
+    );
+  };
+
+  const renderCalendarIcon = (collapsedState) => {
+    const iconSize = collapsedState ? 20 : 18;
+    return (
+      <img
+        src={calendarIcon}
+        alt="Google Calendar"
+        style={{
+          width: iconSize,
+          height: iconSize,
+          borderRadius: 4,
+          objectFit: 'contain',
+          display: 'block'
+        }}
+      />
+    );
+  };
+
+  const quickTools = [
+    {
+      icon: faMagnifyingGlass,
+      label: 'Search',
+      onClick: handleQuickSearch,
+      tooltip: 'Focus the search box'
+    },
+    {
+      label: 'Gmail',
+      onClick: openGmail,
+      tooltip: 'Open Gmail inbox',
+      renderIcon: renderGmailIcon
+    },
+    {
+      label: 'Calendar',
+      onClick: openCalendar,
+      tooltip: 'Open Google Calendar',
+      renderIcon: renderCalendarIcon
+    },
+  ];
 
   const sidebarWidth = effectiveCollapsed
     ? (windowWidth < 600 ? '50px' : '60px')
@@ -314,7 +294,7 @@ export function VerticalHeader({
       display: 'flex',
       flexDirection: 'column',
       fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-      overflow: 'hidden'
+      overflow: 'visible'
     }}>
       {/* Collapse Toggle */}
       <div style={{
@@ -334,84 +314,10 @@ export function VerticalHeader({
             Cool-Desk
           </div>
         )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          title={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          disabled={shouldAutoCollapse}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: shouldAutoCollapse ? 'var(--text-dim, rgba(255, 255, 255, 0.3))' : 'var(--text, rgba(255, 255, 255, 0.7))',
-            cursor: shouldAutoCollapse ? 'not-allowed' : 'pointer',
-            padding: '6px',
-            borderRadius: '6px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'color 0.2s ease'
-          }}
-        >
-          <FontAwesomeIcon icon={effectiveCollapsed ? faChevronDown : faChevronUp} style={{ transform: 'rotate(90deg)' }} />
-        </button>
       </div>
 
       {/* Search Section */}
-      {!effectiveCollapsed && (
-        <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))' }}>
-          <VerticalSearchBox
-            search={search}
-            setSearch={setSearch}
-            openInSidePanel={openInSidePanel}
-          />
-        </div>
-      )}
 
-      {/* Navigation Section */}
-      {((activeTab && setActiveTab) || (activeSection !== undefined && setActiveSection)) && (
-        <div style={{
-          padding: effectiveCollapsed ? '8px' : '16px',
-          borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
-          display: 'flex',
-          flexDirection: effectiveCollapsed ? 'column' : 'row',
-          alignItems: 'center',
-          gap: effectiveCollapsed ? '8px' : '12px'
-        }}>
-          <button
-            className="sidebar-btn"
-            onClick={handlePreviousNav}
-            title={isActivityNavigation
-              ? `Previous: ${sections[(activeSection - 1 + sections.length) % sections.length]}`
-              : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
-            }
-          >
-            <FontAwesomeIcon icon={faChevronUp} />
-          </button>
-
-          {!effectiveCollapsed && (
-            <div style={{
-              fontSize: '12px',
-              fontWeight: '500',
-              color: 'var(--text, rgba(255, 255, 255, 0.8))',
-              textAlign: 'center',
-              flex: 1,
-              textTransform: 'capitalize'
-            }}>
-              {currentLabel}
-            </div>
-          )}
-
-          <button
-            className="sidebar-btn"
-            onClick={handleNextNav}
-            title={isActivityNavigation
-              ? `Next: ${sections[(activeSection + 1) % sections.length]}`
-              : `Switch to ${activeTab === 'workspace' ? 'Saved Tabs' : 'Workspace'}`
-            }
-          >
-            <FontAwesomeIcon icon={faChevronDown} />
-          </button>
-        </div>
-      )}
 
       {/* Controls Section */}
       <div style={{
@@ -422,29 +328,6 @@ export function VerticalHeader({
         padding: effectiveCollapsed ? '8px 4px' : '16px 12px',
         overflowY: 'auto'
       }}>
-
-        {/* Auto Categorize */}
-        <SidebarButton
-          icon={progress.running ? faSpinner : (autoSync ? faRobot : faToggleOff)}
-          label="Auto Categorize"
-          active={autoSync}
-          spinning={progress.running}
-          collapsed={effectiveCollapsed}
-          onClick={async () => {
-            try {
-              const next = !autoSync;
-              setAutoSync(next);
-              const ui = await getUIState();
-              await saveUIState({ ...ui, autoSync: next });
-              if (next) {
-                await triggerAutoCategorize();
-              }
-            } catch (e) {
-              console.warn('Failed to toggle auto-categorize:', e);
-            }
-          }}
-          tooltip={autoSync ? 'Auto Categorize is ON - Click to turn OFF' : 'Auto Categorize is OFF - Click to turn ON'}
-        />
 
         {/* Music Controls */}
         {!effectiveCollapsed && (
@@ -478,74 +361,81 @@ export function VerticalHeader({
           </div>
         )}
 
-        {/* Action Buttons */}
-        <SidebarButton
-          icon={faMicrophone}
-          label="Voice Navigation"
-          active={showVoiceNavigation}
-          collapsed={effectiveCollapsed}
-          onClick={() => setShowVoiceNavigation(!showVoiceNavigation)}
-          tooltip={showVoiceNavigation ? "Hide Voice Navigation" : "Show Voice Navigation"}
-        />
 
         <SidebarButton
-          icon={faPlus}
-          label="Create Workspace"
-          collapsed={effectiveCollapsed}
-          onClick={() => setShowCreateWorkspace(true)}
-        />
-
-        <SidebarButton
-          icon={faPalette}
-          label="Customization"
+          icon={faGear}
+          label="Settings"
           collapsed={effectiveCollapsed}
           onClick={() => setShowSettings(true)}
         />
 
-        <SidebarButton
-          icon={faEnvelope}
-          label="Gmail"
-          collapsed={effectiveCollapsed}
-          onClick={() => {
-            try {
-              const url = 'https://mail.google.com/mail/u/0/#inbox';
-              if (chrome?.tabs?.create) chrome.tabs.create({ url });
-              else window.open(url, '_blank');
-            } catch { }
-          }}
-        />
+        {/* Quick Tools */}
+        <div style={{
+          marginTop: effectiveCollapsed ? '4px' : '8px',
+          borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+          paddingTop: effectiveCollapsed ? '6px' : '10px'
+        }}>
+          {!effectiveCollapsed && (
+            <div style={{
+              fontSize: '11px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.6px',
+              color: 'rgba(255, 255, 255, 0.55)',
+              marginBottom: '6px'
+            }}>
+              Quick Tools
+            </div>
+          )}
+          <div style={{
+            display: 'flex',
+            gap: '6px',
+            flexDirection: effectiveCollapsed ? 'column' : 'row',
+            flexWrap: effectiveCollapsed ? 'nowrap' : 'wrap'
+          }}>
+            {quickTools.map(tool => (
+              <SidebarButton
+                key={tool.label}
+                icon={tool.icon}
+                renderIcon={tool.renderIcon}
+                label={tool.label}
+                collapsed={effectiveCollapsed}
+                onClick={tool.onClick}
+                tooltip={tool.tooltip}
+              />
+            ))}
+          </div>
 
-        <SidebarButton
-          icon={faCalendarDays}
-          label="Calendar"
-          collapsed={effectiveCollapsed}
-          onClick={() => {
-            try {
-              const url = 'https://calendar.google.com/';
-              if (chrome?.tabs?.create) chrome.tabs.create({ url });
-              else window.open(url, '_blank');
-            } catch { }
-          }}
-        />
+          {!effectiveCollapsed && (
+            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label htmlFor="screen-layout-select" style={{ fontSize: '11px', letterSpacing: '0.4px', textTransform: 'uppercase', color: 'rgba(255, 255, 255, 0.55)' }}>
+                Screen Layout
+              </label>
+              <select
+                id="screen-layout-select"
+                value={layoutChoice}
+                onChange={handleLayoutChange}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.2))',
+                  background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+                  color: 'var(--text-primary, #ffffff)',
+                  fontSize: '13px',
+                  appearance: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="default">Default View</option>
+                <option value="split">Split Screen</option>
+                <option value="triple">Triple Screen</option>
+              </select>
+            </div>
+          )}
 
-        <SidebarButton
-          icon={faCircleQuestion}
-          label="Help"
-          collapsed={effectiveCollapsed}
-          onClick={() => {
-            const msg = [
-              'Navigation Shortcuts',
-              '',
-              'Arrows (← ↑ → ↓): Move between cards in the grid',
-              'Enter/Click: Open selected card',
-              '',
-              'Alt+← / Alt+→: Switch between Workspace and Saved tabs',
-              'Ctrl+1 / Ctrl+2: Jump to Workspace/Saved tabs',
-              'Ctrl+← / Ctrl+→: Switch tabs',
-            ].join('\n');
-            alert(msg);
-          }}
-        />
+
+        </div>
+
+
 
         <SidebarButton
           icon={faArrowUpRightFromSquare}
@@ -578,6 +468,7 @@ export function VerticalHeader({
 // Reusable Sidebar Button Component
 function SidebarButton({
   icon,
+  renderIcon,
   label,
   active = false,
   spinning = false,
@@ -611,14 +502,18 @@ function SidebarButton({
         minHeight: '40px'
       }}
     >
-      <FontAwesomeIcon
-        icon={icon}
-        spin={spinning}
-        style={{
-          fontSize: collapsed ? '16px' : '14px',
-          opacity: spinning ? 0.8 : 1
-        }}
-      />
+      {renderIcon
+        ? renderIcon(collapsed)
+        : (
+          <FontAwesomeIcon
+            icon={icon}
+            spin={spinning}
+            style={{
+              fontSize: collapsed ? '16px' : '14px',
+              opacity: spinning ? 0.8 : 1
+            }}
+          />
+        )}
       {!collapsed && <span>{label}</span>}
     </button>
   );
@@ -638,6 +533,18 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
         setRecent(rs.slice(0, 5)); // Limit to 5 for vertical layout
       } catch { }
     })();
+  }, []);
+
+  useEffect(() => {
+    const handleFocusRequest = () => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        setOpen(true);
+      }
+    };
+
+    window.addEventListener('verticalSearch:focus', handleFocusRequest);
+    return () => window.removeEventListener('verticalSearch:focus', handleFocusRequest);
   }, []);
 
   const runSearch = async (q) => {
@@ -683,6 +590,7 @@ function VerticalSearchBox({ search, setSearch, openInSidePanel }) {
         }}
         type="text"
         placeholder="Search..."
+        className="vertical-search-input"
         style={{
           width: '100%',
           padding: '10px 12px',

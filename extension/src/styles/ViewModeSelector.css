@@ -66,6 +66,13 @@
   z-index: 3000;
 }
 
+.ai-sidebar .view-mode-selector .view-mode-dropdown {
+  top: 0;
+  bottom: auto;
+  left: calc(100% + 12px);
+  right: auto;
+}
+
 .dropdown-header {
   display: flex;
   align-items: center;
@@ -160,5 +167,19 @@
   
   .view-mode-button {
     padding: 6px 10px;
+  }
+
+  .view-mode-dropdown {
+    left: 0;
+    right: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .ai-sidebar .view-mode-selector .view-mode-dropdown {
+    left: 0;
+    right: auto;
+    top: auto;
+    bottom: calc(100% + 8px);
   }
 }

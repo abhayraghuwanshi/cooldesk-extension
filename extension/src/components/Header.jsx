@@ -323,11 +323,11 @@ export function Header({
         }}>
 
           <img
-            src={chrome.runtime.getURL('logo.png')}
+            src={chrome.runtime.getURL('logo-2.png')}
             alt="Logo"
             style={{
-              width: 36,
-              height: 36,
+              width: 50,
+              height: 50,
               borderRadius: 8,
               objectFit: 'contain',
               filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))'

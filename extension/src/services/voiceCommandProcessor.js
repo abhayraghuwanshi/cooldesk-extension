@@ -14,6 +14,32 @@ export class VoiceCommandProcessor {
     this.workspaceData = workspaceData;
   }
 
+  async runChromeSearchQuery(text, disposition = 'CURRENT_TAB') {
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      return false;
+    }
+
+    if (typeof chrome === 'undefined' || !chrome?.search?.query) {
+      return false;
+    }
+
+    try {
+      await chrome.search.query({ text: trimmed, disposition });
+
+      if (chrome?.runtime?.lastError?.message) {
+        console.warn('[VoiceCommandProcessor] chrome.search.query runtime error:', chrome.runtime.lastError.message);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      const message = error?.message || chrome?.runtime?.lastError?.message;
+      console.warn('[VoiceCommandProcessor] chrome.search.query rejected, falling back to manual navigation:', message);
+      return false;
+    }
+  }
+
   async processVoiceCommand(command) {
     try {
       console.log('Processing command:', command);
@@ -376,10 +402,20 @@ export class VoiceCommandProcessor {
         return;
       }
 
+      const normalizedEngine = engine.toLowerCase();
+
+      if (normalizedEngine === 'google' || normalizedEngine === 'default') {
+        const handledByChromeSearch = await this.runChromeSearchQuery(searchTerm, 'NEW_TAB');
+        if (handledByChromeSearch) {
+          this.showFeedback(`Searching default engine for "${searchTerm}"`);
+          return;
+        }
+      }
+
       let searchUrl = '';
       let engineName = '';
 
-      switch (engine.toLowerCase()) {
+      switch (normalizedEngine) {
         case 'google':
           searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchTerm)}`;
           engineName = 'Google';

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ContextMenu } from './common/ContextMenu.jsx';
 import { getFaviconUrl, getUrlParts } from '../utils';
 import { handlePinAction, handleAddToBookmarksAction, isUrlPinned } from '../utils/linkActionHandlers.js';
+import '../styles/WorkspacePillList.css';
 
 export function WorkspacePillList({ items = [], onDelete, onAddToWorkspace }) {
     const [hoveredKey, setHoveredKey] = useState(null);
@@ -152,6 +153,7 @@ export function WorkspacePillList({ items = [], onDelete, onAddToWorkspace }) {
     return (
         <div className="coolDesk-section" style={{ padding: '16px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(28,28,33,0.45)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
             <div
+                className="workspace-pill-scroll"
                 style={{
                     display: 'flex',
                     gap: '10px',

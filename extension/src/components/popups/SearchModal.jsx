@@ -301,6 +301,28 @@ const SearchModalComponent = function SearchModal({
 
     const chromeSearchAvailable = () => typeof chrome !== 'undefined' && !!chrome?.search?.query;
 
+    const runChromeSearchQuery = async (text, disposition = 'CURRENT_TAB') => {
+        const trimmed = (text || '').trim();
+        if (!trimmed || !chromeSearchAvailable()) {
+            return false;
+        }
+
+        try {
+            await chrome.search.query({ text: trimmed, disposition });
+
+            if (chrome?.runtime?.lastError?.message) {
+                console.warn('[SearchModal] chrome.search.query reported runtime error:', chrome.runtime.lastError.message);
+                return false;
+            }
+
+            return true;
+        } catch (error) {
+            const message = error?.message || chrome?.runtime?.lastError?.message;
+            console.warn('[SearchModal] chrome.search.query was rejected, falling back to manual navigation:', message);
+            return false;
+        }
+    };
+
     const openWithEngine = async (engineId, query, options = {}) => {
         const engine = engines.find((item) => item.id === engineId);
         if (!engine) return;
@@ -318,22 +340,13 @@ const SearchModalComponent = function SearchModal({
 
         const disposition = options.disposition || 'CURRENT_TAB';
 
-        if (
-            engine.supportsQuery &&
-            engine.id === 'google' &&
-            trimmed &&
-            chromeSearchAvailable() &&
-            options.useChromeSearch !== false
-        ) {
-            try {
-                await chrome.search.query({ text: trimmed, disposition });
+        if (engine.supportsQuery && trimmed && options.useChromeSearch !== false) {
+            const handledByChromeSearch = await runChromeSearchQuery(trimmed, disposition);
+            if (handledByChromeSearch) {
                 if (options.closeModal !== false) {
                     onClose();
                 }
                 return;
-            } catch (error) {
-                console.error('[SearchModal] Failed to run chrome.search.query:', error);
-                // Fall back to manual URL navigation below.
             }
         }
 
@@ -370,7 +383,13 @@ const SearchModalComponent = function SearchModal({
         const trimmed = (query || '').trim();
         if (!trimmed) return;
         await persistRecentSearch(trimmed);
-        await openWithEngine('google', trimmed, { persistRecent: false });
+
+        if (await runChromeSearchQuery(trimmed)) {
+            onClose();
+            return;
+        }
+
+        await openWithEngine('google', trimmed, { persistRecent: false, useChromeSearch: false });
     };
 
     // Compute matches when typing

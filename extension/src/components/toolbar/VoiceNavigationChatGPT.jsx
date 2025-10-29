@@ -8,6 +8,8 @@ import { vDebug, vError, vInfo, vWarn } from '../../utils/logger.js';
 import { fuzzySearch } from '../../utils/searchUtils.js';
 import VoiceNavigationHelp from './VoiceNavigationHelp.jsx';
 
+const HELP_PANEL_STORAGE_KEY = 'voiceNavigation.showHelp';
+
 
 const VoiceNavigationChatGPT = () => {
   const [isListening, setIsListening] = useState(false);
@@ -1536,6 +1538,19 @@ const VoiceNavigationChatGPT = () => {
     : 'assets/Voice_Listening_Animation_Generation.mp4';
 
   const [showHelpContent, setShowHelpContent] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedValue = window.localStorage.getItem(HELP_PANEL_STORAGE_KEY);
+    if (storedValue !== null) {
+      setShowHelpContent(storedValue !== 'false');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(HELP_PANEL_STORAGE_KEY, String(showHelpContent));
+  }, [showHelpContent]);
 
   return (
     <div>

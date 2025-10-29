@@ -509,12 +509,12 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                     }}
                   >
                     <img
-                      src={getFaviconUrl(firstTab.url, 64) || '/logo.png'}
+                      src={getFaviconUrl(firstTab.url, 64) || '/logo-2.png'}
                       alt={`${hostname} favicon`}
                       width={32}
                       height={32}
                       className="currentTabs-hostFavicon"
-                      onError={(e) => { e.currentTarget.src = '/logo.png'; }}
+                      onError={(e) => { e.currentTarget.src = '/logo-2.png'; }}
                     />
                     <div className="currentTabs-hostLabel" title={hostname}>
                       {truncateHostname(hostname)}
@@ -554,13 +554,13 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
                           onClick={() => focusTab(tab)}
                         >
                           <img
-                            src={getFaviconUrl(tab.url, 32) || '/logo.png'}
+                            src={getFaviconUrl(tab.url, 32) || '/logo-2.png'}
                             alt=""
-                            width={18}
-                            height={18}
+                            width={24}
+                            height={24}
                             className="currentTabs-favicon"
                             title={tab.title || tab.url || ''}
-                            onError={(e) => { e.currentTarget.src = '/logo.png'; }}
+                            onError={(e) => { e.currentTarget.src = '/logo-2.png'; }}
                           />
                           {/* Smart text to differentiate tabs */}
                           {(() => {

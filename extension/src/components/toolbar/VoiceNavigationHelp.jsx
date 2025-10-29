@@ -2,38 +2,59 @@ import {
   faArrowDown,
   faArrowLeft,
   faBoxOpen,
-  faHashtag, faLightbulb,
+  faHashtag,
+  faLightbulb,
   faPlus
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useState } from 'react';
+import { useState } from 'react';
+
+// --- Component Data ---
+// 1. Data moved outside the component: This array is now a static 'const'.
+//    It avoids being re-declared on every render, which is more performant.
+// 2. UX Copywriting: Refined 'desc' for clarity (e.g., "go back" description).
+const commands = [
+  { icon: faHashtag, text: '"show numbers"', desc: 'Mark all clickable items', related_command: 'hide numbers, click [num]' },
+  { icon: faBoxOpen, text: '"open [query]"', desc: 'Open a site in a new tab', related_command: 'close tab, search for [query]', eg: "open google" },
+  { icon: faPlus, text: '"search tab [query]"', desc: 'Search through open tabs', eg: "search tab google, find tab google" },
+  { icon: faArrowDown, text: '"scroll down"', desc: 'Scroll the page down', related_command: 'scroll up' },
+  { icon: faArrowLeft, text: '"go back"', desc: 'Navigate to the previous page', related_command: 'go forward' },
+  // Add more commands here as needed
+];
+
+// --- Constants ---
+// Define constants here for easy tweaking and clear intent.
+const DEFAULT_VISIBLE_COUNT = 4;
+
 
 export default function VoiceNavigationHelp() {
   const [showAll, setShowAll] = useState(false);
 
-  // All commands
-  const commands = [
-    { icon: faHashtag, text: '"show numbers"', desc: 'mark clickable elements', related_command: 'hide numbers, click [num]' },
-    { icon: faBoxOpen, text: '"open [query]"', desc: 'open in new tab', related_command: 'close tab, search for [query]', eg: "open google" },
-    { icon: faPlus, text: '"search tab [query]"', desc: 'search in tabs', eg: "search tab google, find tab google" },
-    { icon: faArrowDown, text: '"scroll down"', desc: 'scroll page down', related_command: 'scroll up' },
-    { icon: faArrowLeft, text: "go back", desc: "go back", related_command: "go forward" },
-
-  ];
-
-  const visibleCommands = showAll ? commands : commands.slice(0, 4);
+  // --- Derived State & Logic ---
+  // This logic is more robust. The "More" button will only appear if
+  // there are actually more commands to show.
+  const canToggle = commands.length > DEFAULT_VISIBLE_COUNT;
+  const visibleCommands = showAll ? commands : commands.slice(0, DEFAULT_VISIBLE_COUNT);
 
   return (
-    <div className="command-help">
+    // 'role' and 'aria-labelledby' improve semantics for screen readers.
+    <div className="command-help" role="complementary" aria-labelledby="help-title">
       <div className="help-header">
-        <FontAwesomeIcon icon={faLightbulb} className="help-icon" />
-        <span className="help-title">Voice Commands</span>
+        <FontAwesomeIcon icon={faLightbulb} className="help-icon" aria-hidden="true" />
+        <span className="help-title" id="help-title">Voice Commands</span>
       </div>
 
+      {/* 'aria-live="polite"' would announce changes, but 'list' is fine here. */}
       <div className="command-list">
         {visibleCommands.map((cmd, index) => (
-          <div key={index} className="command-item">
-            <FontAwesomeIcon icon={cmd.icon} className="command-icon" />
+          <div
+            key={index}
+            className="command-item"
+            // UX: This custom property enables staggered animations via pure CSS.
+            style={{ '--index': index }}
+          >
+            {/* A11y: Decorative icons are hidden from screen readers. */}
+            <FontAwesomeIcon icon={cmd.icon} className="command-icon" aria-hidden="true" />
             <div className="command-content">
               <span className="command-text">{cmd.text}</span>
               <div className="command-meta">
@@ -50,13 +71,26 @@ export default function VoiceNavigationHelp() {
         ))}
       </div>
 
-      <button
-        className="toggle-btn" style={{ marginTop: '15px' }}
-        onClick={() => setShowAll(!showAll)}
-      >
-        {showAll ? 'Less' : 'More'}
-      </button>
+      {/* --- Conditional Toggle Button --- */}
+      {/* Only render the button if toggling is possible. */}
+      {canToggle && (
+        <button
+          className="toggle-btn"
+          onClick={() => setShowAll(!showAll)}
+          // A11y: Informs screen readers whether the content is expanded or not.
+          aria-expanded={showAll}
+        >
+          {showAll ? 'Show Less' : `Show All (${commands.length})`}
+        </button>
+      )}
 
+      {/* --- Styles --- */}
+      {/*
+        Key UI/UX Style Improvements:
+        1. Removed 'transition' from '.command-list' (it wasn't doing anything).
+        2. Added a keyframe animation 'fadeInUp' for a polished, staggered load-in.
+        3. Ensured 'focus-visible' state is styled for keyboard accessibility.
+      */}
       <style jsx>{`
         .command-help {
           flex: 0 0 auto;
@@ -73,23 +107,22 @@ export default function VoiceNavigationHelp() {
           backdrop-filter: blur(20px);
         }
 
+        /* --- Scrollbar Styling --- */
         .command-help::-webkit-scrollbar {
           width: 6px;
         }
-
         .command-help::-webkit-scrollbar-track {
           background: transparent;
         }
-
         .command-help::-webkit-scrollbar-thumb {
           background: rgba(255, 255, 255, 0.1);
           border-radius: 3px;
         }
-
         .command-help::-webkit-scrollbar-thumb:hover {
           background: rgba(255, 255, 255, 0.2);
         }
 
+        /* --- Header --- */
         .help-header {
           display: flex;
           align-items: center;
@@ -98,13 +131,11 @@ export default function VoiceNavigationHelp() {
           padding-bottom: 16px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
-
         .help-icon {
           color: #fbbf24;
           font-size: 18px;
           filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.3));
         }
-
         .help-title {
           font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
           font-weight: 600;
@@ -113,11 +144,11 @@ export default function VoiceNavigationHelp() {
           letter-spacing: -0.3px;
         }
 
-        .command-list { 
+        /* --- Command List --- */
+        .command-list {
           display: flex;
           flex-direction: column;
           gap: 8px;
-          transition: all 0.3s ease;
         }
 
         .command-item {
@@ -130,6 +161,20 @@ export default function VoiceNavigationHelp() {
           border: 1px solid rgba(255, 255, 255, 0.05);
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
           cursor: default;
+
+          /* UX: Staggered animation for items loading in */
+          opacity: 0;
+          transform: translateY(4px);
+          animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+          /* The delay is set by the inline 'style' attribute */
+          animation-delay: calc(var(--index) * 50ms);
+        }
+        
+        @keyframes fadeInUp {
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
 
         .command-item:hover {
@@ -198,6 +243,7 @@ export default function VoiceNavigationHelp() {
           color: rgba(52, 211, 153, 0.9);
         }
 
+        /* --- Toggle Button --- */
         .toggle-btn {
           margin-top: 16px;
           width: 100%;
@@ -226,19 +272,24 @@ export default function VoiceNavigationHelp() {
           background: rgba(255, 255, 255, 0.06);
         }
 
+        /* A11y: Clear focus state for keyboard navigation */
         .toggle-btn:focus-visible {
           outline: none;
           box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.3);
           border-color: rgba(124, 58, 237, 0.5);
         }
-  
+        
+        /* --- Responsive --- */
         @media (max-width: 768px) {
           .command-help {
             padding: 16px;
             margin-left: 0;
             margin-top: 16px;
             width: 100%;
-            max-height: 400px;
+            /* UX: Increased max-height for mobile where vertical 
+              space is more available. 
+            */
+            max-height: 50vh; 
           }
         }
       `}</style>

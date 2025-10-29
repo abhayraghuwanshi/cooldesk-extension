@@ -166,7 +166,7 @@ export function injectFooterBar() {
 
     // Try to load the logo, fallback to SVG if it fails
     try {
-      logoImg.src = chrome.runtime.getURL('logo.png');
+      logoImg.src = chrome.runtime.getURL('logo-2.png');
 
       // Add error handler for fallback
       logoImg.onerror = () => {

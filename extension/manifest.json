@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "cooldesk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "action": {
     "default_title": "Open CoolDesk Sidebar"
   },
@@ -40,7 +40,7 @@
       "resources": [
         "assets/*",
         "index.html",
-        "logo.png",
+        "logo-2.png",
         "src/footerBar.js",
         "src/contentInteractions.js",
         "dist/*"
