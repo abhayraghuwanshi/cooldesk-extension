@@ -19,7 +19,6 @@ import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
 import { SettingsModal } from './components/popups/SettingsModal';
 import { ProjectGrid } from './components/ProjectGrid';
-import { VerticalHeader } from './components/toolbar/VerticalHeader';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 import WorkspacePillList from './components/WorkspacePillList.jsx';
 import './search.css';
@@ -1537,15 +1536,7 @@ export default function App() {
   const shouldShowVertical = windowWidth < 700;
 
   return (
-    <div className="popup-wrap" style={{
-      paddingBottom: shouldShowVertical ? 0 : 64,
-      marginLeft: shouldShowVertical ? (
-        windowWidth < 600 ? '50px' :
-          windowWidth < 1200 ? '60px' :
-            '280px'
-      ) : 0,
-      transition: 'margin-left 0.3s ease'
-    }}>
+    <div className="popup-wrap">
 
       {/* Main Content Area with conditional wrapper */}
       <div>
@@ -1768,20 +1759,23 @@ export default function App() {
 
         {/* Conditional Header: VerticalHeader when small screen or user preference, otherwise horizontal Header */}
         {shouldShowVertical ? (
-          <VerticalHeader
-            search={search}
-            setSearch={setSearch}
-            populate={populate}
-            setShowSettings={setShowSettings}
-            openSyncControls={() => { }} // Placeholder function
-            progress={{ running: false }} // Placeholder progress object
-            setShowCreateWorkspace={setShowCreateWorkspace}
-            openInTab={openInTab}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            activeSection={activeSection}
-            setActiveSection={setActiveSection}
-          />
+          <div>
+            {/* <VerticalHeader
+              search={search}
+              setSearch={setSearch}
+              populate={populate}
+              setShowSettings={setShowSettings}
+              openSyncControls={() => { }} // Placeholder function
+              progress={{ running: false }} // Placeholder progress object
+              setShowCreateWorkspace={setShowCreateWorkspace}
+              openInTab={openInTab}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              activeSection={activeSection}
+              setActiveSection={setActiveSection}
+            /> */}
+          </div>
+
         ) : (
           <Header
             search={search}

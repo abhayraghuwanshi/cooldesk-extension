@@ -1969,7 +1969,7 @@ body,
 }
 
 /* Adjust main content margin for mobile */
-@media (max-width: 600px) {
+/* @media (max-width: 600px) {
   .popup-wrap {
     margin-left: 50px !important;
   }
@@ -1979,4 +1979,4 @@ body,
   .popup-wrap {
     margin-left: 45px !important;
   }
-}
+} */
