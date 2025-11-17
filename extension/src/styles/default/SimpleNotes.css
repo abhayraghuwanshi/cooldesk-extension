@@ -65,7 +65,7 @@
     border-radius: 14px;
     background: var(--glass-bg, rgba(255, 255, 255, 0.06));
     border: 1px solid var(--glass-border, var(--border-primary, rgba(255, 255, 255, 0.12)));
-    box-shadow: 0 12px 36px var(--shadow-color, rgba(0, 0, 0, 0.28));
+
     backdrop-filter: var(--glass-backdrop, blur(12px));
 }
 

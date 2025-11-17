@@ -111,6 +111,48 @@ export const scrollPageFunction = (direction) => {
   });
 };
 
+export const typeIntoFocusedElement = (text) => {
+  if (!text) {
+    return { success: false, message: 'No text provided' };
+  }
+
+  const active = document.activeElement;
+
+  if (!active) {
+    return { success: false, message: 'No active element' };
+  }
+
+  const isInput = active.tagName === 'INPUT' || active.tagName === 'TEXTAREA';
+  const isEditable = active.isContentEditable;
+
+  if (!isInput && !isEditable) {
+    return { success: false, message: 'Active element is not editable' };
+  }
+
+  const valueProp = isEditable ? 'innerText' : 'value';
+
+  try {
+    if (!isEditable && typeof active.selectionStart === 'number') {
+      const start = active.selectionStart;
+      const end = active.selectionEnd;
+      const current = active.value || '';
+      active.value = current.slice(0, start) + text + current.slice(end);
+      const newPos = start + text.length;
+      active.selectionStart = newPos;
+      active.selectionEnd = newPos;
+    } else {
+      const current = active[valueProp] || '';
+      active[valueProp] = current + text;
+    }
+
+    active.focus();
+
+    return { success: true };
+  } catch (e) {
+    return { success: false, message: e.message };
+  }
+};
+
 // Helper functions for numbered clicking
 export const addNumbersToElements = () => {
   // Remove existing numbers first
@@ -132,37 +174,37 @@ export const addNumbersToElements = () => {
   // Find all clickable elements with improved selectors
   const selectors = [
     // Basic interactive elements
-    'a:not([style*="display: none"]):not([hidden])', 
-    'button:not([disabled]):not([style*="display: none"]):not([hidden])', 
+    'a:not([style*="display: none"]):not([hidden])',
+    'button:not([disabled]):not([style*="display: none"]):not([hidden])',
     '[role="button"]:not([aria-hidden="true"]):not([style*="display: none"])',
     '[onclick]:not([style*="display: none"]):not([hidden])',
-    'input[type="submit"]:not([disabled]):not([style*="display: none"])', 
+    'input[type="submit"]:not([disabled]):not([style*="display: none"])',
     'input[type="button"]:not([disabled]):not([style*="display: none"])',
-    
+
     // UI component patterns
-    '[class*="btn"]:not([disabled]):not([style*="display: none"]):not([hidden])', 
-    '[class*="button"]:not([disabled]):not([style*="display: none"]):not([hidden])', 
+    '[class*="btn"]:not([disabled]):not([style*="display: none"]):not([hidden])',
+    '[class*="button"]:not([disabled]):not([style*="display: none"]):not([hidden])',
     '[class*="link"]:not([style*="display: none"]):not([hidden])',
     '[tabindex="0"]:not([aria-hidden="true"]):not([style*="display: none"])',
-    
+
     // Collapsible and expandable elements
     '[aria-expanded]', '[data-toggle]', '[data-collapse]',
     '[class*="collapse"]:not(.collapsed)', '[class*="expand"]',
     '[class*="toggle"]:not([disabled]):not([hidden])',
     '[class*="dropdown"]:not([style*="display: none"])',
-    '[class*="accordion"]:not([disabled])' ,
-    
+    '[class*="accordion"]:not([disabled])',
+
     // Icon-only elements and interactive containers  
-    '[class*="icon"]:not([aria-hidden="true"])', 
+    '[class*="icon"]:not([aria-hidden="true"])',
     '[class*="hamburger"]', '[class*="menu-toggle"]',
     '[class*="nav-toggle"]', '[class*="sidebar-toggle"]',
     'svg[role="button"]', 'svg[onclick]', 'svg[class*="clickable"]',
-    
+
     // Form controls and interactive elements
     'select:not([disabled])', 'input[type="checkbox"]', 'input[type="radio"]',
     '[role="tab"]:not([aria-hidden="true"])', '[role="menuitem"]',
     '[role="option"]', '[role="treeitem"]',
-    
+
     // GitHub-specific selectors
     '[class*="js-"]:not([disabled]):not([hidden])', // GitHub JS hooks
     '[data-hydro-click]', // GitHub analytics tracking
@@ -183,7 +225,7 @@ export const addNumbersToElements = () => {
 
   // Debug logging for GitHub buttons specifically
   const debugButtons = document.querySelectorAll('button[class*="btn"]');
-  console.log(`🔍 Found ${debugButtons.length} buttons with 'btn' class:`, 
+  console.log(`🔍 Found ${debugButtons.length} buttons with 'btn' class:`,
     Array.from(debugButtons).map(btn => ({
       text: btn.textContent?.trim(),
       classes: btn.className,
@@ -198,8 +240,8 @@ export const addNumbersToElements = () => {
     if (arr.indexOf(el) !== index) return false;
 
     // Debug specific GitHub buttons
-    const isGitHubEditButton = el.textContent?.trim().includes('Edit profile') || 
-                              el.classList.contains('js-profile-editable-edit-button');
+    const isGitHubEditButton = el.textContent?.trim().includes('Edit profile') ||
+      el.classList.contains('js-profile-editable-edit-button');
     if (isGitHubEditButton) {
       console.log('🎯 GitHub Edit Profile Button Analysis:', {
         text: el.textContent?.trim(),
@@ -221,9 +263,9 @@ export const addNumbersToElements = () => {
     let parent = el.parentElement;
     while (parent) {
       const parentStyle = window.getComputedStyle(parent);
-      if (parentStyle.display === 'none' || 
-          parentStyle.visibility === 'hidden' || 
-          parentStyle.opacity === '0') {
+      if (parentStyle.display === 'none' ||
+        parentStyle.visibility === 'hidden' ||
+        parentStyle.opacity === '0') {
         return false;
       }
       parent = parent.parentElement;
@@ -233,17 +275,17 @@ export const addNumbersToElements = () => {
     let scrollableParent = el.parentElement;
     while (scrollableParent) {
       const scrollStyle = window.getComputedStyle(scrollableParent);
-      if (scrollStyle.overflow === 'auto' || 
-          scrollStyle.overflow === 'scroll' || 
-          scrollStyle.overflowY === 'auto' || 
-          scrollStyle.overflowY === 'scroll') {
-        
+      if (scrollStyle.overflow === 'auto' ||
+        scrollStyle.overflow === 'scroll' ||
+        scrollStyle.overflowY === 'auto' ||
+        scrollStyle.overflowY === 'scroll') {
+
         const parentRect = scrollableParent.getBoundingClientRect();
         const elRect = el.getBoundingClientRect();
-        
+
         // Element should be within scrollable container bounds
-        if (elRect.top < parentRect.top - 50 || 
-            elRect.bottom > parentRect.bottom + 50) {
+        if (elRect.top < parentRect.top - 50 ||
+          elRect.bottom > parentRect.bottom + 50) {
           return false; // Element is outside visible scroll area
         }
         break;
@@ -263,100 +305,100 @@ export const addNumbersToElements = () => {
     const notBehindOtherElements = !style.pointerEvents || style.pointerEvents !== 'none';
 
     // Check if element is actually in viewport
-    const isInViewport = rect.top < window.innerHeight + 100 && 
-                        rect.bottom > -100 && 
-                        rect.left < window.innerWidth + 100 && 
-                        rect.right > -100;
+    const isInViewport = rect.top < window.innerHeight + 100 &&
+      rect.bottom > -100 &&
+      rect.left < window.innerWidth + 100 &&
+      rect.right > -100;
 
     // Enhanced content detection for icon-only and collapsible elements
-    const hasContent = el.textContent?.trim().length > 0 || 
-                      el.getAttribute('aria-label') || 
-                      el.getAttribute('title') ||
-                      el.getAttribute('data-tooltip') ||
-                      el.getAttribute('data-title') ||
-                      el.tagName.toLowerCase() === 'button' ||
-                      el.tagName.toLowerCase() === 'a' ||
-                      el.tagName.toLowerCase() === 'select' ||
-                      el.tagName.toLowerCase() === 'input' ||
-                      // Icon-only elements
-                      el.querySelector('svg, i, [class*="icon"], [class*="fa-"]') ||
-                      // Collapsible elements
-                      el.hasAttribute('aria-expanded') ||
-                      el.hasAttribute('data-toggle') ||
-                      el.hasAttribute('data-collapse') ||
-                      // Interactive roles
-                      ['tab', 'menuitem', 'option', 'treeitem'].includes(el.getAttribute('role'));
+    const hasContent = el.textContent?.trim().length > 0 ||
+      el.getAttribute('aria-label') ||
+      el.getAttribute('title') ||
+      el.getAttribute('data-tooltip') ||
+      el.getAttribute('data-title') ||
+      el.tagName.toLowerCase() === 'button' ||
+      el.tagName.toLowerCase() === 'a' ||
+      el.tagName.toLowerCase() === 'select' ||
+      el.tagName.toLowerCase() === 'input' ||
+      // Icon-only elements
+      el.querySelector('svg, i, [class*="icon"], [class*="fa-"]') ||
+      // Collapsible elements
+      el.hasAttribute('aria-expanded') ||
+      el.hasAttribute('data-toggle') ||
+      el.hasAttribute('data-collapse') ||
+      // Interactive roles
+      ['tab', 'menuitem', 'option', 'treeitem'].includes(el.getAttribute('role'));
 
     // Enhanced decorative element detection
     const isNotDecorative = !el.classList.contains('overlay') &&
-                           !el.classList.contains('backdrop') &&
-                           !el.classList.contains('mask') &&
-                           !el.classList.contains('decoration') &&
-                           !el.classList.contains('spacer') &&
-                           !el.getAttribute('aria-hidden') &&
-                           // Allow elements with interactive indicators
-                           (el.style.cursor === 'pointer' || 
-                            window.getComputedStyle(el).cursor === 'pointer' ||
-                            hasContent);
+      !el.classList.contains('backdrop') &&
+      !el.classList.contains('mask') &&
+      !el.classList.contains('decoration') &&
+      !el.classList.contains('spacer') &&
+      !el.getAttribute('aria-hidden') &&
+      // Allow elements with interactive indicators
+      (el.style.cursor === 'pointer' ||
+        window.getComputedStyle(el).cursor === 'pointer' ||
+        hasContent);
 
-    return isDisplayVisible && 
-           isVisibilityVisible && 
-           hasOpacity && 
-           hasSize && 
-           notBehindOtherElements && 
-           isInViewport && 
-           hasContent && 
-           isNotDecorative;
+    return isDisplayVisible &&
+      isVisibilityVisible &&
+      hasOpacity &&
+      hasSize &&
+      notBehindOtherElements &&
+      isInViewport &&
+      hasContent &&
+      isNotDecorative;
   });
 
   // Sort elements by importance and position
   const sortedElements = visibleElements.sort((a, b) => {
     const aRect = a.getBoundingClientRect();
     const bRect = b.getBoundingClientRect();
-    
+
     // Priority scoring system
     let aScore = 0, bScore = 0;
-    
+
     // Higher priority for interactive elements
     if (a.tagName.toLowerCase() === 'button') aScore += 10;
     if (b.tagName.toLowerCase() === 'button') bScore += 10;
     if (a.tagName.toLowerCase() === 'a') aScore += 8;
     if (b.tagName.toLowerCase() === 'a') bScore += 8;
-    
+
     // Priority for elements with clear text or interactive indicators
     if (a.textContent?.trim().length > 0) aScore += 5;
     if (b.textContent?.trim().length > 0) bScore += 5;
-    
+
     // Priority for collapsible/expandable elements (often important UI controls)
     if (a.hasAttribute('aria-expanded') || a.hasAttribute('data-toggle')) aScore += 7;
     if (b.hasAttribute('aria-expanded') || b.hasAttribute('data-toggle')) bScore += 7;
-    
+
     // Priority for icon-only interactive elements
-    if (a.querySelector('svg, i, [class*="icon"], [class*="fa-"]') && 
-        (a.style.cursor === 'pointer' || window.getComputedStyle(a).cursor === 'pointer')) aScore += 6;
-    if (b.querySelector('svg, i, [class*="icon"], [class*="fa-"]') && 
-        (b.style.cursor === 'pointer' || window.getComputedStyle(b).cursor === 'pointer')) bScore += 6;
-    
+    if (a.querySelector('svg, i, [class*="icon"], [class*="fa-"]') &&
+      (a.style.cursor === 'pointer' || window.getComputedStyle(a).cursor === 'pointer')) aScore += 6;
+    if (b.querySelector('svg, i, [class*="icon"], [class*="fa-"]') &&
+      (b.style.cursor === 'pointer' || window.getComputedStyle(b).cursor === 'pointer')) bScore += 6;
+
     // Priority for dropdown/menu elements
     if (a.getAttribute('role') === 'menuitem' || a.classList.contains('dropdown')) aScore += 4;
     if (b.getAttribute('role') === 'menuitem' || b.classList.contains('dropdown')) bScore += 4;
-    
+
     // Priority for elements closer to top and left (reading order)
     aScore += Math.max(0, 10 - Math.floor(aRect.top / 100));
     bScore += Math.max(0, 10 - Math.floor(bRect.top / 100));
-    
+
     // Priority for larger elements (likely more important)
     const aArea = aRect.width * aRect.height;
     const bArea = bRect.width * bRect.height;
     if (aArea > 1000) aScore += 3;
     if (bArea > 1000) bScore += 3;
-    
+
     // Bonus for elements that might reveal hidden content
-    if (a.classList.contains('toggle') || a.classList.contains('hamburger') || 
-        a.classList.contains('menu-toggle')) aScore += 5;
-    if (b.classList.contains('toggle') || b.classList.contains('hamburger') || 
-        b.classList.contains('menu-toggle')) bScore += 5;
-    
+    if (a.classList.contains('toggle') || a.classList.contains('hamburger') ||
+      a.classList.contains('menu-toggle')) aScore += 5;
+    if (b.classList.contains('toggle') || b.classList.contains('hamburger') ||
+      b.classList.contains('menu-toggle')) bScore += 5;
+
     return bScore - aScore;
   });
 
@@ -432,7 +474,7 @@ export const addNumbersToElements = () => {
   // Function to update positions with smart placement
   const updateNumberPositions = () => {
     const usedPositions = new Set();
-    
+
     numberedElements.forEach(item => {
       const rect = item.element.getBoundingClientRect();
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -457,7 +499,7 @@ export const addNumbersToElements = () => {
 
         // Find a position that doesn't overlap with existing numbers
         for (const pos of positions) {
-          const posKey = `${Math.floor(pos.top/25)}-${Math.floor(pos.left/25)}`;
+          const posKey = `${Math.floor(pos.top / 25)}-${Math.floor(pos.left / 25)}`;
           if (!usedPositions.has(posKey)) {
             bestPosition = pos;
             usedPositions.add(posKey);
@@ -504,10 +546,10 @@ export const addNumbersToElements = () => {
   const scrollableContainers = document.querySelectorAll('[style*="overflow"], [style*="scroll"]');
   const autoScrollContainers = Array.from(document.querySelectorAll('*')).filter(el => {
     const style = window.getComputedStyle(el);
-    return style.overflow === 'auto' || style.overflow === 'scroll' || 
-           style.overflowY === 'auto' || style.overflowY === 'scroll';
+    return style.overflow === 'auto' || style.overflow === 'scroll' ||
+      style.overflowY === 'auto' || style.overflowY === 'scroll';
   });
-  
+
   [...scrollableContainers, ...autoScrollContainers].forEach(container => {
     container.addEventListener('scroll', scrollHandler, { passive: true });
   });
@@ -518,7 +560,7 @@ export const addNumbersToElements = () => {
   // Set up mutation observer for dynamic content changes
   const mutationObserver = new MutationObserver((mutations) => {
     let shouldRefresh = false;
-    
+
     mutations.forEach((mutation) => {
       // Check for added nodes that might be interactive
       if (mutation.addedNodes.length > 0) {
@@ -526,7 +568,7 @@ export const addNumbersToElements = () => {
           if (node.nodeType === Node.ELEMENT_NODE) {
             // Check if added node or its children contain interactive elements
             const interactiveSelectors = 'a, button, [role="button"], [onclick], input[type="submit"], input[type="button"], [class*="btn"], select, [role="tab"], [role="menuitem"]';
-            
+
             if (node.matches && node.matches(interactiveSelectors)) {
               shouldRefresh = true;
               break;
@@ -537,15 +579,15 @@ export const addNumbersToElements = () => {
           }
         }
       }
-      
+
       // Check for attribute changes that might affect visibility
       if (mutation.type === 'attributes') {
         const target = mutation.target;
-        if (mutation.attributeName === 'class' || 
-            mutation.attributeName === 'style' ||
-            mutation.attributeName === 'aria-expanded' ||
-            mutation.attributeName === 'aria-hidden') {
-          
+        if (mutation.attributeName === 'class' ||
+          mutation.attributeName === 'style' ||
+          mutation.attributeName === 'aria-expanded' ||
+          mutation.attributeName === 'aria-hidden') {
+
           // Check if this affects interactive elements
           const interactiveSelectors = 'a, button, [role="button"], [onclick], input[type="submit"], input[type="button"], [class*="btn"], select';
           if (target.matches && target.matches(interactiveSelectors)) {
@@ -564,13 +606,13 @@ export const addNumbersToElements = () => {
         // Re-run the numbering if numbers are currently shown
         if (document.querySelector('.voice-nav-container')) {
           console.log('🔄 Auto-refreshing numbers due to DOM changes');
-          
+
           // Clean up current numbers
           const currentNumbers = document.querySelectorAll('.voice-nav-number');
           currentNumbers.forEach(el => el.remove());
           const currentContainer = document.querySelector('.voice-nav-container');
           if (currentContainer) currentContainer.remove();
-          
+
           // Re-add numbers with current function context
           try {
             const result = addNumbersToElements();
@@ -655,22 +697,22 @@ export const clickElementByNumber = (number) => {
   // Enhanced click handling for collapsible elements
   setTimeout(() => {
     element.click();
-    
+
     // For collapsible elements, wait and refresh numbers if content is revealed
-    if (element.hasAttribute('aria-expanded') || 
-        element.hasAttribute('data-toggle') ||
-        element.classList.contains('dropdown') ||
-        element.classList.contains('collapse') ||
-        element.classList.contains('toggle') ||
-        element.classList.contains('hamburger') ||
-        element.classList.contains('menu-toggle')) {
-      
+    if (element.hasAttribute('aria-expanded') ||
+      element.hasAttribute('data-toggle') ||
+      element.classList.contains('dropdown') ||
+      element.classList.contains('collapse') ||
+      element.classList.contains('toggle') ||
+      element.classList.contains('hamburger') ||
+      element.classList.contains('menu-toggle')) {
+
       // Wait for potential DOM changes
       setTimeout(() => {
         // Check if new content appeared
         const newElements = document.querySelectorAll('a, button, [role="button"], [onclick], input[type="submit"], input[type="button"]');
         const currentCount = document.querySelectorAll('[data-voice-nav-number]').length;
-        
+
         if (newElements.length > currentCount) {
           // Auto-refresh numbers if new interactive content appeared
           setTimeout(() => {
@@ -680,7 +722,7 @@ export const clickElementByNumber = (number) => {
               oldNumbers.forEach(el => el.remove());
               const oldContainer = document.querySelector('.voice-nav-container');
               if (oldContainer) oldContainer.remove();
-              
+
               // Add fresh numbers (this would need to be called from the React component)
               console.log('New interactive content detected - consider refreshing numbers');
             }
@@ -692,11 +734,11 @@ export const clickElementByNumber = (number) => {
 
   return {
     success: true,
-    elementText: element.textContent?.trim() || 
-                element.getAttribute('title') || 
-                element.getAttribute('aria-label') ||
-                element.getAttribute('data-tooltip') ||
-                `Element ${number}`
+    elementText: element.textContent?.trim() ||
+      element.getAttribute('title') ||
+      element.getAttribute('aria-label') ||
+      element.getAttribute('data-tooltip') ||
+      `Element ${number}`
   };
 };
 
@@ -714,31 +756,31 @@ export const addNumbersToContentElements = () => {
   const contentSelectors = [
     // Primary content structures
     'article', 'section', 'main', '[role="main"]',
-    
+
     // Headings (high priority)
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    
+
     // Content blocks
     'p:not(:empty)', 'blockquote', 'pre', 'code',
-    
+
     // Lists and structured content  
     'ul:not(:empty)', 'ol:not(:empty)', 'dl:not(:empty)',
     'li:not(:empty)', 'dt', 'dd',
-    
+
     // Rich content
     'figure', 'figcaption', 'table', 'thead', 'tbody',
-    
+
     // Semantic content
     '[role="article"]', '[role="region"]', '[role="complementary"]',
     '.content', '.post', '.article', '.section',
     '.paragraph', '.text-block', '.description',
-    
+
     // Forms as content
     'fieldset', 'legend', 'label:not(:empty)',
-    
+
     // Navigation content
     'nav:not(:empty)', '[role="navigation"]:not(:empty)',
-    
+
     // Media with captions
     'video + p', 'img + p', 'iframe + p'
   ];
@@ -762,9 +804,9 @@ export const addNumbersToContentElements = () => {
     let parent = el.parentElement;
     while (parent) {
       const parentStyle = window.getComputedStyle(parent);
-      if (parentStyle.display === 'none' || 
-          parentStyle.visibility === 'hidden' || 
-          parentStyle.opacity === '0') {
+      if (parentStyle.display === 'none' ||
+        parentStyle.visibility === 'hidden' ||
+        parentStyle.opacity === '0') {
         return false;
       }
       parent = parent.parentElement;
@@ -773,25 +815,25 @@ export const addNumbersToContentElements = () => {
     // Basic visibility checks
     const style = window.getComputedStyle(el);
     const rect = el.getBoundingClientRect();
-    
+
     const isVisible = style.display !== 'none' &&
-                     style.visibility !== 'hidden' &&
-                     parseFloat(style.opacity) > 0.1 &&
-                     rect.width > 10 && rect.height > 10;
+      style.visibility !== 'hidden' &&
+      parseFloat(style.opacity) > 0.1 &&
+      rect.width > 10 && rect.height > 10;
 
     // Content quality checks
     const textContent = el.textContent?.trim() || '';
     const hasSubstantialContent = textContent.length > 10; // At least 10 characters
-    
+
     // Skip navigation-only elements in content mode
     const isNavigationOnly = el.tagName.toLowerCase() === 'nav' &&
-                            el.querySelectorAll('a, button').length > textContent.split(' ').length;
+      el.querySelectorAll('a, button').length > textContent.split(' ').length;
 
     // Skip if it's just a container with no direct text content
-    const hasDirectText = textContent.length > 0 && 
-                         (el.children.length === 0 || 
-                          textContent.length > Array.from(el.children).reduce((sum, child) => 
-                            sum + (child.textContent?.length || 0), 0) * 0.3);
+    const hasDirectText = textContent.length > 0 &&
+      (el.children.length === 0 ||
+        textContent.length > Array.from(el.children).reduce((sum, child) =>
+          sum + (child.textContent?.length || 0), 0) * 0.3);
 
     return isVisible && hasSubstantialContent && !isNavigationOnly && hasDirectText;
   });
@@ -799,41 +841,41 @@ export const addNumbersToContentElements = () => {
   // Smart content prioritization
   const prioritizedContent = validContent.sort((a, b) => {
     let aScore = 0, bScore = 0;
-    
+
     // Heading hierarchy (highest priority)
     const headingScores = { h1: 100, h2: 90, h3: 80, h4: 70, h5: 60, h6: 50 };
     aScore += headingScores[a.tagName.toLowerCase()] || 0;
     bScore += headingScores[b.tagName.toLowerCase()] || 0;
-    
+
     // Main content areas
     if (a.tagName.toLowerCase() === 'main' || a.getAttribute('role') === 'main') aScore += 95;
     if (b.tagName.toLowerCase() === 'main' || b.getAttribute('role') === 'main') bScore += 95;
-    
+
     // Articles and sections
     if (a.tagName.toLowerCase() === 'article') aScore += 85;
     if (b.tagName.toLowerCase() === 'article') bScore += 85;
     if (a.tagName.toLowerCase() === 'section') aScore += 75;
     if (b.tagName.toLowerCase() === 'section') bScore += 75;
-    
+
     // Content length (substantial content gets priority)
     const aLength = a.textContent?.trim().length || 0;
     const bLength = b.textContent?.trim().length || 0;
     if (aLength > 100) aScore += Math.min(20, Math.floor(aLength / 100));
     if (bLength > 100) bScore += Math.min(20, Math.floor(bLength / 100));
-    
+
     // Semantic classes
     const contentClasses = ['content', 'post', 'article', 'main-text', 'description'];
     contentClasses.forEach(cls => {
       if (a.classList.contains(cls)) aScore += 15;
       if (b.classList.contains(cls)) bScore += 15;
     });
-    
+
     // Reading order (top to bottom)
     const aRect = a.getBoundingClientRect();
     const bRect = b.getBoundingClientRect();
     aScore += Math.max(0, 10 - Math.floor(aRect.top / 100));
     bScore += Math.max(0, 10 - Math.floor(bRect.top / 100));
-    
+
     return bScore - aScore;
   });
 
@@ -891,7 +933,7 @@ export const addNumbersToContentElements = () => {
     const rect = element.getBoundingClientRect();
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-    
+
     numberEl.style.top = `${rect.top + scrollTop - 12}px`;
     numberEl.style.left = `${rect.left + scrollLeft - 12}px`;
 
@@ -900,11 +942,11 @@ export const addNumbersToContentElements = () => {
     numberedContent.push({
       number: number,
       element: element,
-      title: element.tagName.toLowerCase() === 'h1' || element.tagName.toLowerCase() === 'h2' || 
-             element.tagName.toLowerCase() === 'h3' || element.tagName.toLowerCase() === 'h4' ||
-             element.tagName.toLowerCase() === 'h5' || element.tagName.toLowerCase() === 'h6' ?
-             element.textContent?.trim().substring(0, 50) : 
-             element.tagName.toLowerCase() + ' content',
+      title: element.tagName.toLowerCase() === 'h1' || element.tagName.toLowerCase() === 'h2' ||
+        element.tagName.toLowerCase() === 'h3' || element.tagName.toLowerCase() === 'h4' ||
+        element.tagName.toLowerCase() === 'h5' || element.tagName.toLowerCase() === 'h6' ?
+        element.textContent?.trim().substring(0, 50) :
+        element.tagName.toLowerCase() + ' content',
       content: element.textContent?.trim().substring(0, 500) || ''
     });
   });
@@ -918,7 +960,7 @@ export const addNumbersToContentElements = () => {
 // Read content by number function (injected into page)
 export const readContentElementByNumber = (number) => {
   const element = document.querySelector(`[data-voice-content-number="${number}"]`);
-  
+
   if (!element) {
     return { success: false };
   }
@@ -936,9 +978,9 @@ export const readContentElementByNumber = (number) => {
     element.style.cssText = originalStyle;
   }, 2000);
 
-  const title = element.tagName.match(/h[1-6]/i) ? 
-               element.textContent?.trim().substring(0, 50) :
-               `${element.tagName.toLowerCase()} content`;
+  const title = element.tagName.match(/h[1-6]/i) ?
+    element.textContent?.trim().substring(0, 50) :
+    `${element.tagName.toLowerCase()} content`;
 
   return {
     success: true,

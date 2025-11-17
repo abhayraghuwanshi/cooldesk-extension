@@ -1,4 +1,5 @@
-import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack } from '@fortawesome/free-solid-svg-icons';
+
+import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useMemo, useState } from 'react';
 import { listWorkspaces, saveWorkspace } from '../../db/index.js';
@@ -9,6 +10,7 @@ import { setAndSaveFontSize } from '../../utils/fontUtils';
 import DisplayData from '../settings/DisplayData';
 import ExportData from '../settings/ExportData';
 import { TabItem, Tabs } from '../settings/TabComponents';
+import TeamManagement from '../settings/TeamManagement.jsx';
 import ThemesTab from '../settings/ThemesTab';
 
 
@@ -577,6 +579,11 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faEye} style={{ marginRight: '8px' }} />Display</>}>
             <DisplayData />
+          </TabItem>
+          <TabItem title={<><FontAwesomeIcon icon={faUsers} style={{ marginRight: '8px' }} />Team Management</>}>
+            <div style={{ padding: '20px' }}>
+              <TeamManagement />
+            </div>
           </TabItem>
           <TabItem title={<><FontAwesomeIcon icon={faGraduationCap} style={{ marginRight: '8px' }} />Help</>}>
             <div style={{ padding: '20px', maxHeight: '600px', overflowY: 'auto' }}>

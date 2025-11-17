@@ -9,6 +9,43 @@ export class VoiceCommandProcessor {
     this.workspaceData = workspaceData;
   }
 
+  async typeIntoFocusedInput(command) {
+    try {
+      const raw = command.trim();
+      let text = '';
+
+      if (raw.toLowerCase().startsWith('type ')) {
+        text = raw.slice(5);
+      }
+
+      text = text.replace(/[.!?]+$/, '').trim();
+
+      if (!text) {
+        this.showFeedback('Please specify what to type', 'error');
+        return;
+      }
+
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: pageInteraction.typeIntoFocusedElement,
+        args: [text]
+      });
+
+      if (results && results[0] && results[0].result) {
+        const result = results[0].result;
+        if (result.success) {
+          this.showFeedback(`Typed: "${text}"`);
+        } else {
+          this.showFeedback(result.message || 'Could not type into the current field', 'error');
+        }
+      }
+    } catch (error) {
+      throw new Error(`Failed to type into input: ${error.message}`);
+    }
+  }
+
   // Update workspace data for dynamic access
   updateWorkspaceData(workspaceData) {
     this.workspaceData = workspaceData;
@@ -140,6 +177,9 @@ export class VoiceCommandProcessor {
       }
       else if (command.includes('read') && command.match(/read (\\d+)/)) {
         await this.readContentByNumber(command);
+      }
+      else if (command.toLowerCase().startsWith('type ')) {
+        await this.typeIntoFocusedInput(command);
       }
       // Link clicking commands
       else if (command.includes('click') || command.includes('click on')) {
