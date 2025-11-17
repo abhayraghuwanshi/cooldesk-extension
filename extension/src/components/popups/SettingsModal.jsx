@@ -559,433 +559,253 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
             {error}
           </div>
         )}
-        <Tabs
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          disabledTitles={[]} // Remove restrictions for better onboarding flow
-        >
-          <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
-            <ThemesTab
-              selectedTheme={selectedTheme}
-              fontSize={fontSize}
-              fontFamily={fontFamily}
-              onThemeChange={handleThemeChange}
-              onFontSizeChange={handleFontSizeChange}
-              onFontFamilyChange={handleFontFamilyChange}
-            />
-          </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faFileExport} style={{ marginRight: '8px' }} />Export Data</>}>
-            <ExportData />
-          </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faEye} style={{ marginRight: '8px' }} />Display</>}>
-            <DisplayData />
-          </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faUsers} style={{ marginRight: '8px' }} />Team Management</>}>
-            <div style={{ padding: '20px' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '260px minmax(0, 1fr)',
+          gap: '20px',
+          alignItems: 'flex-start'
+        }}>
+          <div style={{
+            borderRadius: '16px',
+            padding: '12px 8px'
+          }}>
+            <Tabs
+              activeTab={activeTab}
+              onTabChange={handleTabChange}
+              disabledTitles={[]} // Remove restrictions for better onboarding flow
+              orientation="vertical"
+            >
+              <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
+                {/* Content rendered in the right pane below */}
+              </TabItem>
+              <TabItem title={<><FontAwesomeIcon icon={faFileExport} style={{ marginRight: '8px' }} />Export Data</>}>
+                {/* Content rendered in the right pane below */}
+              </TabItem>
+              <TabItem title={<><FontAwesomeIcon icon={faEye} style={{ marginRight: '8px' }} />Display</>}>
+                {/* Content rendered in the right pane below */}
+              </TabItem>
+              <TabItem title={<><FontAwesomeIcon icon={faUsers} style={{ marginRight: '8px' }} />Team Management</>}>
+                {/* Content rendered in the right pane below */}
+              </TabItem>
+              <TabItem title={<><FontAwesomeIcon icon={faGraduationCap} style={{ marginRight: '8px' }} />Help</>}>
+                {/* Content rendered in the right pane below */}
+              </TabItem>
+            </Tabs>
+          </div>
+          <div style={{
+            borderRadius: '16px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'rgba(15, 23, 42, 0.8)',
+            padding: '20px',
+            maxHeight: '600px',
+            overflowY: 'auto'
+          }}>
+            {activeTab === 0 && (
+              <ThemesTab
+                selectedTheme={selectedTheme}
+                fontSize={fontSize}
+                fontFamily={fontFamily}
+                onThemeChange={handleThemeChange}
+                onFontSizeChange={handleFontSizeChange}
+                onFontFamilyChange={handleFontFamilyChange}
+              />
+            )}
+            {activeTab === 1 && (
+              <ExportData />
+            )}
+            {activeTab === 2 && (
+              <DisplayData />
+            )}
+            {activeTab === 3 && (
               <TeamManagement />
-            </div>
-          </TabItem>
-          <TabItem title={<><FontAwesomeIcon icon={faGraduationCap} style={{ marginRight: '8px' }} />Help</>}>
-            <div style={{ padding: '20px', maxHeight: '600px', overflowY: 'auto' }}>
-              {/* Getting Started Section */}
-              <div style={{ marginBottom: '32px' }}>
-                <h2 style={{ marginTop: 0, marginBottom: '12px', fontSize: '20px', fontWeight: 600 }}>
-                  Getting Started
-                </h2>
-                <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6 }}>
-                  Need help getting started with CoolDesk? Take a quick tour to learn about all the features.
-                </p>
+            )}
+            {activeTab === 4 && (
+              <div style={{ padding: '0', maxHeight: '560px', overflowY: 'auto' }}>
+                {/* Getting Started Section */}
+                <div style={{ marginBottom: '32px' }}>
+                  <h2 style={{ marginTop: 0, marginBottom: '12px', fontSize: '20px', fontWeight: 600 }}>
+                    Getting Started
+                  </h2>
+                  <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6 }}>
+                    Need help getting started with CoolDesk? Take a quick tour to learn about all the features.
+                  </p>
 
-                <button
-                  onClick={() => {
-                    if (onStartOnboarding) {
-                      onStartOnboarding();
-                      onClose();
-                    }
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '14px 20px',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    color: 'white',
-                    fontSize: '15px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    fontFamily: 'inherit',
-                    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.4)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
-                  }}
-                >
-                  <FontAwesomeIcon icon={faGraduationCap} style={{ fontSize: '18px' }} />
-                  Start Onboarding Tour
-                </button>
-              </div>
+                  <button
+                    onClick={() => {
+                      if (onStartOnboarding) {
+                        onStartOnboarding();
+                        onClose();
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '14px 20px',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '15px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      fontFamily: 'inherit',
+                      boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faGraduationCap} style={{ fontSize: '18px' }} />
+                    Start Onboarding Tour
+                  </button>
+                </div>
 
-              {/* Features Guide */}
-              <div style={{ marginBottom: '32px' }}>
-                <h2 style={{ marginTop: 0, marginBottom: '16px', fontSize: '20px', fontWeight: 600 }}>
-                  Features Guide
-                </h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {[
-                    {
-                      icon: faThumbtack,
-                      title: 'Pins',
-                      desc: 'Quick access to your most important links',
-                      howTo: 'Right-click any link → Pin. Pinned items appear at the top of your dashboard.',
-                    },
-                    {
-                      icon: faRocket,
-                      title: 'Pinned Workspaces',
-                      desc: 'Keep important workspaces at the top',
-                      howTo: 'Right-click any workspace → Pin to Pinned Workspaces.',
-                    },
-                    {
-                      icon: faFolder,
-                      title: 'Workspace List',
-                      desc: 'Organize tabs and links by project',
-                      howTo: 'Click + button to create workspace. Add current tab or paste URLs.',
-                    },
-                    {
-                      icon: faTableCellsLarge,
-                      title: 'Tabs',
-                      desc: 'Manage all open browser tabs',
-                      howTo: 'View all tabs in one place. Click to switch, close, or organize.',
-                    },
-                    {
-                      icon: faMicrophone,
-                      title: 'Voice Navigation',
-                      desc: 'Control browser with voice commands',
-                      howTo: 'Click microphone icon. Say "show numbers" to see clickable elements.',
-                    },
-                    {
-                      icon: faComments,
-                      title: 'AI Chats',
-                      desc: 'Auto-save ChatGPT, Claude, Gemini & Grok',
-                      howTo: 'Automatically scrapes chats when you visit AI platforms.',
-                    },
-                    {
-                      icon: faLightbulb,
-                      title: 'Notes & Daily Journal',
-                      desc: 'Daily notes and task management',
-                      howTo: 'Click date to add notes. Keep track of your daily thoughts and tasks.',
-                    },
-                  ].map((feature, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
-                        border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
-                        borderRadius: '8px',
-                        padding: '16px',
-                        transition: 'all 0.2s',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                        <FontAwesomeIcon
-                          icon={feature.icon}
-                          style={{
-                            fontSize: '20px',
-                            color: '#667eea',
-                            marginTop: '2px',
-                          }}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
-                            {feature.title}
-                          </div>
-                          <div style={{ fontSize: '14px', color: 'var(--text-secondary, #999)', marginBottom: '8px', lineHeight: 1.5 }}>
-                            {feature.desc}
-                          </div>
-                          <div style={{ fontSize: '13px', color: 'var(--text-secondary, #999)', lineHeight: 1.6 }}>
-                            <span style={{ fontWeight: 600, color: '#667eea' }}>How to use:</span> {feature.howTo}
+                {/* Features Guide */}
+                <div style={{ marginBottom: '32px' }}>
+                  <h2 style={{ marginTop: 0, marginBottom: '16px', fontSize: '20px', fontWeight: 600 }}>
+                    Features Guide
+                  </h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {[
+                      {
+                        icon: faThumbtack,
+                        title: 'Pins',
+                        desc: 'Quick access to your most important links',
+                        howTo: 'Right-click any link → Pin. Pinned items appear at the top of your dashboard.',
+                      },
+                      {
+                        icon: faRocket,
+                        title: 'Pinned Workspaces',
+                        desc: 'Keep important workspaces at the top',
+                        howTo: 'Right-click any workspace → Pin to Pinned Workspaces.',
+                      },
+                      {
+                        icon: faFolder,
+                        title: 'Workspace List',
+                        desc: 'Organize tabs and links by project',
+                        howTo: 'Click + button to create workspace. Add current tab or paste URLs.',
+                      },
+                      {
+                        icon: faTableCellsLarge,
+                        title: 'Tabs',
+                        desc: 'Manage all open browser tabs',
+                        howTo: 'View all tabs in one place. Click to switch, close, or organize.',
+                      },
+                      {
+                        icon: faMicrophone,
+                        title: 'Voice Navigation',
+                        desc: 'Control browser with voice commands',
+                        howTo: 'Click microphone icon. Say "show numbers" to see clickable elements.',
+                      },
+                      {
+                        icon: faComments,
+                        title: 'AI Chats',
+                        desc: 'Auto-save ChatGPT, Claude, Gemini & Grok',
+                        howTo: 'Automatically scrapes chats when you visit AI platforms.',
+                      },
+                      {
+                        icon: faLightbulb,
+                        title: 'Notes & Daily Journal',
+                        desc: 'Daily notes and task management',
+                        howTo: 'Click date to add notes. Keep track of your daily thoughts and tasks.',
+                      },
+                    ].map((feature, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
+                          border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
+                          borderRadius: '8px',
+                          padding: '16px',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                          <FontAwesomeIcon
+                            icon={feature.icon}
+                            style={{
+                              fontSize: '20px',
+                              color: '#667eea',
+                              marginTop: '2px',
+                            }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
+                              {feature.title}
+                            </div>
+                            <div style={{ fontSize: '14px', color: 'var(--text-secondary, #999)', marginBottom: '8px', lineHeight: 1.5 }}>
+                              {feature.desc}
+                            </div>
+                            <div style={{ fontSize: '13px', color: 'var(--text-secondary, #999)', lineHeight: 1.6 }}>
+                              <span style={{ fontWeight: 600, color: '#667eea' }}>How to use:</span> {feature.howTo}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Support Section */}
-              <div style={{
-                padding: '20px',
-                background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
-                borderRadius: '8px',
-                border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))'
-              }}>
-                <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600 }}>
-                  Need More Help?
-                </h3>
-                <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6, fontSize: '14px' }}>
-                  Found a bug or have a feature request? We'd love to hear from you!
-                </p>
-                <button
-                  onClick={() => {
-                    const subject = encodeURIComponent('CoolDesk Feedback');
-                    const body = encodeURIComponent('Please describe your issue or suggestion:\n\n');
-                    window.open(`mailto:support@cooldesk.com?subject=${subject}&body=${body}`, '_blank');
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '10px 16px',
-                    background: 'transparent',
-                    border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.2))',
-                    borderRadius: '6px',
-                    color: 'var(--text, #e5e7eb)',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    fontFamily: 'inherit',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.borderColor = '#667eea';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.borderColor = 'var(--border-primary, rgba(255, 255, 255, 0.2))';
-                  }}
-                >
-                  <FontAwesomeIcon icon={faEnvelope} />
-                  Report Bug or Request Feature
-                </button>
-              </div>
-            </div>
-          </TabItem>
-          {/* <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>
-            <AccountTab />
-          </TabItem> */}
-        </Tabs>
-
-        {/* Removed global Save button; use Save & Continue in Basic tab */}
-
-        {showCreateWorkspace && (
-          <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleCloseCreateWorkspace() }} style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10000,
-            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
-          }}>
-            <div className="modal" style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '16px',
-              boxShadow: '0 12px 48px rgba(0, 0, 0, 0.4)',
-              maxWidth: '500px',
-              width: '90vw',
-              padding: '24px',
-              color: '#e5e7eb'
-            }}>
-              <div
-                className="modal-header"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 16,
-                  paddingBottom: 20,
-                  borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-                  marginBottom: 24,
-                }}
-              >
-                <h3 style={{
-                  margin: 0,
-                  fontSize: '20px',
-                  fontWeight: '600',
-                  color: '#e5e7eb'
-                }}>Create New Workspace</h3>
-                <button
-                  onClick={handleCloseCreateWorkspace}
-                  className="cancel-btn"
-                  aria-label="Close"
-                  title="Close"
-                  style={{
-                    padding: '8px',
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    border: 'none',
-                    color: '#e5e7eb',
-                    cursor: 'pointer',
-                    fontSize: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.background = 'rgba(255, 255, 255, 0.2)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '500', color: '#d1d5db' }}>Workspace Name *</span>
-                  <input
-                    value={workspaces.find(w => w.id === 'new')?.name || ''}
-                    onChange={(e) => {
-                      const newWorkspace = { id: 'new', name: e.target.value, description: workspaces.find(w => w.id === 'new')?.description || '' };
-                      setWorkspaces(prev => {
-                        const filtered = prev.filter(w => w.id !== 'new');
-                        return [...filtered, newWorkspace];
-                      });
-                    }}
-                    placeholder="Enter workspace name..."
-                    autoFocus
-                    style={{
-                      padding: '12px 16px',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      borderRadius: '8px',
-                      color: '#e5e7eb',
-                      fontSize: '14px',
-                      outline: 'none',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#34C759';
-                      e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                    }}
-                  />
-                </label>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '500', color: '#d1d5db' }}>Description</span>
-                  <textarea
-                    value={workspaces.find(w => w.id === 'new')?.description || ''}
-                    onChange={(e) => {
-                      const newWorkspace = { id: 'new', name: workspaces.find(w => w.id === 'new')?.name || '', description: e.target.value };
-                      setWorkspaces(prev => {
-                        const filtered = prev.filter(w => w.id !== 'new');
-                        return [...filtered, newWorkspace];
-                      });
-                    }}
-                    placeholder="What are you working on? (optional)"
-                    rows="3"
-                    style={{
-                      padding: '12px 16px',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      borderRadius: '8px',
-                      color: '#e5e7eb',
-                      fontSize: '14px',
-                      outline: 'none',
-                      resize: 'vertical',
-                      fontFamily: 'inherit',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#34C759';
-                      e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                    }}
-                  />
-                </label>
-
-                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', paddingTop: '8px' }}>
+                {/* Support Section */}
+                <div style={{
+                  padding: '20px',
+                  background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))'
+                }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600 }}>
+                    Need More Help?
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6, fontSize: '14px' }}>
+                    Found a bug or have a feature request? We'd love to hear from you!
+                  </p>
                   <button
-                    onClick={handleCloseCreateWorkspace}
+                    onClick={() => {
+                      const subject = encodeURIComponent('CoolDesk Feedback');
+                      const body = encodeURIComponent('Please describe your issue or suggestion:\n\n');
+                      window.open(`mailto:support@cooldesk.com?subject=${subject}&body=${body}`, '_blank');
+                    }}
                     style={{
-                      padding: '10px 20px',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      borderRadius: '8px',
-                      color: '#e5e7eb',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 16px',
+                      background: 'transparent',
+                      border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.2))',
+                      borderRadius: '6px',
+                      color: 'var(--text, #e5e7eb)',
                       fontSize: '14px',
-                      fontWeight: '500',
+                      fontWeight: 500,
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const newWorkspace = workspaces.find(w => w.id === 'new');
-                      if (!newWorkspace?.name?.trim()) return;
-
-                      await handleCreateWorkspace(newWorkspace.name.trim(), newWorkspace.description?.trim() || '');
-                      setWorkspaces(prev => prev.filter(w => w.id !== 'new'));
-                    }}
-                    disabled={!workspaces.find(w => w.id === 'new')?.name?.trim()}
-                    style={{
-                      padding: '10px 20px',
-                      background: workspaces.find(w => w.id === 'new')?.name?.trim() ? '#34C759' : 'rgba(255, 255, 255, 0.05)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      color: workspaces.find(w => w.id === 'new')?.name?.trim() ? 'white' : '#6b7280',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: workspaces.find(w => w.id === 'new')?.name?.trim() ? 'pointer' : 'not-allowed',
                       transition: 'all 0.2s ease',
-                      boxShadow: workspaces.find(w => w.id === 'new')?.name?.trim() ? '0 2px 8px rgba(52, 199, 89, 0.3)' : 'none'
+                      fontFamily: 'inherit',
                     }}
                     onMouseEnter={(e) => {
-                      if (workspaces.find(w => w.id === 'new')?.name?.trim()) {
-                        e.target.style.transform = 'translateY(-1px)';
-                        e.target.style.boxShadow = '0 4px 12px rgba(52, 199, 89, 0.4)';
-                      }
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                      e.currentTarget.style.borderColor = '#667eea';
                     }}
                     onMouseLeave={(e) => {
-                      if (workspaces.find(w => w.id === 'new')?.name?.trim()) {
-                        e.target.style.transform = 'translateY(0)';
-                        e.target.style.boxShadow = '0 2px 8px rgba(52, 199, 89, 0.3)';
-                      }
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.borderColor = 'var(--border-primary, rgba(255, 255, 255, 0.2))';
                     }}
                   >
-                    Create Workspace
+                    <FontAwesomeIcon icon={faEnvelope} />
+                    Report Bug or Request Feature
                   </button>
                 </div>
               </div>
-            </div>
+            )}
           </div>
-        )}
+        </div>
+
       </div>
     </div>
   )
 }
-

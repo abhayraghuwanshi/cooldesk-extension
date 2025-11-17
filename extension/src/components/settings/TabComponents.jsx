@@ -7,100 +7,52 @@ export function Tabs({ children, activeTab: controlledActiveTab, onTabChange, di
 
   return (
     <div>
-      <div className="tab-list" role="tablist" style={{ display: 'flex', gap: 16, marginBottom: 32, flexWrap: 'wrap' }}>
-        {React.Children.map(children, (child, index) => (
-          <button
-            key={index}
-            role="tab"
-            aria-selected={activeTab === index}
-            onClick={() => {
-              const title = child.props.title
-              const isDisabled = Array.isArray(disabledTitles) && disabledTitles.includes(title)
-              if (isDisabled) return
-              setActiveTab(index)
-            }}
-            disabled={Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)}
-            className="filter-btn"
-            style={{
-              fontSize: '14px',
-              padding: '12px 20px',
-              borderRadius: '12px',
-              border: activeTab === index ? 'none' : '1px solid var(--border-primary)',
-              cursor: Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title) ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              transition: 'all 0.2s ease',
-              background: Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)
-                ? 'var(--interactive-disabled)'
-                : (activeTab === index ? 'var(--accent-primary, #34C759)' : 'var(--interactive-hover)'),
-              color: Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title)
-                ? 'var(--text-muted)'
-                : (activeTab === index ? 'white' : 'var(--text)'),
-              backdropFilter: 'blur(10px)',
-              fontWeight: activeTab === index ? '600' : '500',
-              opacity: Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title) ? 0.5 : 1,
-              position: 'relative',
-              overflow: 'hidden',
-              boxShadow: activeTab === index ? '0 4px 16px var(--border-accent)' : 'none',
-              minWidth: 'fit-content',
-              textAlign: 'center',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-              WebkitTapHighlightColor: 'transparent'
-            }}
-            onMouseEnter={(e) => {
-              if (!(Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title))) {
-                if (activeTab !== index) {
-                  e.currentTarget.style.background = 'var(--interactive-active)';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
-                } else {
-                  e.currentTarget.style.boxShadow = '0 6px 20px var(--border-accent)';
-                }
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!(Array.isArray(disabledTitles) && disabledTitles.includes(child.props.title))) {
-                if (activeTab !== index) {
-                  e.currentTarget.style.background = 'var(--interactive-hover)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = 'none';
-                } else {
-                  e.currentTarget.style.boxShadow = '0 4px 16px var(--border-accent)';
-                }
-              }
-            }}
-          >
-            <span style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '2px 4px',
-              borderRadius: '8px',
-              transition: 'all 0.2s ease',
-              width: '100%',
-              justifyContent: 'center',
-              position: 'relative',
-              zIndex: 1
-            }}>
-              {child.props.title}
-            </span>
-            {activeTab === index && (
-              <div style={{
-                position: 'absolute',
-                bottom: '0',
-                left: '0',
-                right: '0',
-                height: '2px',
-                background: 'rgba(255, 255, 255, 0.3)',
-                borderRadius: '1px'
-              }} />
-            )}
-          </button>
-        ))}
+      <div
+        className="tab-list"
+        role="tablist"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+        }}
+      >
+        {React.Children.map(children, (child, index) => {
+          const title = child.props.title;
+          const isDisabled = Array.isArray(disabledTitles) && disabledTitles.includes(title);
+          const isActive = activeTab === index;
+
+          return (
+            <button
+              key={index}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => {
+                if (isDisabled) return;
+                setActiveTab(index);
+              }}
+              disabled={isDisabled}
+              className="filter-btn"
+              style={{
+                borderRadius: '8px',
+                padding: '8px 12px',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 13,
+                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                background: isActive ? 'rgba(255,255,255,0.08)' : 'transparent',
+                color: isDisabled ? 'var(--text-muted)' : 'var(--text)',
+                fontWeight: isActive ? 600 : 500,
+                border: 'none',
+              }}
+            >
+              {title}
+            </button>
+          );
+        })}
       </div>
-      <div className="tab-content">
+      <div className="tab-content" style={{ marginTop: 0 }}>
         {React.Children.toArray(children)[activeTab]}
       </div>
     </div>
