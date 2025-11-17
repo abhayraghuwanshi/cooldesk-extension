@@ -244,7 +244,7 @@ function TeamManagement() {
                 <div className="settings-block">
                     <div className="settings-row settings-row-spread">
                         <div className="settings-row-main">
-                            <div className="settings-label">Team</div>
+                            <div className="settings-label">Shared team</div>
                             {myTeamsLoading && <div className="settings-hint">Loading teams…</div>}
                             {!myTeamsLoading && myTeams.length === 0 && (
                                 <div className="settings-hint">You are not part of any team yet.</div>
@@ -301,50 +301,35 @@ function TeamManagement() {
                         </form>
                     )}
 
-                    <div className="team-members-table">
-                        <div className="team-members-header-row">
-                            <div className="team-members-col user">User</div>
-                            <div className="team-members-col role">Role</div>
-                            <div className="team-members-col actions">Actions</div>
-                        </div>
-                        <div className="team-members-body">
-                            {membersLoading && (
-                                <div className="team-members-row">
-                                    <div className="team-members-col user">
-                                        <span className="settings-hint">Loading members…</span>
-                                    </div>
-                                </div>
-                            )}
-                            {!membersLoading && members.length === 0 && (
-                                <div className="team-members-row">
-                                    <div className="team-members-col user">
-                                        <span className="settings-hint">No members yet.</span>
-                                    </div>
-                                </div>
-                            )}
-                            {!membersLoading && members.length > 0 && members.map((member) => (
-                                <div key={member.email} className="team-members-row">
-                                    <div className="team-members-col user">
+                    {membersLoading && (
+                        <div className="settings-hint">Loading members…</div>
+                    )}
+                    {!membersLoading && members.length === 0 && (
+                        <div className="settings-hint">No members yet.</div>
+                    )}
+                    {!membersLoading && members.length > 0 && (
+                        <ul className="settings-list settings-list-striped">
+                            {members.map((member) => (
+                                <li key={member.email} className="settings-list-row team-members-row">
+                                    <div className="team-members-main">
                                         <div className="team-members-email">{member.email}</div>
+                                        <div className="team-members-meta">
+                                            <span className="team-members-role-pill">{member.role || 'member'}</span>
+                                        </div>
                                     </div>
-                                    <div className="team-members-col role">
-                                        <span className="team-members-role-pill">{member.role || 'member'}</span>
-                                    </div>
-                                    <div className="team-members-col actions">
-                                        {createdTeam && selectedTeam && createdTeam.id === selectedTeam.id && createdTeam.owner_email && member.email !== createdTeam.owner_email && (
-                                            <button
-                                                className="settings-button-danger settings-button-ghost"
-                                                onClick={() => removeMember(member.email)}
-                                                disabled={membersLoading}
-                                            >
-                                                Remove
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
+                                    {createdTeam && selectedTeam && createdTeam.id === selectedTeam.id && createdTeam.owner_email && member.email !== createdTeam.owner_email && (
+                                        <button
+                                            className="settings-button-danger settings-button-ghost"
+                                            onClick={() => removeMember(member.email)}
+                                            disabled={membersLoading}
+                                        >
+                                            Remove
+                                        </button>
+                                    )}
+                                </li>
                             ))}
-                        </div>
-                    </div>
+                        </ul>
+                    )}
                 </div>
             </div>
         </div>

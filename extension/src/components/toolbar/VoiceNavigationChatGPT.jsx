@@ -1,4 +1,5 @@
-import { faChevronDown, faChevronUp, faMicrophone } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faChevronUp, faPause, faPlay } from '@fortawesome/free-solid-svg-icons';
+
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import { useEffect, useRef, useState } from 'react';
@@ -9,7 +10,6 @@ import { fuzzySearch } from '../../utils/searchUtils.js';
 import VoiceNavigationHelp from './VoiceNavigationHelp.jsx';
 
 const HELP_PANEL_STORAGE_KEY = 'voiceNavigation.showHelp';
-
 
 const VoiceNavigationChatGPT = () => {
   const [isListening, setIsListening] = useState(false);
@@ -708,7 +708,14 @@ const VoiceNavigationChatGPT = () => {
   const startAudioAnalysis = async (retryCount = 0) => {
     vInfo('startAudioAnalysis', { retryCount });
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
       microphoneRef.current = stream;
       try {
         vInfo('getUserMedia success', { tracks: stream.getAudioTracks().map(t => t.label) });
@@ -874,6 +881,14 @@ const VoiceNavigationChatGPT = () => {
     setShowEnergyWave(false);
     stopAudioAnalysis();
     vDebug('stopAudioAnalysis completed');
+
+    // Reset session timer state so UI shows 00:00 when paused
+    if (timeDisplayTimerRef.current) {
+      clearInterval(timeDisplayTimerRef.current);
+      timeDisplayTimerRef.current = null;
+    }
+    sessionStartTimeRef.current = null;
+    setTimeRemaining(0);
 
     // Clear reconnection attempts
     if (reconnectTimerRef.current) {
@@ -1351,160 +1366,6 @@ const VoiceNavigationChatGPT = () => {
     }
   };
 
-  // // Helper functions for injection
-  // const addNumbersToElements = () => {
-  //   const existingNumbers = document.querySelectorAll('.voice-nav-number');
-  //   existingNumbers.forEach(el => el.remove());
-
-  //   // Expanded selectors for comprehensive coverage
-  //   const selectors = [
-  //     // Basic interactive elements
-  //     'a', 'button', '[role="button"]', '[onclick]',
-  //     'input[type="submit"]', 'input[type="button"]',
-  //     '[class*="btn"]', '[class*="button"]',
-
-  //     // YouTube specific selectors
-  //     'a[href*="/watch"]', // Video links
-  //     'a[href*="/channel/"]', // Channel links
-  //     'a[href*="/c/"]', // Channel links (new format)
-  //     'a[href*="/@"]', // Handle-based channels
-  //     'a[href*="/playlist"]', // Playlist links
-  //     '.yt-lockup-view-model__content-image', // Video thumbnails
-  //     '.ytd-compact-video-renderer', // Sidebar videos
-  //     '.ytd-rich-item-renderer', // Home page videos
-  //     '.ytd-video-renderer', // Search results videos
-
-  //     // Common website patterns
-  //     '[class*="card"]', '[class*="item"]', '[class*="tile"]',
-  //     '[class*="post"]', '[class*="article"]', '[class*="entry"]',
-  //     '[class*="link"]', '[class*="nav"]', '[class*="menu"]',
-  //     '[class*="tab"]', '[class*="thumb"]', '[class*="preview"]',
-
-  //     // Social media patterns
-  //     '[data-testid*="tweet"]', '[data-testid*="post"]',
-  //     '[aria-label*="like"]', '[aria-label*="share"]', '[aria-label*="comment"]',
-
-  //     // E-commerce patterns
-  //     '[class*="product"]', '[class*="item"]', '[class*="listing"]',
-  //     '[class*="add-to-cart"]', '[class*="buy"]', '[class*="purchase"]',
-
-  //     // Generic clickable patterns
-  //     '[class*="clickable"]', '[data-href]', '[data-url]',
-  //     '[tabindex="0"]', '[tabindex="-1"]', // Focusable elements
-
-  //     // Media controls and interactive elements
-  //     '[class*="play"]', '[class*="pause"]', '[class*="video"]',
-  //     '[class*="audio"]', '[class*="media"]', '[class*="control"]'
-  //   ];
-
-  //   let elements = [];
-  //   selectors.forEach(selector => {
-  //     try {
-  //       const found = document.querySelectorAll(selector);
-  //       elements.push(...Array.from(found));
-  //     } catch (e) {
-  //       // Skip invalid selectors
-  //       console.warn('Invalid selector:', selector);
-  //     }
-  //   });
-
-  //   // Enhanced visibility and interactivity filtering
-  //   const visibleElements = elements.filter((el, index, arr) => {
-  //     // Remove duplicates
-  //     if (arr.indexOf(el) !== index) return false;
-
-  //     // Check basic visibility
-  //     const style = window.getComputedStyle(el);
-  //     const rect = el.getBoundingClientRect();
-
-  //     if (style.display === 'none' || style.visibility === 'hidden') return false;
-  //     if (rect.width < 3 || rect.height < 3) return false;
-
-  //     // Check if element is in viewport (with some buffer)
-  //     const viewportBuffer = 100;
-  //     if (rect.bottom < -viewportBuffer ||
-  //       rect.top > window.innerHeight + viewportBuffer ||
-  //       rect.right < 0 ||
-  //       rect.left > window.innerWidth) return false;
-
-  //     // Check if element is actually interactive
-  //     const isClickable = el.tagName === 'A' ||
-  //       el.tagName === 'BUTTON' ||
-  //       el.onclick !== null ||
-  //       el.hasAttribute('data-href') ||
-  //       el.hasAttribute('data-url') ||
-  //       el.getAttribute('role') === 'button' ||
-  //       el.getAttribute('tabindex') !== null ||
-  //       el.className.includes('clickable') ||
-  //       el.className.includes('btn') ||
-  //       el.className.includes('link') ||
-  //       el.className.includes('card') ||
-  //       el.className.includes('item') ||
-  //       getComputedStyle(el).cursor === 'pointer';
-
-  //     return isClickable;
-  //   });
-
-  //   // Sort by position (top to bottom, left to right) for more intuitive numbering
-  //   visibleElements.sort((a, b) => {
-  //     const rectA = a.getBoundingClientRect();
-  //     const rectB = b.getBoundingClientRect();
-
-  //     // If elements are roughly on the same line (within 20px), sort by x position
-  //     if (Math.abs(rectA.top - rectB.top) < 20) {
-  //       return rectA.left - rectB.left;
-  //     }
-  //     // Otherwise sort by y position
-  //     return rectA.top - rectB.top;
-  //   });
-
-  //   // Increase limit to 40 elements
-  //   visibleElements.slice(0, 40).forEach((element, index) => {
-  //     const number = index + 1;
-  //     const numberEl = document.createElement('div');
-  //     numberEl.className = 'voice-nav-number';
-  //     numberEl.textContent = number;
-
-  //     // Enhanced styling with better visibility
-  //     numberEl.style.cssText = `
-  //       position: absolute;
-  //       width: 22px; height: 22px;
-  //       border-radius: 50%;
-  //       background: linear-gradient(135deg, #ff4444, #cc0000);
-  //       color: white;
-  //       display: flex;
-  //       align-items: center;
-  //       justify-content: center;
-  //       font-size: 11px;
-  //       font-weight: bold;
-  //       font-family: Arial, sans-serif;
-  //       border: 2px solid white;
-  //       box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-  //       z-index: 999999;
-  //       pointer-events: none;
-  //       text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-  //     `;
-
-  //     const rect = element.getBoundingClientRect();
-
-  //     // Better positioning logic
-  //     let top = rect.top + window.scrollY - 11;
-  //     let left = rect.left + window.scrollX - 11;
-
-  //     // Ensure numbers stay within viewport
-  //     if (left < 5) left = 5;
-  //     if (top < 5) top = rect.top + window.scrollY + 5;
-
-  //     numberEl.style.top = `${top}px`;
-  //     numberEl.style.left = `${left}px`;
-
-  //     document.body.appendChild(numberEl);
-  //     element.setAttribute('data-voice-nav-number', number);
-  //   });
-
-  //   return { count: Math.min(40, visibleElements.length) };
-  // };
-
   const removeNumbersFromElements = () => {
     document.querySelectorAll('.voice-nav-number').forEach(el => el.remove());
     document.querySelectorAll('[data-voice-nav-number]').forEach(el =>
@@ -1585,206 +1446,68 @@ const VoiceNavigationChatGPT = () => {
       <div className="voice-navigation-chatgpt">
 
         {/* Background animation video (shown only while listening) */}
-        <div className="voice-content">
+        <div className="voice-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+
           {/* Section Title */}
 
-          <div className="voice-button-container">
-            <button
-              className={`voice-sphere ${isListening ? 'listening' : ''}`}
-              onClick={isListening ? stopListening : startListening}
-              disabled={error === 'Microphone permission denied'}
+          <div className="voice-button-container" style={{ margin: '0 auto' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
+                border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
+                borderRadius: 12,
+                padding: '10px 12px',
+                width: '100%',
+                maxWidth: 520
+              }}
             >
-              {!isListening ? (
-                /* Simple Microphone Button */
-                <div className="mic-button-container">
-                  <FontAwesomeIcon icon={faMicrophone} className="mic-button-icon" />
+              <button
+                onClick={isListening ? stopListening : startListening}
+                title={isListening ? 'Pause' : 'Play'}
+                aria-label={isListening ? 'Pause voice' : 'Start voice'}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: '50%',
+                  border: '1px solid var(--border-primary, rgba(255,255,255,0.1))',
+                  background: 'var(--interactive-hover, rgba(255,255,255,0.06))',
+                  color: 'var(--text, #e5e7eb)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <FontAwesomeIcon icon={isListening ? faPause : faPlay} />
+              </button>
+
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+                {/* simple level meter */}
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {waveformData.map((v, i) => (
+                    <div key={i} style={{
+                      width: 3,
+                      height: `${8 + v * 18}px`,
+                      background: 'var(--accent-primary, #34C759)',
+                      opacity: isListening ? 0.9 : 0.35,
+                      borderRadius: 2
+                    }} />
+                  ))}
                 </div>
-              ) : (
-                /* Celestial Orb Animation */
-                <div className="sphere-container">
-                  <div className="celestial-orb-container">
-                    {/* Enhanced celestrial rings with Dynamic Rotations */}
-                    <div className="celestial-ring ring-1"
-                      style={{
-                        width: '120px',
-                        height: '120px',
-                        transform: 'translate(-50%, -50%) rotateX(70deg)',
-                        opacity: 0.8 + voiceLevel * 0.4,
-                        boxShadow: `0 0 ${10 + voiceLevel * 20}px rgba(124, 58, 237, ${0.3 + voiceLevel * 0.3})`
-                      }}>
-                      <div className="ring-particles">
-                        {Array.from({ length: 8 }, (_, i) => (
-                          <div key={i} className="ring-particle"
-                            style={{ '--delay': `${i * 0.25}s`, '--angle': `${i * 45}deg` }} />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="celestial-ring ring-2"
-                      style={{
-                        width: '100px',
-                        height: '100px',
-                        transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(60deg)',
-                        opacity: 0.6 + voiceLevel * 0.4,
-                        filter: `blur(${Math.max(0, 1 - voiceLevel * 2)}px)`
-                      }}>
-                      <div className="ring-glow"></div>
-                    </div>
-
-                    <div className="celestial-ring ring-3"
-                      style={{
-                        width: '140px',
-                        height: '140px',
-                        transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(120deg)',
-                        opacity: 0.7 + voiceLevel * 0.3
-                      }}>
-                      <div className="particle-orbit advanced-orbit">
-                        <div className="orbit-trail"></div>
-                      </div>
-                    </div>
-
-                    {/* Additional Dynamic Rings */}
-                    <div className="celestial-ring ring-4"
-                      style={{
-                        width: '80px',
-                        height: '80px',
-                        transform: 'translate(-50%, -50%) rotateX(70deg) rotateY(-45deg)',
-                        opacity: 0.5 + voiceLevel * 0.5
-                      }}>
-                    </div>
-                    {/* Enhanced Central Orb */}
-                    <div className="sphere-core" style={{
-                      transform: `translate(-50%, -50%) scale(${1 + voiceLevel * 0.4})`,
-                      filter: `brightness(${1 + voiceLevel * 0.5}) saturate(${1 + voiceLevel * 0.3})`,
-                      animationDuration: `${Math.max(1.5, 4 - voiceLevel * 2.5)}s`,
-                      boxShadow: `
-                      inset 0 0 20px rgba(255, 255, 255, 0.2),
-                      0 0 ${30 + voiceLevel * 40}px ${5 + voiceLevel * 15}px rgba(124, 58, 237, ${0.4 + voiceLevel * 0.4}),
-                      0 0 ${15 + voiceLevel * 20}px ${2 + voiceLevel * 8}px rgba(255, 255, 255, ${0.1 + voiceLevel * 0.3})
-                    `
-                    }}>
-                      {/* Voice-reactive surface patterns */}
-                      {voiceLevel > 0.2 && (
-                        <div className="voice-surface-effects">
-                          {Array.from({ length: 12 }, (_, i) => (
-                            <div
-                              key={i}
-                              className="surface-ripple"
-                              style={{
-                                '--angle': `${i * 30}deg`,
-                                '--intensity': voiceLevel,
-                                '--delay': `${i * 0.08}s`
-                              }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {/* Enhanced Energy Wave Effects */}
-                  {showEnergyWave && (
-                    <div className="energy-wave-container">
-                      <div className="energy-wave energy-wave-1">
-                        <div className="wave-inner"></div>
-                      </div>
-                      <div className="energy-wave energy-wave-2">
-                        <div className="wave-inner"></div>
-                      </div>
-                      <div className="energy-wave energy-wave-3">
-                        <div className="wave-inner"></div>
-                      </div>
-                      {/* Additional wave patterns */}
-                      <div className="energy-wave energy-wave-hex">
-                        <div className="hex-pattern"></div>
-                      </div>
-                      <div className="energy-wave energy-wave-spiral">
-                        <div className="spiral-pattern"></div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Continuous subtle waves when listening */}
-                  {isListening && (
-                    <div className="continuous-waves">
-                      <div className="wave-ring wave-ring-1"></div>
-                      <div className="wave-ring wave-ring-2"></div>
-                      <div className="wave-ring wave-ring-3"></div>
-                    </div>
-                  )}
-                  <div className="particle-field">
-                    {/* Enhanced Particle System with Multiple Types */}
-                    {Array.from({ length: 20 }, (_, i) => {
-                      const particleType = i % 4;
-                      const intensity = 0.5 + voiceLevel * 1.5;
-                      return (
-                        <div
-                          key={i}
-                          className={`particle particle-type-${particleType}`}
-                          style={{
-                            '--delay': `${i * 0.15}s`,
-                            '--duration': `${1.5 + Math.random() * 2}s`,
-                            '--intensity': intensity,
-                            '--start-x': `${Math.random() * 100}%`,
-                            '--end-x': `${Math.random() * 100}%`,
-                            '--size': `${2 + voiceLevel * 3 + Math.random() * 2}px`,
-                            '--opacity': Math.max(0.3, voiceLevel + 0.2)
-                          }}
-                        />
-                      );
-                    })}
-
-                    {/* Spiral Particles */}
-                    {Array.from({ length: 6 }, (_, i) => (
-                      <div
-                        key={`spiral-${i}`}
-                        className="spiral-particle"
-                        style={{
-                          '--angle': `${i * 60}deg`,
-                          '--radius': `${45 + voiceLevel * 20}px`,
-                          '--speed': `${3 + voiceLevel * 2}s`,
-                          '--delay': `${i * 0.5}s`
-                        }}
-                      />
-                    ))}
-
-                    {/* Voice-Reactive Burst Particles */}
-                    {voiceLevel > 0.3 && Array.from({ length: 8 }, (_, i) => (
-                      <div
-                        key={`burst-${i}`}
-                        className="burst-particle"
-                        style={{
-                          '--burst-angle': `${i * 45}deg`,
-                          '--burst-distance': `${40 + voiceLevel * 40}px`,
-                          '--burst-delay': `${i * 0.1}s`
-                        }}
-                      />
-                    ))}
-                  </div>
+                <div style={{ marginLeft: 'auto', color: 'var(--text-secondary, #9ca3af)', fontSize: 12 }}>
+                  {isListening ? formatTime(Math.max(0, 1800 - timeRemaining)) : '0:00'}
                 </div>
-              )}
-            </button>
-
-            {/* Input volume meter (uses waveformData) */}
-            {isListening && (
-              <div className="mic-level-meter" title="Input level">
-                {waveformData.map((v, i) => (
-                  <div
-                    key={i}
-                    className="mic-level-bar"
-                    style={{ height: `${8 + v * 24}px`, opacity: 0.6 + v * 0.4 }}
-                  />
-                ))}
               </div>
-            )}
-
-
+            </div>
           </div>
 
-
-          {/* Minimal Status Display */}
+          {/* Minimal Status Display (below the control) */}
           {feedback && (
-            <div className="status-display">
-              <div className="status-message feedback">
+            <div className="status-display" style={{ marginTop: 8, position: 'static', inset: 'unset', width: '100%', maxWidth: 520, display: 'flex', justifyContent: 'center' }}>
+              <div className="status-message feedback" style={{ position: 'static' }}>
                 <span>{feedback}</span>
               </div>
             </div>

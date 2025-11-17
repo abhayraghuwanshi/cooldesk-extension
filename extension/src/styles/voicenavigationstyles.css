@@ -1300,7 +1300,6 @@
 .status-message {
     background: rgba(0, 0, 0, 0.7);
     color: white;
-    padding: 8px 16px;
     border-radius: 20px;
     font-size: 14px;
     font-weight: 500;
@@ -1454,7 +1453,6 @@
 }
 
 .status-message {
-    padding: 6px 12px;
     border-radius: 6px;
     font-size: var(--font-size-sm);
     background: rgba(52, 199, 89, 0.1);
