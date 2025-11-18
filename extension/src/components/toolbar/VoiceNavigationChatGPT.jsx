@@ -560,7 +560,40 @@ const VoiceNavigationChatGPT = () => {
           vDebug('annyang result', phrases);
           setTranscript(command);
           setInterimTranscript('');
-          // Feedback is set by the command action
+
+          // Let number-specific commands be handled by explicit patterns above.
+          // For other free-form commands, ask TinyBERT in the background to interpret.
+          const isNumberCommand = /\b(click (number )?\d+|switch to tab \d+|go to tab \d+)\b/i.test(command);
+          if (!isNumberCommand) {
+            setFeedback('Interpreting command...');
+            try {
+              chrome.runtime.sendMessage(
+                { action: 'voice_execute_intent', text: command },
+                (response) => {
+                  if (chrome.runtime.lastError) {
+                    console.warn('[VoiceNav] TinyBERT message error:', chrome.runtime.lastError.message);
+                    setFeedback('Could not interpret command');
+                    return;
+                  }
+
+                  if (!response?.ok) {
+                    setFeedback(response?.error || 'Command not recognized');
+                    return;
+                  }
+
+                  if (response.handled) {
+                    setFeedback(response.message || `Executed intent: ${response.intent}`);
+                  } else {
+                    setFeedback(response.message || `Command not recognized: "${command}"`);
+                  }
+                }
+              );
+            } catch (err) {
+              console.warn('[VoiceNav] Failed to send TinyBERT intent message:', err);
+              setFeedback('Failed to interpret command');
+            }
+          }
+          // Feedback from TinyBERT or commandProcessor will follow.
         }
       });
 
@@ -569,7 +602,37 @@ const VoiceNavigationChatGPT = () => {
           vWarn('annyang resultNoMatch', phrases);
           const command = phrases[0];
           setTranscript(command);
-          setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
+
+          // When no grammar matches, always try TinyBERT as intelligent fallback.
+          setFeedback('Interpreting command...');
+
+          try {
+            chrome.runtime.sendMessage(
+              { action: 'voice_execute_intent', text: command },
+              (response) => {
+                if (chrome.runtime.lastError) {
+                  console.warn('[VoiceNav] TinyBERT message error (no match):', chrome.runtime.lastError.message);
+                  setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
+                  return;
+                }
+
+                if (!response?.ok) {
+                  setFeedback(response?.error || `Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
+                  return;
+                }
+
+                if (response.handled) {
+                  setFeedback(response.message || `Executed intent: ${response.intent}`);
+                } else {
+                  setFeedback(response.message || `Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
+                }
+              }
+            );
+          } catch (err) {
+            console.warn('[VoiceNav] Failed to send TinyBERT intent message (no match):', err);
+            setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
+          }
+
           // Clear feedback after 3 seconds
           if (feedbackTimeoutRef.current) {
             clearTimeout(feedbackTimeoutRef.current);
