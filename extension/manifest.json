@@ -3,7 +3,8 @@
   "name": "cooldesk",
   "version": "0.1.2",
   "action": {
-    "default_title": "Open CoolDesk Sidebar"
+    "default_title": "Open CoolDesk Sidebar",
+    "default_popup": "popup.html"
   },
   "side_panel": {
     "default_path": "index.html"
@@ -27,13 +28,14 @@
     "activeTab",
     "sessions",
     "sidePanel",
-    "search"
+    "search",
+    "offscreen"
   ],
   "host_permissions": [
     "https://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self'; img-src 'self' data: blob: https: http:; media-src 'self' data: blob:; font-src 'self' data:;"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src 'self' https://*.firebaseio.com https://*.firebaseapp.com https://*.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://www.googleapis.com https://accounts.google.com https://*.google.com https://*.gstatic.com; img-src 'self' data: blob: https: http:; media-src 'self' data: blob:; font-src 'self' data:;"
   },
   "web_accessible_resources": [
     {

@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
         manifest,
         // Explicitly define background script as a separate entry
         background: {
-          entry: './src/background.js',
+          entry: './src/background/background.js',
           type: 'module',
         },
         // Configure CSP for Firebase and localhost sync
@@ -36,6 +36,14 @@ export default defineConfig(({ mode }) => {
       }),
       react(),
     ],
-    esbuild: { drop: ['console', 'debugger'] },
+    build: {
+      rollupOptions: {
+        input: {
+          index: 'index.html',
+          offscreen: 'offscreen.html'
+        }
+      }
+    },
+    // esbuild: { drop: ['console', 'debugger'] },
   }
 })

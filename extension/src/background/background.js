@@ -3,9 +3,9 @@
 // Global error handlers to prevent connection errors from showing in extension UI
 self.addEventListener('unhandledrejection', (event) => {
   const error = event.reason?.message || event.reason || '';
-  if (error.includes?.('Could not establish connection') || 
-      error.includes?.('Receiving end does not exist') ||
-      error.includes?.('message port closed')) {
+  if (error.includes?.('Could not establish connection') ||
+    error.includes?.('Receiving end does not exist') ||
+    error.includes?.('message port closed')) {
     console.debug('[Background] Suppressed connection error:', error);
     event.preventDefault(); // Prevent the error from appearing in the console
   }
@@ -13,13 +13,28 @@ self.addEventListener('unhandledrejection', (event) => {
 
 self.addEventListener('error', (event) => {
   const error = event.message || event.error?.message || '';
-  if (error.includes?.('Could not establish connection') || 
-      error.includes?.('Receiving end does not exist') ||
-      error.includes?.('message port closed')) {
+  if (error.includes?.('Could not establish connection') ||
+    error.includes?.('Receiving end does not exist') ||
+    error.includes?.('message port closed')) {
     console.debug('[Background] Suppressed connection error:', error);
     event.preventDefault();
   }
 });
+
+async function ensureOffscreenDocument() {
+  try {
+    if (chrome.offscreen && (await chrome.offscreen.hasDocument?.())) {
+      return;
+    }
+  } catch { }
+  if (chrome.offscreen) {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['IFRAME_SCRIPTING'],
+      justification: 'Run Firebase web-extension auth popup in offscreen context'
+    });
+  }
+}
 
 import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats } from '../db/index.js';
 import { DB_CONFIG, getUnifiedDB } from '../db/unified-db.js';
@@ -328,6 +343,68 @@ async function main() {
       try {
       } catch { }
     };
+
+    // Offscreen auth: start Google login
+    if (msg?.action === 'LOGIN_WITH_GOOGLE') {
+      (async () => {
+        try {
+          await ensureOffscreenDocument();
+          // Wait for offscreen to report ready
+          await new Promise((resolve) => {
+            let timeout;
+            const readyHandler = (m) => {
+              if (m?.type === 'OFFSCREEN_READY') {
+                try { chrome.runtime.onMessage.removeListener(readyHandler); } catch { }
+                clearTimeout(timeout);
+                resolve();
+              }
+            };
+            chrome.runtime.onMessage.addListener(readyHandler);
+            timeout = setTimeout(() => {
+              try { chrome.runtime.onMessage.removeListener(readyHandler); } catch { }
+              resolve(); // proceed anyway after timeout
+            }, 1000);
+          });
+
+          // Try forwarding the SAME message to offscreen (preferred)
+          const direct = await new Promise((resolve) => {
+            let settled = false;
+            chrome.runtime.sendMessage(msg, (response) => {
+              settled = true;
+              resolve({ settled: true, response });
+            });
+            setTimeout(() => { if (!settled) resolve({ settled: false }); }, 1000);
+          });
+
+          if (direct.settled && direct.response) {
+            sendResponse(direct.response);
+            return;
+          }
+
+          // Fallback: old START_OFFSCREEN_AUTH event-based flow
+          await chrome.runtime.sendMessage({ type: 'START_OFFSCREEN_AUTH' });
+          const result = await new Promise((resolve) => {
+            const handler = (m) => {
+              if (m?.type === 'OFFSCREEN_AUTH_RESULT') {
+                try { chrome.runtime.onMessage.removeListener(handler); } catch { }
+                resolve(m);
+              }
+            };
+            chrome.runtime.onMessage.addListener(handler);
+          });
+          if (result.ok) {
+            sendResponse({ ok: true, user: result.user, idToken: result.idToken });
+          } else {
+            sendResponse({ ok: false, error: result.error || 'Auth failed' });
+          }
+        } catch (e) {
+          sendResponse({ ok: false, error: e?.message || String(e) });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true; // keep channel open
+    }
 
     // Handle media control commands
     if (msg?.type === 'MEDIA_COMMAND') {
@@ -795,7 +872,7 @@ async function main() {
 
           if (result.success && result.chats && result.chats.length > 0) {
             console.log('[Background] Processing chats...');
-            
+
             // Use top-level imports (same pattern as activity.js)
             console.log('[Background] Step 1: Opening database...');
             const db = await getUnifiedDB();

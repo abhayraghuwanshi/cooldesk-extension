@@ -1,5 +1,5 @@
 
-import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack, faUser, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useMemo, useState } from 'react';
 import { listWorkspaces, saveWorkspace } from '../../db/index.js';
@@ -28,6 +28,33 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
   const [syncConfig, setSyncConfig] = useState(null)
   const [syncStatus, setSyncStatus] = useState(null)
   const [syncConfigLoading, setSyncConfigLoading] = useState(false)
+  const [authUser, setAuthUser] = useState(null)
+
+  useEffect(() => {
+    try {
+      const unsub = onAuthStateChanged(auth, (u) => setAuthUser(u));
+      return () => unsub && unsub();
+    } catch { }
+  }, [])
+
+  const handleLogin = async () => {
+    try {
+      const res = await chrome.runtime.sendMessage({ action: 'LOGIN_WITH_GOOGLE' });
+      if (!res?.ok) {
+        console.warn('Login failed:', res?.error);
+      }
+    } catch (e) {
+      console.warn('Login error:', e);
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.warn('Logout error:', e);
+    }
+  }
 
   // Font size options
   const fontSizes = [
@@ -575,6 +602,9 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
               disabledTitles={[]} // Remove restrictions for better onboarding flow
               orientation="vertical"
             >
+              <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>
+                {/* Content rendered in the right pane below */}
+              </TabItem>
               <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
                 {/* Content rendered in the right pane below */}
               </TabItem>
@@ -600,7 +630,7 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
             maxHeight: '600px',
             overflowY: 'auto'
           }}>
-            {activeTab === 0 && (
+            {activeTab === 1 && (
               <ThemesTab
                 selectedTheme={selectedTheme}
                 fontSize={fontSize}
@@ -610,17 +640,18 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
                 onFontFamilyChange={handleFontFamilyChange}
               />
             )}
-            {activeTab === 1 && (
+            {activeTab === 2 && (
               <ExportData />
             )}
-            {activeTab === 2 && (
+            {activeTab === 3 && (
               <DisplayData />
             )}
-            {activeTab === 3 && (
+            {activeTab === 4 && (
               <TeamManagement />
             )}
-            {activeTab === 4 && (
+            {activeTab === 5 && (
               <div style={{ padding: '0', maxHeight: '560px', overflowY: 'auto' }}>
+                {/* Account Tab Content (duplicated features hidden in Account tab) */}
                 {/* Getting Started Section */}
                 <div style={{ marginBottom: '32px' }}>
                   <h2 style={{ marginTop: 0, marginBottom: '12px', fontSize: '20px', fontWeight: 600 }}>
@@ -799,6 +830,30 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
                     <FontAwesomeIcon icon={faEnvelope} />
                     Report Bug or Request Feature
                   </button>
+                </div>
+              </div>
+            )}
+            {activeTab === 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{
+                  background: 'var(--bg-secondary, rgba(255,255,255,0.05))',
+                  border: '1px solid var(--border-primary, rgba(255,255,255,0.1))',
+                  borderRadius: '8px',
+                  padding: '16px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 600 }}>Account</div>
+                      <div style={{ fontSize: 13, color: 'var(--text-secondary, #999)' }}>
+                        {authUser ? `Signed in as ${authUser.email || authUser.uid}` : 'Not signed in'}
+                      </div>
+                    </div>
+                    {authUser ? (
+                      <button onClick={handleLogout} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border-primary, rgba(255,255,255,0.2))', background: 'transparent', color: 'inherit', cursor: 'pointer' }}>Logout</button>
+                    ) : (
+                      <button onClick={handleLogin} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border-primary, rgba(255,255,255,0.2))', background: 'transparent', color: 'inherit', cursor: 'pointer' }}>Login with Google</button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
