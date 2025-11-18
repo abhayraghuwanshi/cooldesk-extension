@@ -1,4 +1,3 @@
-
 import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack, faUser, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useMemo, useState } from 'react';
@@ -30,27 +29,62 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
   const [syncConfigLoading, setSyncConfigLoading] = useState(false)
   const [authUser, setAuthUser] = useState(null)
 
+  // Load any stored auth info from chrome.storage
   useEffect(() => {
     try {
-      const unsub = onAuthStateChanged(auth, (u) => setAuthUser(u));
-      return () => unsub && unsub();
+      chrome.storage?.local.get('cooldeskAuth', (data) => {
+        if (chrome.runtime?.lastError) {
+          console.warn('Failed to load stored auth:', chrome.runtime.lastError.message);
+          return;
+        }
+        if (data && data.cooldeskAuth) {
+          setAuthUser(data.cooldeskAuth);
+        }
+      });
     } catch { }
   }, [])
 
   const handleLogin = async () => {
     try {
+      setError('');
       const res = await chrome.runtime.sendMessage({ action: 'LOGIN_WITH_GOOGLE' });
       if (!res?.ok) {
-        console.warn('Login failed:', res?.error);
+        setError(res?.error || 'Login failed. Please try again.');
+        return;
       }
+
+      const user = res.user || {};
+
+      try {
+        await chrome.storage.local.set({
+          cooldeskAuth: {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            idToken: res.idToken || null,
+            provider: 'google-oauth',
+            lastLogin: Date.now()
+          }
+        });
+      } catch (storageError) {
+        console.warn('Failed to persist auth to chrome.storage.local:', storageError);
+      }
+
+      setAuthUser(user);
     } catch (e) {
       console.warn('Login error:', e);
+      setError(e?.message || 'Login failed. Please try again.');
     }
   }
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      try {
+        await chrome.storage.local.remove('cooldeskAuth');
+      } catch (storageError) {
+        console.warn('Failed to clear auth from chrome.storage.local:', storageError);
+      }
+      setAuthUser(null);
     } catch (e) {
       console.warn('Logout error:', e);
     }

@@ -1,373 +1,275 @@
 .export-data-container {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    padding: 0;
-    width: 100%;
-    max-width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 1.5rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    color: var(--text-primary, #1a1a1a);
+    line-height: 1.5;
 }
 
 .export-header {
-    margin-bottom: 4px;
+    margin-bottom: 2rem;
+    text-align: center;
 }
 
 .export-header h2 {
-    margin: 0 0 6px 0;
-    font-size: 20px;
+    font-size: 1.75rem;
     font-weight: 600;
+    margin: 0 0 0.5rem;
     color: var(--text-primary, #1a1a1a);
 }
 
-.export-subtitle {
+.export-header p {
+    color: var(--text-secondary, #4a4a4a);
     margin: 0;
-    font-size: 13px;
-    color: var(--text-secondary, #666);
-    line-height: 1.4;
+    font-size: 1rem;
 }
 
 .export-actions {
     display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 2rem;
 }
 
-.export-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 9px 16px;
+.export-button {
+    background-color: var(--primary-color, #2563eb);
+    color: white;
     border: none;
     border-radius: 6px;
-    font-size: 13px;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s ease;
-    font-family: inherit;
-}
-
-.export-btn.primary {
-    background: #667eea;
-    color: white;
-}
-
-.export-btn.primary:hover:not(:disabled) {
-    background: #5568d3;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-}
-
-.export-btn.secondary {
-    background: var(--bg-secondary, #f5f5f5);
-    color: var(--text-primary, #333);
-    border: 1px solid var(--border-color, #ddd);
-}
-
-.export-btn.secondary:hover:not(:disabled) {
-    background: var(--bg-hover, #e8e8e8);
-    border-color: var(--border-hover, #bbb);
-}
-
-.export-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.btn-icon {
-    font-size: 14px;
-    line-height: 1;
-}
-
-.replace-mode-toggle {
+    transition: background-color 0.2s ease, transform 0.1s ease;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    background: var(--bg-primary, #fff);
-    border: 1px solid var(--border-color, #ddd);
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.export-button:disabled {
+    background-color: var(--disabled-bg, #94a3b8);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.export-button:not(:disabled):hover {
+    background-color: var(--primary-hover, #1d4ed8);
+    transform: translateY(-1px);
+}
+
+.export-button:not(:disabled):active {
+    transform: translateY(0);
+}
+
+.export-button.secondary {
+    background-color: var(--secondary-bg, #f1f5f9);
+    color: var(--text-primary, #1a1a1a);
+    border: 1px solid var(--border-color, #e2e8f0);
+}
+
+.export-button.secondary:hover {
+    background-color: var(--secondary-hover, #e2e8f0);
+}
+
+.export-button.danger {
+    background-color: var(--danger-color, #dc2626);
+}
+
+.export-button.danger:hover {
+    background-color: var(--danger-hover, #b91c1c);
+}
+
+.export-message {
+    margin: 1.5rem 0;
+    padding: 1rem;
     border-radius: 6px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: all 0.15s ease;
-    user-select: none;
+    background-color: var(--info-bg, #e0f2fe);
+    color: var(--info-text, #0369a1);
+    border-left: 4px solid var(--info-border, #0ea5e9);
 }
 
-.replace-mode-toggle:hover {
-    border-color: var(--border-hover, #999);
-    background: var(--bg-hover, #fafafa);
+.export-message.error {
+    background-color: var(--error-bg, #fee2e2);
+    color: var(--error-text, #b91c1c);
+    border-left-color: var(--error-border, #ef4444);
 }
 
-.replace-mode-toggle input[type="checkbox"] {
-    cursor: pointer;
-    margin: 0;
-}
-
-.replace-mode-toggle span {
-    color: var(--text-primary, #333);
-}
-
-.export-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.export-status.success {
-    background: #e8f5e9;
-    color: #2e7d32;
-    border: 1px solid #a5d6a7;
-}
-
-.export-status.error {
-    background: #ffebee;
-    color: #c62828;
-    border: 1px solid #ef9a9a;
-}
-
-.status-icon {
-    font-size: 16px;
-    line-height: 1;
+.export-message.success {
+    background-color: var(--success-bg, #dcfce7);
+    color: var(--success-text, #166534);
+    border-left-color: var(--success-border, #22c55e);
 }
 
 .export-details {
-    background: var(--bg-secondary, #f8f9fa);
+    margin-top: 1.5rem;
+    padding: 1.25rem;
+    background-color: var(--card-bg, #ffffff);
     border-radius: 8px;
-    padding: 16px;
-    border: 1px solid var(--border-color, #e0e0e0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--border-color, #e2e8f0);
 }
 
-.details-header h3 {
-    margin: 0 0 14px 0;
-    font-size: 16px;
+.export-details h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
     font-weight: 600;
     color: var(--text-primary, #1a1a1a);
 }
 
-.details-grid {
+.detail-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 10px;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
 }
 
-.detail-card {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px;
-    background: var(--bg-primary, white);
+.detail-item {
+    background-color: var(--bg-secondary, #f8fafc);
+    padding: 0.75rem;
     border-radius: 6px;
-    border: 1px solid var(--border-color, #e0e0e0);
-    transition: all 0.15s ease;
+    border-left: 3px solid var(--primary-color, #2563eb);
 }
 
-.detail-card:hover {
-    border-color: var(--border-hover, #ccc);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-.detail-card.highlight {
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
-    border-color: #667eea;
-}
-
-.detail-icon {
-    font-size: 22px;
-    line-height: 1;
-    flex-shrink: 0;
-}
-
-.detail-content {
-    flex: 1;
-    min-width: 0;
-}
-
-.detail-label {
-    font-size: 11px;
-    color: var(--text-secondary, #666);
-    margin-bottom: 3px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
+.detail-item h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
     font-weight: 500;
+    color: var(--text-secondary, #4a4a4a);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-.detail-value {
-    font-size: 18px;
+.detail-item p {
+    margin: 0;
+    font-size: 1.25rem;
     font-weight: 600;
     color: var(--text-primary, #1a1a1a);
-    line-height: 1.2;
 }
 
-.store-counts {
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px solid var(--border-color, #e0e0e0);
-}
-
-.store-counts h4 {
-    margin: 0 0 10px 0;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary, #666);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.store-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 6px;
-}
-
-.store-item {
+.replace-mode {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 6px 10px;
-    background: var(--bg-primary, white);
-    border-radius: 4px;
-    border: 1px solid var(--border-color, #e0e0e0);
-}
-
-.store-name {
-    font-size: 11px;
-    color: #667eea;
-    font-family: 'Courier New', 'Consolas', monospace;
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.store-count {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-primary, #333);
-    background: var(--bg-secondary, #f0f0f0);
-    padding: 2px 6px;
-    border-radius: 3px;
-    flex-shrink: 0;
-    margin-left: 8px;
-}
-
-.export-info {
-    padding: 12px 14px;
-    background: #fffbf0;
+    gap: 0.75rem;
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background-color: var(--warning-bg, #fffbeb);
     border-radius: 6px;
-    border: 1px solid #ffe082;
+    border-left: 4px solid var(--warning-border, #f59e0b);
 }
 
-.info-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #f57c00;
-    margin-bottom: 6px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+.replace-mode input[type="checkbox"] {
+    width: 1.25rem;
+    height: 1.25rem;
+    cursor: pointer;
 }
 
-.info-stores {
-    font-size: 11px;
-    color: var(--text-secondary, #666);
-    font-family: 'Courier New', 'Consolas', monospace;
-    line-height: 1.5;
-    word-break: break-word;
+.replace-mode label {
+    font-size: 0.95rem;
+    color: var(--text-secondary, #4a4a4a);
+    cursor: pointer;
+}
+
+.replace-mode .warning {
+    color: var(--warning-text, #92400e);
+    font-weight: 500;
 }
 
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
-    .export-header h2 {
-        color: #e0e0e0;
+    :root {
+        --text-primary: #f3f4f6;
+        --text-secondary: #9ca3af;
+        --bg-primary: #111827;
+        --bg-secondary: #1f2937;
+        --border-color: #374151;
+        --primary-color: #3b82f6;
+        --primary-hover: #60a5fa;
+        --secondary-bg: #1f2937;
+        --secondary-hover: #374151;
+        --danger-color: #ef4444;
+        --danger-hover: #f87171;
+        --info-bg: #1e3a8a;
+        --info-text: #bfdbfe;
+        --info-border: #3b82f6;
+        --error-bg: #7f1d1d;
+        --error-text: #fecaca;
+        --error-border: #ef4444;
+        --success-bg: #14532d;
+        --success-text: #bbf7d0;
+        --success-border: #22c55e;
+        --warning-bg: #78350f;
+        --warning-text: #fde68a;
+        --warning-border: #f59e0b;
+        --card-bg: #1f2937;
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .export-actions {
+        flex-direction: column;
     }
 
-    .export-subtitle {
-        color: #999;
+    .detail-grid {
+        grid-template-columns: 1fr;
     }
 
-    .export-btn.secondary {
-        background: #2a2a2a;
-        color: #e0e0e0;
-        border-color: #444;
+    .export-button {
+        width: 100%;
+    }
+}
+
+/* Animation for loading state */
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
     }
 
-    .export-btn.secondary:hover:not(:disabled) {
-        background: #333;
-        border-color: #555;
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.export-button:disabled {
+    position: relative;
+    overflow: hidden;
+}
+
+.export-button:disabled::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg,
+            transparent,
+            rgba(255, 255, 255, 0.2),
+            transparent);
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
     }
 
-    .replace-mode-toggle {
-        background: #2a2a2a;
-        border-color: #444;
+    100% {
+        transform: translateX(100%);
     }
+}
 
-    .replace-mode-toggle:hover {
-        background: #333;
-        border-color: #555;
-    }
-
-    .replace-mode-toggle span {
-        color: #e0e0e0;
-    }
-
-    .export-details {
-        background: #1e1e1e;
-        border-color: #333;
-    }
-
-    .details-header h3 {
-        color: #e0e0e0;
-    }
-
-    .detail-card {
-        background: #2a2a2a;
-        border-color: #444;
-    }
-
-    .detail-card:hover {
-        border-color: #555;
-    }
-
-    .detail-card.highlight {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-        border-color: #667eea;
-    }
-
-    .detail-label {
-        color: #999;
-    }
-
-    .detail-value {
-        color: #e0e0e0;
-    }
-
-    .store-counts {
-        border-top-color: #333;
-    }
-
-    .store-counts h4 {
-        color: #999;
-    }
-
-    .store-item {
-        background: #2a2a2a;
-        border-color: #444;
-    }
-
-    .store-count {
-        background: #1e1e1e;
-        color: #e0e0e0;
-    }
-
-    .export-info {
-        background: #2a2200;
-        border-color: #665500;
-    }
-
-    .info-stores {
-        color: #999;
-    }
+/* Hide file input visually but keep it accessible */
+.file-input {
+    position: absolute;
+    width: 0.1px;
+    height: 0.1px;
+    opacity: 0;
+    overflow: hidden;
+    z-index: -1;
 }

@@ -128,9 +128,8 @@ CoolDesk requests the following permissions. Each is **necessary** for core func
 - **Isolated Storage**: Extension storage is isolated from web pages
 
 ### 4.3 Third-Party Code
-- **Firebase SDK**: Included but **disabled by default** in this build (`AUTH_DISABLED = true`)
 - **Voice Recognition**: Uses browser's native Web Speech API (no external service)
-- **No Analytics**: No Google Analytics, tracking pixels, or third-party analytics
+- **No Analytics**: No tracking pixels or third-party analytics
 
 ---
 

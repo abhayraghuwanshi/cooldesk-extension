@@ -39,8 +39,7 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         input: {
-          index: 'index.html',
-          offscreen: 'offscreen.html'
+          index: 'index.html'
         }
       }
     },

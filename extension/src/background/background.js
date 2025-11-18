@@ -21,20 +21,7 @@ self.addEventListener('error', (event) => {
   }
 });
 
-async function ensureOffscreenDocument() {
-  try {
-    if (chrome.offscreen && (await chrome.offscreen.hasDocument?.())) {
-      return;
-    }
-  } catch { }
-  if (chrome.offscreen) {
-    await chrome.offscreen.createDocument({
-      url: 'offscreen.html',
-      reasons: ['IFRAME_SCRIPTING'],
-      justification: 'Run Firebase web-extension auth popup in offscreen context'
-    });
-  }
-}
+// Offscreen auth has been deprecated in favor of chrome.identity-based login.
 
 import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats } from '../db/index.js';
 import { DB_CONFIG, getUnifiedDB } from '../db/unified-db.js';
@@ -42,6 +29,7 @@ import { storageGetWithTTL } from '../services/extensionApi.js';
 import { populateAndStore } from './data.js';
 // Modular background pieces - these initialize their own message handlers
 // NOTE: realTimeCategorizor is lazy-loaded to avoid window reference errors in service worker
+import { CloudflareService } from '../services/cloudflareService';
 import {
   handleActivityContentScriptMessage,
   handleCleanupTimeSeriesData,
@@ -51,7 +39,6 @@ import {
 } from './activity.js';
 import { initializeData } from './data.js';
 import { handleSetAutoCleanup, initializeTabCleanup } from './tabCleanup.js';
-import { detectIntent as detectTinyBertIntent } from './tiny-bert.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
 
@@ -382,89 +369,154 @@ async function main() {
       } catch { }
     };
 
-    if (msg?.action === 'voice_execute_intent') {
-      (async () => {
-        try {
-          const text = (msg.text || '').trim();
-          if (!text) {
-            sendResponse({ ok: false, error: 'Empty voice text', handled: false });
-            return;
-          }
 
-          let intent;
-          try {
-            intent = await detectTinyBertIntent(text);
-          } catch (e) {
-            console.warn('[Background] detectTinyBertIntent failed, falling back to fuzzy only:', e);
-            intent = 'UNKNOWN';
-          }
-
-          const result = await executeTinyBertIntent(intent, text);
-          sendResponse({ ok: true, intent, handled: result.handled, message: result.message });
-        } catch (e) {
-          console.error('[Background] voice_execute_intent error:', e);
-          sendResponse({ ok: false, handled: false, error: e?.message || String(e) });
-        } finally {
-          cleanup();
-        }
-      })();
-      return true;
-    }
-
-    // Offscreen auth: start Google login
+    // Google OAuth login via chrome.identity.launchWebAuthFlow
     if (msg?.action === 'LOGIN_WITH_GOOGLE') {
       (async () => {
         try {
-          await ensureOffscreenDocument();
-          // Wait for offscreen to report ready
-          await new Promise((resolve) => {
-            let timeout;
-            const readyHandler = (m) => {
-              if (m?.type === 'OFFSCREEN_READY') {
-                try { chrome.runtime.onMessage.removeListener(readyHandler); } catch { }
-                clearTimeout(timeout);
-                resolve();
-              }
-            };
-            chrome.runtime.onMessage.addListener(readyHandler);
-            timeout = setTimeout(() => {
-              try { chrome.runtime.onMessage.removeListener(readyHandler); } catch { }
-              resolve(); // proceed anyway after timeout
-            }, 1000);
-          });
-
-          // Try forwarding the SAME message to offscreen (preferred)
-          const direct = await new Promise((resolve) => {
-            let settled = false;
-            chrome.runtime.sendMessage(msg, (response) => {
-              settled = true;
-              resolve({ settled: true, response });
-            });
-            setTimeout(() => { if (!settled) resolve({ settled: false }); }, 1000);
-          });
-
-          if (direct.settled && direct.response) {
-            sendResponse(direct.response);
+          if (!chrome.identity || !chrome.identity.launchWebAuthFlow) {
+            sendResponse({ ok: false, error: 'Chrome identity WebAuthFlow API not available' });
             return;
           }
 
-          // Fallback: old START_OFFSCREEN_AUTH event-based flow
-          await chrome.runtime.sendMessage({ type: 'START_OFFSCREEN_AUTH' });
-          const result = await new Promise((resolve) => {
-            const handler = (m) => {
-              if (m?.type === 'OFFSCREEN_AUTH_RESULT') {
-                try { chrome.runtime.onMessage.removeListener(handler); } catch { }
-                resolve(m);
+          const redirectUri = chrome.identity.getRedirectURL();
+          const clientId = chrome.runtime.getManifest?.().oauth2?.client_id || 'REPLACE_WITH_YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+
+          const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+          authUrl.searchParams.set('client_id', clientId);
+          authUrl.searchParams.set('response_type', 'token id_token');
+          authUrl.searchParams.set('redirect_uri', redirectUri);
+          authUrl.searchParams.set('scope', 'openid email profile');
+          authUrl.searchParams.set('prompt', 'select_account');
+          authUrl.searchParams.set('nonce', crypto.randomUUID());
+
+          const responseUrl = await new Promise((resolve, reject) => {
+            chrome.identity.launchWebAuthFlow(
+              { url: authUrl.toString(), interactive: true },
+              (redirectedTo) => {
+                if (chrome.runtime.lastError || !redirectedTo) {
+                  reject(new Error(chrome.runtime.lastError?.message || 'User closed login or auth failed'));
+                  return;
+                }
+                resolve(redirectedTo);
               }
-            };
-            chrome.runtime.onMessage.addListener(handler);
+            );
           });
-          if (result.ok) {
-            sendResponse({ ok: true, user: result.user, idToken: result.idToken });
-          } else {
-            sendResponse({ ok: false, error: result.error || 'Auth failed' });
+
+          const fragment = responseUrl.split('#')[1] || '';
+          const params = new URLSearchParams(fragment);
+          const accessToken = params.get('access_token');
+          const idToken = params.get('id_token');
+
+          if (!accessToken || !idToken) {
+            sendResponse({ ok: false, error: 'OAuth flow did not return tokens' });
+            return;
           }
+
+          let user = { uid: '', email: '', displayName: '' };
+          try {
+            const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            if (resp.ok) {
+              const info = await resp.json();
+              user = {
+                uid: info.sub || '',
+                email: info.email || '',
+                displayName: info.name || info.email || 'Google User'
+              };
+            }
+          } catch (e) {
+            console.warn('[Background] Failed to fetch Google userinfo:', e);
+          }
+
+          if (!user.uid) {
+            user.uid = 'google-oauth-user';
+          }
+
+          // After successful authentication, generate keys and send to server
+          try {
+            // 1. Generate key pair
+            const { CryptoUtils } = await import('../utils/cryptoUtils.js');
+            const keyPair = await CryptoUtils.generateKeyPair();
+
+            // 2. Store keys locally
+            await chrome.storage.local.set({
+              auth: {
+                user: {
+                  ...user,
+                  keyId: keyPair.keyId
+                },
+                idToken,
+                keyPair: {
+                  privateKey: keyPair.privateKey,
+                  publicKey: keyPair.publicKey,
+                  keyId: keyPair.keyId
+                },
+                lastAuth: new Date().toISOString()
+              }
+            });
+
+            // 3. Send public key to Cloudflare server
+            try {
+              const privateKey = await crypto.subtle.importKey(
+                'jwk',
+                keyPair.privateKey,
+                { name: "ECDSA", namedCurve: "P-256" },
+                false,
+                ["sign"]
+              );
+
+              await CloudflareService.registerKey(
+                {
+                  keyId: keyPair.keyId,
+                  publicKey: keyPair.publicKey
+                },
+                privateKey,
+                user.uid
+              );
+
+              if (!serverResponse.ok) {
+                throw new Error('Failed to register key with server');
+              }
+
+              // 4. Send success response with user info
+              sendResponse({
+                ok: true,
+                user: {
+                  ...user,
+                  keyId: keyPair.keyId
+                },
+                keyRegistered: true
+              });
+              console.log('Successfully registered key with Cloudflare');
+            } catch (serverError) {
+              console.error('Failed to register key with server:', serverError);
+              // Still return success to user, but indicate key registration failed
+              sendResponse({
+                ok: true,
+                user: {
+                  ...user,
+                  keyId: keyPair.keyId
+                },
+                keyRegistered: false,
+                warning: 'Key generation succeeded but server registration failed'
+              });
+            }
+
+          } catch (keyError) {
+            console.error('Key generation failed:', keyError);
+            // Even if key generation fails, we can still let the user in
+            sendResponse({
+              ok: true,
+              user,
+              keyRegistered: false,
+              warning: 'Key generation failed, some features may be limited'
+            });
+          }
+
         } catch (e) {
+          console.error('[Background] LOGIN_WITH_GOOGLE error:', e);
           sendResponse({ ok: false, error: e?.message || String(e) });
         } finally {
           cleanup();
