@@ -1,11 +1,11 @@
 // Crypto utilities for asymmetric key generation and signing
 
-function arrayBufferToBase64(buffer) {
+export function arrayBufferToBase64(buffer) {
     return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
 // Helper function to convert base64 to ArrayBuffer
-function base64ToArrayBuffer(base64) {
+export function base64ToArrayBuffer(base64) {
     const binaryString = atob(base64);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
@@ -50,8 +50,8 @@ export class CryptoUtils {
                 'jwk',
                 privateKeyJwk,
                 {
-                    name: "RSASSA-PKCS1-v1_5",
-                    hash: { name: "SHA-256" },
+                    name: "ECDSA",
+                    namedCurve: "P-256",
                 },
                 false,
                 ['sign']
@@ -65,13 +65,16 @@ export class CryptoUtils {
 
             // Sign the data
             const signature = await crypto.subtle.sign(
-                { name: "RSASSA-PKCS1-v1_5" },
+                {
+                    name: "ECDSA",
+                    hash: { name: "SHA-256" }
+                },
                 privateKey,
                 dataBuffer
             );
 
             // Convert signature to base64 for transmission
-            return this.arrayBufferToBase64(signature);
+            return arrayBufferToBase64(signature);
         } catch (error) {
             console.error('Error signing data:', error);
             throw error;
@@ -85,8 +88,8 @@ export class CryptoUtils {
                 'jwk',
                 publicKeyJwk,
                 {
-                    name: "RSASSA-PKCS1-v1_5",
-                    hash: { name: "SHA-256" },
+                    name: "ECDSA",
+                    namedCurve: "P-256",
                 },
                 false,
                 ['verify']
@@ -99,11 +102,14 @@ export class CryptoUtils {
                 : data;
 
             // Convert signature from base64 to ArrayBuffer
-            const signatureBuffer = this.base64ToArrayBuffer(signature);
+            const signatureBuffer = base64ToArrayBuffer(signature);
 
             // Verify the signature
             return crypto.subtle.verify(
-                { name: "RSASSA-PKCS1-v1_5" },
+                {
+                    name: "ECDSA",
+                    hash: { name: "SHA-256" }
+                },
                 publicKey,
                 signatureBuffer,
                 dataBuffer
@@ -112,27 +118,5 @@ export class CryptoUtils {
             console.error('Error verifying signature:', error);
             return false;
         }
-    }
-
-    // Helper method to convert ArrayBuffer to base64
-    static arrayBufferToBase64(buffer) {
-        let binary = '';
-        const bytes = new Uint8Array(buffer);
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        return window.btoa(binary);
-    }
-
-    // Helper method to convert base64 to ArrayBuffer
-    static base64ToArrayBuffer(base64) {
-        const binaryString = window.atob(base64);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        return bytes.buffer;
     }
 }

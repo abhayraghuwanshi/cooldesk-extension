@@ -1,4 +1,5 @@
 // src/services/cloudflareService.js
+import { arrayBufferToBase64 } from '../utils/cryptoUtils.js';
 const CLOUDFLARE_WORKER_URL = 'https://cool-desk.raghuwanshi-abhay405.workers.dev';
 
 export class CloudflareService {
@@ -6,12 +7,18 @@ export class CloudflareService {
      * Make an authenticated request with ECDSA signature
      * @private
      */
-    static async fetchWithAuth(url, method, privateKey, userId, body = null) {
+    // In src/services/cloudflareService.js
+
+    /**
+     * Make an authenticated request with ECDSA signature, and optionally, a Bearer token.
+     * @private
+     */
+    static async fetchWithAuth(url, method, privateKey, userId, body = null, idToken = null) {
         const timestamp = Date.now().toString();
         const fullUrl = `${CLOUDFLARE_WORKER_URL}${url}`;
 
         try {
-            // Create signature
+            // Create signature (This part remains the same)
             const payloadString = `${method}:${fullUrl}:${timestamp}`;
             const encoder = new TextEncoder();
             const data = encoder.encode(payloadString);
@@ -25,18 +32,26 @@ export class CloudflareService {
                 data
             );
 
-            // Convert binary signature to Base64 string using our helper
             const signatureBase64 = arrayBufferToBase64(signatureBuffer);
+
+            // --- 🔑 Authentication Headers Setup ---
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-User-Id': userId,
+                'X-Timestamp': timestamp,
+                'X-Signature': signatureBase64 // ECDSA Signature for request integrity
+            };
+
+            // **NEW: Add Authorization header if idToken is provided**
+            if (idToken) {
+                headers['Authorization'] = `Bearer ${idToken}`; // Google ID Token for user identity
+            }
+            // --- -------------------------------- ---
 
             // Make the request
             const response = await fetch(fullUrl, {
                 method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-User-Id': userId,
-                    'X-Timestamp': timestamp,
-                    'X-Signature': signatureBase64
-                },
+                headers: headers, // Use the dynamically created headers object
                 body: body ? JSON.stringify(body) : null
             });
 
@@ -92,14 +107,15 @@ export class CloudflareService {
     /**
      * Register a public key with the server
      */
-    static async registerKey({ keyId, publicKey }, privateKey, userId) {
+    static async registerKey({ keyId, publicKey }, privateKey, userId, idToken) {
         try {
             const response = await this.fetchWithAuth(
                 '/api/register-key',
                 'POST',
                 privateKey,
                 userId,
-                { keyId, publicKey }
+                { keyId, publicKey },
+                idToken // <-- PASS idToken here
             );
             return await response.json();
         } catch (error) {

@@ -473,12 +473,9 @@ async function main() {
                   publicKey: keyPair.publicKey
                 },
                 privateKey,
-                user.uid
+                user.uid,
+                idToken
               );
-
-              if (!serverResponse.ok) {
-                throw new Error('Failed to register key with server');
-              }
 
               // 4. Send success response with user info
               sendResponse({
@@ -524,6 +521,99 @@ async function main() {
       })();
       return true; // keep channel open
     }
+
+    // Add this inside the chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => { ... }) block
+    // Right after the LOGIN_WITH_GOOGLE handler
+
+    if (msg?.action === 'TEST_REGISTER_KEY') {
+      (async () => {
+        try {
+          console.log('[Background] Starting TEST_REGISTER_KEY flow');
+
+          // 1. Get stored auth data
+          const data = await new Promise((resolve) => {
+            chrome.storage.local.get('auth', resolve);
+          });
+
+          console.log('Stored auth data:', data.auth);
+          if (data.auth) {
+            console.log('Key ID:', data.auth.user?.keyId);
+            console.log('Last auth:', data.auth.lastAuth);
+          }
+
+          if (!data?.auth?.user?.email) {
+            throw new Error('No authenticated user found. Please log in first.');
+          }
+
+          const { user, keyPair: existingKeyPair, idToken } = data.auth;
+
+          // 2. Generate new key pair or use existing
+          let keyPair;
+          if (existingKeyPair?.privateKey && existingKeyPair?.publicKey) {
+            console.log('[Background] Using existing key pair');
+            keyPair = existingKeyPair;
+          } else {
+            console.log('[Background] Generating new key pair...');
+            const { CryptoUtils } = await import('../utils/cryptoUtils.js');
+            keyPair = await CryptoUtils.generateKeyPair();
+
+            // Store the new key pair
+            await chrome.storage.local.set({
+              auth: {
+                ...data.auth,
+                keyPair,
+                user: {
+                  ...data.auth.user,
+                  keyId: keyPair.keyId
+                }
+              }
+            });
+          }
+
+          // 3. Import private key for signing
+          const privateKey = await crypto.subtle.importKey(
+            'jwk',
+            keyPair.privateKey,
+            { name: "ECDSA", namedCurve: "P-256" },
+            false,
+            ["sign"]
+          );
+
+          // 4. Register/Update key with Cloudflare
+          console.log('[Background] Registering key with Cloudflare...');
+          const result = await CloudflareService.registerKey(
+            {
+              keyId: keyPair.keyId,
+              publicKey: keyPair.publicKey
+            },
+            privateKey,
+            user.uid,
+            idToken
+          );
+
+          console.log('[Background] Key registration successful:', result);
+          sendResponse({
+            ok: true,
+            user: {
+              ...user,
+              keyId: keyPair.keyId
+            },
+            usedExistingKey: !!existingKeyPair?.keyId,
+            result
+          });
+
+        } catch (error) {
+          console.error('[Background] TEST_REGISTER_KEY error:', error);
+          sendResponse({
+            ok: false,
+            error: error.message || 'Key registration test failed',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+          });
+        }
+      })();
+      return true; // Keep the message channel open for async response
+    }
+
 
     // Handle media control commands
     if (msg?.type === 'MEDIA_COMMAND') {
