@@ -1549,7 +1549,12 @@ export default function App() {
             display: 'grid',
             gridTemplateColumns: windowWidth < 768 ? '1fr' : '1fr 1fr',
             gap: 'var(--card-spacing)',
-            marginBottom: 'var(--section-spacing)'
+            marginBottom: 'var(--section-spacing)',
+            border: '1px solid rgba(70, 70, 75, 0.7)',
+            boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
+            borderRadius: '16px',
+            padding: '8px',
+            background: 'rgba(35, 35, 40, 0.95)'
           }}>
             {displaySettings.pingsSection !== false && (
               <div className="pings-section section">
