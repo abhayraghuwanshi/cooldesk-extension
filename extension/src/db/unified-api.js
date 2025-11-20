@@ -4,10 +4,10 @@
  * Provides consistent, validated, error-handled database operations
  */
 
-import { DB_CONFIG, getUnifiedDB, closeUnifiedDB } from './unified-db.js'
-import { isMigrationNeeded, performMigration, cleanupLegacyDatabases } from './migration-manager.js'
-import { validateAndSanitize, batchValidate, validateQueryParams } from './validation.js'
-import { handleDatabaseError, withErrorHandling, ErrorSeverity, ErrorStrategy } from './error-handler.js'
+import { ErrorSeverity, ErrorStrategy, handleDatabaseError, withErrorHandling } from './error-handler.js'
+import { cleanupLegacyDatabases, isMigrationNeeded, performMigration } from './migration-manager.js'
+import { closeUnifiedDB, DB_CONFIG, getUnifiedDB } from './unified-db.js'
+import { validateAndSanitize } from './validation.js'
 
 /**
  * Initialize the unified database system
@@ -16,20 +16,20 @@ import { handleDatabaseError, withErrorHandling, ErrorSeverity, ErrorStrategy } 
 export async function initializeDatabase() {
     try {
         console.log('[Unified API] Initializing database system...')
-        
+
         // Check if migration is needed
         const needsMigration = await isMigrationNeeded()
-        
+
         if (needsMigration) {
             console.log('[Unified API] Migration required, starting data migration...')
-            
+
             const migrationResult = await performMigration((progress) => {
                 console.log(`[Unified API] Migration progress: ${progress.stage} - ${progress.progress}%`)
             })
-            
+
             if (migrationResult.success) {
                 console.log(`[Unified API] Migration completed successfully, imported ${migrationResult.migratedRecords} records`)
-                
+
                 // Optionally clean up legacy databases
                 try {
                     await cleanupLegacyDatabases(() => true) // Auto-cleanup
@@ -42,11 +42,11 @@ export async function initializeDatabase() {
                 throw new Error('Database migration failed')
             }
         }
-        
+
         // Ensure database is open and ready
         const db = await getUnifiedDB()
         console.log(`[Unified API] Database initialized successfully (version ${db.version})`)
-        
+
         return { success: true, migrated: needsMigration }
     } catch (error) {
         console.error('[Unified API] Database initialization failed:', error)
@@ -65,13 +65,13 @@ export async function initializeDatabase() {
  */
 export const listWorkspaces = withErrorHandling(async (options = {}) => {
     const { limit, offset, sortBy = 'updatedAt', sortOrder = 'desc' } = options
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.WORKSPACES, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACES)
-    
+
     let results = []
-    
+
     if (sortBy === 'name') {
         const index = store.index('by_name')
         const request = index.getAll()
@@ -94,7 +94,7 @@ export const listWorkspaces = withErrorHandling(async (options = {}) => {
             request.onerror = () => reject(request.error)
         })
     }
-    
+
     // Sort results
     if (sortBy === 'updatedAt' || sortBy === 'createdAt') {
         results.sort((a, b) => {
@@ -103,13 +103,13 @@ export const listWorkspaces = withErrorHandling(async (options = {}) => {
             return sortOrder === 'desc' ? bTime - aTime : aTime - bTime
         })
     }
-    
+
     // Apply pagination
     if (offset) results = results.slice(offset)
     if (limit) results = results.slice(0, limit)
-    
+
     return results
-}, { 
+}, {
     operation: 'listWorkspaces',
     severity: ErrorSeverity.LOW,
     strategy: ErrorStrategy.FALLBACK,
@@ -121,11 +121,11 @@ export const listWorkspaces = withErrorHandling(async (options = {}) => {
  */
 export const getWorkspace = withErrorHandling(async (id) => {
     if (!id) throw new Error('Workspace ID is required')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.WORKSPACES, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACES)
-    
+
     const request = store.get(id)
     return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result || null)
@@ -142,7 +142,7 @@ export const getWorkspace = withErrorHandling(async (id) => {
 export const saveWorkspace = withErrorHandling(async (workspaceData) => {
     // Validate and sanitize data
     const workspace = validateAndSanitize(workspaceData, 'workspace')
-    
+
     // Deduplicate URLs array by URL string (keep first occurrence)
     if (Array.isArray(workspace.urls) && workspace.urls.length > 0) {
         const seenUrls = new Set()
@@ -152,24 +152,24 @@ export const saveWorkspace = withErrorHandling(async (workspaceData) => {
             return true
         })
     }
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.WORKSPACES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACES)
-    
+
     const request = store.put(workspace)
-    
+
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
             console.log(`[Unified API] Saved workspace: ${workspace.name} (${workspace.id})`)
-            
+
             // Notify listeners
             try {
                 const bc = new BroadcastChannel('ws_db_changes')
                 bc.postMessage({ type: 'workspacesChanged' })
                 bc.close()
-            } catch {}
-            
+            } catch { }
+
             resolve(workspace)
         }
         request.onerror = () => reject(request.error)
@@ -186,35 +186,35 @@ export const saveWorkspace = withErrorHandling(async (workspaceData) => {
  */
 export const deleteWorkspace = withErrorHandling(async (id) => {
     if (!id) throw new Error('Workspace ID is required')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction([DB_CONFIG.STORES.WORKSPACES, DB_CONFIG.STORES.WORKSPACE_URLS], 'readwrite')
-    
+
     // Delete workspace
     const workspaceStore = tx.objectStore(DB_CONFIG.STORES.WORKSPACES)
     const deleteWorkspaceReq = workspaceStore.delete(id)
-    
+
     // Remove workspace ID from URLs
     const urlStore = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_URLS)
     const urlIndex = urlStore.index('by_workspaceIds')
     const urlsReq = urlIndex.getAll(id)
-    
+
     return new Promise((resolve, reject) => {
         tx.oncomplete = () => {
             console.log(`[Unified API] Deleted workspace: ${id}`)
-            
+
             // Notify listeners
             try {
                 const bc = new BroadcastChannel('ws_db_changes')
                 bc.postMessage({ type: 'workspacesChanged' })
                 bc.close()
-            } catch {}
-            
+            } catch { }
+
             resolve(true)
         }
-        
+
         tx.onerror = () => reject(tx.error)
-        
+
         // Handle URL cleanup
         urlsReq.onsuccess = () => {
             const urls = urlsReq.result || []
@@ -243,7 +243,7 @@ export const deleteWorkspace = withErrorHandling(async (id) => {
  */
 export const addUrlToWorkspace = withErrorHandling(async (url, workspaceId, metadata = {}) => {
     if (!url || !workspaceId) throw new Error('URL and workspace ID are required')
-    
+
     const urlData = validateAndSanitize({
         url,
         title: metadata.title || '',
@@ -252,37 +252,37 @@ export const addUrlToWorkspace = withErrorHandling(async (url, workspaceId, meta
         addedAt: Date.now(),
         extra: metadata.extra || {}
     }, 'workspaceUrl')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.WORKSPACE_URLS, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_URLS)
-    
+
     // Get existing URL or create new
     const getReq = store.get(url)
-    
+
     return new Promise((resolve, reject) => {
         getReq.onsuccess = () => {
             const existing = getReq.result
             let urlDoc
-            
+
             if (existing) {
                 // Add workspace ID if not already present
                 const workspaceIds = new Set(existing.workspaceIds)
                 workspaceIds.add(workspaceId)
-                urlDoc = { 
-                    ...existing, 
+                urlDoc = {
+                    ...existing,
                     ...metadata,
                     workspaceIds: Array.from(workspaceIds)
                 }
             } else {
                 urlDoc = urlData
             }
-            
+
             const putReq = store.put(urlDoc)
             putReq.onsuccess = () => resolve(urlDoc)
             putReq.onerror = () => reject(putReq.error)
         }
-        
+
         getReq.onerror = () => reject(getReq.error)
     })
 }, {
@@ -295,19 +295,19 @@ export const addUrlToWorkspace = withErrorHandling(async (url, workspaceId, meta
  */
 export const listWorkspaceUrls = withErrorHandling(async (workspaceId, options = {}) => {
     if (!workspaceId) throw new Error('Workspace ID is required')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.WORKSPACE_URLS, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_URLS)
     const index = store.index('by_workspaceIds')
-    
+
     const request = index.getAll(workspaceId)
-    
+
     let results = await new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result || [])
         request.onerror = () => reject(request.error)
     })
-    
+
     // Apply sorting
     if (options.sortBy === 'addedAt') {
         results.sort((a, b) => {
@@ -315,7 +315,7 @@ export const listWorkspaceUrls = withErrorHandling(async (workspaceId, options =
             return ((b.addedAt || 0) - (a.addedAt || 0)) * order
         })
     }
-    
+
     return results
 }, {
     operation: 'listWorkspaceUrls',
@@ -331,13 +331,13 @@ export const listWorkspaceUrls = withErrorHandling(async (workspaceId, options =
  */
 export const listScrapedChats = withErrorHandling(async (options = {}) => {
     const { platform, limit, offset, sortBy = 'scrapedAt', sortOrder = 'desc' } = options
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
-    
+
     let results = []
-    
+
     if (platform) {
         // Filter by platform using index
         const index = store.index('by_platform')
@@ -354,7 +354,7 @@ export const listScrapedChats = withErrorHandling(async (options = {}) => {
             request.onerror = () => reject(request.error)
         })
     }
-    
+
     // Sort results
     if (sortBy === 'scrapedAt') {
         results.sort((a, b) => {
@@ -369,11 +369,11 @@ export const listScrapedChats = withErrorHandling(async (options = {}) => {
             return sortOrder === 'desc' ? bTitle.localeCompare(aTitle) : aTitle.localeCompare(bTitle)
         })
     }
-    
+
     // Apply pagination
     if (offset) results = results.slice(offset)
     if (limit) results = results.slice(0, limit)
-    
+
     return results
 }, {
     operation: 'listScrapedChats',
@@ -387,11 +387,11 @@ export const listScrapedChats = withErrorHandling(async (options = {}) => {
  */
 export const getScrapedChat = withErrorHandling(async (chatId) => {
     if (!chatId) throw new Error('Chat ID is required')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
-    
+
     const request = store.get(chatId)
     return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result || null)
@@ -408,13 +408,13 @@ export const getScrapedChat = withErrorHandling(async (chatId) => {
 export const saveScrapedChat = withErrorHandling(async (chatData) => {
     // Validate and sanitize data
     const chat = validateAndSanitize(chatData, 'scrapedChat')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
-    
+
     const request = store.put(chat)
-    
+
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
             console.log(`[Unified API] Saved scraped chat: ${chat.title} (${chat.chatId})`)
@@ -434,13 +434,13 @@ export const saveScrapedChat = withErrorHandling(async (chatData) => {
  */
 export const deleteScrapedChat = withErrorHandling(async (chatId) => {
     if (!chatId) throw new Error('Chat ID is required')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
-    
+
     const request = store.delete(chatId)
-    
+
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
             console.log(`[Unified API] Deleted scraped chat: ${chatId}`)
@@ -458,26 +458,26 @@ export const deleteScrapedChat = withErrorHandling(async (chatId) => {
  */
 export const deleteScrapedChatsByPlatform = withErrorHandling(async (platform) => {
     if (!platform) throw new Error('Platform is required')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
     const index = store.index('by_platform')
-    
+
     // Get all chats for this platform
     const chatsRequest = index.getAll(platform)
-    
+
     return new Promise((resolve, reject) => {
         chatsRequest.onsuccess = () => {
             const chats = chatsRequest.result || []
             let deletedCount = 0
-            
+
             // Delete each chat
             chats.forEach(chat => {
                 const deleteReq = store.delete(chat.chatId)
                 deleteReq.onsuccess = () => deletedCount++
             })
-            
+
             tx.oncomplete = () => {
                 console.log(`[Unified API] Deleted ${deletedCount} chats from ${platform}`)
                 resolve(deletedCount)
@@ -498,20 +498,20 @@ export const deleteScrapedChatsByPlatform = withErrorHandling(async (platform) =
  */
 export const listNotes = withErrorHandling(async (options = {}) => {
     const { limit = 200, offset = 0, sortBy = 'updatedAt' } = options
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.NOTES, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.NOTES)
-    
+
     const request = store.getAll()
     let results = await new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result || [])
         request.onerror = () => reject(request.error)
     })
-    
+
     // Sort and paginate
     results.sort((a, b) => (b[sortBy] || 0) - (a[sortBy] || 0))
-    
+
     return results.slice(offset, offset + limit)
 }, {
     operation: 'listNotes',
@@ -525,36 +525,36 @@ export const listNotes = withErrorHandling(async (options = {}) => {
  */
 export const saveNote = withErrorHandling(async (noteData) => {
     const note = validateAndSanitize(noteData, 'note')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.NOTES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.NOTES)
-    
+
     return new Promise((resolve, reject) => {
         // Enforce note limit of 200 by cleaning oldest - do this within the transaction
         const getAllRequest = store.getAll()
-        
+
         getAllRequest.onsuccess = () => {
             const allNotes = getAllRequest.result || []
-            
+
             // If we have too many notes, delete the oldest ones
             if (allNotes.length >= 200) {
                 // Sort by creation time (oldest first)
                 allNotes.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
                 const toDelete = allNotes.slice(0, allNotes.length - 199) // Keep 199, delete rest
-                
+
                 // Delete old notes within the same transaction
                 toDelete.forEach(oldNote => {
                     store.delete(oldNote.id)
                 })
             }
-            
+
             // Now save the new note
             const putRequest = store.put(note)
             putRequest.onsuccess = () => resolve(note)
             putRequest.onerror = () => reject(putRequest.error)
         }
-        
+
         getAllRequest.onerror = () => reject(getAllRequest.error)
     })
 }, {
@@ -569,18 +569,18 @@ export const saveNote = withErrorHandling(async (noteData) => {
  */
 export const getUrlNotes = withErrorHandling(async (url) => {
     if (!url) return []
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.URL_NOTES, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.URL_NOTES)
     const index = store.index('by_url')
-    
+
     const request = index.getAll(url)
     const results = await new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result || [])
         request.onerror = () => reject(request.error)
     })
-    
+
     return results.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
 }, {
     operation: 'getUrlNotes',
@@ -597,11 +597,11 @@ export const saveUrlNote = withErrorHandling(async (noteData) => {
         id: noteData.id || generateId(),
         ...noteData
     }, 'urlNote')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.URL_NOTES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.URL_NOTES)
-    
+
     const request = store.put(note)
     return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(note)
@@ -621,13 +621,13 @@ export const getSettings = withErrorHandling(async () => {
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.SETTINGS, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.SETTINGS)
-    
+
     const request = store.get('default')
     const result = await new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result)
         request.onerror = () => reject(request.error)
     })
-    
+
     return result || {
         id: 'default',
         geminiApiKey: '',
@@ -659,13 +659,13 @@ export const saveSettings = withErrorHandling(async (settingsData) => {
         ...settingsData,
         updatedAt: Date.now()
     }, 'settings')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.SETTINGS, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.SETTINGS)
-    
+
     const request = store.put(settings)
-    
+
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
             // Notify settings change
@@ -673,8 +673,8 @@ export const saveSettings = withErrorHandling(async (settingsData) => {
                 const bc = new BroadcastChannel('settings_db_changes')
                 bc.postMessage({ type: 'settingsChanged' })
                 bc.close()
-            } catch {}
-            
+            } catch { }
+
             resolve(settings)
         }
         request.onerror = () => reject(request.error)
@@ -691,28 +691,28 @@ export const getUIState = withErrorHandling(async () => {
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.UI_STATE, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.UI_STATE)
-    
+
     const request = store.get('default')
     const result = await new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result)
         request.onerror = () => reject(request.error)
     })
-    
+
     // Flatten any nested 'data' properties to fix corrupted state
     const flattenData = (obj) => {
         if (!obj || typeof obj !== 'object') return obj
-        
+
         let flattened = { ...obj }
         while (flattened.data && typeof flattened.data === 'object' && !Array.isArray(flattened.data)) {
             const { data, ...rest } = flattened
             flattened = { ...rest, ...data }
         }
-        
+
         return flattened
     }
-    
+
     const flattened = result ? flattenData(result) : null
-    
+
     return flattened || {
         id: 'default',
         selectedTab: null,
@@ -744,14 +744,14 @@ export const saveUIState = withErrorHandling(async (uiStateData) => {
     // Flatten any nested 'data' properties to prevent tree-like nesting
     const flattenData = (obj) => {
         if (!obj || typeof obj !== 'object') return obj
-        
+
         // If there's a nested 'data' property, flatten it
         let flattened = { ...obj }
         while (flattened.data && typeof flattened.data === 'object' && !Array.isArray(flattened.data)) {
             const { data, ...rest } = flattened
             flattened = { ...rest, ...data }
         }
-        
+
         return flattened
     }
 
@@ -760,7 +760,7 @@ export const saveUIState = withErrorHandling(async (uiStateData) => {
     // Check if this is a partial update (only a few fields) or full state (has id)
     // If it's a full state object, don't merge - just replace
     const isFullState = flatNew && flatNew.id === 'default'
-    
+
     let merged
     if (isFullState) {
         // Full state replacement - don't merge to avoid double-nesting
@@ -779,9 +779,9 @@ export const saveUIState = withErrorHandling(async (uiStateData) => {
                 resolve(null)
             }
         })
-        
+
         const flatExisting = flattenData(existing)
-        
+
         merged = {
             id: 'default',
             ...(flatExisting || {}),
@@ -809,14 +809,14 @@ export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData) =>
         timestamp: eventData.timestamp,
         hasMetrics: !!eventData.metrics
     })
-    
+
     const event = validateAndSanitize({
         id: eventData.id || generateId(),
         timestamp: eventData.timestamp || Date.now(),
         sessionId: eventData.sessionId || `session_${Date.now()}`,
         ...eventData
     }, 'activitySeries')
-    
+
     console.log('[DB Debug] Event after validation:', {
         id: event.id,
         url: event.url,
@@ -825,13 +825,13 @@ export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData) =>
         time: event.time,
         metrics: event.metrics
     })
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
-    
+
     console.log('[DB Debug] About to store event in:', DB_CONFIG.STORES.ACTIVITY_SERIES)
-    
+
     const request = store.put(event)
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
@@ -922,16 +922,16 @@ export const getAllActivity = withErrorHandling(async (options = {}) => {
 export const cleanupOldTimeSeriesData = withErrorHandling(async (retentionDays = 30) => {
     const db = await getUnifiedDB()
     const cutoffTime = Date.now() - (retentionDays * 24 * 60 * 60 * 1000)
-    
+
     const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
     const index = store.index('by_timestamp')
     const range = IDBKeyRange.upperBound(cutoffTime)
-    
+
     return new Promise((resolve, reject) => {
         let deletedCount = 0
         const request = index.openCursor(range)
-        
+
         request.onsuccess = (event) => {
             const cursor = event.target.result
             if (cursor) {
@@ -943,7 +943,7 @@ export const cleanupOldTimeSeriesData = withErrorHandling(async (retentionDays =
                 resolve(deletedCount)
             }
         }
-        
+
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -958,20 +958,20 @@ export const getTimeSeriesStorageStats = withErrorHandling(async () => {
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
-    
+
     const countRequest = store.count()
     const totalEvents = await new Promise((resolve, reject) => {
         countRequest.onsuccess = () => resolve(countRequest.result)
         countRequest.onerror = () => reject(countRequest.error)
     })
-    
+
     const estimatedSizeMB = (totalEvents * 0.5) / 1024 // ~500 bytes per event
-    
+
     // Get oldest and newest timestamps
     const index = store.index('by_timestamp')
     const oldestRequest = index.openCursor()
     const newestRequest = index.openCursor(null, 'prev')
-    
+
     const oldest = await new Promise((resolve) => {
         oldestRequest.onsuccess = (e) => {
             if (e.target.result) resolve(e.target.result.value.timestamp)
@@ -979,7 +979,7 @@ export const getTimeSeriesStorageStats = withErrorHandling(async () => {
         }
         oldestRequest.onerror = () => resolve(null)
     })
-    
+
     const newest = await new Promise((resolve) => {
         newestRequest.onsuccess = (e) => {
             if (e.target.result) resolve(e.target.result.value.timestamp)
@@ -987,7 +987,7 @@ export const getTimeSeriesStorageStats = withErrorHandling(async () => {
         }
         newestRequest.onerror = () => resolve(null)
     })
-    
+
     return {
         totalEvents,
         estimatedSizeMB: Math.round(estimatedSizeMB * 100) / 100,
@@ -1009,7 +1009,7 @@ export const listAllUrls = withErrorHandling(async () => {
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.WORKSPACE_URLS, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_URLS)
-    
+
     const request = store.getAll()
     return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result || [])
@@ -1027,11 +1027,11 @@ export const listAllUrls = withErrorHandling(async () => {
  */
 export const getUrlRecord = withErrorHandling(async (url) => {
     if (!url) return null
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.WORKSPACE_URLS, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_URLS)
-    
+
     const request = store.get(url)
     return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result || null)
@@ -1047,7 +1047,7 @@ export const getUrlRecord = withErrorHandling(async (url) => {
  */
 export const upsertUrl = withErrorHandling(async (urlData) => {
     if (!urlData?.url) throw new Error('URL is required')
-    
+
     return await addUrlToWorkspace(urlData.url, urlData.workspaceIds?.[0] || 'default', {
         title: urlData.title,
         favicon: urlData.favicon,
@@ -1063,11 +1063,11 @@ export const upsertUrl = withErrorHandling(async (urlData) => {
  */
 export const deleteUrlNote = withErrorHandling(async (noteId) => {
     if (!noteId) throw new Error('Note ID is required')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.URL_NOTES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.URL_NOTES)
-    
+
     const request = store.delete(noteId)
     return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(true)
@@ -1083,11 +1083,11 @@ export const deleteUrlNote = withErrorHandling(async (noteId) => {
  */
 export const deleteNote = withErrorHandling(async (noteId) => {
     if (!noteId) throw new Error('Note ID is required')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.NOTES, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.NOTES)
-    
+
     const request = store.delete(noteId)
     return new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(true)
@@ -1108,20 +1108,20 @@ export const upsertNote = saveNote
  */
 export const listPings = withErrorHandling(async (options = {}) => {
     const { limit = 12 } = options
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.PINS, 'readonly')
     const store = tx.objectStore(DB_CONFIG.STORES.PINS)
-    
+
     const request = store.getAll()
     let results = await new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result || [])
         request.onerror = () => reject(request.error)
     })
-    
+
     // Sort by creation time and limit
     results.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-    
+
     return results.slice(0, limit)
 }, {
     operation: 'listPings',
@@ -1141,11 +1141,11 @@ export const upsertPing = withErrorHandling(async (pingData) => {
         favicon: pingData.favicon || '',
         createdAt: pingData.createdAt || Date.now()
     }, 'pin')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.PINS, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.PINS)
-    
+
     return new Promise((resolve, reject) => {
         // Save the new pin directly without enforcing any limit
         const putRequest = store.put(pin)
@@ -1155,7 +1155,7 @@ export const upsertPing = withErrorHandling(async (pingData) => {
                 const bc = new BroadcastChannel('ws_db_changes')
                 bc.postMessage({ type: 'pinsChanged' })
                 bc.close()
-            } catch {}
+            } catch { }
             resolve(pin)
         }
         putRequest.onerror = () => reject(putRequest.error)
@@ -1170,11 +1170,11 @@ export const upsertPing = withErrorHandling(async (pingData) => {
  */
 export const deletePing = withErrorHandling(async (pinId) => {
     if (!pinId) throw new Error('Pin ID is required')
-    
+
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.PINS, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.PINS)
-    
+
     const request = store.delete(pinId)
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
@@ -1183,7 +1183,7 @@ export const deletePing = withErrorHandling(async (pinId) => {
                 const bc = new BroadcastChannel('ws_db_changes')
                 bc.postMessage({ type: 'pinsChanged' })
                 bc.close()
-            } catch {}
+            } catch { }
             resolve(true)
         }
         request.onerror = () => reject(request.error)
@@ -1203,20 +1203,20 @@ export const deleteWorkspaceById = deleteWorkspace
  */
 export const updateWorkspaceGridType = withErrorHandling(async (workspaceId, gridType) => {
     if (!workspaceId || !gridType) throw new Error('Workspace ID and grid type are required')
-    
+
     // Get existing workspace
     const workspace = await getWorkspace(workspaceId)
     if (!workspace) {
         throw new Error(`Workspace not found: ${workspaceId}`)
     }
-    
+
     // Update with new grid type
     const updatedWorkspace = {
         ...workspace,
         gridType,
         updatedAt: Date.now()
     }
-    
+
     return await saveWorkspace(updatedWorkspace)
 }, {
     operation: 'updateWorkspaceGridType',
@@ -1228,17 +1228,17 @@ export const updateWorkspaceGridType = withErrorHandling(async (workspaceId, gri
  */
 export const updateItemWorkspace = withErrorHandling(async (itemId, workspaceName) => {
     if (!itemId) throw new Error('Item ID is required')
-    
+
     try {
         // This function operates on dashboardData in chrome.storage.local
         const { dashboardData } = await chrome.storage.local.get(['dashboardData'])
         if (!dashboardData) return
-        
+
         const bookmarks = dashboardData.bookmarks || []
         const history = dashboardData.history || []
-        
+
         let itemUpdated = false
-        
+
         const newBookmarks = bookmarks.map(item => {
             if (item.id === itemId) {
                 itemUpdated = true
@@ -1246,7 +1246,7 @@ export const updateItemWorkspace = withErrorHandling(async (itemId, workspaceNam
             }
             return item
         })
-        
+
         let newHistory = history
         if (!itemUpdated) {
             newHistory = history.map(item => {
@@ -1257,17 +1257,17 @@ export const updateItemWorkspace = withErrorHandling(async (itemId, workspaceNam
                 return item
             })
         }
-        
+
         if (itemUpdated) {
             await chrome.storage.local.set({
-                dashboardData: { 
-                    ...dashboardData, 
-                    bookmarks: newBookmarks, 
-                    history: newHistory 
+                dashboardData: {
+                    ...dashboardData,
+                    bookmarks: newBookmarks,
+                    history: newHistory
                 }
             })
         }
-        
+
         return itemUpdated
     } catch (error) {
         console.error('Error updating item workspace:', error)
@@ -1291,15 +1291,15 @@ export const getDatabaseHealth = withErrorHandling(async () => {
         stores: {},
         timestamp: Date.now()
     }
-    
+
     // Check each store
     const transaction = db.transaction(Object.values(DB_CONFIG.STORES), 'readonly')
-    
+
     for (const storeName of Object.values(DB_CONFIG.STORES)) {
         try {
             const store = transaction.objectStore(storeName)
             const countRequest = store.count()
-            
+
             health.stores[storeName] = await new Promise((resolve, reject) => {
                 countRequest.onsuccess = () => resolve({
                     count: countRequest.result,
@@ -1312,7 +1312,7 @@ export const getDatabaseHealth = withErrorHandling(async () => {
             health.status = 'degraded'
         }
     }
-    
+
     return health
 }, {
     operation: 'getDatabaseHealth',
@@ -1399,4 +1399,20 @@ function generateId() {
     } catch {
         return `id_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     }
+}
+
+
+export async function getTimeSeriesDataRange(startTime, endTime) {
+    const db = await getUnifiedDB();
+    const transaction = db.transaction(['activity_timeseries'], 'readonly'); // Ensure store name matches your schema
+    const store = transaction.objectStore('activity_timeseries');
+    const index = store.index('timestamp'); // Ensure you have an index on 'timestamp'
+    const range = IDBKeyRange.bound(startTime, endTime);
+
+    return new Promise((resolve, reject) => {
+        const request = index.getAll(range);
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
 }

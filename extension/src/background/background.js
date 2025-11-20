@@ -175,42 +175,7 @@ async function updateDailyNotesSummary(date, selectionCount) {
   }
 }
 
-async function executeTinyBertIntent(intent, text) {
-  try {
-    switch (intent) {
-      case 'open_youtube': {
-        await chrome.tabs.create({ url: 'https://youtube.com' });
-        return { handled: true, message: 'Opening YouTube' };
-      }
-      case 'open_gmail': {
-        await chrome.tabs.create({ url: 'https://mail.google.com' });
-        return { handled: true, message: 'Opening Gmail' };
-      }
-      case 'open_facebook': {
-        await chrome.tabs.create({ url: 'https://facebook.com' });
-        return { handled: true, message: 'Opening Facebook' };
-      }
-      case 'open_settings': {
-        try {
-          if (chrome.runtime.openOptionsPage) {
-            await chrome.runtime.openOptionsPage();
-          } else {
-            await chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
-          }
-        } catch (e) {
-          console.warn('[Background] Failed to open options page:', e);
-          return { handled: false, message: 'Failed to open settings' };
-        }
-        return { handled: true, message: 'Opening extension settings' };
-      }
-      default:
-        return { handled: false, message: `No TinyBERT intent mapping for "${intent}"` };
-    }
-  } catch (e) {
-    console.error('[Background] Error executing TinyBERT intent:', intent, e);
-    return { handled: false, message: e?.message || String(e) };
-  }
-}
+
 
 async function main() {
   console.log('[Background] Main function started');

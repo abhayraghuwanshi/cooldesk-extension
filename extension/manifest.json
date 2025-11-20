@@ -28,7 +28,8 @@
     "sessions",
     "sidePanel",
     "search",
-    "identity"
+    "identity",
+    "alarms"
   ],
   "oauth2": {
     "client_id": "256165123494-q5n57e6750sik1f723vj5rb8i28fmmue.apps.googleusercontent.com",

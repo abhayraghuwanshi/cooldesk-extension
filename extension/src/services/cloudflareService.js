@@ -179,6 +179,22 @@ export class CloudflareService {
             throw error;
         }
     }
+
+    static async categorizeBatch(urls, privateKey, userId) {
+        try {
+            const response = await this.fetchWithAuth(
+                '/api/categorize-batch',
+                'POST',
+                privateKey,
+                userId,
+                { urls } // Send array of URLs
+            );
+            return await response.json();
+        } catch (error) {
+            console.error('Batch categorization error:', error);
+            throw error;
+        }
+    }
 }
 
 // Example usage:

@@ -27,107 +27,54 @@
 
 // Export all API functions
 export {
-    // Initialization
-    initializeDatabase,
-    
-    // Workspace operations
-    listWorkspaces,
-    getWorkspace, 
-    saveWorkspace,
-    deleteWorkspace,
-    
+
     // Workspace URL operations
-    addUrlToWorkspace,
-    listWorkspaceUrls,
-    
-    // Scraped Chats operations
-    listScrapedChats,
-    getScrapedChat,
-    saveScrapedChat,
-    deleteScrapedChat,
-    deleteScrapedChatsByPlatform,
-    
-    // Notes operations
-    listNotes,
-    saveNote,
-    deleteNote,
-    upsertNote,
-    
-    // URL Notes operations  
-    getUrlNotes,
-    saveUrlNote,
-    deleteUrlNote,
-    
+    addUrlToWorkspace, cleanupOldTimeSeriesData, closeDatabaseConnection, deleteNote, deletePing, deleteScrapedChat,
+    deleteScrapedChatsByPlatform, deleteUrlNote, deleteWorkspace, deleteWorkspaceById, getAllActivity,
+    // Utility functions
+    getDatabaseHealth, getScrapedChat,
     // Settings operations
-    getSettings,
-    saveSettings,
-    
+    getSettings, getTimeSeriesDataRange, getTimeSeriesStorageStats,
     // UI State operations
     getUIState,
-    saveUIState,
-    
-    // Activity & Time Tracking operations
-    putActivityTimeSeriesEvent,
-    putActivityRow,
-    getAllActivity,
-    cleanupOldTimeSeriesData,
-    getTimeSeriesStorageStats,
-    
+    // URL Notes operations  
+    getUrlNotes, getUrlRecord, getWorkspace,
+    // Initialization
+    initializeDatabase,
     // Legacy compatibility functions
     listAllUrls,
-    getUrlRecord,
-    upsertUrl,
-    listPings,
-    upsertPing,
-    deletePing,
-    deleteWorkspaceById,
-    updateWorkspaceGridType,
-    updateItemWorkspace,
-    
-    // Utility functions
-    getDatabaseHealth,
-    subscribeWorkspaceChanges,
-    subscribePinsChanges,
-    subscribeDailyNotesChanges,
-    subscribeSettingsChanges,
-    closeDatabaseConnection
-    
+    // Notes operations
+    listNotes, listPings,
+    // Scraped Chats operations
+    listScrapedChats,
+    // Workspace operations
+    listWorkspaces, listWorkspaceUrls, putActivityRow,
+    // Activity & Time Tracking operations
+    putActivityTimeSeriesEvent, saveNote, saveScrapedChat, saveSettings, saveUIState, saveUrlNote, saveWorkspace, subscribeDailyNotesChanges, subscribePinsChanges, subscribeSettingsChanges, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType, upsertNote, upsertPing, upsertUrl
 } from './unified-api.js'
 
 // Export error handling utilities
 export {
-    ErrorSeverity,
-    ErrorStrategy,
-    handleDatabaseError,
-    withErrorHandling,
-    getErrorStats,
-    subscribeToErrors,
-    clearErrors
+    clearErrors, ErrorSeverity,
+    ErrorStrategy, getErrorStats, handleDatabaseError, subscribeToErrors, withErrorHandling
 } from './error-handler.js'
 
 // Export validation utilities
 export {
-    ValidationError,
-    ValidationRules,
-    validateData,
-    validateAndSanitize,
     batchValidate,
-    createCustomValidator
+    createCustomValidator, validateAndSanitize, validateData, ValidationError,
+    ValidationRules
 } from './validation.js'
 
 // Export migration utilities (for advanced usage)
 export {
-    isMigrationNeeded,
-    performMigration,
-    cleanupLegacyDatabases
+    cleanupLegacyDatabases, isMigrationNeeded,
+    performMigration
 } from './migration-manager.js'
 
 // Export database configuration (for advanced usage)
 export {
-    DB_CONFIG,
-    SCHEMAS,
-    getUnifiedDB,
-    getDatabaseHealth as getInternalHealth
+    DB_CONFIG, getDatabaseHealth as getInternalHealth, getUnifiedDB, SCHEMAS
 } from './unified-db.js'
 
 /**
@@ -146,21 +93,21 @@ export async function setupDatabase(options = {}) {
         cleanupLegacy = true,
         enableErrorTracking = true
     } = options
-    
+
     try {
         console.log('[DB Setup] Initializing unified database system...')
-        
+
         // Import the function locally to avoid circular dependencies
         const { initializeDatabase } = await import('./unified-api.js')
         const result = await initializeDatabase()
-        
+
         if (result.success) {
             console.log('[DB Setup] ✅ Database system ready')
-            
+
             if (result.migrated) {
                 console.log('[DB Setup] ✅ Legacy data migrated successfully')
             }
-            
+
             return {
                 success: true,
                 message: 'Database system initialized successfully',
@@ -169,7 +116,7 @@ export async function setupDatabase(options = {}) {
         } else {
             throw new Error('Database initialization failed')
         }
-        
+
     } catch (error) {
         console.error('[DB Setup] ❌ Database setup failed:', error)
         return {
@@ -188,15 +135,15 @@ export async function resetDatabase() {
     if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'development') {
         throw new Error('resetDatabase can only be used in development')
     }
-    
+
     try {
         // Import needed modules locally
         const { DB_CONFIG, getIndexedDBInstance } = await import('./unified-db.js')
         const { closeDatabaseConnection } = await import('./unified-api.js')
-        
+
         // Close existing connections
         closeDatabaseConnection()
-        
+
         // Delete the unified database
         await new Promise((resolve, reject) => {
             const deleteReq = getIndexedDBInstance().deleteDatabase(DB_CONFIG.NAME)
@@ -207,10 +154,10 @@ export async function resetDatabase() {
                 setTimeout(() => reject(new Error('Deletion blocked')), 5000)
             }
         })
-        
+
         console.log('[DB Reset] Database reset complete')
         return { success: true }
-        
+
     } catch (error) {
         console.error('[DB Reset] Reset failed:', error)
         return { success: false, error: error.message }
@@ -218,15 +165,15 @@ export async function resetDatabase() {
 }
 
 // ===== LEGACY COMPATIBILITY NOTICE =====
-// 
+//
 // Legacy database files have been removed and replaced with the unified system.
 // All legacy functions are now provided through the unified API above.
-// 
+//
 // If you encounter import errors, update your imports to use the unified API:
-// 
+//
 // OLD: import { listWorkspaces } from './db/workspace-db.js'
 // NEW: import { listWorkspaces } from './db/index.js'
-// 
+//
 // The unified system provides the same API with enhanced features:
 // - Automatic data validation and sanitization
 // - Comprehensive error handling and recovery
