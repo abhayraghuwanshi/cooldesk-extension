@@ -21,6 +21,8 @@ export function WorkspaceFilters({
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [currentTab, setCurrentTab] = useState(null)
   const [menu, setMenu] = useState({ open: false, x: 0, y: 0, ws: null })
+  const [showAllWorkspaces, setShowAllWorkspaces] = useState(false)
+  const VISIBLE_WORKSPACES_LIMIT = 5
 
   // Get current tab when modal opens
   useEffect(() => {
@@ -106,7 +108,7 @@ export function WorkspaceFilters({
             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
           </svg>
         </button>
-        {workspaces.map((ws, i) => (
+        {workspaces.slice(0, showAllWorkspaces ? workspaces.length : VISIBLE_WORKSPACES_LIMIT).map((ws, i) => (
           <button
             key={ws}
             onClick={() => onChange(ws)}
@@ -154,6 +156,55 @@ export function WorkspaceFilters({
             {ws}
           </button>
         ))}
+        {workspaces.length > VISIBLE_WORKSPACES_LIMIT && (
+          <button
+            onClick={() => setShowAllWorkspaces(!showAllWorkspaces)}
+            style={{
+              background: 'transparent',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              height: '32px',
+              justifyContent: 'center',
+              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+              outline: 'none',
+              whiteSpace: 'nowrap',
+              gap: '4px',
+              marginLeft: '4px'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+              e.target.style.color = 'rgba(255, 255, 255, 0.8)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = 'transparent';
+              e.target.style.color = 'rgba(255, 255, 255, 0.6)';
+            }}
+          >
+            {showAllWorkspaces ? (
+              <>
+                <span>Show Less</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ transform: 'rotate(180deg)' }}>
+                  <path d="M7 10l5 5 5-5z" />
+                </svg>
+              </>
+            ) : (
+              <>
+                <span>Show {workspaces.length - VISIBLE_WORKSPACES_LIMIT} More</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7 10l5 5 5-5z" />
+                </svg>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {menu.open && (

@@ -1554,7 +1554,7 @@ export default function App() {
             boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
             borderRadius: '16px',
             padding: '8px',
-            background: 'rgba(35, 35, 40, 0.95)'
+
           }}>
             {displaySettings.pingsSection !== false && (
               <div className="pings-section section">
