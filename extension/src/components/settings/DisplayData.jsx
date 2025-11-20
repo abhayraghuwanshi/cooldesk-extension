@@ -1,4 +1,4 @@
-import { faChartLine, faFilter, faMapPin, faNewspaper, faThumbtack, faCheckCircle } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faCheckCircle, faFilter, faMapPin, faNewspaper, faThumbtack } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useState } from 'react'
 import { applyViewMode, getCurrentViewMode, getViewModesList } from '../../config/viewModes'
@@ -48,13 +48,6 @@ const UI_COMPONENTS = [
         label: 'Notes Section',
         description: 'Quick notes and reminders',
         icon: faMapPin,
-        category: 'Activity Panel'
-    },
-    {
-        id: 'dailyNotesSection',
-        label: 'Daily Notes Section',
-        description: 'Daily journal and notes',
-        icon: faNewspaper,
         category: 'Activity Panel'
     },
     {
@@ -145,7 +138,7 @@ export default function DisplayData() {
             <div className="view-mode-section">
                 <h3 className="section-title">View Modes</h3>
                 <p className="section-subtitle">Quick presets for different workflows</p>
-                
+
                 <div className="view-mode-grid">
                     {viewModes.map(mode => (
                         <button

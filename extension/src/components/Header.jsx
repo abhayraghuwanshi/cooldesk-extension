@@ -8,6 +8,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import calendarIcon from '../../calendericon.svg';
+import { applyViewMode } from '../config/viewModes';
 import { getUIState, saveUIState } from '../db/index.js';
 import { getFaviconUrl } from '../utils.js';
 import { AddLinkFlow } from './popups/AddLinkFlow.jsx';
@@ -400,7 +401,62 @@ export function Header({
 
 
         {/* View Mode Selector */}
-        <ViewModeSelector />
+        <div style={{
+          display: 'flex',
+          gap: '4px',
+          alignItems: 'center',
+          margin: '0 4px'
+        }}>
+          <button
+            style={{
+              background: 'none',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              width: '28px',
+              height: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              opacity: '0.7',
+              transition: 'all 0.2s',
+              padding: 0
+            }}
+            onMouseOver={(e) => e.currentTarget.style.opacity = '1'}
+            onMouseOut={(e) => e.currentTarget.style.opacity = '0.7'}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onClick={() => applyViewMode('workspace')}
+            title="Workspace View"
+          >
+            <span style={{ fontSize: '1.1em' }}>💼</span>
+          </button>
+          <button
+            style={{
+              background: 'none',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              width: '28px',
+              height: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              opacity: '0.7',
+              transition: 'all 0.2s',
+              padding: 0
+            }}
+            onMouseOver={(e) => e.currentTarget.style.opacity = '1'}
+            onMouseOut={(e) => e.currentTarget.style.opacity = '0.7'}
+            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
+            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            onClick={() => applyViewMode('tabs')}
+            title="Tabs View"
+          >
+            <span style={{ fontSize: '1.1em' }}>📑</span>
+          </button>
+          <ViewModeSelector />
+        </div>
 
         <button
           className="icon-btn"

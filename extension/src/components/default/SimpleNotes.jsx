@@ -458,7 +458,7 @@ export function SimpleNotes() {
 
         filtered.forEach(note => {
             if (note.pinned) return; // Already in pinned
-            
+
             const age = now - note.createdAt;
             if (age < oneDayMs) {
                 groups.today.push(note);
@@ -529,7 +529,26 @@ export function SimpleNotes() {
         <div className="simple-notes-root">
             {/* Header with Toolbar */}
             <div className="simple-notes-header">
-                <h2 className="simple-notes-title">Notes</h2>
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 16,
+                    padding: '0 4px'
+                }}>
+                    <h3 style={{
+                        fontSize: 'var(--font-size-2xl)',
+                        fontWeight: 600,
+                        margin: 0,
+                        color: '#ffffff',
+                        letterSpacing: '-0.5px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8
+                    }}>
+                        Notes
+                    </h3>
+                </div>
 
                 {/* Apple-style Toolbar */}
                 <div className="simple-notes-toolbar">

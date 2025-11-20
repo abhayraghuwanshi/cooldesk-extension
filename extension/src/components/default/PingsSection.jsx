@@ -258,7 +258,28 @@ export function PingsSection({ tabs }) {
 
   return (
     <div className="coolDesk-section" data-onboarding="current-pins-section">
-      <h2 className="coolDesk-section-title">Pins</h2>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 16,
+        padding: '0 4px'
+      }}>
+        <h3 style={{
+          fontSize: 'var(--font-size-2xl)',
+          fontWeight: 600,
+          margin: 0,
+          color: '#ffffff',
+          letterSpacing: '-0.5px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
+          Pins
+        </h3>
+
+      </div>
       <div className="coolDesk-pings-container" style={{
         display: 'flex',
         flexDirection: 'row',
@@ -276,8 +297,15 @@ export function PingsSection({ tabs }) {
               position: 'relative',
               cursor: 'pointer',
               padding: '4px',
-              borderRadius: '6px',
-              transition: 'background-color 0.2s'
+              borderRadius: '8px',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              background: 'rgba(255, 255, 255, 0.02)',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px'
             }}
             onClick={() => openOrFocusUrl(ping.url)}
             onMouseEnter={() => setHoveredPingId(ping.url)}
@@ -288,8 +316,8 @@ export function PingsSection({ tabs }) {
               src={ping.favicon || getFaviconUrl(ping.url)}
               alt={ping.title || 'Pin'}
               style={{
-                width: '24px',
-                height: '24px',
+                width: '20px',
+                height: '20px',
                 objectFit: 'contain',
                 borderRadius: '4px'
               }}
@@ -359,9 +387,10 @@ export function PingsSection({ tabs }) {
             position: 'relative',
             cursor: 'pointer',
             padding: '4px',
-            borderRadius: '6px',
-            transition: 'background-color 0.2s',
+            borderRadius: '8px',
+            transition: 'all 0.2s ease',
             border: '1px dashed var(--border-color, rgba(255,255,255,0.15))',
+            background: 'rgba(255, 255, 255, 0.02)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

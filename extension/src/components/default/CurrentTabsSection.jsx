@@ -404,9 +404,9 @@ export function CurrentTabsSection({ onAddPing, onRequestPreview }) {
 
       {/* Header remains the same */}
       <div className="currentTabs-header">
-        <h2 className="currentTabs-headerTitle">
-          Tabs
-        </h2>
+        <h3 className="currentTabs-headerTitle">
+          Active Tabs
+        </h3>
         <div className="currentTabs-headerActions">
           <button
             onClick={() => setShowRecentlyClosed(!showRecentlyClosed)}

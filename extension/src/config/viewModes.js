@@ -10,7 +10,6 @@ const BASE_SETTINGS = {
   voiceNavigationSection: false,
   aiChatsSection: false,
   notesSection: false,
-  dailyNotesSection: false,
   pingsSection: false,
   feedSection: false,
 };
@@ -34,6 +33,61 @@ export const VIEW_MODES = {
     description: 'Show all UI components',
     icon: '📋',
     overrides: ALL_ON_SETTINGS,
+  }),
+
+  tabs: createMode({
+    id: 'tabs',
+    label: 'Tabs View',
+    description: 'Focus on your open tabs',
+    icon: '📑',
+    overrides: {
+      currentTabsSection: true,
+      pinnedWorkspaces: true,
+      workspaceFilters: true,
+    },
+  }),
+
+  workspace: createMode({
+    id: 'workspace',
+    label: 'Workspace View',
+    description: 'Focus on workspaces and projects',
+    icon: '💼',
+    overrides: {
+      pinnedWorkspaces: true,
+      workspaceFilters: true,
+    },
+  }),
+
+  voice: createMode({
+    id: 'voice',
+    label: 'Voice Control',
+    description: 'Optimized for voice navigation',
+    icon: '🎙️',
+    overrides: {
+      voiceNavigationSection: true,
+    },
+  }),
+
+  chats: createMode({
+    id: 'chats',
+    label: 'AI Chats',
+    description: 'Focus on AI conversations',
+    icon: '💬',
+    overrides: {
+      aiChatsSection: true,
+      notesSection: true,
+    },
+  }),
+
+  notes: createMode({
+    id: 'notes',
+    label: 'Notes & Writing',
+    description: 'Focus on notes and daily journal',
+    icon: '📝',
+    overrides: {
+      notesSection: true,
+      dailyNotesSection: true,
+    },
   }),
 
   focus: createMode({

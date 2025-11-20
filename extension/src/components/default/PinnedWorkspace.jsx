@@ -100,16 +100,27 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
 
     return (
         <div className="coolDesk-section pinnedws-container">
-            <h2
-                className="coolDesk-section-title"
-                title={list.length > 2 ? "Scroll through the pills to see all pinned workspaces" : "Pin workspaces by right-clicking them"}
-                style={{ cursor: 'help' }}
-                onDoubleClick={() => setIsHidden(true)}
-                data-double-click-hint="Double-click to hide pinned workspaces"
-            >
-                Pinned Workspace
-
-            </h2>
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 16,
+                padding: '0 4px'
+            }}>
+                <h3 style={{
+                    fontSize: 'var(--font-size-2xl)',
+                    fontWeight: 600,
+                    margin: 0,
+                    color: '#ffffff',
+                    letterSpacing: '-0.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                }}>
+                    {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
+                    Pinned Workspace
+                </h3>
+            </div>
             {/* Pills row */}
             <div
                 className="coolDesk-pings-container pinnedws-pills"

@@ -1,4 +1,4 @@
-import { faChevronDown, faEye } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faEye, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { applyViewMode, getCurrentViewMode, getViewModesList } from '../../config/viewModes';
@@ -52,26 +52,37 @@ export function ViewModeSelector() {
           {/* Dropdown */}
           <div className="view-mode-dropdown">
             <div className="dropdown-header">
-              <FontAwesomeIcon icon={faEye} />
-              <span>View Modes</span>
+              <div className="header-left">
+                <FontAwesomeIcon icon={faEye} />
+                <span>View Modes</span>
+              </div>
+              <button
+                className="close-button"
+                onClick={() => setIsOpen(false)}
+                aria-label="Close view modes"
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
             </div>
 
-            {viewModes.map(mode => (
-              <button
-                key={mode.id}
-                className={`view-mode-option ${currentMode === mode.id ? 'active' : ''}`}
-                onClick={() => handleModeChange(mode.id)}
-              >
-                <span className="option-icon">{mode.icon}</span>
-                <div className="option-content">
-                  <div className="option-label">{mode.label}</div>
-                  <div className="option-description">{mode.description}</div>
-                </div>
-                {currentMode === mode.id && (
-                  <span className="option-checkmark">✓</span>
-                )}
-              </button>
-            ))}
+            <div className="view-modes-grid">
+              {viewModes.map(mode => (
+                <button
+                  key={mode.id}
+                  className={`view-mode-option ${currentMode === mode.id ? 'active' : ''}`}
+                  onClick={() => handleModeChange(mode.id)}
+                >
+                  <span className="option-icon">{mode.icon}</span>
+                  <div className="option-content">
+                    <div className="option-label">{mode.label}</div>
+                    <div className="option-description">{mode.description}</div>
+                  </div>
+                  {currentMode === mode.id && (
+                    <span className="option-checkmark">✓</span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </>
       )}

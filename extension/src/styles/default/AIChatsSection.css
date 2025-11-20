@@ -17,31 +17,69 @@
 .ai-chats-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  background: var(--bg-secondary, #f0f0f0);
+  border-radius: 20px;
+  padding: 2px;
+  height: 32px;
 }
 
-.chat-count {
-  font-size: 14px;
-  font-weight: normal;
-  color: var(--text-secondary);
-  margin-left: 8px;
+.platform-filters {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+  height: 100%;
+}
+
+.platform-filter {
+  background: none;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
   opacity: 0.7;
+  transition: all 0.2s;
+  padding: 4px;
+}
+
+.platform-filter:hover {
+  opacity: 0.9;
+  background: var(--hover-bg, rgba(0, 0, 0, 0.05));
+}
+
+.platform-filter.active {
+  opacity: 1;
+  background: var(--active-bg, rgba(0, 0, 0, 0.1));
+}
+
+.platform-filter img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 .refresh-button {
-  background: transparent;
-  border: 1px solid var(--border-color, var(--border-primary));
-  border-radius: 8px;
-  padding: 6px 12px;
+  background: none;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  color: var(--text-secondary);
+  opacity: 0.7;
   transition: all 0.2s;
+  padding: 0;
 }
 
-.refresh-button:hover:not(:disabled) {
-  background: var(--background-tertiary, var(--interactive-hover));
-  color: var(--text);
-  border-color: var(--border-hover, var(--border-accent));
+.refresh-button:hover {
+  opacity: 1;
+  background: var(--hover-bg, rgba(0, 0, 0, 0.05));
 }
 
 .refresh-button:disabled {
@@ -86,7 +124,6 @@
 
 .platform-filter,
 .sort-filter {
-  min-width: 100px;
   padding: 8px 12px;
   border: 1px solid var(--border-color, var(--border-primary));
   border-radius: 8px;

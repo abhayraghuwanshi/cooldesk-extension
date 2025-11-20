@@ -333,7 +333,7 @@ export function CoolFeedSection({ tabs, pings }) {
         marginBottom: 16,
         padding: '0 4px'
       }}>
-        <h2 style={{
+        <h3 style={{
           fontSize: 'var(--font-size-2xl)',
           fontWeight: 600,
           margin: 0,
@@ -345,7 +345,7 @@ export function CoolFeedSection({ tabs, pings }) {
         }}>
           {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
           Activity
-        </h2>
+        </h3>
 
         {/* Controls */}
         {/* <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -478,8 +478,8 @@ export function CoolFeedSection({ tabs, pings }) {
                     borderRadius: '8px',
                     border: `1px solid rgba(255, 255, 255, 0.05)`,
                     transition: 'all 0.2s ease',
-                    width: '48px',
-                    height: '48px',
+                    width: '32px',
+                    height: '32px',
                     position: 'relative'
                   }}
                   onMouseEnter={(e) => {
@@ -498,8 +498,8 @@ export function CoolFeedSection({ tabs, pings }) {
                       src={firstSrc}
                       alt={host}
                       style={{
-                        width: '24px',
-                        height: '24px',
+                        width: '20px',
+                        height: '20px',
                         objectFit: 'contain',
                         borderRadius: '4px'
                       }}
@@ -511,8 +511,8 @@ export function CoolFeedSection({ tabs, pings }) {
                         // If all favicon attempts fail, show globe icon
                         const fallback = document.createElement('div');
                         fallback.style.cssText = `
-                          width: 24px;
-                          height: 24px;
+                          width: 20px;
+                          height: 20px;
                           border-radius: 4px;
                           background: rgba(52, 199, 89, 0.2);
                           display: flex;
@@ -527,8 +527,8 @@ export function CoolFeedSection({ tabs, pings }) {
                     />
                   ) : (
                     <div style={{
-                      width: '24px',
-                      height: '24px',
+                      width: '20px',
+                      height: '20px',
                       borderRadius: '4px',
                       background: 'rgba(52, 199, 89, 0.2)',
                       display: 'flex',

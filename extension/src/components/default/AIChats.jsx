@@ -1,4 +1,4 @@
-import { faRobot, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faGlobe, faRobot, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
@@ -25,8 +25,8 @@ const PLATFORM_CONFIG = {
   }
 };
 
-const DEFAULT_VISIBLE_COUNT = 4;
-const LOAD_STEP = 4;
+const DEFAULT_VISIBLE_COUNT = 8;
+const LOAD_STEP = 20;
 
 export function AIChatsSection() {
   const [chats, setChats] = useState([]);
@@ -127,26 +127,72 @@ export function AIChatsSection() {
     <div className="ai-chats-section">
       {/* Header with title and refresh */}
       <div className="ai-chats-header">
-        <h2 className="coolDesk-section-title">
-          AI Chats
-          <span className="chat-count">
-            {totalCount === 0 ? '(0)' : `(${visibleChats.length}/${totalCount})`}
-          </span>
-        </h2>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 16,
+          padding: '0 4px'
+        }}>
+          <h3 style={{
+            fontSize: 'var(--font-size-2xl)',
+            fontWeight: 600,
+            margin: 0,
+            color: '#ffffff',
+            letterSpacing: '-0.5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            AI Chats
+          </h3>
+        </div>
         <div className="ai-chats-header-actions">
-          <button className="refresh-button" onClick={loadChats} disabled={loading} title="Refresh">
+          <button
+            className={`refresh-button ${loading ? 'loading' : ''}`}
+            onClick={loadChats}
+            disabled={loading}
+            title="Refresh"
+          >
             <FontAwesomeIcon icon={faSync} spin={loading} />
           </button>
-          <select
-            value={selectedPlatform}
-            onChange={(e) => setSelectedPlatform(e.target.value)}
-            className="platform-filter"
-          >
-            <option value="all">All</option>
-            {platforms.map(platform => (
-              <option key={platform} value={platform}>{platform}</option>
-            ))}
-          </select>
+          <div className="platform-filters">
+            <button
+              className={`platform-filter ${selectedPlatform === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedPlatform('all')}
+              title="All Platforms"
+            >
+              <FontAwesomeIcon icon={faGlobe} />
+            </button>
+            {platforms.map(platform => {
+              const platformUrls = {
+                'ChatGPT': 'https://chat.openai.com',
+                'Claude': 'https://claude.ai',
+                'Gemini': 'https://gemini.google.com',
+                'Grok': 'https://x.com'
+              };
+              const iconUrl = getFaviconUrl(platformUrls[platform] || platform, 32);
+
+              return (
+                <button
+                  key={platform}
+                  className={`platform-filter ${selectedPlatform === platform ? 'active' : ''}`}
+                  onClick={() => setSelectedPlatform(platform)}
+                  title={platform}
+                >
+                  <img
+                    src={iconUrl}
+                    alt={platform}
+                    style={{ width: '16px', height: '16px', objectFit: 'contain' }}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMSAxMWE0IDQgMCAwIDAtNC00SDdhNCA0IDAgMCAwLTMgNi43NjlWMTlhMyAzIDAgMCAwIDMgM2gxMGEzIDMgMCAwIDAgMy0zdi0yLjIzMUE0IDQgMCAwIDAgMjEgMTF6Ij48L3BhdGg+PGNpcmNsZSBjeD0iOSIgeT0iOSIgcj0iMiI+PC9jaXJjbGU+PGNpcmNsZSBjeD0iMTUiIGN5PSI5IiByPSIyIj48L2NpcmNsZT48L3N2Zz4=';
+                    }}
+                  />
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -222,11 +268,11 @@ export function AIChatsSection() {
               )}
               <div className="chat-content">
                 <div className="chat-title">{chat.title}</div>
-                <div className="chat-meta">
+                {/* <div className="chat-meta">
                   <span className="chat-platform">{chat.platform}</span>
                   <span className="chat-separator">•</span>
                   <span className="chat-date">{formatDate(chat.scrapedAt)}</span>
-                </div>
+                </div> */}
               </div>
             </div>
           ))

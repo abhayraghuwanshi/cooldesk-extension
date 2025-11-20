@@ -13,7 +13,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import { Header } from './components/Header';
+import { Header } from './components/Header.jsx';
 import { ItemGrid } from './components/ItemGrid';
 import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
@@ -97,6 +97,7 @@ class ErrorBoundary extends React.Component {
 export default function App() {
   const { data, loading, refreshing, populate } = useDashboardData()
   const [workspace, setWorkspace] = useState('All')
+  const [themeClass, setThemeClass] = useState('bg-ai-quantum') // Default theme
   const [search, setSearch] = useState('')
   const [focusSearchTick, setFocusSearchTick] = useState(0)
   const [showDeskMetaReminder, setShowDeskMetaReminder] = useState(false);
@@ -817,10 +818,11 @@ export default function App() {
           // Remove all theme classes
           themeClasses.forEach(cls => body.classList.remove(cls));
 
-          // Apply saved theme or default to Crimson Fire
-          const themeToApply = savedTheme || 'crimson-fire';
-          const themeClass = `bg-${themeToApply}`;
-          body.classList.add(themeClass);
+          // Apply saved theme or default to ai-quantum
+          const themeToApply = savedTheme || 'ai-quantum';
+          const newThemeClass = `bg-${themeToApply}`;
+          body.classList.add(newThemeClass);
+          setThemeClass(newThemeClass);
 
           // Initialize font size using utility
           const initialFontSize = initializeFontSize();
@@ -1436,7 +1438,7 @@ export default function App() {
     switch (gridType) {
       case 'ProjectGrid':
         return (
-          <div className="workspace-grid">
+          <div className="content-section section">
             <ProjectGrid
               items={items}
               workspaces={savedWorkspaces}
@@ -1449,7 +1451,7 @@ export default function App() {
 
       case 'ItemGrid':
         return (
-          <div style={{ marginTop: 16 }}>
+          <div className="content-section section">
             <WorkspacePillList
               items={items}
               onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
@@ -1475,7 +1477,7 @@ export default function App() {
       case 'ItemGrid1':
       default:
         return (
-          <div className="workspace-grid">
+          <div className="content-section section">
             <ItemGrid
               items={items}
               workspaces={savedWorkspaces}
@@ -1536,7 +1538,7 @@ export default function App() {
   const shouldShowVertical = windowWidth < 700;
 
   return (
-    <div className="popup-wrap">
+    <div className={`popup-wrap ${themeClass}`} style={{ '--section-spacing': '24px', '--card-spacing': '16px' }}>
 
       {/* Main Content Area with conditional wrapper */}
       <div>
@@ -1546,14 +1548,14 @@ export default function App() {
           <div style={{
             display: 'grid',
             gridTemplateColumns: windowWidth < 768 ? '1fr' : '1fr 1fr',
-            gap: windowWidth < 768 ? 24 : 16,
-            marginBottom: 24
+            gap: 'var(--card-spacing)',
+            marginBottom: 'var(--section-spacing)'
           }}>
             {displaySettings.pingsSection !== false && (
-              <div style={{ minWidth: 0 }}>
+              <div className="pings-section section">
                 {showPingsSection ? (
                   <div onDoubleClick={() => setShowPingsSection(false)}>
-                    <PingsSection tabs={[]} />
+                    <PingsSection />
                   </div>
                 ) : (
                   <div
@@ -1574,7 +1576,7 @@ export default function App() {
               </div>
             )}
             {displaySettings.feedSection !== false && (
-              <div style={{ minWidth: 0 }}>
+              <div className="feed-section section">
                 {showFeedSection ? (
                   <div onDoubleClick={() => setShowFeedSection(false)}>
                     <CoolFeedSection />
@@ -1600,9 +1602,9 @@ export default function App() {
           </div>
         </ErrorBoundary>
 
-        {displaySettings.pinnedWorkspaces !== false && (
-          <ErrorBoundary>
-            <div data-onboarding="pinned-workspaces">
+        <div className="pinned-workspace-container section" style={{ marginTop: 'var(--section-spacing)' }}>
+          {displaySettings.pinnedWorkspaces !== false && (
+            <ErrorBoundary>
               <PinnedWorkspace
                 items={pinnedWorkspaces}
                 active={activePinnedWorkspace}
@@ -1616,146 +1618,154 @@ export default function App() {
                   }
                 }}
               />
-            </div>
-          </ErrorBoundary>
-        )}
+            </ErrorBoundary>
+          )}
+        </div>
 
-        {displaySettings.workspaceFilters !== false && (
-          <>
-            {workspaceHidden ? (
-              <div
-                className="coolDesk-section"
-                onDoubleClick={() => setWorkspaceHidden(false)}
-                style={{
-                  marginTop: '24px',
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  border: '1px dashed var(--border-primary)',
-                  color: 'var(--text-secondary)',
-                  background: 'var(--glass-bg)',
-                  cursor: 'pointer',
-                  userSelect: 'none',
+        <div className="workspace-filters-section section" style={{ marginTop: 'var(--section-spacing)' }}>
+          {workspaceHidden ? (
+            <div
+              className="coolDesk-section"
+              onDoubleClick={() => setWorkspaceHidden(false)}
+              style={{
+                marginTop: '24px',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px dashed var(--border-primary)',
+                color: 'var(--text-secondary)',
+                background: 'var(--glass-bg)',
+                cursor: 'pointer',
+                userSelect: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s ease',
+                fontStyle: 'italic'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--interactive-hover)';
+                e.currentTarget.style.borderColor = 'var(--border-accent)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--glass-bg)';
+                e.currentTarget.style.borderColor = 'var(--border-primary)';
+              }}
+              title="Double-click to show workspace filters"
+            >
+              <span style={{ opacity: 0.8 }}>Hidden: Workspace Filters</span>
+              <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
+            </div>
+          ) : (
+            <div>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 16,
+                padding: '0 4px'
+              }}>
+                <h3 style={{
+                  fontSize: 'var(--font-size-2xl)',
+                  fontWeight: 600,
+                  margin: 0,
+                  color: '#ffffff',
+                  letterSpacing: '-0.5px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  transition: 'all 0.2s ease',
-                  fontStyle: 'italic'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--interactive-hover)';
-                  e.currentTarget.style.borderColor = 'var(--border-accent)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'var(--glass-bg)';
-                  e.currentTarget.style.borderColor = 'var(--border-primary)';
-                }}
-                title="Double-click to show workspace filters"
-              >
-                <span style={{ opacity: 0.8 }}>Hidden: Workspace Filters</span>
-                <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
-              </div>
-            ) : (
-              <>
-                <h2
-                  className="coolDesk-section-title"
-                  style={{ cursor: 'help', marginTop: '24px' }}
-                  onDoubleClick={() => setWorkspaceHidden(true)}
-                  title="Double-click to hide workspace filters"
-                >
+                  gap: 8
+                }}>
+                  {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
                   Workspace
-                </h2>
-                {/* Filters */}
-                <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '24px 0 8px' }}>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} data-onboarding="workspace-filters">
-                    <WorkspaceFilters
-                      items={filterItems}
-                      active={workspace}
-                      onChange={setWorkspace}
-                      onWorkspaceCreated={createWorkspace}
-                      onPinWorkspace={togglePinWorkspace}
-                      onAddLink={handleOpenAddLinkModal}
-                      pinnedWorkspaces={pinnedWorkspaces}
-                    />
-                  </div>
-                </div>
-
-                {/* Workspace Grid Content */}
-                {workspace !== 'All' && displaySettings.workspaceFilters !== false && (
-                  <>
-                    {workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
-                      <div key={`ws-${workspace}`} className="ws-animate-in">
-                        {renderWorkspaceGrid(
-                          savedWorkspaces.find(ws => ws.name === workspace),
-                          mergedWorkspaceItems
-                        )}
-                      </div>
-                    ) : (
-                      <div key={`ws-${workspace}`} className="ws-animate-in">
-                        {renderWorkspaceGrid(
-                          workspace === 'All' ? { name: 'All', gridType: 'ItemGrid' } : savedWorkspaces.find(ws => ws.name === workspace),
-                          workspace === 'All' ? allItemsCombined : mergedWorkspaceItems
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </>
-        )}
-
-        <>
-
-          {/* Always render content; hydration refreshes in background */}
-          <>
-            <ErrorBoundary>
-              <ActivityPanel activeSection={activeSection} />
-            </ErrorBoundary>
-          </>
-        </>
-
-
-
-        {addingToWorkspace && (
-          <div
-            className="modal-overlay"
-            onClick={(e) => { if (e.target === e.currentTarget) setAddingToWorkspace(null) }}
-          >
-            <div className="modal">
-              <div
-                className="modal-header"
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
-                }}
-              >
-                <h3 style={{ margin: 0 }}>Add to "{addingToWorkspace}"</h3>
-                <button
-                  onClick={() => setAddingToWorkspace(null)}
-                  className="cancel-btn"
-                  aria-label="Close"
-                  title="Close"
-                  style={{ padding: '4px 8px' }}
-                >
-                  ×
-                </button>
+                </h3>
               </div>
-              <AddLinkFlow
-                allItems={data}
-                savedItems={savedWorkspaces.flatMap(ws => (ws.urls || []).map(u => ({
-                  ...u,
-                  workspaceGroup: ws.name,
-                  id: `${ws.id}-${u.url}`,
-                })))}
-                currentWorkspace={addingToWorkspace}
-                onAdd={handleAddItemToWorkspace}
-                onAddSaved={handleAddSavedUrlToWorkspace}
-                onCancel={() => setAddingToWorkspace(null)}
-              />
+              {/* Filters */}
+              <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '24px 0 8px' }}>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} data-onboarding="workspace-filters">
+                  <WorkspaceFilters
+                    items={filterItems}
+                    active={workspace}
+                    onChange={setWorkspace}
+                    onWorkspaceCreated={createWorkspace}
+                    onPinWorkspace={togglePinWorkspace}
+                    onAddLink={handleOpenAddLinkModal}
+                    pinnedWorkspaces={pinnedWorkspaces}
+                  />
+                </div>
+              </div>
+
+              {/* Workspace Grid Content */}
+              {workspace !== 'All' && displaySettings.workspaceFilters !== false && (
+                <div className="workspace-grid-section section">
+                  {workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
+                    <div key={`ws-${workspace}`} className="ws-animate-in">
+                      {renderWorkspaceGrid(
+                        savedWorkspaces.find(ws => ws.name === workspace),
+                        mergedWorkspaceItems
+                      )}
+                    </div>
+                  ) : (
+                    <div key={`ws-${workspace}`} className="ws-animate-in">
+                      {renderWorkspaceGrid(
+                        workspace === 'All' ? { name: 'All', gridType: 'ItemGrid' } : savedWorkspaces.find(ws => ws.name === workspace),
+                        workspace === 'All' ? allItemsCombined : mergedWorkspaceItems
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        <div className="activity-panel-section section" style={{ marginTop: 'var(--section-spacing)' }}>
+          {/* Always render content; hydration refreshes in background */}
+          <ErrorBoundary>
+            <ActivityPanel activeSection={activeSection} />
+          </ErrorBoundary>
+        </div>
+
+        <div style={{ marginTop: 'var(--section-spacing)' }}>
+          {addingToWorkspace && (
+            <div
+              className="modal-overlay"
+              onClick={(e) => { if (e.target === e.currentTarget) setAddingToWorkspace(null) }}
+            >
+              <div className="modal">
+                <div
+                  className="modal-header"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
+                  }}
+                >
+                  <h3 style={{ margin: 0 }}>Add to "{addingToWorkspace}"</h3>
+                  <button
+                    onClick={() => setAddingToWorkspace(null)}
+                    className="cancel-btn"
+                    aria-label="Close"
+                    title="Close"
+                    style={{ padding: '4px 8px' }}
+                  >
+                    ×
+                  </button>
+                </div>
+                <AddLinkFlow
+                  allItems={data}
+                  savedItems={savedWorkspaces.flatMap(ws => (ws.urls || []).map(u => ({
+                    ...u,
+                    workspaceGroup: ws.name,
+                    id: `${ws.id}-${u.url}`,
+                  })))}
+                  currentWorkspace={addingToWorkspace}
+                  onAdd={handleAddItemToWorkspace}
+                  onAddSaved={handleAddSavedUrlToWorkspace}
+                  onCancel={() => setAddingToWorkspace(null)}
+                />
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Conditional Header: VerticalHeader when small screen or user preference, otherwise horizontal Header */}
         {shouldShowVertical ? (
@@ -1794,39 +1804,46 @@ export default function App() {
           />
         )}
 
+        <div style={{ marginTop: 'var(--section-spacing)' }}>
+          <AddToWorkspaceModal
+            show={showAddLinkModal}
+            workspace={workspaceForLinkAdd}
+            onClose={handleCloseAddLinkModal}
+            onSave={handleSaveLink}
+            suggestions={data.filter(it => !it.workspaceGroup)}
+          />
+        </div>
 
-        <AddToWorkspaceModal
-          show={showAddLinkModal}
-          workspace={workspaceForLinkAdd}
-          onClose={handleCloseAddLinkModal}
-          onSave={handleSaveLink}
-          suggestions={data.filter(it => !it.workspaceGroup)}
-        />
+        <div style={{ marginTop: 'var(--section-spacing)' }}>
+          <CreateWorkspaceModal
+            show={showCreateWorkspace}
+            onClose={() => setShowCreateWorkspace(false)}
+            onCreate={createWorkspace}
+            currentTab={currentTab}
+          />
+        </div>
 
-        <CreateWorkspaceModal
-          show={showCreateWorkspace}
-          onClose={() => setShowCreateWorkspace(false)}
-          onCreate={createWorkspace}
-          currentTab={currentTab}
-        />
-
-        <SettingsModal
-          show={showSettings}
-          onClose={() => setShowSettings(false)}
-          settings={settings}
-          onSave={saveSettings}
-          fontSize={fontSize}
-          onFontSizeChange={handleFontSizeChange}
-          onStartOnboarding={startOnboarding}
-        />
+        <div style={{ marginTop: 'var(--section-spacing)' }}>
+          <SettingsModal
+            show={showSettings}
+            onClose={() => setShowSettings(false)}
+            settings={settings}
+            onSave={saveSettings}
+            fontSize={fontSize}
+            onFontSizeChange={handleFontSizeChange}
+            onStartOnboarding={startOnboarding}
+          />
+        </div>
 
         {/* Onboarding Tour */}
-        {shouldShowOnboarding && (
-          <OnboardingTour
-            onComplete={completeOnboarding}
-            onSkip={skipOnboarding}
-          />
-        )}
+        <div style={{ marginTop: 'var(--section-spacing)' }}>
+          {shouldShowOnboarding && (
+            <OnboardingTour
+              onComplete={completeOnboarding}
+              onSkip={skipOnboarding}
+            />
+          )}
+        </div>
       </div>
     </div>
   )

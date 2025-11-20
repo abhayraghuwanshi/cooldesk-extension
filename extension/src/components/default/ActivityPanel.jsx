@@ -272,8 +272,9 @@ export function ActivityPanel({ activeSection = 0 }) {
     <section
       ref={containerRef}
       style={{
-        marginTop: 24,
-        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+        marginTop: 'var(--space-xl)',
+        marginBottom: 'var(--space-xxl)',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
       }}
     >
       {/* Show all sections with current one highlighted */}
@@ -291,9 +292,9 @@ export function ActivityPanel({ activeSection = 0 }) {
                 onDoubleClick={() => toggleHidden(section.name)}
                 ref={el => sectionRefs.current[index] = el}
                 style={{
-                  marginTop: index === 0 ? 16 : 32,
-                  marginBottom: 24,
-                  padding: '10px 12px',
+                  marginTop: index === 0 ? 'var(--space-lg)' : 'var(--space-xxl)',
+                  marginBottom: 'var(--space-xl)',
+                  padding: 'var(--space-md) 20px',
                   borderRadius: '8px',
                   border: '1px dashed var(--border-primary)',
                   color: 'var(--text-secondary)',
@@ -325,8 +326,8 @@ export function ActivityPanel({ activeSection = 0 }) {
                 onDoubleClick={() => toggleHidden(section.name)}
                 ref={el => sectionRefs.current[index] = el}
                 style={{
-                  marginTop: index === 0 ? 16 : 32,
-                  marginBottom: 24,
+                  marginTop: index === 0 ? 'var(--space-lg)' : 'var(--space-xxl)',
+                  marginBottom: 'var(--space-xl)',
                   opacity: isAllMode ? 1 : (isCurrentSection ? 1 : 0.3),
                   transform: isAllMode ? 'scale(1)' : (isCurrentSection ? 'scale(1)' : 'scale(0.98)'),
                   transition: 'all 0.3s ease',

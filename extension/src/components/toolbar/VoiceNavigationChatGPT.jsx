@@ -1479,12 +1479,26 @@ const VoiceNavigationChatGPT = () => {
   return (
     <div>
       <div className="voice-navigation-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-        <h2
-          className="coolDesk-section-title"
-          style={{ cursor: 'help', margin: 0 }}
-        >
-          Voice Navigation
-        </h2>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 16,
+          padding: '0 4px'
+        }}>
+          <h3 style={{
+            fontSize: 'var(--font-size-2xl)',
+            fontWeight: 600,
+            margin: 0,
+            color: '#ffffff',
+            letterSpacing: '-0.5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            Voice Navigation
+          </h3>
+        </div>
         <button
           type="button"
           className="voice-navigation-toggle"
