@@ -5,7 +5,7 @@ import { WorkspaceProject } from './WorkspaceProject';
 
 export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddRelated, onAddLink, onDelete, onItemClick }, ref) {
   const [timeSpent, setTimeSpent] = useState({});
-  const [selectedWorkspace, setSelectedWorkspace] = useState('All');
+  const [selectedWorkspace, setSelectedWorkspace] = useState('');
   const itemRefs = useRef([]);
   const columns = 4;
   const chipRefs = useRef([]);
@@ -57,7 +57,7 @@ export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddR
 
   // Parse URLs and create hierarchical structure
   const [projectGroups, setProjectGroups] = useState({ allGroups: [], categoryStats: new Map() });
-  const [workspaceOptions, setWorkspaceOptions] = useState([{ id: 'All', name: 'All', count: 0 }]);
+  const [workspaceOptions, setWorkspaceOptions] = useState([]);
 
   useEffect(() => {
     const processUrls = async () => {
@@ -95,7 +95,7 @@ export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddR
       if (!parseResult.groups || !Array.isArray(parseResult.groups)) {
         console.error('[ProjectGrid] parseResult.groups is not an array:', parseResult);
         setProjectGroups({ allGroups: [], categoryStats: new Map() });
-        setWorkspaceOptions([{ id: 'All', name: 'All', count: 0 }]);
+        setWorkspaceOptions([]);
         return;
       }
 
@@ -148,12 +148,8 @@ export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddR
         categoryStats
       });
 
-      // Create workspace filter options
-      const options = [{ id: 'All', name: 'All', count: items.length }];
-
-      console.log('Parse result stats:', parseResult.stats); // Debug log
-
-      // Get categories from workspace patterns
+      // Create workspace filter options from platform categories
+      const options = [];
       const categories = GenericUrlParser.getAllPlatforms();
 
       // Add platform-based options that have data
@@ -171,6 +167,11 @@ export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddR
         }
       });
 
+      // Select the first workspace by default if none selected
+      if (options.length > 0 && !selectedWorkspace) {
+        setSelectedWorkspace(options[0].id);
+      }
+
       setWorkspaceOptions(options);
     };
 
@@ -181,8 +182,8 @@ export const ProjectGrid = React.forwardRef(function ProjectGrid({ items, onAddR
   const filteredContent = useMemo(() => {
     let filteredGroups = projectGroups.allGroups;
 
-    // Filter by workspace category or specific platform
-    if (selectedWorkspace !== 'All') {
+    // Filter by selected workspace
+    if (selectedWorkspace) {
       filteredGroups = filteredGroups.filter(group => {
         // Filter by platform type (e.g., 'project', 'conversation', etc.)
         if (group.workspace && group.workspace.type === selectedWorkspace) {

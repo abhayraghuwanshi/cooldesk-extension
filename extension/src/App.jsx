@@ -96,7 +96,7 @@ class ErrorBoundary extends React.Component {
 
 export default function App() {
   const { data, loading, refreshing, populate } = useDashboardData()
-  const [workspace, setWorkspace] = useState('All')
+  const [workspace, setWorkspace] = useState('')
   const [themeClass, setThemeClass] = useState('bg-ai-quantum') // Default theme
   const [search, setSearch] = useState('')
   const [focusSearchTick, setFocusSearchTick] = useState(0)
@@ -994,18 +994,19 @@ export default function App() {
   }, [showCreateWorkspace])
 
 
-  // Items to build the workspace filter options: only saved workspaces + 'All'
+  // Items to build the workspace filter options from saved workspaces
   const filterItems = useMemo(() => {
-    const all = [{ workspaceGroup: 'All' }];
-    const extras = savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }));
-    return [...all, ...extras];
+    return savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }));
   }, [savedWorkspaces])
 
-  // Guard: if current workspace isn't a saved workspace (and not 'All'), reset to 'All'
+  // Reset workspace if the current one doesn't exist
   useEffect(() => {
-    if (workspace === 'All') return;
-    const exists = savedWorkspaces.some(ws => (ws?.name || '').trim().toLowerCase() === (workspace || '').trim().toLowerCase());
-    if (!exists) setWorkspace('All');
+    if (!workspace && savedWorkspaces.length > 0) {
+      setWorkspace(savedWorkspaces[0]?.name || '');
+    } else if (workspace) {
+      const exists = savedWorkspaces.some(ws => (ws?.name || '').trim().toLowerCase() === (workspace || '').trim().toLowerCase());
+      if (!exists) setWorkspace(savedWorkspaces[0]?.name || '');
+    }
   }, [savedWorkspaces, workspace])
 
   // Keyboard shortcuts for tab navigation
@@ -1379,7 +1380,7 @@ export default function App() {
     );
   }, [savedWorkspaces, workspace]);
 
-  // For 'All' view, merge history/bookmarks with all saved URLs and de-duplicate by URL
+  // Merge history/bookmarks with saved URLs and de-duplicate by URL
   const allItemsCombined = useMemo(() => {
     const map = new Map();
     for (const it of filtered) {
@@ -1393,7 +1394,7 @@ export default function App() {
 
   // Saved items for the currently selected workspace (by name)
   const workspaceSavedItems = useMemo(() => {
-    if (!workspace || workspace === 'All') return [];
+    if (!workspace) return [];
     const ws = savedWorkspaces.find(w => (w?.name || '').trim().toLowerCase() === (workspace || '').trim().toLowerCase());
     if (!ws) return [];
     return (ws.urls || []).map(u => ({
@@ -1405,7 +1406,7 @@ export default function App() {
 
   // Merge history/data items in this workspace with saved URLs for this workspace
   const mergedWorkspaceItems = useMemo(() => {
-    if (workspace === 'All') return filtered;
+    if (!workspace) return [];
     const byUrl = new Map();
     for (const it of filtered) {
       if (it?.url) byUrl.set(it.url, it);
@@ -1483,10 +1484,10 @@ export default function App() {
               workspaces={savedWorkspaces}
               onAddRelated={handleAddRelated}
               onAddLink={() => handleOpenAddLinkModal(workspace)}
-              onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
+              onDelete={handleDeleteFromWorkspace}
               allItems={data}
               savedItems={savedUrlsFlat}
-              currentWorkspace={workspace}
+              currentWorkspace={workspace || ''}
               onAddItem={handleAddItemToWorkspace}
               onAddSavedItem={handleAddSavedUrlToWorkspace}
             />
@@ -1700,23 +1701,15 @@ export default function App() {
               </div>
 
               {/* Workspace Grid Content */}
-              {workspace !== 'All' && displaySettings.workspaceFilters !== false && (
+              {workspace && displaySettings.workspaceFilters !== false && (
                 <div className="workspace-grid-section section">
-                  {workspace !== 'All' && savedWorkspaces.find(ws => ws.name === workspace) ? (
-                    <div key={`ws-${workspace}`} className="ws-animate-in">
-                      {renderWorkspaceGrid(
-                        savedWorkspaces.find(ws => ws.name === workspace),
-                        mergedWorkspaceItems
-                      )}
-                    </div>
-                  ) : (
-                    <div key={`ws-${workspace}`} className="ws-animate-in">
-                      {renderWorkspaceGrid(
-                        workspace === 'All' ? { name: 'All', gridType: 'ItemGrid' } : savedWorkspaces.find(ws => ws.name === workspace),
-                        workspace === 'All' ? allItemsCombined : mergedWorkspaceItems
-                      )}
-                    </div>
-                  )}
+                  <div key={`ws-${workspace}`} className="ws-animate-in">
+                    {renderWorkspaceGrid(
+                      savedWorkspaces.find(ws => ws.name === workspace) || { name: workspace, urls: [] },
+                      mergedWorkspaceItems,
+                      workspace
+                    )}
+                  </div>
                 </div>
               )}
             </div>
