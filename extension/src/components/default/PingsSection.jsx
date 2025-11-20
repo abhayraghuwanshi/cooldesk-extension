@@ -258,7 +258,7 @@ export function PingsSection({ tabs }) {
 
   return (
     <div className="coolDesk-section" data-onboarding="current-pins-section">
-      <div style={{
+      {/* <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -275,11 +275,10 @@ export function PingsSection({ tabs }) {
           alignItems: 'center',
           gap: 8
         }}>
-          {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
           Pins
         </h3>
 
-      </div>
+      </div> */}
       <div className="coolDesk-pings-container" style={{
         display: 'flex',
         flexDirection: 'row',

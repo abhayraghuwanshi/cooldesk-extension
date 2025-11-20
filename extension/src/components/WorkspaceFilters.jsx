@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CreateWorkspaceModal } from './popups/CreateWorkspaceModal';
 
 export function WorkspaceFilters({
@@ -10,12 +10,73 @@ export function WorkspaceFilters({
   onDeleteWorkspace,
   onAddLink,
   pinnedWorkspaces = [],
+  onWorkspaceReordered,
 }) {
-  const workspaces = useMemo(() => {
-    const set = new Set()
-    items.forEach((i) => i.workspaceGroup && set.add(i.workspaceGroup))
-    return Array.from(set)
-  }, [items])
+  const [workspaces, setWorkspaces] = useState(() => {
+    const set = new Set();
+    items.forEach((i) => i.workspaceGroup && set.add(i.workspaceGroup));
+    return Array.from(set);
+  });
+
+  // Update workspaces when items change
+  useEffect(() => {
+    const newWorkspaces = [];
+    const seen = new Set();
+
+    // First, keep the existing order for workspaces that still exist
+    workspaces.forEach(ws => {
+      if (items.some(item => item.workspaceGroup === ws)) {
+        newWorkspaces.push(ws);
+        seen.add(ws);
+      }
+    });
+
+    // Then add any new workspaces that weren't in the list
+    items.forEach(item => {
+      if (item.workspaceGroup && !seen.has(item.workspaceGroup)) {
+        newWorkspaces.push(item.workspaceGroup);
+        seen.add(item.workspaceGroup);
+      }
+    });
+
+    setWorkspaces(newWorkspaces);
+  }, [items]);
+
+  // Handle drag start
+  const handleDragStart = (e, index) => {
+    e.dataTransfer.setData('text/plain', index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.style.opacity = '0.5';
+  };
+
+  // Handle drag over
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const draggedIndex = Number(e.dataTransfer.getData('text/plain'));
+    if (draggedIndex === index) return;
+
+    const newWorkspaces = [...workspaces];
+    const [removed] = newWorkspaces.splice(draggedIndex, 1);
+    newWorkspaces.splice(index, 0, removed);
+
+    setWorkspaces(newWorkspaces);
+    if (onWorkspaceReordered) {
+      onWorkspaceReordered(newWorkspaces);
+    }
+  };
+
+  // Handle drag end
+  const handleDragEnd = (e) => {
+    e.currentTarget.style.opacity = '1';
+  };
+
+  // Handle drop
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.currentTarget.style.opacity = '1';
+  };
 
   const btnRefs = useRef([])
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -111,9 +172,18 @@ export function WorkspaceFilters({
         {workspaces.slice(0, showAllWorkspaces ? workspaces.length : VISIBLE_WORKSPACES_LIMIT).map((ws, i) => (
           <button
             key={ws}
+            draggable
+            onDragStart={(e) => handleDragStart(e, i)}
+            onDragOver={(e) => handleDragOver(e, i)}
+            onDragEnd={handleDragEnd}
+            onDrop={handleDrop}
             onClick={() => onChange(ws)}
             ref={el => btnRefs.current[i] = el}
             style={{
+              cursor: 'grab',
+              userSelect: 'none',
+              touchAction: 'none',
+              position: 'relative',
               background: ws === active
                 ? 'rgba(255, 255, 255, 0.15)'
                 : 'rgba(255, 255, 255, 0.08)',
@@ -304,11 +374,13 @@ export function WorkspaceFilters({
             Delete workspace
           </button>
         </div>
-      )}
+      )
+      }
 
-      <CreateWorkspaceModal
+      < CreateWorkspaceModal
         show={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={() => setShowCreateModal(false)
+        }
         onCreate={handleCreateWorkspace}
         currentTab={currentTab}
       />

@@ -13,6 +13,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import { QuickAccess } from './components/default/QuickAccess';
 import { Header } from './components/Header.jsx';
 import { ItemGrid } from './components/ItemGrid';
 import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
@@ -40,8 +41,6 @@ library.add(
 );
 
 import { ActivityPanel } from './components/default/ActivityPanel';
-import { CoolFeedSection } from './components/default/CoolFeedSection.jsx';
-import { PingsSection } from './components/default/PingsSection';
 import { PinnedWorkspace } from './components/default/PinnedWorkspace';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
@@ -1547,65 +1546,27 @@ export default function App() {
         {/* Pins and Cool Feed Side by Side */}
         <ErrorBoundary>
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: windowWidth < 768 ? '1fr' : '1fr 1fr',
-            gap: 'var(--card-spacing)',
-            marginBottom: 'var(--section-spacing)',
-            border: '1px solid rgba(70, 70, 75, 0.7)',
-            boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
-            borderRadius: '16px',
-            padding: '8px',
-
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 16,
+            padding: '0 4px'
           }}>
-            {displaySettings.pingsSection !== false && (
-              <div className="pings-section section">
-                {showPingsSection ? (
-                  <div onDoubleClick={() => setShowPingsSection(false)}>
-                    <PingsSection />
-                  </div>
-                ) : (
-                  <div
-                    className="coolDesk-section"
-                    onDoubleClick={() => setShowPingsSection(true)}
-                    style={{
-                      padding: '12px',
-                      textAlign: 'center',
-                      cursor: 'pointer',
-                      opacity: 0.6,
-                      border: '1px dashed var(--border-color)',
-                      borderRadius: '8px'
-                    }}
-                  >
-                    <span style={{ fontSize: '0.9em' }}>Double-click to show Pins</span>
-                  </div>
-                )}
-              </div>
-            )}
-            {displaySettings.feedSection !== false && (
-              <div className="feed-section section">
-                {showFeedSection ? (
-                  <div onDoubleClick={() => setShowFeedSection(false)}>
-                    <CoolFeedSection />
-                  </div>
-                ) : (
-                  <div
-                    className="coolDesk-section"
-                    onDoubleClick={() => setShowFeedSection(true)}
-                    style={{
-                      padding: '12px',
-                      textAlign: 'center',
-                      cursor: 'pointer',
-                      opacity: 0.6,
-                      border: '1px dashed var(--border-color)',
-                      borderRadius: '8px'
-                    }}
-                  >
-                    <span style={{ fontSize: '0.9em' }}>Double-click to show Feed</span>
-                  </div>
-                )}
-              </div>
-            )}
+            <h3 style={{
+              fontSize: 'var(--font-size-2xl)',
+              fontWeight: 600,
+              margin: 0,
+              color: '#ffffff',
+              letterSpacing: '-0.5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
+              Quick Access
+            </h3>
           </div>
+          <QuickAccess displaySettings={displaySettings} initialShowPings={showPingsSection} initialShowFeed={showFeedSection} />
         </ErrorBoundary>
 
         <div className="pinned-workspace-container section" style={{ marginTop: 'var(--section-spacing)' }}>

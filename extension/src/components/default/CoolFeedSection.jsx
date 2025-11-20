@@ -325,61 +325,7 @@ export function CoolFeedSection({ tabs, pings }) {
       style={{
         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
       }}>
-      {/* Apple-style Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-        padding: '0 4px'
-      }}>
-        <h3 style={{
-          fontSize: 'var(--font-size-2xl)',
-          fontWeight: 600,
-          margin: 0,
-          color: '#ffffff',
-          letterSpacing: '-0.5px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8
-        }}>
-          {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
-          Activity
-        </h3>
 
-        {/* Controls */}
-        {/* <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            onClick={loadActivity}
-            style={{
-              height: 32,
-              borderRadius: 16,
-              border: 'none',
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-              e.target.style.transform = 'scale(1.05)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-              e.target.style.transform = 'scale(1)';
-            }}
-            aria-label="Reload activity"
-            title="Reload activity"
-          >
-            <FontAwesomeIcon icon={faRotateRight} style={{ fontSize: 'var(--font-size-base)' }} />
-          </button>
-
-
-        </div> */}
-      </div>
       {
         loading ? (
           <div style={{
