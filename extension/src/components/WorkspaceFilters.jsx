@@ -195,7 +195,7 @@ export function WorkspaceFilters({
               color: 'rgba(255, 255, 255, 0.85)',
               fontSize: 'var(--font-size-base)',
               fontWeight: 500,
-              cursor: 'pointer',
+
               transition: 'all 0.2s ease',
               display: 'flex',
               alignItems: 'center',
@@ -203,7 +203,7 @@ export function WorkspaceFilters({
               justifyContent: 'center',
               fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
               outline: 'none',
-              position: 'relative',
+
               whiteSpace: 'nowrap'
             }}
             onMouseEnter={(e) => {

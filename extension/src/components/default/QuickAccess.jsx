@@ -18,9 +18,9 @@ export function QuickAccess({
             border: '1px solid rgba(70, 70, 75, 0.7)',
             boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
             borderRadius: '16px',
-            background: '#1c1c2180',
+            background: 'rgba(28, 28, 33, 0.45)',
             padding: '16px',
-            backgroundColor: 'var(--card-bg, rgba(28, 28, 28, 0.8))'
+
         }}>
             {/* Feed Section */}
             {displaySettings.feedSection !== false && (

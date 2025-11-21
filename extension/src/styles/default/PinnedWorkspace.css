@@ -53,22 +53,15 @@
     gap: 8px;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     flex: 0 0 auto;
     max-width: calc(100vw - 80px);
 }
 
 .pinnedws-pill--active {
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--accent-primary, #60a5fa) 24%, transparent),
-        color-mix(in srgb, var(--accent-secondary, var(--accent-primary, #60a5fa)) 18%, transparent)
-    );
+    background: linear-gradient(135deg,
+            color-mix(in srgb, var(--accent-primary, #60a5fa) 24%, transparent),
+            color-mix(in srgb, var(--accent-secondary, var(--accent-primary, #60a5fa)) 18%, transparent));
     border: 1px solid color-mix(in srgb, var(--accent-primary, #60a5fa) 48%, transparent);
-    box-shadow:
-        0 6px 20px color-mix(in srgb, var(--accent-primary, #60a5fa) 22%, transparent),
-        0 0 0 1px color-mix(in srgb, var(--accent-primary, #60a5fa) 18%, transparent),
-        inset 0 1px 0 rgba(255, 255, 255, 0.12);
     color: var(--text, #ffffff);
     font-weight: 600;
 }
