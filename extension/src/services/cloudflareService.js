@@ -1,5 +1,5 @@
 // src/services/cloudflareService.js
-import { arrayBufferToBase64 } from '../utils/cryptoUtils.js';
+import { CryptoUtils, arrayBufferToBase64 } from '../utils/cryptoUtils.js';
 const CLOUDFLARE_WORKER_URL = 'https://cool-desk.raghuwanshi-abhay405.workers.dev';
 
 export class CloudflareService {
@@ -180,21 +180,32 @@ export class CloudflareService {
         }
     }
 
-    static async categorizeBatch(urls, privateKey, userId) {
-        try {
-            const response = await this.fetchWithAuth(
-                '/api/categorize-batch',
-                'POST',
-                privateKey,
-                userId,
-                { urls } // Send array of URLs
-            );
-            return await response.json();
-        } catch (error) {
-            console.error('Batch categorization error:', error);
-            throw error;
-        }
+
+
+    static async categorizeBatch(urls, privateKeyJwk, keyId) {
+
+        const body = { urls };
+
+        // Sign canonical body
+        const { timestamp, nonce, signatureBase64 } = await CryptoUtils.signRequest(privateKeyJwk, body);
+
+        const headers = {
+            "Content-Type": "application/json",
+            "X-Client-Key": keyId,
+            "X-Client-Ts": timestamp,
+            "X-Client-Nonce": nonce,
+            "X-Client-Sig": signatureBase64,
+        };
+
+        const res = await fetch(`${CLOUDFLARE_WORKER_URL}/api/categorize-batch`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body)
+        });
+
+        return res.json();
     }
+
 }
 
 // Example usage:

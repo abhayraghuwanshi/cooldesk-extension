@@ -30,6 +30,7 @@ import { populateAndStore } from './data.js';
 // Modular background pieces - these initialize their own message handlers
 // NOTE: realTimeCategorizor is lazy-loaded to avoid window reference errors in service worker
 import { CloudflareService } from '../services/cloudflareService';
+import { arrayBufferToBase64 } from '../utils/cryptoUtils.js';
 import {
   handleActivityContentScriptMessage,
   handleCleanupTimeSeriesData,
@@ -41,6 +42,8 @@ import { initializeData } from './data.js';
 import { handleSetAutoCleanup, initializeTabCleanup } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
+
+
 
 // Auto-save selected text to daily notes
 async function saveToDailyNotes(selectionData) {
@@ -343,6 +346,7 @@ async function main() {
             sendResponse({ ok: false, error: 'Chrome identity WebAuthFlow API not available' });
             return;
           }
+          console.log("Auth Message recieved")
 
           const redirectUri = chrome.identity.getRedirectURL();
           const clientId = chrome.runtime.getManifest?.().oauth2?.client_id || 'REPLACE_WITH_YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
@@ -423,7 +427,9 @@ async function main() {
             });
 
             // 3. Send public key to Cloudflare server
+            // 3. Send public key to Cloudflare server
             try {
+              // Convert private JWK to CryptoKey
               const privateKey = await crypto.subtle.importKey(
                 'jwk',
                 keyPair.privateKey,
@@ -432,39 +438,44 @@ async function main() {
                 ["sign"]
               );
 
+              // Convert public JWK → SPKI Base64
+              const publicKeyCrypto = await crypto.subtle.importKey(
+                'jwk',
+                keyPair.publicKey,
+                { name: "ECDSA", namedCurve: "P-256" },
+                true,
+                []
+              );
+              const spki = await crypto.subtle.exportKey("spki", publicKeyCrypto);
+              const publicKeyBase64 = arrayBufferToBase64(spki);
+
               await CloudflareService.registerKey(
                 {
                   keyId: keyPair.keyId,
-                  publicKey: keyPair.publicKey
+                  publicKey: publicKeyBase64   // ✔ FIXED
                 },
                 privateKey,
                 user.uid,
                 idToken
               );
 
-              // 4. Send success response with user info
               sendResponse({
                 ok: true,
-                user: {
-                  ...user,
-                  keyId: keyPair.keyId
-                },
+                user: { ...user, keyId: keyPair.keyId },
                 keyRegistered: true
               });
+
               console.log('Successfully registered key with Cloudflare');
             } catch (serverError) {
               console.error('Failed to register key with server:', serverError);
-              // Still return success to user, but indicate key registration failed
               sendResponse({
                 ok: true,
-                user: {
-                  ...user,
-                  keyId: keyPair.keyId
-                },
+                user: { ...user, keyId: keyPair.keyId },
                 keyRegistered: false,
                 warning: 'Key generation succeeded but server registration failed'
               });
             }
+
 
           } catch (keyError) {
             console.error('Key generation failed:', keyError);
@@ -579,6 +590,49 @@ async function main() {
       return true; // Keep the message channel open for async response
     }
 
+    // Add this after the TEST_REGISTER_KEY action
+    // In background.js, add this message handler
+    if (msg?.action === 'TEST_CATEGORIZATION') {
+      (async () => {
+        try {
+          console.log('[Background] Starting TEST_CATEGORIZATION');
+
+          // Import the categorization manager
+          const { CategorizationManager } = await import('../services/categorizationManager.js');
+
+          // Initialize if not already done
+          if (!CategorizationManager.isInitialized) {
+            await CategorizationManager.init();
+          }
+
+          // Run the categorization with the provided parameters
+          const results = await CategorizationManager.processDailyBatch({
+            force: msg.force || false,
+            limit: msg.limit || 10,
+            lookbackHours: msg.lookbackHours || 24
+          });
+
+          // Get current cache state
+          const cacheState = Array.from(CategorizationManager.categorizedUrlCache || []);
+
+          sendResponse({
+            ok: true,
+            results,
+            cacheState,
+            processedCount: results.successful?.length || 0
+          });
+
+        } catch (error) {
+          console.error('[Background] TEST_CATEGORIZATION error:', error);
+          sendResponse({
+            ok: false,
+            error: error.message || 'Categorization test failed',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+          });
+        }
+      })();
+      return true; // Keep the message channel open for async response
+    }
 
     // Handle media control commands
     if (msg?.type === 'MEDIA_COMMAND') {

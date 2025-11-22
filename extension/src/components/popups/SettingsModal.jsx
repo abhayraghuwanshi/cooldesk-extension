@@ -46,6 +46,7 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
 
   const handleLogin = async () => {
     try {
+      console.log("Sending login to background")
       setError('');
       const res = await chrome.runtime.sendMessage({ action: 'LOGIN_WITH_GOOGLE' });
       if (!res?.ok) {

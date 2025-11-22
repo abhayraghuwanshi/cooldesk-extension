@@ -119,4 +119,33 @@ export class CryptoUtils {
             return false;
         }
     }
+
+    static async signRequest(privateKeyJwk, bodyObj) {
+        const timestamp = Date.now().toString();
+        const nonce = crypto.randomUUID();
+
+        const canonical = `${timestamp}\n${nonce}\n${JSON.stringify(bodyObj)}`;
+
+        const encoder = new TextEncoder();
+        const data = encoder.encode(canonical);
+
+        const privateKey = await crypto.subtle.importKey(
+            'jwk',
+            privateKeyJwk,
+            { name: "ECDSA", namedCurve: "P-256" },
+            false,
+            ['sign']
+        );
+
+        const signatureBuffer = await crypto.subtle.sign(
+            { name: "ECDSA", hash: { name: "SHA-256" } },
+            privateKey,
+            data
+        );
+
+        const signatureBase64 = arrayBufferToBase64(signatureBuffer);
+
+        return { timestamp, nonce, signatureBase64 };
+    }
+
 }

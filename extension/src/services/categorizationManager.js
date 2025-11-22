@@ -1,19 +1,14 @@
 // src/services/categorizationManager.js
-import {
-    // You need to expose a function to read time series from your DB
-    // Assuming it returns an array of { url, metrics: { timeSpent, clicks, ... } }
-    getTimeSeriesDataRange,
-    listWorkspaceUrls,
-    subscribeWorkspaceChanges
-} from '../db/index.js';
+import { CryptoUtils } from '../utils/cryptoUtils.js';
+import { CloudflareService } from './cloudflareService.js';
 
-import './cloudflareService.js';
 // Configuration
 const CONFIG = {
     ALARM_NAME: 'daily_categorization_sync',
     MIN_ENGAGEMENT_SCORE: 50,
     BATCH_CHUNK_SIZE: 50,
-    LOOKBACK_HOURS: 24
+    LOOKBACK_HOURS: 24,
+    SIGNATURE_TTL: 5 * 60 * 1000 // 5 minutes
 };
 
 let categorizedUrlCache = new Set();
@@ -32,12 +27,24 @@ export const CategorizationManager = {
 
         chrome.alarms.onAlarm.addListener((alarm) => {
             if (alarm.name === CONFIG.ALARM_NAME) {
-                this.processDailyBatch();
+                this.processDailyBatch().catch(console.error);
             }
         });
 
         isInitialized = true;
         console.log('[CategorizationManager] Daily DB-based service initialized');
+    },
+
+    async refreshCache() {
+        try {
+            const urls = await listWorkspaceUrls();
+            const urlList = urls.map(u => (typeof u === 'string' ? u : u.url));
+            categorizedUrlCache = new Set(urlList);
+            console.log(`[CategorizationManager] Refreshed cache with ${urlList.length} URLs`);
+        } catch (e) {
+            console.warn('[CategorizationManager] Failed to refresh cache:', e);
+            throw e;
+        }
     },
 
     async setupDailyAlarm() {
@@ -49,100 +56,179 @@ export const CategorizationManager = {
                 delayInMinutes: randomDelayMinutes,
                 periodInMinutes: 1440 // 24 hours
             });
+            console.log(`[CategorizationManager] Created daily alarm with ${randomDelayMinutes} min delay`);
         }
     },
 
-    async refreshCache() {
+    async signRequestData(data) {
         try {
-            const urls = await listWorkspaceUrls();
-            const urlList = urls.map(u => (typeof u === 'string' ? u : u.url));
-            categorizedUrlCache = new Set(urlList);
-        } catch (e) {
-            console.warn('[CategorizationManager] Failed to refresh cache:', e);
+            const auth = await getAuth();
+            if (!auth?.keyPair?.privateKey) {
+                throw new Error('No private key available for signing');
+            }
+
+            const timestamp = Date.now();
+            const payload = {
+                ...data,
+                timestamp,
+                expires: timestamp + CONFIG.SIGNATURE_TTL
+            };
+
+            const signature = await CryptoUtils.signData(
+                auth.keyPair.privateKey,
+                JSON.stringify(payload)
+            );
+
+            return {
+                ...payload,
+                signature,
+                keyId: auth.user?.keyId
+            };
+        } catch (error) {
+            console.error('[CategorizationManager] Error signing request:', error);
+            throw error;
         }
     },
 
-    // NOTE: queueUrl is REMOVED. We no longer queue things manually.
-
-    /**
-     * The Daily Cron Job
-     * 1. Reads raw activity from DB
-     * 2. Aggregates and scores it
-     * 3. Filters and sends to Cloudflare
-     */
-
-    async processDailyBatch() {
-        console.log('[CategorizationManager] ⏰ Starting daily analysis...');
+    async processDailyBatch(params = {}) {
+        console.log('[CategorizationManager] ⏰ Starting daily analysis...', { params });
 
         try {
-            // 1. Fetch data from the last 24 hours
+            // 1. Get auth and validate
+            const auth = await getAuth();
+            if (!auth?.keyPair?.privateKey || !auth.user?.uid) {
+                throw new Error('Authentication required for categorization');
+            }
+
+            // 2. Fetch recent activity with configurable lookback
             const endTime = Date.now();
-            const startTime = endTime - (CONFIG.LOOKBACK_HOURS * 60 * 60 * 1000);
+            const lookbackHours = params.lookbackHours || CONFIG.LOOKBACK_HOURS;
+            const startTime = endTime - (lookbackHours * 60 * 60 * 1000);
 
-            // Fetch from the DB using the new function
+            console.log(`[CategorizationManager] Fetching data from last ${lookbackHours} hours`);
+
             const rawEvents = await getTimeSeriesDataRange(startTime, endTime);
 
-            if (!rawEvents || rawEvents.length === 0) {
-                console.log('[CategorizationManager] No activity in the last 24h.');
-                return;
+            if (!rawEvents?.length) {
+                console.log('[CategorizationManager] No activity found in the specified time range');
+                return { processed: 0, failed: 0, successful: [] };
             }
 
-            // 2. Aggregate Data (Group by URL)
-            const aggregation = new Map();
-
-            for (const event of rawEvents) {
-                // Validate URL based on your data sample
-                const url = event.url;
-                if (!url || !event.metrics) continue;
-
-                if (!aggregation.has(url)) {
-                    aggregation.set(url, { time: 0, clicks: 0, forms: 0, scroll: 0 });
-                }
-
-                const stats = aggregation.get(url);
-                const m = event.metrics;
-
-                // Accumulate totals
-                stats.time += (Number(m.timeSpent) || 0);
-                stats.clicks += (Number(m.clicks) || 0);
-                stats.forms += (Number(m.forms) || 0);
-
-                // For scroll, we take the MAX depth reached across all sessions
-                stats.scroll = Math.max(stats.scroll, (Number(m.scrollDepth) || 0));
+            // 3. Process and score URLs
+            const { candidates } = this.analyzeActivity(rawEvents, params);
+            if (candidates.length === 0) {
+                console.log('[CategorizationManager] No URLs met the minimum engagement score');
+                return { processed: 0, failed: 0, successful: [] };
             }
 
-            // 3. Score and Filter
-            const candidates = [];
+            // 4. Apply limit if specified
+            const limit = params.limit > 0 ? Math.min(params.limit, candidates.length) : candidates.length;
+            const candidatesToProcess = candidates.slice(0, limit);
 
-            for (const [url, stats] of aggregation.entries()) {
-                if (categorizedUrlCache.has(url)) continue;
+            console.log(`[CategorizationManager] Processing ${candidatesToProcess.length} URLs`);
 
-                // Scoring Logic
-                // 1 form = 100 pts (Instant qualify)
-                // 1 click = 10 pts
-                // 1% scroll = 0.5 pts (50% scroll = 25 pts)
-                // 1 second = 0.1 pts (60 seconds = 6 pts)
-                const score = (
-                    (stats.forms * 100) +
-                    (stats.clicks * 10) +
-                    (stats.scroll * 0.5) +
-                    ((stats.time / 1000) * 0.1)
-                );
+            // 5. Sign the request data
+            const signedRequest = await this.signRequestData({
+                urls: candidatesToProcess.map(c => c.url),
+                userId: auth.user.uid
+            });
 
-                if (score >= CONFIG.MIN_ENGAGEMENT_SCORE) {
-                    candidates.push(url);
-                }
-            }
+            // 6. Call Cloudflare service
+            const batchResults = await CloudflareService.categorizeBatch(
+                signedRequest,
+                auth.user.uid
+            );
 
-            // ... (Rest of the batch sending logic remains the same)
-
-            if (candidates.length > 0) {
-                console.log(`[CategorizationManager] Processing ${candidates.length} URLs`);
-                // Call batch API here...
-            }
+            // 7. Process and return results
+            return this.processCategorizationResults(batchResults, candidatesToProcess);
 
         } catch (error) {
-            console.error('[CategorizationManager] Daily process failed:', error);
+            console.error('[CategorizationManager] Error in processDailyBatch:', error);
+            throw error;
         }
+    },
+
+    analyzeActivity(events, params = {}) {
+        const aggregation = new Map();
+        const candidates = [];
+
+        // Aggregate metrics by URL
+        for (const event of events) {
+            if (!event?.url || !event.metrics) continue;
+
+            const url = event.url;
+            if (!aggregation.has(url)) {
+                aggregation.set(url, { time: 0, clicks: 0, forms: 0, scroll: 0 });
+            }
+
+            const stats = aggregation.get(url);
+            const m = event.metrics;
+
+            stats.time += (Number(m.timeSpent) || 0);
+            stats.clicks += (Number(m.clicks) || 0);
+            stats.forms += (Number(m.forms) || 0);
+            stats.scroll = Math.max(stats.scroll, (Number(m.scrollDepth) || 0));
+        }
+
+        // Score and filter URLs
+        for (const [url, stats] of aggregation.entries()) {
+            // Skip if URL is already categorized and we're not forcing reprocessing
+            if (!params.force && categorizedUrlCache.has(url)) {
+                continue;
+            }
+
+            const score = (
+                (stats.forms * 100) +
+                (stats.clicks * 10) +
+                (stats.scroll * 0.5) +
+                ((stats.time / 1000) * 0.1)
+            );
+
+            if (score >= CONFIG.MIN_ENGAGEMENT_SCORE) {
+                candidates.push({
+                    url,
+                    score,
+                    stats,
+                    lastSeen: stats.lastSeen // Make sure this is set when aggregating
+                });
+            }
+        }
+
+        // Sort by score descending
+        candidates.sort((a, b) => b.score - a.score);
+
+        return { candidates, aggregation };
+    },
+
+    async processCategorizationResults(results, candidates) {
+        const successful = [];
+        const failed = [];
+
+        if (!Array.isArray(results)) {
+            throw new Error('Invalid results format from categorization service');
+        }
+
+        results.forEach((result, index) => {
+            const candidate = candidates[index];
+            if (!candidate) return;
+
+            if (result.success) {
+                successful.push({
+                    url: candidate.url,
+                    category: result.category,
+                    score: candidate.score,
+                    stats: candidate.stats
+                });
+                categorizedUrlCache.add(candidate.url);
+            } else {
+                failed.push({
+                    url: candidate.url,
+                    error: result.error || 'Unknown error'
+                });
+            }
+        });
+
+        console.log(`[CategorizationManager] Processed ${successful.length} URLs successfully, ${failed.length} failed`);
+        return { processed: successful.length, failed: failed.length, successful, failed };
     }
 };
