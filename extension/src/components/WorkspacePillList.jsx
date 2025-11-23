@@ -8,6 +8,8 @@ export function WorkspacePillList({ items = [], onDelete, onAddToWorkspace, embe
     const [hoveredKey, setHoveredKey] = useState(null);
     const [contextMenu, setContextMenu] = useState({ show: false, position: { x: 0, y: 0 }, chip: null });
     const [pinnedState, setPinnedState] = useState(() => new Map());
+    const [showAll, setShowAll] = useState(false);
+    const [maxItemsPerRow, setMaxItemsPerRow] = useState(5);
 
     const chips = useMemo(() => {
         const groups = new Map();
@@ -155,51 +157,82 @@ export function WorkspacePillList({ items = [], onDelete, onAddToWorkspace, embe
     }
 
     const pills = (
-        <div
-            className="workspace-pill-scroll"
-            style={{
-                display: 'flex',
-                gap: '10px',
-                overflowX: 'auto',
-                paddingBottom: '4px',
-                scrollbarWidth: 'thin'
-            }}
-        >
-            {chips.map((chip) => (
-                <div
-                    key={chip.key}
-                    className="pinnedws-urlChip"
-                    style={{
-                        position: 'relative',
-                        minWidth: '200px',
-                        maxWidth: '280px',
-                        flex: '0 0 auto',
-                        cursor: 'pointer'
-                    }}
-                    onClick={(e) => {
-                        if (e.detail && e.detail > 1) return;
-                        openInSameTab(chip.url);
-                    }}
-                    onMouseEnter={() => setHoveredKey(chip.key)}
-                    onMouseLeave={() => setHoveredKey((curr) => (curr === chip.key ? null : curr))}
-                    onDoubleClick={(e) => openContextMenu(e, chip)}
-                    onContextMenu={(e) => openContextMenu(e, chip)}
-                    title={chip.title}
-                >
-                    <img
-                        src={chip.favicon || '/logo.png'}
-                        alt=""
-                        width={18}
-                        height={18}
-                        style={{ borderRadius: 4, objectFit: 'cover', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
-                        onError={(e) => { e.currentTarget.src = '/logo.png'; }}
-                    />
-                    <span className="pinnedws-urlTitle" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        {chip.title}
-                    </span>
+        <div style={{ width: '100%' }}>
+            <div
+                className="workspace-pill-scroll"
+                style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '10px',
+                    overflow: 'hidden',
+                    paddingBottom: '4px',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                    maxHeight: showAll ? 'none' : '120px'
+                }}
+            >
+                {chips.slice(0, showAll ? chips.length : maxItemsPerRow * 2).map((chip) => (
+                    <div
+                        key={chip.key}
+                        className="pinnedws-urlChip"
+                        style={{
+                            position: 'relative',
+                            minWidth: '200px',
+                            maxWidth: '280px',
+                            flex: showAll ? '0 0 auto' : '0 0 auto',
+                            cursor: 'pointer'
+                        }}
+                        onClick={(e) => {
+                            if (e.detail && e.detail > 1) return;
+                            openInSameTab(chip.url);
+                        }}
+                        onMouseEnter={() => setHoveredKey(chip.key)}
+                        onMouseLeave={() => setHoveredKey((curr) => (curr === chip.key ? null : curr))}
+                        onDoubleClick={(e) => openContextMenu(e, chip)}
+                        onContextMenu={(e) => openContextMenu(e, chip)}
+                        title={chip.title}
+                    >
+                        <img
+                            src={chip.favicon || '/logo.png'}
+                            alt=""
+                            width={18}
+                            height={18}
+                            style={{ borderRadius: 4, objectFit: 'cover', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
+                            onError={(e) => { e.currentTarget.src = '/logo.png'; }}
+                        />
+                        <span className="pinnedws-urlTitle" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            {chip.title}
+                        </span>
 
-                </div>
-            ))}
+                    </div>
+                ))}
+            </div>
+            {chips.length > maxItemsPerRow * 2 && (
+                <button
+                    onClick={() => setShowAll(!showAll)}
+                    style={{
+                        marginTop: '8px',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'rgba(255,255,255,0.05)',
+                        color: 'rgba(255,255,255,0.8)',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.1)';
+                        e.target.style.color = 'rgba(255,255,255,1)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.05)';
+                        e.target.style.color = 'rgba(255,255,255,0.8)';
+                    }}
+                >
+                    {showAll ? 'Show Less' : `Show More (${chips.length - maxItemsPerRow * 2} more)`}
+                </button>
+            )}
         </div>
     );
 
