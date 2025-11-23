@@ -19,6 +19,15 @@ export function WorkspaceFilters({
     return Array.from(set);
   });
 
+  // Track workspace usage/activity
+  const [workspaceActivity, setWorkspaceActivity] = useState(() => {
+    const saved = localStorage.getItem('workspace_activity');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const [sortBy, setSortBy] = useState('activity'); // 'activity', 'name', 'manual'
+  const VISIBLE_WORKSPACES_LIMIT = 5;
+
   // Update workspaces when items change
   useEffect(() => {
     const newWorkspaces = [];
@@ -42,6 +51,45 @@ export function WorkspaceFilters({
 
     setWorkspaces(newWorkspaces);
   }, [items]);
+
+  // Track workspace activity when switching
+  const trackWorkspaceActivity = (workspaceName) => {
+    const now = Date.now();
+    const newActivity = {
+      ...workspaceActivity,
+      [workspaceName]: {
+        lastAccessed: now,
+        accessCount: (workspaceActivity[workspaceName]?.accessCount || 0) + 1,
+        totalItems: items.filter(item => item.workspaceGroup === workspaceName).length
+      }
+    };
+    setWorkspaceActivity(newActivity);
+    localStorage.setItem('workspace_activity', JSON.stringify(newActivity));
+  };
+
+  // Sort workspaces based on selected method
+  const getSortedWorkspaces = () => {
+    const sorted = [...workspaces];
+
+    switch (sortBy) {
+      case 'activity':
+        return sorted.sort((a, b) => {
+          const aActivity = workspaceActivity[a] || { lastAccessed: 0, accessCount: 0 };
+          const bActivity = workspaceActivity[b] || { lastAccessed: 0, accessCount: 0 };
+
+          // Sort by last accessed first, then by access count
+          if (aActivity.lastAccessed !== bActivity.lastAccessed) {
+            return bActivity.lastAccessed - aActivity.lastAccessed;
+          }
+          return bActivity.accessCount - aActivity.accessCount;
+        });
+      case 'name':
+        return sorted.sort((a, b) => a.localeCompare(b));
+      case 'manual':
+      default:
+        return sorted;
+    }
+  };
 
   // Handle drag start
   const handleDragStart = (e, index) => {
@@ -84,7 +132,6 @@ export function WorkspaceFilters({
   const [currentTab, setCurrentTab] = useState(null)
   const [menu, setMenu] = useState({ open: false, x: 0, y: 0, ws: null })
   const [showAllWorkspaces, setShowAllWorkspaces] = useState(false)
-  const VISIBLE_WORKSPACES_LIMIT = 5
 
   // Get current tab when modal opens
   useEffect(() => {
@@ -115,6 +162,11 @@ export function WorkspaceFilters({
     }
   }, [])
 
+  const handleWorkspaceClick = (workspaceName) => {
+    trackWorkspaceActivity(workspaceName);
+    onChange(workspaceName);
+  };
+
   const handleCreateWorkspace = async (name, description) => {
     try {
       if (onWorkspaceCreated) {
@@ -124,7 +176,9 @@ export function WorkspaceFilters({
     } catch (error) {
       console.error('Error creating workspace:', error)
     }
-  }
+  };
+
+  const sortedWorkspaces = getSortedWorkspaces();
 
   return (
     <>
@@ -170,7 +224,7 @@ export function WorkspaceFilters({
             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
           </svg>
         </button>
-        {workspaces.slice(0, showAllWorkspaces ? workspaces.length : VISIBLE_WORKSPACES_LIMIT).map((ws, i) => (
+        {sortedWorkspaces.slice(0, showAllWorkspaces ? sortedWorkspaces.length : VISIBLE_WORKSPACES_LIMIT).map((ws, i) => (
           <button
             key={ws}
             draggable
@@ -178,7 +232,7 @@ export function WorkspaceFilters({
             onDragOver={(e) => handleDragOver(e, i)}
             onDragEnd={handleDragEnd}
             onDrop={handleDrop}
-            onClick={() => onChange(ws)}
+            onClick={() => handleWorkspaceClick(ws)}
             ref={el => btnRefs.current[i] = el}
             style={{
               cursor: 'grab',
@@ -227,7 +281,7 @@ export function WorkspaceFilters({
             {ws}
           </button>
         ))}
-        {workspaces.length > VISIBLE_WORKSPACES_LIMIT && (
+        {sortedWorkspaces.length > VISIBLE_WORKSPACES_LIMIT && (
           <button
             onClick={() => setShowAllWorkspaces(!showAllWorkspaces)}
             style={{
@@ -268,7 +322,7 @@ export function WorkspaceFilters({
               </>
             ) : (
               <>
-                <span>Show {workspaces.length - VISIBLE_WORKSPACES_LIMIT} More</span>
+                <span>Show {sortedWorkspaces.length - VISIBLE_WORKSPACES_LIMIT} More</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M7 10l5 5 5-5z" />
                 </svg>

@@ -208,30 +208,31 @@ export function WorkspacePillList({ items = [], onDelete, onAddToWorkspace, embe
                 ))}
             </div>
             {chips.length > maxItemsPerRow * 2 && (
-                <button
-                    onClick={() => setShowAll(!showAll)}
-                    style={{
-                        marginTop: '8px',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        background: 'rgba(255,255,255,0.05)',
-                        color: 'rgba(255,255,255,0.8)',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                        e.target.style.background = 'rgba(255,255,255,0.1)';
-                        e.target.style.color = 'rgba(255,255,255,1)';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.target.style.background = 'rgba(255,255,255,0.05)';
-                        e.target.style.color = 'rgba(255,255,255,0.8)';
-                    }}
-                >
-                    {showAll ? 'Show Less' : `Show More (${chips.length - maxItemsPerRow * 2} more)`}
-                </button>
+                <div style={{ width: '100%', marginTop: '8px' }}>
+                    <button
+                        onClick={() => setShowAll(!showAll)}
+                        style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            background: 'rgba(255,255,255,0.05)',
+                            color: 'rgba(255,255,255,0.8)',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.target.style.background = 'rgba(255,255,255,0.1)';
+                            e.target.style.color = 'rgba(255,255,255,1)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.target.style.background = 'rgba(255,255,255,0.05)';
+                            e.target.style.color = 'rgba(255,255,255,0.8)';
+                        }}
+                    >
+                        {showAll ? 'Show Less' : `Show More (${chips.length - maxItemsPerRow * 2} more)`}
+                    </button>
+                </div>
             )}
         </div>
     );
