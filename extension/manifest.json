@@ -43,7 +43,8 @@
     "https://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://*.googleapis.com https://www.googleapis.com https://accounts.google.com https://*.google.com https://*.gstatic.com https://cool-desk.raghuwanshi-abhay405.workers.dev;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev",
+    "service_worker": "script-src 'self'; connect-src 'self' wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev"
   },
   "web_accessible_resources": [
     {

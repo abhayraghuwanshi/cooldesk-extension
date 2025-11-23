@@ -11,6 +11,7 @@ export function WorkspaceFilters({
   onAddLink,
   pinnedWorkspaces = [],
   onWorkspaceReordered,
+  onShareWorkspaceUrl,
 }) {
   const [workspaces, setWorkspaces] = useState(() => {
     const set = new Set();
@@ -342,6 +343,29 @@ export function WorkspaceFilters({
             }}
           >
             Add link to workspace
+          </button>
+
+          {/* Share URL to team workspace */}
+          <button
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 12px',
+              textAlign: 'left',
+              background: 'transparent',
+              color: '#60a5fa',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13
+            }}
+            onClick={() => {
+              setMenu({ open: false, x: 0, y: 0, ws: null })
+              if (typeof onShareWorkspaceUrl === 'function' && menu.ws) {
+                onShareWorkspaceUrl(menu.ws)
+              }
+            }}
+          >
+            Share URL to team workspace
           </button>
 
           {/* Divider */}

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ContextMenu } from './common/ContextMenu.jsx';
-import { getFaviconUrl, getUrlParts } from '../utils';
-import { handlePinAction, handleAddToBookmarksAction, isUrlPinned } from '../utils/linkActionHandlers.js';
 import '../styles/WorkspacePillList.css';
+import { getFaviconUrl, getUrlParts } from '../utils';
+import { handleAddToBookmarksAction, handlePinAction, isUrlPinned } from '../utils/linkActionHandlers.js';
+import { ContextMenu } from './common/ContextMenu.jsx';
 
-export function WorkspacePillList({ items = [], onDelete, onAddToWorkspace }) {
+export function WorkspacePillList({ items = [], onDelete, onAddToWorkspace, embedded = false }) {
     const [hoveredKey, setHoveredKey] = useState(null);
     const [contextMenu, setContextMenu] = useState({ show: false, position: { x: 0, y: 0 }, chip: null });
     const [pinnedState, setPinnedState] = useState(() => new Map());
@@ -134,6 +134,10 @@ export function WorkspacePillList({ items = [], onDelete, onAddToWorkspace }) {
     };
 
     if (!chips.length) {
+        if (embedded) {
+            return null;
+        }
+
         return (
             <div
                 className="coolDesk-section"
@@ -150,54 +154,81 @@ export function WorkspacePillList({ items = [], onDelete, onAddToWorkspace }) {
         );
     }
 
+    const pills = (
+        <div
+            className="workspace-pill-scroll"
+            style={{
+                display: 'flex',
+                gap: '10px',
+                overflowX: 'auto',
+                paddingBottom: '4px',
+                scrollbarWidth: 'thin'
+            }}
+        >
+            {chips.map((chip) => (
+                <div
+                    key={chip.key}
+                    className="pinnedws-urlChip"
+                    style={{
+                        position: 'relative',
+                        minWidth: '200px',
+                        maxWidth: '280px',
+                        flex: '0 0 auto',
+                        cursor: 'pointer'
+                    }}
+                    onClick={(e) => {
+                        if (e.detail && e.detail > 1) return;
+                        openInSameTab(chip.url);
+                    }}
+                    onMouseEnter={() => setHoveredKey(chip.key)}
+                    onMouseLeave={() => setHoveredKey((curr) => (curr === chip.key ? null : curr))}
+                    onDoubleClick={(e) => openContextMenu(e, chip)}
+                    onContextMenu={(e) => openContextMenu(e, chip)}
+                    title={chip.title}
+                >
+                    <img
+                        src={chip.favicon || '/logo.png'}
+                        alt=""
+                        width={18}
+                        height={18}
+                        style={{ borderRadius: 4, objectFit: 'cover', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
+                        onError={(e) => { e.currentTarget.src = '/logo.png'; }}
+                    />
+                    <span className="pinnedws-urlTitle" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        {chip.title}
+                    </span>
+
+                </div>
+            ))}
+        </div>
+    );
+
+    if (embedded) {
+        return (
+            <>
+                {pills}
+                {contextMenu.show && contextMenu.chip && (
+                    <ContextMenu
+                        show={contextMenu.show}
+                        onClose={closeContextMenu}
+                        url={contextMenu.chip.url}
+                        title={contextMenu.chip.title}
+                        onPin={handlePinChip}
+                        onDelete={handleDeleteChip}
+                        onOpen={() => openInSameTab(contextMenu.chip.url)}
+                        onAddToBookmarks={() => handleAddToBookmarksChip(contextMenu.chip.url, contextMenu.chip.title)}
+                        onAddToWorkspace={onAddToWorkspace ? (workspace) => onAddToWorkspace(contextMenu.chip.url, workspace.name) : undefined}
+                        isPinned={pinnedState.get(contextMenu.chip.url) || false}
+                        position={contextMenu.position}
+                    />
+                )}
+            </>
+        );
+    }
+
     return (
         <div className="coolDesk-section" style={{ padding: '16px', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(28,28,33,0.45)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
-            <div
-                className="workspace-pill-scroll"
-                style={{
-                    display: 'flex',
-                    gap: '10px',
-                    overflowX: 'auto',
-                    paddingBottom: '4px',
-                    scrollbarWidth: 'thin'
-                }}
-            >
-                {chips.map((chip) => (
-                    <div
-                        key={chip.key}
-                        className="pinnedws-urlChip"
-                        style={{
-                            position: 'relative',
-                            minWidth: '200px',
-                            maxWidth: '280px',
-                            flex: '0 0 auto',
-                            cursor: 'pointer'
-                        }}
-                        onClick={(e) => {
-                            if (e.detail && e.detail > 1) return;
-                            openInSameTab(chip.url);
-                        }}
-                        onMouseEnter={() => setHoveredKey(chip.key)}
-                        onMouseLeave={() => setHoveredKey((curr) => (curr === chip.key ? null : curr))}
-                        onDoubleClick={(e) => openContextMenu(e, chip)}
-                        onContextMenu={(e) => openContextMenu(e, chip)}
-                        title={chip.title}
-                    >
-                        <img
-                            src={chip.favicon || '/logo.png'}
-                            alt=""
-                            width={18}
-                            height={18}
-                            style={{ borderRadius: 4, objectFit: 'cover', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
-                            onError={(e) => { e.currentTarget.src = '/logo.png'; }}
-                        />
-                        <span className="pinnedws-urlTitle" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                            {chip.title}
-                        </span>
-
-                    </div>
-                ))}
-            </div>
+            {pills}
             {contextMenu.show && contextMenu.chip && (
                 <ContextMenu
                     show={contextMenu.show}

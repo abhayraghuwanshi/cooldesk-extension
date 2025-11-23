@@ -20,6 +20,7 @@ import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
 import { SettingsModal } from './components/popups/SettingsModal';
 import { ProjectGrid } from './components/ProjectGrid';
+import { SharedWorkspace } from './components/SharedWorkspace.jsx';
 import { WorkspaceFilters } from './components/WorkspaceFilters';
 import WorkspacePillList from './components/WorkspacePillList.jsx';
 import './search.css';
@@ -50,6 +51,7 @@ import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorksp
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
 import { getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
+import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
 import { getFaviconUrl, getUrlParts } from './utils';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
@@ -94,6 +96,9 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
+  const SHARED_TEAM_ID = 'demo-team';
+  const SHARED_USER_ID = 'demo-user';
+  const SHARED_WS_URL = 'wss://YOUR_WORKER_URL';
   const { data, loading, refreshing, populate } = useDashboardData()
   const [workspace, setWorkspace] = useState('')
   const [themeClass, setThemeClass] = useState('bg-ai-quantum') // Default theme
@@ -126,6 +131,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
   const activeSectionTimeoutRef = useRef(null)
+  const sharedClientRef = useRef(null)
   const [processes, setProcesses] = useState([])
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [fontSize, setFontSize] = useState('medium')
@@ -182,6 +188,44 @@ export default function App() {
       }
     };
   }, [activeSection]); // Re-run whenever activeSection changes
+
+  const handleShareWorkspaceUrl = (workspaceName) => {
+    if (!workspaceName) return;
+    try {
+      if (!SHARED_TEAM_ID || !SHARED_USER_ID || !SHARED_WS_URL) {
+        console.warn('[App] Shared workspace config missing');
+        return;
+      }
+
+      if (!sharedClientRef.current) {
+        sharedClientRef.current = createSharedWorkspaceClient({
+          teamId: SHARED_TEAM_ID,
+          userId: SHARED_USER_ID,
+          wsUrl: SHARED_WS_URL,
+        });
+        sharedClientRef.current.connect();
+      }
+
+      if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabsList) => {
+          try {
+            const [tab] = Array.isArray(tabsList) ? tabsList : [];
+            if (!tab || !tab.url) return;
+            const title = tab.title || tab.url;
+            sharedClientRef.current?.addUrl(tab.url, title, null);
+            console.log('[App] Shared current tab URL to team workspace:', {
+              workspaceName,
+              url: tab.url,
+            });
+          } catch (err) {
+            console.warn('[App] Failed to share URL to team workspace:', err);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to handle share workspace URL action:', e);
+    }
+  };
 
   // Window resize handler for responsive behavior
   useEffect(() => {
@@ -592,7 +636,7 @@ export default function App() {
     if (!activePinnedWorkspace) return;
     if (!Array.isArray(pinnedWorkspaces) || pinnedWorkspaces.includes(activePinnedWorkspace)) return;
     setActivePinnedWorkspace(pinnedWorkspaces[0] ?? null);
-  }, [pinnedWorkspaces, activePinnedWorkspace]);
+  }, [pinnedWorkspaces, activePinnedWorkspace])
 
   const togglePinWorkspace = (name) => {
     if (!name || typeof name !== 'string') return;
@@ -1569,6 +1613,17 @@ export default function App() {
           <QuickAccess displaySettings={displaySettings} initialShowPings={showPingsSection} initialShowFeed={showFeedSection} />
         </ErrorBoundary>
 
+        {/* Shared Workspace (team) */}
+        <div className="shared-workspace-container section" style={{ marginTop: 'var(--section-spacing)' }}>
+          <ErrorBoundary>
+            <SharedWorkspace
+              teamId="demo-team"
+              userId="demo-user"
+              wsUrl="wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev"
+            />
+          </ErrorBoundary>
+        </div>
+
         <div className="pinned-workspace-container section" style={{ marginTop: 'var(--section-spacing)' }}>
           {displaySettings.pinnedWorkspaces !== false && (
             <ErrorBoundary>
@@ -1657,6 +1712,7 @@ export default function App() {
                     onPinWorkspace={togglePinWorkspace}
                     onAddLink={handleOpenAddLinkModal}
                     pinnedWorkspaces={pinnedWorkspaces}
+                    onShareWorkspaceUrl={handleShareWorkspaceUrl}
                   />
                 </div>
               </div>

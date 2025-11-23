@@ -1,6 +1,6 @@
 import React from 'react';
 import '../../styles/default/PinnedWorkspace.css';
-import { getFaviconUrl } from '../../utils';
+import WorkspacePillList from '../WorkspacePillList.jsx';
 
 export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspaces = [], onReorder }) {
     const [hovered, setHovered] = React.useState(null);
@@ -233,29 +233,10 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                             {urls.length === 0 ? (
                                 <div style={{ color: 'rgba(255,255,255,0.7)', fontStyle: 'italic', fontSize: 12 }}>No items yet</div>
                             ) : (
-                                <div className="pinnedws-urlChips">
-                                    {urls.map((u, idx) => (
-                                        <div key={`${name}-${idx}`} className="pinnedws-urlChip"
-                                            title={u.title || u.url}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                openInSameTab(u.url);
-                                            }}
-                                        >
-                                            <img
-                                                src={(u.favicon && /^https?:\/\//i.test(u.favicon)) ? u.favicon : (getFaviconUrl(u.url, 16) || '/logo.png')}
-                                                alt=""
-                                                width={16}
-                                                height={16}
-                                                style={{ borderRadius: 4, objectFit: 'cover', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }}
-                                                onError={(e) => { e.currentTarget.src = '/logo.png'; }}
-                                            />
-                                            <span className="pinnedws-urlTitle">
-                                                {u.title || (() => { try { return new URL(u.url).hostname; } catch { return u.url; } })()}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
+                                <WorkspacePillList
+                                    items={urls}
+                                    embedded
+                                />
                             )}
                         </div>
                     );
