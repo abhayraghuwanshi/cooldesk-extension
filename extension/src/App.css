@@ -214,9 +214,9 @@ body,
     width: 100%;
     margin-left: 0;
     margin-right: 0;
-    padding-left: 15vw;
+    padding-left: 20vw;
     /* simulate 15% side margins via padding */
-    padding-right: 15vw;
+    padding-right: 20vw;
   }
 }
 

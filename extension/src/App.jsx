@@ -105,14 +105,6 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [focusSearchTick, setFocusSearchTick] = useState(0)
   const [showDeskMetaReminder, setShowDeskMetaReminder] = useState(false);
-  const [workspaceHidden, setWorkspaceHidden] = useState(() => {
-    try {
-      const saved = localStorage.getItem('workspaceHidden');
-      return saved === 'true';
-    } catch {
-      return false;
-    }
-  });
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' })
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
   const [addingToWorkspace, setAddingToWorkspace] = useState(null);
@@ -611,13 +603,6 @@ export default function App() {
       }
     } catch { }
   }, [activePinnedWorkspace]);
-
-  // Persist workspaceHidden state to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('workspaceHidden', String(workspaceHidden));
-    } catch { }
-  }, [workspaceHidden]);
 
   // Persist Pings and Feed section visibility to localStorage
   useEffect(() => {
@@ -1645,40 +1630,7 @@ export default function App() {
         </div>
 
         <div className="workspace-filters-section section" style={{ marginTop: 'var(--section-spacing)' }}>
-          {workspaceHidden ? (
-            <div
-              className="coolDesk-section"
-              onDoubleClick={() => setWorkspaceHidden(false)}
-              style={{
-                marginTop: '24px',
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: '1px dashed var(--border-primary)',
-                color: 'var(--text-secondary)',
-                background: 'var(--glass-bg)',
-                cursor: 'pointer',
-                userSelect: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                transition: 'all 0.2s ease',
-                fontStyle: 'italic'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--interactive-hover)';
-                e.currentTarget.style.borderColor = 'var(--border-accent)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--glass-bg)';
-                e.currentTarget.style.borderColor = 'var(--border-primary)';
-              }}
-              title="Double-click to show workspace filters"
-            >
-              <span style={{ opacity: 0.8 }}>Hidden: Workspace Filters</span>
-              <span style={{ fontSize: 'var(--font-size-xs)', opacity: 0.6 }}>(double-click to show)</span>
-            </div>
-          ) : (
-            <div>
+          <div>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -1729,8 +1681,7 @@ export default function App() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
+          </div>
         </div>
 
         <div className="activity-panel-section section" style={{ marginTop: 'var(--section-spacing)' }}>
@@ -1800,7 +1751,6 @@ export default function App() {
               setActiveSection={setActiveSection}
             /> */}
           </div>
-
         ) : (
           <Header
             search={search}

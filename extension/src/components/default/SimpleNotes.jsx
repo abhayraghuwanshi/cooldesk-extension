@@ -1,4 +1,4 @@
-import { faCheck, faCheckCircle, faCircle, faEdit, faList, faMicrophone, faPause, faPlay, faStop, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faCheckCircle, faCircle, faEdit, faLightbulb, faMicrophone, faPause, faPlay, faSquareCheck, faStop, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
@@ -564,14 +564,14 @@ export function SimpleNotes() {
                         className={`simple-notes-filter ${filter === 'todos' ? 'is-active' : ''}`}
                         title="Active todos"
                     >
-                        <FontAwesomeIcon icon={faCircle} /> {stats.todos > 0 && stats.todos}
+                        <FontAwesomeIcon icon={faSquareCheck} /> {stats.todos > 0 && stats.todos}
                     </button>
                     <button
                         onClick={() => setFilter('thoughts')}
                         className={`simple-notes-filter ${filter === 'thoughts' ? 'is-active' : ''}`}
-                        title="Thoughts"
+                        title="Thoughts & Notes"
                     >
-                        <FontAwesomeIcon icon={faList} /> {stats.thoughts > 0 && stats.thoughts}
+                        <FontAwesomeIcon icon={faLightbulb} /> {stats.thoughts > 0 && stats.thoughts}
                     </button>
                     <button
                         onClick={() => setFilter('completed')}
@@ -608,7 +608,7 @@ export function SimpleNotes() {
                             className={`simple-notes-type-toggle ${noteType === 'todo' ? 'is-todo' : ''}`}
                             title={noteType === 'todo' ? 'Switch to thought' : 'Switch to todo'}
                         >
-                            <FontAwesomeIcon icon={noteType === 'todo' ? faCircle : faList} />
+                            <FontAwesomeIcon icon={noteType === 'todo' ? faSquareCheck : faLightbulb} />
                         </button>
 
                         {/* Voice button */}
