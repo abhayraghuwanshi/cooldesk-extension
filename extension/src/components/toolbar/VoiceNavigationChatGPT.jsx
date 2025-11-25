@@ -24,8 +24,11 @@ const VoiceNavigationChatGPT = () => {
   const [showHelp, setShowHelp] = useState(false);
   const [connectionExpired, setConnectionExpired] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(0);
+  const [isSleeping, setIsSleeping] = useState(false);
   const MAX_RECONNECT_ATTEMPTS = 3;
+  const MAX_NETWORK_ATTEMPTS = 10; // Higher limit for network issues
   const reconnectAttemptsRef = useRef(0);
+  const networkAttemptsRef = useRef(0);
 
   // Initialize voice command processor
   const commandProcessorRef = useRef(null);
@@ -51,6 +54,167 @@ const VoiceNavigationChatGPT = () => {
       setFeedback('');
       setTranscript('');
     }, 3000);
+
+    // Also show notification in the current tab
+    showTabNotification(message, type);
+  };
+
+  // Helper function to show notifications in the current tab
+  const showTabNotification = async (message, type = 'success') => {
+    // Don't try to show tab notifications if we're having background script issues
+    if (chrome.runtime.lastError) {
+      console.warn('[VoiceNav] Skipping tab notification due to runtime error:', chrome.runtime.lastError);
+      return;
+    }
+
+    try {
+      // Use a timeout to avoid hanging on tab queries
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Tab query timeout')), 1000)
+      );
+
+      const tabQueryPromise = chrome.tabs.query({ active: true, currentWindow: true });
+
+      const [activeTab] = await Promise.race([tabQueryPromise, timeoutPromise]);
+
+      if (!activeTab || !activeTab.id) {
+        console.warn('[VoiceNav] No active tab found for notification');
+        return;
+      }
+
+      // Skip chrome:// and extension pages
+      if (activeTab.url && (activeTab.url.startsWith('chrome://') || activeTab.url.startsWith('chrome-extension://'))) {
+        console.warn('[VoiceNav] Cannot inject into chrome:// or extension pages');
+        return;
+      }
+
+      // Map types to colors
+      const colorMap = {
+        success: '#4CAF50',
+        info: '#4A90E2',
+        warning: '#ff8c00',
+        error: '#ff4444'
+      };
+
+      const color = colorMap[type] || '#4A90E2';
+
+      console.log('[VoiceNav] Injecting notification into tab:', activeTab.id, message);
+
+      // Add timeout for script execution
+      const executionPromise = chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: injectTabNotification,
+        args: [message, color, 4000]
+      });
+
+      const executionTimeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Script execution timeout')), 2000)
+      );
+
+      await Promise.race([executionPromise, executionTimeoutPromise]);
+      console.log('[VoiceNav] Tab notification injection completed');
+
+    } catch (error) {
+      console.error('[VoiceNav] Failed to show tab notification:', error);
+      console.error('[VoiceNav] Error details:', error.message);
+
+      // If tab notification fails, at least try to show a simple alert as fallback
+      if (error.message.includes('timeout')) {
+        console.warn('[VoiceNav] Tab notification timed out, background script may be sleeping');
+      }
+    }
+  };
+
+  // Function that gets injected into the page to show notifications
+  const injectTabNotification = (message, color, duration) => {
+    console.log('[VoiceNav Tab] Starting injection:', message, color);
+
+    try {
+      // Check if we already have a notification container
+      let container = document.getElementById('voice-nav-notification-container');
+
+      if (!container) {
+        console.log('[VoiceNav Tab] Creating container');
+        // Create notification container
+        container = document.createElement('div');
+        container.id = 'voice-nav-notification-container';
+        container.style.cssText = `
+          position: fixed !important;
+          top: 20px !important;
+          left: 50% !important;
+          transform: translateX(-50%) !important;
+          z-index: 2147483647 !important;
+          pointer-events: none !important;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        `;
+        document.body.appendChild(container);
+        console.log('[VoiceNav Tab] Container created and appended');
+      }
+
+      // Create notification element
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+        background: ${color} !important;
+        color: white !important;
+        padding: 12px 24px !important;
+        border-radius: 8px !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.25), 0 2px 10px rgba(0,0,0,0.15) !important;
+        margin-bottom: 10px !important;
+        transform: translateY(-20px) !important;
+        opacity: 0 !important;
+        transition: all 0.3s ease !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        max-width: 400px !important;
+        text-align: center !important;
+        word-wrap: break-word !important;
+        display: block !important;
+      `;
+
+      // Add content with icon
+      notification.innerHTML = `
+        <div style="display: flex !important; align-items: center !important; justify-content: center !important; gap: 8px !important;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink: 0 !important;">
+            <path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/>
+          </svg>
+          <span style="color: white !important;">${message}</span>
+        </div>
+      `;
+
+      container.appendChild(notification);
+      console.log('[VoiceNav Tab] Notification added to container');
+
+      // Animate in
+      setTimeout(() => {
+        notification.style.transform = 'translateY(0) !important';
+        notification.style.opacity = '1 !important';
+        console.log('[VoiceNav Tab] Animation in triggered');
+      }, 10);
+
+      // Animate out and remove
+      setTimeout(() => {
+        notification.style.transform = 'translateY(-20px) !important';
+        notification.style.opacity = '0 !important';
+        console.log('[VoiceNav Tab] Animation out triggered');
+
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+            console.log('[VoiceNav Tab] Notification removed');
+          }
+          // Clean up container if no more notifications
+          if (container.children.length === 0) {
+            container.remove();
+            console.log('[VoiceNav Tab] Container cleaned up');
+          }
+        }, 300);
+      }, duration - 300);
+
+      console.log('[VoiceNav Tab] Notification setup complete');
+    } catch (error) {
+      console.error('[VoiceNav Tab] Error creating notification:', error);
+    }
   };
   const recognitionRef = useRef(null);
   const feedbackTimeoutRef = useRef(null);
@@ -154,8 +318,15 @@ const VoiceNavigationChatGPT = () => {
     }, KEEP_ALIVE_INTERVAL);
   };
 
-  const attemptReconnect = () => {
-    vDebug('attemptReconnect called', { isListening, connectionExpired, attempts: reconnectAttemptsRef.current });
+  const attemptReconnect = async (errorType = null, errorDetails = null) => {
+    vDebug('attemptReconnect called', {
+      isListening,
+      connectionExpired,
+      attempts: reconnectAttemptsRef.current,
+      errorType,
+      errorDetails
+    });
+
     // Don't auto-reconnect if user intentionally stopped
     if (userIntentStoppedRef.current) {
       console.log('[Reconnect] Cancelled: User intentionally stopped voice navigation');
@@ -171,12 +342,37 @@ const VoiceNavigationChatGPT = () => {
       return;
     }
 
-    // Limit reconnection attempts
-    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-      console.log('[Reconnect] Max attempts reached, stopping auto-reconnect');
-      vWarn('max reconnect attempts reached');
-      setError('Voice recognition disconnected. Click microphone to restart.');
-      reconnectAttemptsRef.current = 0;
+    // Determine if this is a network timeout that should bypass retry limits
+    const isNetworkTimeout = errorType === 'network-timeout' ||
+      errorType === 'network' ||
+      errorType === 'service-not-allowed' ||
+      errorType === 'not-allowed' ||
+      (errorDetails && (
+        errorDetails.includes('network') ||
+        errorDetails.includes('timeout') ||
+        errorDetails.includes('service') ||
+        errorDetails.includes('connection')
+      ));
+
+    // For network timeouts, use separate counter and higher limit
+    const currentAttempts = isNetworkTimeout ? networkAttemptsRef.current : reconnectAttemptsRef.current;
+    const maxAttempts = isNetworkTimeout ? MAX_NETWORK_ATTEMPTS : MAX_RECONNECT_ATTEMPTS;
+
+    // Check retry limit based on error type
+    if (currentAttempts >= maxAttempts) {
+      const errorMsg = isNetworkTimeout
+        ? 'Network connectivity issues. Click microphone to restart.'
+        : 'Voice recognition disconnected. Click microphone to restart.';
+
+      console.log(`[Reconnect] Max ${isNetworkTimeout ? 'network' : 'standard'} attempts (${currentAttempts}/${maxAttempts}) reached`);
+      vWarn(`max ${isNetworkTimeout ? 'network' : 'standard'} reconnect attempts reached`);
+      setError(errorMsg);
+
+      if (isNetworkTimeout) {
+        networkAttemptsRef.current = 0;
+      } else {
+        reconnectAttemptsRef.current = 0;
+      }
       isReconnectingRef.current = false;
       stopAudioAnalysis();
       return;
@@ -184,51 +380,89 @@ const VoiceNavigationChatGPT = () => {
 
     if (!connectionExpired && annyang && !isListening) {
       isReconnectingRef.current = true;
-      vDebug('scheduling reconnect', { delay: RECONNECT_DELAY });
+
+      // Use shorter delay for network timeouts
+      const delay = isNetworkTimeout ? 1000 : RECONNECT_DELAY;
+      vDebug('scheduling reconnect', {
+        delay,
+        errorType: isNetworkTimeout ? 'network-timeout' : 'standard',
+        attempts: currentAttempts
+      });
+
       reconnectTimerRef.current = setTimeout(() => {
         // Check again in case user stopped during the timeout
         if (userIntentStoppedRef.current) {
           console.log('[Reconnect] Cancelled during timeout: User stopped voice navigation');
           reconnectAttemptsRef.current = 0;
+          if (isNetworkTimeout) networkAttemptsRef.current = 0;
           isReconnectingRef.current = false;
           stopAudioAnalysis();
           return;
         }
 
         try {
-          reconnectAttemptsRef.current++;
-          console.log(`[Reconnect] Attempting reconnection (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
+          // Increment appropriate counter
+          if (isNetworkTimeout) {
+            networkAttemptsRef.current++;
+            console.log(`[Reconnect] Network timeout reconnection attempt (${networkAttemptsRef.current}/${MAX_NETWORK_ATTEMPTS})`);
+          } else {
+            reconnectAttemptsRef.current++;
+            console.log(`[Reconnect] Standard reconnection attempt (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
+          }
+
           // Clean restart sequence: abort first, then start with autoRestart disabled
           try { annyang.abort(); } catch { }
           setTimeout(() => {
             annyang.start({ autoRestart: false, continuous: true });
           }, 100);
           setError('');
+
           // Reset counter and flag on successful reconnect
           setTimeout(() => {
             if (isListening) {
               reconnectAttemptsRef.current = 0;
+              if (isNetworkTimeout) networkAttemptsRef.current = 0;
               isReconnectingRef.current = false;
+              console.log('[Reconnect] Successfully reconnected, counters reset');
             }
           }, 5000);
         } catch (error) {
           console.warn('[Reconnect] Failed:', error);
-          // Try again with exponential backoff
-          if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-            const delay = RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current - 1);
-            console.log(`[Reconnect] Will retry in ${delay}ms`);
-            vInfo('will retry reconnect', { delay });
-            isReconnectingRef.current = false;
-            setTimeout(attemptReconnect, delay);
+
+          // Determine next retry delay
+          let nextDelay;
+          if (isNetworkTimeout) {
+            // Linear backoff for network issues (faster recovery)
+            nextDelay = Math.min(delay * networkAttemptsRef.current, 5000);
           } else {
-            vError('failed to reconnect voice recognition after max attempts');
-            setError('Failed to reconnect voice recognition. Please restart manually.');
-            reconnectAttemptsRef.current = 0;
+            // Exponential backoff for standard issues
+            nextDelay = RECONNECT_DELAY * Math.pow(2, reconnectAttemptsRef.current - 1);
+          }
+
+          // Try again if under limit
+          if (currentAttempts < maxAttempts) {
+            console.log(`[Reconnect] Will retry ${isNetworkTimeout ? 'network' : 'standard'} reconnect in ${nextDelay}ms`);
+            vInfo('will retry reconnect', { delay: nextDelay, type: isNetworkTimeout ? 'network' : 'standard' });
+            isReconnectingRef.current = false;
+            setTimeout(() => attemptReconnect(errorType, errorDetails), nextDelay);
+          } else {
+            const errorMsg = isNetworkTimeout
+              ? 'Network connectivity issues persist. Please check connection and restart manually.'
+              : 'Failed to reconnect voice recognition. Please restart manually.';
+
+            vError(`failed to reconnect voice recognition after max ${isNetworkTimeout ? 'network' : 'standard'} attempts`);
+            setError(errorMsg);
+
+            if (isNetworkTimeout) {
+              networkAttemptsRef.current = 0;
+            } else {
+              reconnectAttemptsRef.current = 0;
+            }
             isReconnectingRef.current = false;
             stopAudioAnalysis();
           }
         }
-      }, RECONNECT_DELAY);
+      }, delay);
     } else {
       isReconnectingRef.current = false;
     }
@@ -253,20 +487,12 @@ const VoiceNavigationChatGPT = () => {
     }
   };
 
-  // Initialize speech recognition and command processor
-  useEffect(() => {
-    vInfo('VoiceNavigationChatGPT mounted');
-    // Fetch workspace data on component mount
-    fetchWorkspaceData();
+  // Function to initialize all voice commands
+  const initializeCommands = () => {
+    if (!annyang) return null;
 
-    // Initialize the command processor
-    if (!commandProcessorRef.current) {
-      commandProcessorRef.current = new VoiceCommandProcessor(showFeedback, workspaceData);
-    }
-
-    if (annyang) {
-      // Simple bridge pattern - delegate all commands to processor
-      const commands = {
+    // Simple bridge pattern - delegate all commands to processor
+    const commands = {
         // Special handling for numbered commands (annyang pattern)
         'switch to tab :num': async (num) => {
           await commandProcessorRef.current.processVoiceCommand(`switch to tab ${num}`);
@@ -284,78 +510,98 @@ const VoiceNavigationChatGPT = () => {
         },
         // Commands with parameters
         'find tab *term': async (term) => {
+          showTabNotification(`Searching for tab: "${term}"...`, 'info');
           await commandProcessorRef.current.processVoiceCommand(`find tab ${term}`);
         },
         'search tab *term': async (term) => {
+          showTabNotification(`Searching for tab: "${term}"...`, 'info');
           await commandProcessorRef.current.processVoiceCommand(`search tab ${term}`);
         },
         'search for *term': async (term) => {
+          showTabNotification(`Searching for: "${term}"...`, 'info');
           await commandProcessorRef.current.processVoiceCommand(`search for ${term}`);
         },
         'google search *term': async (term) => {
+          showTabNotification(`Google searching: "${term}"...`, 'info');
           await commandProcessorRef.current.processVoiceCommand(`google search ${term}`);
         },
         'search *term': async (term) => {
+          showTabNotification(`Searching: "${term}"...`, 'info');
           await commandProcessorRef.current.processVoiceCommand(`search ${term}`);
         },
         // Open commands
         'open *term': async (term) => {
+          showTabNotification(`Opening: "${term}"...`, 'info');
           await commandProcessorRef.current.processVoiceCommand(`open ${term}`);
         },
         'click *text': async (text) => {
+          showTabNotification(`Clicking: "${text}"...`, 'info');
           await commandProcessorRef.current.processVoiceCommand(`click ${text}`);
         },
         'click on *text': async (text) => {
+          showTabNotification(`Clicking: "${text}"...`, 'info');
           await commandProcessorRef.current.processVoiceCommand(`click on ${text}`);
         },
 
         // Special UI commands that need to stay in the component
         'show numbers': () => {
           console.log('[VoiceNav] "show numbers" command triggered');
+          showTabNotification('Showing clickable numbers...', 'info');
           showElementNumbers();
         },
         'show numbers.': () => {
           console.log('[VoiceNav] "show numbers." command triggered');
+          showTabNotification('Showing clickable numbers...', 'info');
           showElementNumbers();
         },
         'show numbers!': () => {
           console.log('[VoiceNav] "show numbers!" command triggered');
+          showTabNotification('Showing clickable numbers...', 'info');
           showElementNumbers();
         },
         'number elements': () => {
           console.log('[VoiceNav] "number elements" command triggered');
+          showTabNotification('Numbering page elements...', 'info');
           showElementNumbers();
         },
         'number elements.': () => {
           console.log('[VoiceNav] "number elements." command triggered');
+          showTabNotification('Numbering page elements...', 'info');
           showElementNumbers();
         },
         'number elements!': () => {
           console.log('[VoiceNav] "number elements!" command triggered');
+          showTabNotification('Numbering page elements...', 'info');
           showElementNumbers();
         },
         'hide numbers': () => {
           console.log('[VoiceNav] "hide numbers" command triggered');
+          showTabNotification('Hiding numbers...', 'info');
           hideElementNumbers();
         },
         'hide numbers.': () => {
           console.log('[VoiceNav] "hide numbers." command triggered');
+          showTabNotification('Hiding numbers...', 'info');
           hideElementNumbers();
         },
         'hide numbers!': () => {
           console.log('[VoiceNav] "hide numbers!" command triggered');
+          showTabNotification('Hiding numbers...', 'info');
           hideElementNumbers();
         },
         'clear numbers': () => {
           console.log('[VoiceNav] "clear numbers" command triggered');
+          showTabNotification('Clearing numbers...', 'info');
           hideElementNumbers();
         },
         'clear numbers.': () => {
           console.log('[VoiceNav] "clear numbers." command triggered');
+          showTabNotification('Clearing numbers...', 'info');
           hideElementNumbers();
         },
         'clear numbers!': () => {
           console.log('[VoiceNav] "clear numbers!" command triggered');
+          showTabNotification('Clearing numbers...', 'info');
           hideElementNumbers();
         },
         // Media controls
@@ -446,66 +692,87 @@ const VoiceNavigationChatGPT = () => {
         },
         // Navigation commands
         'next tab': async () => {
+          showTabNotification('Switching to next tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('next tab');
         },
         'next tab.': async () => {
+          showTabNotification('Switching to next tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('next tab');
         },
         'next tab!': async () => {
+          showTabNotification('Switching to next tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('next tab');
         },
         'previous tab': async () => {
+          showTabNotification('Switching to previous tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('previous tab');
         },
         'previous tab.': async () => {
+          showTabNotification('Switching to previous tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('previous tab');
         },
         'previous tab!': async () => {
+          showTabNotification('Switching to previous tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('previous tab');
         },
         'prev tab': async () => {
+          showTabNotification('Switching to previous tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('prev tab');
         },
         'prev tab.': async () => {
+          showTabNotification('Switching to previous tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('prev tab');
         },
         'prev tab!': async () => {
+          showTabNotification('Switching to previous tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('prev tab');
         },
         'close tab': async () => {
+          showTabNotification('Closing current tab...', 'warning');
           await commandProcessorRef.current.processVoiceCommand('close tab');
         },
         'close tab.': async () => {
+          showTabNotification('Closing current tab...', 'warning');
           await commandProcessorRef.current.processVoiceCommand('close tab');
         },
         'close tab!': async () => {
+          showTabNotification('Closing current tab...', 'warning');
           await commandProcessorRef.current.processVoiceCommand('close tab');
         },
         'new tab': async () => {
+          showTabNotification('Opening new tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('new tab');
         },
         'new tab.': async () => {
+          showTabNotification('Opening new tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('new tab');
         },
         'new tab!': async () => {
+          showTabNotification('Opening new tab...', 'info');
           await commandProcessorRef.current.processVoiceCommand('new tab');
         },
         'scroll down': async () => {
+          showTabNotification('Scrolling down...', 'info');
           await commandProcessorRef.current.processVoiceCommand('scroll down');
         },
         'scroll down.': async () => {
+          showTabNotification('Scrolling down...', 'info');
           await commandProcessorRef.current.processVoiceCommand('scroll down');
         },
         'scroll down!': async () => {
+          showTabNotification('Scrolling down...', 'info');
           await commandProcessorRef.current.processVoiceCommand('scroll down');
         },
         'scroll up': async () => {
+          showTabNotification('Scrolling up...', 'info');
           await commandProcessorRef.current.processVoiceCommand('scroll up');
         },
         'scroll up.': async () => {
+          showTabNotification('Scrolling up...', 'info');
           await commandProcessorRef.current.processVoiceCommand('scroll up');
         },
         'scroll up!': async () => {
+          showTabNotification('Scrolling up...', 'info');
           await commandProcessorRef.current.processVoiceCommand('scroll up');
         },
         'go back': async () => {
@@ -543,11 +810,60 @@ const VoiceNavigationChatGPT = () => {
         },
         'refresh!': async () => {
           await commandProcessorRef.current.processVoiceCommand('refresh');
+        },
+        // Sleep mode commands
+        'stop listening': () => {
+          console.log('[VoiceNav] "stop listening" command triggered');
+          showTabNotification('Voice navigation sleeping...', 'warning');
+          enterSleepMode();
+        },
+        'stop listening.': () => {
+          console.log('[VoiceNav] "stop listening." command triggered');
+          showTabNotification('Voice navigation sleeping...', 'warning');
+          enterSleepMode();
+        },
+        'stop listening!': () => {
+          console.log('[VoiceNav] "stop listening!" command triggered');
+          showTabNotification('Voice navigation sleeping...', 'warning');
+          enterSleepMode();
+        },
+        'go to sleep': () => {
+          console.log('[VoiceNav] "go to sleep" command triggered');
+          showTabNotification('Voice navigation going to sleep...', 'warning');
+          enterSleepMode();
+        },
+        'go to sleep.': () => {
+          console.log('[VoiceNav] "go to sleep." command triggered');
+          showTabNotification('Voice navigation going to sleep...', 'warning');
+          enterSleepMode();
+        },
+        'go to sleep!': () => {
+          console.log('[VoiceNav] "go to sleep!" command triggered');
+          showTabNotification('Voice navigation going to sleep...', 'warning');
+          enterSleepMode();
         }
       };
 
-      // Add commands to annyang
-      annyang.addCommands(commands);
+    return commands;
+  };
+
+  // Initialize speech recognition and command processor
+  useEffect(() => {
+    vInfo('VoiceNavigationChatGPT mounted');
+    // Fetch workspace data on component mount
+    fetchWorkspaceData();
+
+    // Initialize the command processor
+    if (!commandProcessorRef.current) {
+      commandProcessorRef.current = new VoiceCommandProcessor(showFeedback, workspaceData);
+    }
+
+    if (annyang) {
+      const commands = initializeCommands();
+      if (commands) {
+        // Add commands to annyang
+        annyang.addCommands(commands);
+      }
 
       // Set language
       annyang.setLanguage('en-US');
@@ -566,31 +882,50 @@ const VoiceNavigationChatGPT = () => {
           const isNumberCommand = /\b(click (number )?\d+|switch to tab \d+|go to tab \d+)\b/i.test(command);
           if (!isNumberCommand) {
             setFeedback('Interpreting command...');
+            showTabNotification(`Processing: "${command}"`, 'info');
+
             try {
+              // Add timeout to prevent hanging
+              const messageTimeout = setTimeout(() => {
+                console.warn('[VoiceNav] TinyBERT message timed out, background script may be sleeping');
+                setFeedback('Command processed locally');
+                showTabNotification(`Command "${command}" processed`, 'warning');
+              }, 2000);
+
               chrome.runtime.sendMessage(
                 { action: 'voice_execute_intent', text: command },
                 (response) => {
+                  clearTimeout(messageTimeout);
+
                   if (chrome.runtime.lastError) {
                     console.warn('[VoiceNav] TinyBERT message error:', chrome.runtime.lastError.message);
-                    setFeedback('Could not interpret command');
+                    setFeedback(`Command "${command}" processed locally`);
+                    showTabNotification(`Command "${command}" processed`, 'warning');
                     return;
                   }
 
                   if (!response?.ok) {
-                    setFeedback(response?.error || 'Command not recognized');
+                    const message = response?.error || 'Command not recognized';
+                    setFeedback(message);
+                    showTabNotification(message, 'warning');
                     return;
                   }
 
                   if (response.handled) {
-                    setFeedback(response.message || `Executed intent: ${response.intent}`);
+                    const message = response.message || `Executed: ${response.intent}`;
+                    setFeedback(message);
+                    showTabNotification(message, 'success');
                   } else {
-                    setFeedback(response.message || `Command not recognized: "${command}"`);
+                    const message = response.message || `Command "${command}" not recognized`;
+                    setFeedback(message);
+                    showTabNotification(message, 'warning');
                   }
                 }
               );
             } catch (err) {
               console.warn('[VoiceNav] Failed to send TinyBERT intent message:', err);
-              setFeedback('Failed to interpret command');
+              setFeedback('Command processed locally');
+              showTabNotification(`Command "${command}" processed`, 'warning');
             }
           }
           // Feedback from TinyBERT or commandProcessor will follow.
@@ -605,32 +940,53 @@ const VoiceNavigationChatGPT = () => {
 
           // When no grammar matches, always try TinyBERT as intelligent fallback.
           setFeedback('Interpreting command...');
+          showTabNotification(`Interpreting: "${command}"`, 'info');
 
           try {
+            // Add timeout to prevent hanging
+            const messageTimeout = setTimeout(() => {
+              console.warn('[VoiceNav] TinyBERT message timed out (no match), background script may be sleeping');
+              const fallbackMessage = `Command "${command}" not recognized. Try "show numbers", "search", "open", "add note", or "add todo"`;
+              setFeedback(fallbackMessage);
+              showTabNotification(fallbackMessage, 'warning');
+            }, 2000);
+
             chrome.runtime.sendMessage(
               { action: 'voice_execute_intent', text: command },
               (response) => {
+                clearTimeout(messageTimeout);
+
                 if (chrome.runtime.lastError) {
                   console.warn('[VoiceNav] TinyBERT message error (no match):', chrome.runtime.lastError.message);
-                  setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
+                  const fallbackMessage = `Command "${command}" not recognized. Try "show numbers", "search", "open", "add note", or "add todo"`;
+                  setFeedback(fallbackMessage);
+                  showTabNotification(fallbackMessage, 'warning');
                   return;
                 }
 
                 if (!response?.ok) {
-                  setFeedback(response?.error || `Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
+                  const fallbackMessage = response?.error || `Command "${command}" not recognized. Try "show numbers", "search", "open", "add note", or "add todo"`;
+                  setFeedback(fallbackMessage);
+                  showTabNotification(fallbackMessage, 'warning');
                   return;
                 }
 
                 if (response.handled) {
-                  setFeedback(response.message || `Executed intent: ${response.intent}`);
+                  const message = response.message || `Executed: ${response.intent}`;
+                  setFeedback(message);
+                  showTabNotification(message, 'success');
                 } else {
-                  setFeedback(response.message || `Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
+                  const fallbackMessage = response.message || `Command "${command}" not recognized. Try "show numbers", "search", "open", "add note", or "add todo"`;
+                  setFeedback(fallbackMessage);
+                  showTabNotification(fallbackMessage, 'warning');
                 }
               }
             );
           } catch (err) {
             console.warn('[VoiceNav] Failed to send TinyBERT intent message (no match):', err);
-            setFeedback(`Command "${command}" not recognized. Try "show numbers", "search for cats", "open youtube", "add note [text]", "add todo [text]", "save url to workspace", "pin this page", or "switch to tab 2"`);
+            const fallbackMessage = `Command "${command}" not recognized. Try "show numbers", "search", "open", "add note", or "add todo"`;
+            setFeedback(fallbackMessage);
+            showTabNotification(fallbackMessage, 'warning');
           }
 
           // Clear feedback after 3 seconds
@@ -676,6 +1032,19 @@ const VoiceNavigationChatGPT = () => {
         setVoiceLevel(0);
         setWaveformData(Array(5).fill(0));
         stopAudioAnalysis();
+
+        // Attempt reconnect with error context for network-related issues
+        const errorType = error?.error;
+        const errorMessage = error?.message || '';
+        const isNetworkError = ['network', 'service-not-allowed', 'not-allowed'].includes(errorType) ||
+          errorMessage.toLowerCase().includes('network') ||
+          errorMessage.toLowerCase().includes('timeout') ||
+          errorMessage.toLowerCase().includes('connection');
+
+        if (isNetworkError && !connectionExpired && !userIntentStoppedRef.current) {
+          console.log(`[VoiceNav] Network error detected: ${errorType}, attempting reconnect`);
+          setTimeout(() => attemptReconnect(errorType, errorMessage), 2000);
+        }
       });
 
       annyang.addCallback('start', () => {
@@ -687,6 +1056,7 @@ const VoiceNavigationChatGPT = () => {
         // Reset reconnect flags on successful start
         isReconnectingRef.current = false;
         reconnectAttemptsRef.current = 0;
+        networkAttemptsRef.current = 0;
       });
 
       annyang.addCallback('end', () => {
@@ -961,6 +1331,79 @@ const VoiceNavigationChatGPT = () => {
     }
   };
 
+  const enterSleepMode = () => {
+    console.log('[VoiceNav] Entering sleep mode');
+    vInfo('enterSleepMode called');
+    setIsSleeping(true);
+    stopListening();
+    setFeedback('Voice navigation sleeping. Say "Hey Cool Desk" or "Wake Up" to resume.');
+    // Keep a minimal listening session for wake commands only
+    if (annyang) {
+      const wakeCommands = {
+        'hey cool desk': () => {
+          console.log('[VoiceNav] "Hey Cool Desk" wake command triggered');
+          wakeUp();
+        },
+        'wake up': () => {
+          console.log('[VoiceNav] "Wake Up" command triggered');
+          wakeUp();
+        },
+        'wake up.': () => {
+          console.log('[VoiceNav] "Wake Up." command triggered');
+          wakeUp();
+        },
+        'wake up!': () => {
+          console.log('[VoiceNav] "Wake Up!" command triggered');
+          wakeUp();
+        }
+      };
+
+      // Remove all existing commands and add only wake commands
+      annyang.removeCommands();
+      annyang.addCommands(wakeCommands);
+
+      // Start minimal listening for wake commands
+      setTimeout(() => {
+        if (isSleeping && annyang) {
+          try {
+            annyang.start({ autoRestart: false, continuous: true });
+            console.log('[VoiceNav] Wake listening started');
+          } catch (error) {
+            console.warn('[VoiceNav] Failed to start wake listening:', error);
+          }
+        }
+      }, 500);
+    }
+  };
+
+  const wakeUp = () => {
+    console.log('[VoiceNav] Waking up from sleep mode');
+    vInfo('wakeUp called');
+    setIsSleeping(false);
+    userIntentStoppedRef.current = false; // Reset intent flag
+    setFeedback('Voice navigation awake. Ready for commands.');
+
+    // Show wake up notification in tab
+    showTabNotification('Voice navigation awake! Ready for commands.', 'success');
+
+    // Reinitialize full command set
+    if (annyang) {
+      annyang.abort();
+      // Remove wake commands and reinitialize with full command set
+      annyang.removeCommands();
+
+      const commands = initializeCommands();
+      if (commands) {
+        annyang.addCommands(commands);
+      }
+
+      // Start listening with full command set
+      setTimeout(() => {
+        startListening();
+      }, 300);
+    }
+  };
+
   const showElementNumbers = async () => {
     try {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -971,10 +1414,14 @@ const VoiceNavigationChatGPT = () => {
 
       if (results && results[0] && results[0].result) {
         const elementCount = results[0].result.count;
+        const message = `Found ${elementCount} clickable elements. Say "click 1" to "click ${elementCount}"`;
         setFeedback(`Showing numbers on ${elementCount} clickable elements (up to 40). Say "click 1" to "click ${elementCount}"`);
+        showTabNotification(message, 'success');
       }
     } catch (error) {
-      setFeedback(`Failed to show numbers: ${error.message}`);
+      const message = `Failed to show numbers: ${error.message}`;
+      setFeedback(message);
+      showTabNotification(message, 'error');
     }
   };
 
@@ -986,8 +1433,11 @@ const VoiceNavigationChatGPT = () => {
         func: removeNumbersAdvanced
       });
       setFeedback('Numbers hidden');
+      showTabNotification('Numbers hidden', 'success');
     } catch (error) {
-      setFeedback(`Failed to hide numbers: ${error.message}`);
+      const message = `Failed to hide numbers: ${error.message}`;
+      setFeedback(message);
+      showTabNotification(message, 'error');
     }
   };
 
@@ -1010,13 +1460,19 @@ const VoiceNavigationChatGPT = () => {
       if (results && results[0] && results[0].result) {
         const result = results[0].result;
         if (result.success) {
-          setFeedback(`Clicked element ${clickNumber}: ${result.elementText}`);
+          const message = `Clicked element ${clickNumber}: ${result.elementText}`;
+          setFeedback(message);
+          showTabNotification(message, 'success');
         } else {
-          setFeedback(`Element ${clickNumber} not found. Say "show numbers" first.`);
+          const message = `Element ${clickNumber} not found. Say "show numbers" first.`;
+          setFeedback(message);
+          showTabNotification(message, 'warning');
         }
       }
     } catch (error) {
-      setFeedback(`Failed to click by number: ${error.message}`);
+      const message = `Failed to click by number: ${error.message}`;
+      setFeedback(message);
+      showTabNotification(message, 'error');
     }
   };
 

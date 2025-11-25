@@ -142,6 +142,21 @@ export function injectFooterBar() {
       .toggle-btn.pulse {
         animation: pulse 2s ease-in-out 3;
       }
+
+      /* Loading state */
+      .toggle-btn.loading {
+        pointer-events: none;
+        opacity: 0.8;
+      }
+
+      .toggle-btn.loading .btn-icon {
+        animation: loading-spin 1s linear infinite;
+      }
+
+      @keyframes loading-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
     `;
 
     // Create the floating button structure
@@ -211,28 +226,42 @@ export function injectFooterBar() {
     const showNotification = (message, color = '#4A90E2', duration = 5000) => {
       const notification = document.createElement('div');
       notification.style.cssText = `
-        position: fixed; 
-        top: 20px; 
-        right: 20px; 
+        position: fixed;
+        top: 20px;
+        right: 20px;
         z-index: 2147483647;
-        background: ${color}; 
-        color: white; 
-        padding: 12px 20px; 
-        border-radius: 8px; 
-        font-family: system-ui; 
+        background: ${color};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 14px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        font-weight: 500;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.25), 0 2px 10px rgba(0,0,0,0.15);
         max-width: 350px;
         word-wrap: break-word;
+        backdrop-filter: blur(10px);
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
       `;
       notification.textContent = message;
       document.body.appendChild(notification);
 
+      // Animate in
       setTimeout(() => {
-        if (notification.parentNode) {
-          notification.parentNode.removeChild(notification);
-        }
-      }, duration);
+        notification.style.transform = 'translateX(0)';
+      }, 10);
+
+      setTimeout(() => {
+        // Animate out
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 300);
+      }, duration - 300);
     };
 
     // Helper: open extension side panel
@@ -273,10 +302,13 @@ export function injectFooterBar() {
 
           console.log('[CoolDesk Button] Falling back to tab...');
           // Fallback to tab for other errors
+          showNotification('Runtime error, opening in new tab...', '#ff8c00', 4000);
           try {
             window.open(chrome.runtime.getURL('index.html'), '_blank');
+            showNotification('CoolDesk opened in new tab', '#4CAF50', 3000);
           } catch (e) {
             console.error('[CoolDesk Button] Failed to open fallback tab:', e);
+            showNotification('Failed to open CoolDesk. Please try again.', '#ff4444', 5000);
           }
           return;
         }
@@ -290,33 +322,44 @@ export function injectFooterBar() {
 
           // Show helpful message about proper side panel usage
           if (response?.message) {
-            showNotification(response.message, '#4A90E2', 8000);
+            showNotification(response.message, '#ff8c00', 8000);
+          } else {
+            showNotification('Side panel unavailable, opening in new tab...', '#ff8c00', 4000);
           }
 
           // Fallback to opening the extension UI in a tab
           try {
             window.open(chrome.runtime.getURL('index.html'), '_blank');
+            showNotification('CoolDesk opened in new tab', '#4CAF50', 3000);
           } catch (e) {
             console.error('[CoolDesk Button] Failed to open fallback tab:', e);
+            showNotification('Failed to open CoolDesk. Please try again.', '#ff4444', 5000);
           }
         } else {
           console.log('[CoolDesk Button] Request processed successfully');
+          showNotification('CoolDesk side panel opened!', '#4CAF50', 2000);
         }
       } catch (e) {
         console.error('[CoolDesk Button] Error in openSidePanel:', e);
         console.log('[CoolDesk Button] Direct fallback to tab...');
+        showNotification('Connection error, opening in new tab...', '#ff8c00', 4000);
         try {
           window.open(chrome.runtime.getURL('index.html'), '_blank');
+          showNotification('CoolDesk opened in new tab', '#4CAF50', 3000);
         } catch (e2) {
           console.error('[CoolDesk Button] Failed to open fallback tab:', e2);
+          showNotification('Failed to open CoolDesk. Please try refreshing the page.', '#ff4444', 5000);
         }
       }
     };
 
     // Click handler
-    toggleBtn.addEventListener('click', (e) => {
+    toggleBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
+
+      // Prevent double-clicks while processing
+      if (toggleBtn.classList.contains('loading')) return;
 
       // Visual feedback
       toggleBtn.style.transform = 'translateX(-2px) scale(0.95)';
@@ -324,7 +367,23 @@ export function injectFooterBar() {
         toggleBtn.style.transform = '';
       }, 150);
 
-      openSidePanel();
+      // Add loading state
+      toggleBtn.classList.add('loading');
+
+      // Show immediate feedback that the click was registered
+      showNotification('Opening CoolDesk...', '#4A90E2', 3000);
+
+      try {
+        await openSidePanel();
+      } catch (error) {
+        console.error('[CoolDesk Button] Error in click handler:', error);
+        showNotification('Failed to open CoolDesk. Please try again.', '#ff4444', 5000);
+      } finally {
+        // Remove loading state
+        setTimeout(() => {
+          toggleBtn.classList.remove('loading');
+        }, 500);
+      }
     });
 
     // Drag functionality

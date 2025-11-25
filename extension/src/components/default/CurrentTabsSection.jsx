@@ -16,7 +16,8 @@ import { getFaviconUrl } from '../../utils';
  * - Integrates with existing focus/remove/auto-organize logic
  * - Responsive and uses existing CSS class names (with additions below)
  *
- * Replace your existing file with this file and CSS file below.
+ * Updates:
+ * - "Tidy Up" feature: Physical Chrome Tab Grouping button
  */
 
 export function CurrentTabsSection({
@@ -423,6 +424,78 @@ export function CurrentTabsSection({
     return hostname.substring(0, maxLength) + '...';
   }, []);
 
+  // --------------------------------------------------------------------------
+  // SYNC TO BROWSER GROUPS (User Triggered)
+  // This uses chrome.tabs.group to physically group tabs in the browser.
+  // --------------------------------------------------------------------------
+  const syncGroupsToBrowser = useCallback(async () => {
+    // Check for API availability
+    if (typeof chrome === 'undefined' || !chrome.tabs || !chrome.tabs.group) {
+      console.warn("Chrome Tab Group API not available.");
+      return;
+    }
+
+    const domains = Object.entries(adaptiveGroups.domainGroups);
+
+    // Helper for color generation
+    const getGroupColor = (hostname) => {
+      const colors = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan'];
+      let hash = 0;
+      for (let i = 0; i < hostname.length; i++) {
+        hash = hostname.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      return colors[Math.abs(hash) % colors.length];
+    };
+
+    let didGroup = false;
+
+    for (const [hostname, groupTabs] of domains) {
+      // Only group if we have 2 or more tabs for this domain
+      if (groupTabs.length < 2) continue;
+
+      const tabIds = groupTabs.map(t => t.id);
+
+      try {
+        // Check if the first tab is already in a group
+        const firstTabId = tabIds[0];
+        // Use Promise wrapper for tabs.get
+        const firstTab = await new Promise((resolve) => chrome.tabs.get(firstTabId, resolve));
+
+        if (!firstTab) continue;
+
+        let groupId = firstTab.groupId;
+
+        // Group the tabs
+        if (groupId === -1) {
+          // Create new group
+          groupId = await new Promise((resolve) => chrome.tabs.group({ tabIds }, resolve));
+        } else {
+          // Add to existing group
+          await new Promise((resolve) => chrome.tabs.group({ groupId, tabIds }, resolve));
+        }
+
+        // Update group metadata
+        if (chrome.tabGroups && chrome.tabGroups.update) {
+          await new Promise((resolve) => chrome.tabGroups.update(groupId, {
+            title: truncateHostname(hostname, 12),
+            color: getGroupColor(hostname),
+            collapsed: true // Auto-collapse to save space
+          }, resolve));
+        }
+
+        didGroup = true;
+
+      } catch (e) {
+        console.warn(`Failed to group ${hostname}:`, e);
+      }
+    }
+
+    if (didGroup) {
+      setTimeout(refreshTabs, 600);
+    }
+  }, [adaptiveGroups, refreshTabs, truncateHostname]);
+
+
   // Count total tab number
   const totalTabsCount = tabs.length;
 
@@ -680,6 +753,14 @@ export function CurrentTabsSection({
             title="Recently closed"
           >
             <FontAwesomeIcon icon={faHistory} className="currentTabs-icon" />
+          </button>
+
+          <button
+            onClick={syncGroupsToBrowser}
+            className="currentTabs-iconBtn"
+            title="Tidy Up: Group tabs in Browser"
+          >
+            <FontAwesomeIcon icon={faLayerGroup} className="currentTabs-icon" />
           </button>
 
           <div ref={settingsRef} className="currentTabs-settingsWrap">
