@@ -531,7 +531,7 @@ export function CurrentTabsSection({
         <div className="currentTabs-pinnedRow" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           {adaptiveGroups.pinned.map(tab => (
             <div key={tab.id} className={`currentTabs-hostCard ${tab.active ? 'is-active' : ''}`} onClick={() => focusTab(tab)}>
-              <img src={getFaviconUrl(tab.url, 64) || '/logo-2.png'} alt="" className="currentTabs-hostFavicon" width={32} height={32} onError={(e) => { e.currentTarget.src = '/logo-2.png'; }} />
+              <img src={getFaviconUrl(tab.url, 64, tab.favIconUrl) || '/logo-2.png'} alt="" className="currentTabs-hostFavicon" width={32} height={32} onError={(e) => { e.currentTarget.src = '/logo-2.png'; }} />
               <div className="currentTabs-hostLabel" title={tab.title || tab.url}>{truncateHostname(displayTitleFor(tab))}</div>
               <div style={{ position: 'absolute', top: 6, right: 8, display: 'flex', gap: 4 }}>
                 <button
@@ -569,7 +569,7 @@ export function CurrentTabsSection({
         <div className="currentTabs-recentsRow" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           {adaptiveGroups.recents.map(tab => (
             <div key={tab.id} className={`currentTabs-hostCard ${tab.active ? 'is-active' : ''}`} onClick={() => focusTab(tab)}>
-              <img src={getFaviconUrl(tab.url, 64) || '/logo-2.png'} alt="" className="currentTabs-hostFavicon" width={32} height={32} onError={(e) => { e.currentTarget.src = '/logo-2.png'; }} />
+              <img src={getFaviconUrl(tab.url, 64, tab.favIconUrl) || '/logo-2.png'} alt="" className="currentTabs-hostFavicon" width={32} height={32} onError={(e) => { e.currentTarget.src = '/logo-2.png'; }} />
               <div className="currentTabs-hostLabel" title={tab.title || tab.url}>{truncateHostname(displayTitleFor(tab))}</div>
               <div style={{ position: 'absolute', top: 6, right: 8, display: 'flex', gap: 4 }}>
                 <button
@@ -625,7 +625,7 @@ export function CurrentTabsSection({
                   title={hostname || '(unknown)'}
                 >
                   <img
-                    src={getFaviconUrl(firstTab?.url, 64) || '/logo-2.png'}
+                    src={getFaviconUrl(firstTab?.url, 64, firstTab?.favIconUrl) || '/logo-2.png'}
                     alt={`${hostname} favicon`}
                     width={32}
                     height={32}
@@ -663,7 +663,7 @@ export function CurrentTabsSection({
                         title={`${tab.title || ''}${tab.url ? ` — ${tab.url}` : ''}`}
                       >
                         <img
-                          src={getFaviconUrl(tab.url, 32) || '/logo-2.png'}
+                          src={getFaviconUrl(tab.url, 32, tab.favIconUrl) || '/logo-2.png'}
                           alt=""
                           width={24}
                           height={24}
@@ -881,7 +881,7 @@ export function CurrentTabsSection({
                             title={`${item.tab?.title || ''}${item.tab?.url ? ` — ${item.tab.url}` : ''}`}
                             className="currentTabs-iconTile"
                           >
-                            <img src={getFaviconUrl(item.tab?.url, 32)} alt="" width={16} height={16} style={{ borderRadius: 4 }} onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }} />
+                            <img src={getFaviconUrl(item.tab?.url, 32, item.tab?.favIconUrl)} alt="" width={16} height={16} style={{ borderRadius: 4 }} onError={(e) => { e.currentTarget.src = '/logo-2.png'; }} />
                           </div>
                         ))}
                       </div>
@@ -893,7 +893,7 @@ export function CurrentTabsSection({
                             className="currentTabs-listRow"
                             title={`${item.tab?.title || ''}${item.tab?.url ? ` — ${item.tab.url}` : ''}`}
                           >
-                            <img src={getFaviconUrl(item.tab?.url, 32)} alt="" width={16} height={16} style={{ borderRadius: 3 }} onError={(e) => { e.currentTarget.src = '/default-favicon.svg'; }} />
+                            <img src={getFaviconUrl(item.tab?.url, 32, item.tab?.favIconUrl)} alt="" width={16} height={16} style={{ borderRadius: 3 }} onError={(e) => { e.currentTarget.src = '/logo-2.png'; }} />
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontSize: 13, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.tab?.title}</div>
                               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

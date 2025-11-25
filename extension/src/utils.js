@@ -59,21 +59,46 @@ export const getUrlParts = (url) => {
   }
 }
 
-export const getFaviconUrl = (url, size = 32) => {
-  // Prefer Google's S2 favicon service. It supports a size parameter and is reliable.
-  // No special Chrome permissions are required to load this from an extension page.
+export const getFaviconUrl = (url, size = 32, favIconUrl = null) => {
+  // If tab.favIconUrl is provided (from Chrome tabs API), use it directly
+  // This works offline as Chrome caches these favicons locally
+  if (favIconUrl && favIconUrl.startsWith('http')) {
+    return favIconUrl;
+  }
+
   try {
     const u = new URL(url);
     // Only resolve favicons for http/https pages
     if (!(u.protocol === 'http:' || u.protocol === 'https:')) return null;
+
     const host = u.hostname;
     const s = Math.max(16, Math.min(256, Number(size) || 32));
-    // Example: https://www.google.com/s2/favicons?domain=example.com&sz=32
+
+    // Use a data URL for offline fallback to prevent flickering
+    // Construct a simple SVG as fallback
+    const fallbackSvg = `data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24">
+        <rect width="24" height="24" rx="4" fill="%23${Math.abs(hashCode(host)).toString(16).substring(0, 6)}"/>
+        <text x="12" y="16" font-size="12" text-anchor="middle" fill="white" font-family="Arial">${host.charAt(0).toUpperCase()}</text>
+      </svg>`
+    )}`;
+
     return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=${s}`;
   } catch {
     return null;
   }
 };
+
+// Simple hash function for generating colors from hostnames
+function hashCode(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return hash;
+}
 
 export const formatTime = (ms) => {
   if (!ms || ms < 60000) return null;
