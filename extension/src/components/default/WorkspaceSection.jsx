@@ -1,39 +1,42 @@
-import { useMemo, useState, useEffect } from 'react';
-import { createSharedWorkspaceClient, createUseSharedWorkspaceHook } from '../services/sharedWorkspaceService.js';
-import { getFaviconUrl } from '../utils';
-import WorkspacePillList from './WorkspacePillList.jsx';
+import { useState, useEffect } from 'react';
+import { WorkspaceFilters } from '../WorkspaceFilters';
 
-const useSharedWorkspace = createUseSharedWorkspaceHook(createSharedWorkspaceClient);
-
-export function SharedWorkspace({ teamId, userId, wsUrl, title = 'Shared Workspace' }) {
-    const { items } = useSharedWorkspace({ teamId, userId, wsUrl });
+export function WorkspaceSection({
+    displaySettings = {},
+    workspace,
+    setWorkspace,
+    filterItems,
+    createWorkspace,
+    togglePinWorkspace,
+    handleOpenAddLinkModal,
+    pinnedWorkspaces,
+    handleShareWorkspaceUrl,
+    savedWorkspaces,
+    mergedWorkspaceItems,
+    renderWorkspaceGrid
+}) {
     const [isCollapsed, setIsCollapsed] = useState(() => {
         try {
-            const saved = localStorage.getItem('sharedWorkspace_collapsed');
+            const saved = localStorage.getItem('workspaceSection_collapsed');
             return saved === 'true';
         } catch {
             return false;
         }
     });
 
-    const pillItems = useMemo(() => {
-        if (!Array.isArray(items)) return [];
-        return items.map((item) => ({
-            url: item.url,
-            title: item.title || item.url,
-            favicon: getFaviconUrl(item.url, 16),
-            lastVisitTime: item.added_at || item.addedAt || 0,
-        }));
-    }, [items]);
-
     // Persist collapsed state to localStorage
     useEffect(() => {
         try {
-            localStorage.setItem('sharedWorkspace_collapsed', String(isCollapsed));
+            localStorage.setItem('workspaceSection_collapsed', String(isCollapsed));
         } catch (e) {
-            console.warn('[SharedWorkspace] Failed to save collapsed state', e);
+            console.warn('[WorkspaceSection] Failed to save collapsed state', e);
         }
     }, [isCollapsed]);
+
+    // If display settings hide workspace filters, return null
+    if (displaySettings.workspaceFilters === false) {
+        return null;
+    }
 
     // If collapsed, show only title
     if (isCollapsed) {
@@ -71,7 +74,7 @@ export function SharedWorkspace({ teamId, userId, wsUrl, title = 'Shared Workspa
                     alignItems: 'center',
                     gap: 8
                 }}>
-                    {title}
+                    Workspace
                 </h3>
                 <span style={{
                     fontSize: '0.85rem',
@@ -85,16 +88,17 @@ export function SharedWorkspace({ teamId, userId, wsUrl, title = 'Shared Workspa
     }
 
     return (
-        <div className="coolDesk-section" style={{ marginTop: 12 }}>
+        <div style={{ marginBottom: 'var(--section-spacing)' }}>
+            {/* Header with toggle */}
             <div
                 onClick={() => setIsCollapsed(true)}
                 style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    marginBottom: 8,
-                    cursor: 'pointer',
+                    marginBottom: 16,
                     padding: '8px 16px',
+                    cursor: 'pointer',
                     transition: 'opacity 0.2s ease',
                 }}
                 onMouseEnter={(e) => {
@@ -114,8 +118,7 @@ export function SharedWorkspace({ teamId, userId, wsUrl, title = 'Shared Workspa
                     alignItems: 'center',
                     gap: 8
                 }}>
-                    {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
-                    {title}
+                    Workspace
                 </h3>
                 <span style={{
                     fontSize: '0.75rem',
@@ -125,9 +128,37 @@ export function SharedWorkspace({ teamId, userId, wsUrl, title = 'Shared Workspa
                     Click to hide
                 </span>
             </div>
-            <WorkspacePillList items={pillItems} />
+
+            {/* Filters */}
+            <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '24px 0 8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} data-onboarding="workspace-filters">
+                    <WorkspaceFilters
+                        items={filterItems}
+                        active={workspace}
+                        onChange={setWorkspace}
+                        onWorkspaceCreated={createWorkspace}
+                        onPinWorkspace={togglePinWorkspace}
+                        onAddLink={handleOpenAddLinkModal}
+                        pinnedWorkspaces={pinnedWorkspaces}
+                        onShareWorkspaceUrl={handleShareWorkspaceUrl}
+                    />
+                </div>
+            </div>
+
+            {/* Workspace Grid Content */}
+            {workspace && (
+                <div className="workspace-grid-section section">
+                    <div key={`ws-${workspace}`} className="ws-animate-in">
+                        {renderWorkspaceGrid(
+                            savedWorkspaces.find(ws => ws.name === workspace) || { name: workspace, urls: [] },
+                            mergedWorkspaceItems,
+                            workspace
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-export default SharedWorkspace;
+export default WorkspaceSection;

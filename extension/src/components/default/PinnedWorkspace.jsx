@@ -6,7 +6,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
     const [hovered, setHovered] = React.useState(null);
     const [dragOverName, setDragOverName] = React.useState(null);
 
-    // Load hidden state from localStorage
+    // Load hidden state from localStorage (for double-click hide)
     const [isHidden, setIsHidden] = React.useState(() => {
         try {
             const saved = localStorage.getItem('pinnedWorkspace_hidden');
@@ -15,6 +15,9 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
             return false;
         }
     });
+
+    // Collapsed state for header click
+    const [isCollapsed, setIsCollapsed] = React.useState(false);
 
     // Persist hidden state to localStorage
     React.useEffect(() => {
@@ -62,6 +65,56 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
         try { window.location.href = url; } catch { }
     }, []);
 
+    // Collapsed view (from header click)
+    if (isCollapsed) {
+        return (
+            <div
+                onClick={() => setIsCollapsed(false)}
+                style={{
+                    marginBottom: 'var(--section-spacing)',
+                    padding: '12px 20px',
+                    border: '1px solid rgba(70, 70, 75, 0.7)',
+                    borderRadius: '16px',
+                    background: 'rgba(28, 28, 33, 0.45)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(28, 28, 33, 0.65)';
+                    e.currentTarget.style.borderColor = 'rgba(100, 100, 105, 0.7)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(28, 28, 33, 0.45)';
+                    e.currentTarget.style.borderColor = 'rgba(70, 70, 75, 0.7)';
+                }}
+            >
+                <h3 style={{
+                    fontSize: 'var(--font-size-2xl)',
+                    fontWeight: 600,
+                    margin: 0,
+                    color: '#ffffff',
+                    letterSpacing: '-0.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                }}>
+                    Pinned Workspace
+                </h3>
+                <span style={{
+                    fontSize: '0.85rem',
+                    opacity: 0.5,
+                    color: 'var(--text-secondary, #aaa)'
+                }}>
+                    Click to expand
+                </span>
+            </div>
+        );
+    }
+
+    // Hidden view (from double-click)
     if (isHidden) {
         return (
             <div
@@ -100,13 +153,24 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
 
     return (
         <div className="coolDesk-section pinnedws-container">
-            <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 16,
-                padding: '0 4px'
-            }}>
+            <div
+                onClick={() => setIsCollapsed(true)}
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 16,
+                    padding: '8px 16px',
+                    cursor: 'pointer',
+                    transition: 'opacity 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.opacity = '0.7';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.opacity = '1';
+                }}
+            >
                 <h3 style={{
                     fontSize: 'var(--font-size-2xl)',
                     fontWeight: 600,
@@ -120,6 +184,13 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                     {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
                     Pinned Workspace
                 </h3>
+                <span style={{
+                    fontSize: '0.75rem',
+                    opacity: 0.4,
+                    color: 'var(--text-secondary, #aaa)'
+                }}>
+                    Click to hide
+                </span>
             </div>
             {/* Pills row */}
             <div

@@ -44,6 +44,7 @@ library.add(
 
 import { ActivityPanel } from './components/default/ActivityPanel';
 import { PinnedWorkspace } from './components/default/PinnedWorkspace';
+import { WorkspaceSection } from './components/default/WorkspaceSection';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import { getDisplaySettings } from './components/settings/DisplayData';
@@ -1664,27 +1665,6 @@ export default function App() {
 
         {/* Pins and Cool Feed Side by Side */}
         <ErrorBoundary>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 16,
-            padding: '0 4px'
-          }}>
-            <h3 style={{
-              fontSize: 'var(--font-size-2xl)',
-              fontWeight: 600,
-              margin: 0,
-              color: '#ffffff',
-              letterSpacing: '-0.5px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8
-            }}>
-              {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
-              Quick Access
-            </h3>
-          </div>
           <QuickAccess displaySettings={displaySettings} initialShowPings={showPingsSection} initialShowFeed={showFeedSection} />
         </ErrorBoundary>
 
@@ -1720,58 +1700,20 @@ export default function App() {
         </div>
 
         <div className="workspace-filters-section section" style={{ marginTop: 'var(--section-spacing)' }}>
-          <div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 16,
-                padding: '0 4px'
-              }}>
-                <h3 style={{
-                  fontSize: 'var(--font-size-2xl)',
-                  fontWeight: 600,
-                  margin: 0,
-                  color: '#ffffff',
-                  letterSpacing: '-0.5px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8
-                }}>
-                  {/* <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ color: '#34C759', fontSize: 'var(--font-size-xl)' }} /> */}
-                  Workspace
-                </h3>
-              </div>
-              {/* Filters */}
-              <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '24px 0 8px' }}>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} data-onboarding="workspace-filters">
-                  <WorkspaceFilters
-                    items={filterItems}
-                    active={workspace}
-                    onChange={setWorkspace}
-                    onWorkspaceCreated={createWorkspace}
-                    onPinWorkspace={togglePinWorkspace}
-                    onAddLink={handleOpenAddLinkModal}
-                    pinnedWorkspaces={pinnedWorkspaces}
-                    onShareWorkspaceUrl={handleShareWorkspaceUrl}
-                  />
-                </div>
-              </div>
-
-              {/* Workspace Grid Content */}
-              {workspace && displaySettings.workspaceFilters !== false && (
-                <div className="workspace-grid-section section">
-                  <div key={`ws-${workspace}`} className="ws-animate-in">
-                    {renderWorkspaceGrid(
-                      savedWorkspaces.find(ws => ws.name === workspace) || { name: workspace, urls: [] },
-                      mergedWorkspaceItems,
-                      workspace
-                    )}
-                  </div>
-                </div>
-              )}
-          </div>
+          <WorkspaceSection
+            displaySettings={displaySettings}
+            workspace={workspace}
+            setWorkspace={setWorkspace}
+            filterItems={filterItems}
+            createWorkspace={createWorkspace}
+            togglePinWorkspace={togglePinWorkspace}
+            handleOpenAddLinkModal={handleOpenAddLinkModal}
+            pinnedWorkspaces={pinnedWorkspaces}
+            handleShareWorkspaceUrl={handleShareWorkspaceUrl}
+            savedWorkspaces={savedWorkspaces}
+            mergedWorkspaceItems={mergedWorkspaceItems}
+            renderWorkspaceGrid={renderWorkspaceGrid}
+          />
         </div>
 
         <div className="activity-panel-section section" style={{ marginTop: 'var(--section-spacing)' }}>

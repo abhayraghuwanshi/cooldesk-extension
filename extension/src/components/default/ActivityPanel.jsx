@@ -280,8 +280,8 @@ export function ActivityPanel({ activeSection = 0 }) {
     <section
       ref={containerRef}
       style={{
-        marginTop: 'var(--space-xl)',
-        marginBottom: 'var(--space-xxl)',
+        marginTop: 'var(--section-spacing)',
+        marginBottom: 'var(--section-spacing)',
         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
       }}
     >
@@ -300,8 +300,8 @@ export function ActivityPanel({ activeSection = 0 }) {
                 onDoubleClick={() => toggleHidden(section.name)}
                 ref={el => sectionRefs.current[index] = el}
                 style={{
-                  marginTop: index === 0 ? 'var(--space-lg)' : 'var(--space-xxl)',
-                  marginBottom: 'var(--space-xl)',
+                  marginTop: 'var(--section-spacing)',
+                  marginBottom: 'var(--section-spacing)',
                   padding: 'var(--space-md) 20px',
                   borderRadius: '8px',
                   border: '1px dashed var(--border-primary)',
@@ -334,8 +334,8 @@ export function ActivityPanel({ activeSection = 0 }) {
                 onDoubleClick={() => toggleHidden(section.name)}
                 ref={el => sectionRefs.current[index] = el}
                 style={{
-                  marginTop: index === 0 ? 'var(--space-lg)' : 'var(--space-xxl)',
-                  marginBottom: 'var(--space-xl)',
+                  marginTop: 'var(--section-spacing)',
+                  marginBottom: 'var(--section-spacing)',
                   opacity: isAllMode ? 1 : (isCurrentSection ? 1 : 0.3),
                   transform: isAllMode ? 'scale(1)' : (isCurrentSection ? 'scale(1)' : 'scale(0.98)'),
                   transition: 'all 0.3s ease',

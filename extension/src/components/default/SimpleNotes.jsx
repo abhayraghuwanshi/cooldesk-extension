@@ -188,6 +188,14 @@ export function SimpleNotes() {
     const [recordingTime, setRecordingTime] = React.useState(0);
     const [speechRecognition, setSpeechRecognition] = React.useState(null);
     const [playingId, setPlayingId] = React.useState(null);
+    const [isCollapsed, setIsCollapsed] = React.useState(() => {
+        try {
+            const saved = localStorage.getItem('simpleNotes_collapsed');
+            return saved === 'true';
+        } catch {
+            return false;
+        }
+    });
 
     const recordingTimerRef = React.useRef(null);
     const audioRefs = React.useRef({});
@@ -501,6 +509,15 @@ export function SimpleNotes() {
         }
     }, [text]);
 
+    // Persist collapsed state to localStorage
+    React.useEffect(() => {
+        try {
+            localStorage.setItem('simpleNotes_collapsed', String(isCollapsed));
+        } catch (e) {
+            console.warn('[SimpleNotes] Failed to save collapsed state', e);
+        }
+    }, [isCollapsed]);
+
     // Load notes on mount
     React.useEffect(() => {
         loadNotes();
@@ -525,17 +542,77 @@ export function SimpleNotes() {
         };
     }, [isRecording, mediaRecorder, speechRecognition]);
 
+    // If collapsed, show only title
+    if (isCollapsed) {
+        return (
+            <div
+                onClick={() => setIsCollapsed(false)}
+                style={{
+                    marginBottom: 'var(--section-spacing)',
+                    padding: '12px 20px',
+                    border: '1px solid rgba(70, 70, 75, 0.7)',
+                    borderRadius: '16px',
+                    background: 'rgba(28, 28, 33, 0.45)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(28, 28, 33, 0.65)';
+                    e.currentTarget.style.borderColor = 'rgba(100, 100, 105, 0.7)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(28, 28, 33, 0.45)';
+                    e.currentTarget.style.borderColor = 'rgba(70, 70, 75, 0.7)';
+                }}
+            >
+                <h3 style={{
+                    fontSize: 'var(--font-size-2xl)',
+                    fontWeight: 600,
+                    margin: 0,
+                    color: '#ffffff',
+                    letterSpacing: '-0.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                }}>
+                    Notes
+                </h3>
+                <span style={{
+                    fontSize: '0.85rem',
+                    opacity: 0.5,
+                    color: 'var(--text-secondary, #aaa)'
+                }}>
+                    Click to expand
+                </span>
+            </div>
+        );
+    }
+
     return (
         <div className="simple-notes-root">
             {/* Header with Toolbar */}
             <div className="simple-notes-header">
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 16,
-                    padding: '0 4px'
-                }}>
+                <div
+                    onClick={() => setIsCollapsed(true)}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: 16,
+                        padding: '8px 16px',
+                        cursor: 'pointer',
+                        transition: 'opacity 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.opacity = '0.7';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                    }}
+                >
                     <h3 style={{
                         fontSize: 'var(--font-size-2xl)',
                         fontWeight: 600,
@@ -548,6 +625,13 @@ export function SimpleNotes() {
                     }}>
                         Notes
                     </h3>
+                    <span style={{
+                        fontSize: '0.75rem',
+                        opacity: 0.4,
+                        color: 'var(--text-secondary, #aaa)'
+                    }}>
+                        Click to hide
+                    </span>
                 </div>
 
                 {/* Apple-style Toolbar */}

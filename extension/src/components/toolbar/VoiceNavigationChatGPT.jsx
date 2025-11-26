@@ -25,6 +25,14 @@ const VoiceNavigationChatGPT = () => {
   const [connectionExpired, setConnectionExpired] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [isSleeping, setIsSleeping] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem('voiceNavigation_collapsed');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
   const MAX_RECONNECT_ATTEMPTS = 3;
   const MAX_NETWORK_ATTEMPTS = 10; // Higher limit for network issues
   const reconnectAttemptsRef = useRef(0);
@@ -1932,9 +1940,86 @@ const VoiceNavigationChatGPT = () => {
     window.localStorage.setItem(HELP_PANEL_STORAGE_KEY, String(showHelpContent));
   }, [showHelpContent]);
 
+  // Persist collapsed state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('voiceNavigation_collapsed', String(isCollapsed));
+    } catch (e) {
+      console.warn('[VoiceNavigation] Failed to save collapsed state', e);
+    }
+  }, [isCollapsed]);
+
+  // If collapsed, show only title
+  if (isCollapsed) {
+    return (
+      <div
+        onClick={() => setIsCollapsed(false)}
+        style={{
+          marginBottom: 'var(--section-spacing)',
+          padding: '12px 20px',
+          border: '1px solid rgba(70, 70, 75, 0.7)',
+          borderRadius: '16px',
+          background: 'rgba(28, 28, 33, 0.45)',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(28, 28, 33, 0.65)';
+          e.currentTarget.style.borderColor = 'rgba(100, 100, 105, 0.7)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(28, 28, 33, 0.45)';
+          e.currentTarget.style.borderColor = 'rgba(70, 70, 75, 0.7)';
+        }}
+      >
+        <h3 style={{
+          fontSize: 'var(--font-size-2xl)',
+          fontWeight: 600,
+          margin: 0,
+          color: '#ffffff',
+          letterSpacing: '-0.5px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          Voice Navigation
+        </h3>
+        <span style={{
+          fontSize: '0.85rem',
+          opacity: 0.5,
+          color: 'var(--text-secondary, #aaa)'
+        }}>
+          Click to expand
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <div className="voice-navigation-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+      <div
+        className="voice-navigation-header-row"
+        onClick={() => setIsCollapsed(true)}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '12px',
+          cursor: 'pointer',
+          padding: '8px 16px',
+          transition: 'opacity 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = '0.7';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = '1';
+        }}
+      >
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -1955,26 +2040,38 @@ const VoiceNavigationChatGPT = () => {
             Voice Navigation
           </h3>
         </div>
-        <button
-          type="button"
-          className="voice-navigation-toggle"
-          onClick={() => setShowHelpContent((prev) => !prev)}
-          style={{
-            border: '1px solid var(--border-primary)',
-            borderRadius: '999px',
-            width: '34px',
-            height: '34px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'var(--interactive-hover)',
-            color: 'var(--text)',
-            cursor: 'pointer'
-          }}
-          title={showHelpContent ? 'Hide help' : 'Show help'}
-        >
-          <FontAwesomeIcon icon={showHelpContent ? faChevronUp : faChevronDown} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontSize: '0.75rem',
+            opacity: 0.4,
+            color: 'var(--text-secondary, #aaa)'
+          }}>
+            Click to hide
+          </span>
+          <button
+            type="button"
+            className="voice-navigation-toggle"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowHelpContent((prev) => !prev);
+            }}
+            style={{
+              border: '1px solid var(--border-primary)',
+              borderRadius: '999px',
+              width: '34px',
+              height: '34px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'var(--interactive-hover)',
+              color: 'var(--text)',
+              cursor: 'pointer'
+            }}
+            title={showHelpContent ? 'Hide help' : 'Show help'}
+          >
+            <FontAwesomeIcon icon={showHelpContent ? faChevronUp : faChevronDown} />
+          </button>
+        </div>
       </div>
       <div className="voice-navigation-chatgpt">
 

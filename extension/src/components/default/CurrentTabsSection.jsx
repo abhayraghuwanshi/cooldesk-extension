@@ -46,6 +46,16 @@ export function CurrentTabsSection({
   const settingsRef = useRef(null);
   const groupsContainerRef = useRef(null);
 
+  // Collapsed state for header click
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem('currentTabsSection_collapsed');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
   // Utility: persist tabMeta to chrome.storage.local
   const persistTabMeta = useCallback(async (meta) => {
     try {
@@ -56,6 +66,15 @@ export function CurrentTabsSection({
       // ignore
     }
   }, []);
+
+  // Persist collapsed state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('currentTabsSection_collapsed', String(isCollapsed));
+    } catch (e) {
+      console.warn('[CurrentTabsSection] Failed to save collapsed state', e);
+    }
+  }, [isCollapsed]);
 
   // Load initial settings and metadata
   useEffect(() => {
@@ -740,12 +759,80 @@ export function CurrentTabsSection({
     return buckets;
   }, [recentlyClosed, recentSortKey]);
 
+  // Collapsed view
+  if (isCollapsed) {
+    return (
+      <div
+        onClick={() => setIsCollapsed(false)}
+        style={{
+          marginBottom: 'var(--section-spacing)',
+          padding: '12px 20px',
+          border: '1px solid rgba(70, 70, 75, 0.7)',
+          borderRadius: '16px',
+          background: 'rgba(28, 28, 33, 0.45)',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(28, 28, 33, 0.65)';
+          e.currentTarget.style.borderColor = 'rgba(100, 100, 105, 0.7)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(28, 28, 33, 0.45)';
+          e.currentTarget.style.borderColor = 'rgba(70, 70, 75, 0.7)';
+        }}
+      >
+        <h3 style={{
+          fontSize: 'var(--font-size-2xl)',
+          fontWeight: 600,
+          margin: 0,
+          color: '#ffffff',
+          letterSpacing: '-0.5px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          Active Tabs <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginLeft: 8 }}>{totalTabsCount}</span>
+        </h3>
+        <span style={{
+          fontSize: '0.85rem',
+          opacity: 0.5,
+          color: 'var(--text-secondary, #aaa)'
+        }}>
+          Click to expand
+        </span>
+      </div>
+    );
+  }
+
   // Render
   return (
     <div className="currentTabs-root">
-      <div className="currentTabs-header">
-        <h3 className="currentTabs-headerTitle">Active Tabs <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginLeft: 8 }}>{totalTabsCount}</span></h3>
-        <div className="currentTabs-headerActions">
+      <div
+        className="currentTabs-header"
+        style={{ cursor: 'pointer', transition: 'opacity 0.2s ease' }}
+        onClick={() => setIsCollapsed(true)}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = '0.7';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = '1';
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h3 className="currentTabs-headerTitle">Active Tabs <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginLeft: 8 }}>{totalTabsCount}</span></h3>
+          <span style={{
+            fontSize: '0.75rem',
+            opacity: 0.4,
+            color: 'var(--text-secondary, #aaa)'
+          }}>
+            Click to hide
+          </span>
+        </div>
+        <div className="currentTabs-headerActions" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => setShowRecentlyClosed(s => !s)}
             className="currentTabs-iconBtn"
