@@ -17,7 +17,14 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
     });
 
     // Collapsed state for header click
-    const [isCollapsed, setIsCollapsed] = React.useState(false);
+    const [isCollapsed, setIsCollapsed] = React.useState(() => {
+        try {
+            const saved = localStorage.getItem('pinnedWorkspace_collapsed');
+            return saved === 'true';
+        } catch {
+            return false;
+        }
+    });
 
     // Persist hidden state to localStorage
     React.useEffect(() => {
@@ -25,6 +32,15 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
             localStorage.setItem('pinnedWorkspace_hidden', String(isHidden));
         } catch { }
     }, [isHidden]);
+
+    // Persist collapsed state to localStorage
+    React.useEffect(() => {
+        try {
+            localStorage.setItem('pinnedWorkspace_collapsed', String(isCollapsed));
+        } catch (e) {
+            console.warn('[PinnedWorkspace] Failed to save collapsed state', e);
+        }
+    }, [isCollapsed]);
 
     const list = Array.isArray(items) ? items.slice(0, 24) : [];
 
