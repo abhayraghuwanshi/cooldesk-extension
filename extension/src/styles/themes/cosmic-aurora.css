@@ -1,8 +1,8 @@
 /* Cosmic Aurora Theme - Northern lights inspired with green and teal gradients */
 .bg-cosmic-aurora {
-  background: radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), 
+  /* background: radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), 
               radial-gradient(50% 60% at 80% 10%, #06b6d420, #0000 60%), 
-              linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+              linear-gradient(180deg, #0f172a 0%, #1e293b 100%); */
   min-height: 100vh;
   color: #e5e7eb;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;

@@ -10,6 +10,32 @@ body,
 
 /* Body styles now handled by theme classes */
 
+/* Wallpaper mode - override theme backgrounds with highest specificity */
+/* This needs to be very specific to override individual theme files */
+html body.wallpaper-enabled,
+html body.wallpaper-enabled.bg-ai-midnight-nebula,
+html body.wallpaper-enabled.bg-cosmic-aurora,
+html body.wallpaper-enabled.bg-sunset-horizon,
+html body.wallpaper-enabled.bg-forest-depths,
+html body.wallpaper-enabled.bg-minimal-dark,
+html body.wallpaper-enabled.bg-ocean-depths,
+html body.wallpaper-enabled.bg-cherry-blossom,
+html body.wallpaper-enabled.bg-arctic-frost,
+html body.wallpaper-enabled.bg-volcanic-ember,
+html body.wallpaper-enabled.bg-neon-cyberpunk,
+html body.wallpaper-enabled.bg-white-cred,
+html body.wallpaper-enabled.bg-orange-warm,
+html body.wallpaper-enabled.bg-brown-earth,
+html body.wallpaper-enabled.bg-royal-purple,
+html body.wallpaper-enabled.bg-golden-honey,
+html body.wallpaper-enabled.bg-mint-sage,
+html body.wallpaper-enabled.bg-crimson-fire,
+html body.wallpaper-enabled.bg-ai-quantum {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
 /* === AI Dark Theme Utilities (no framework) === */
 :root {
   --surface-0: #0b1020;

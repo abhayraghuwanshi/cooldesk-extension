@@ -13,7 +13,21 @@ import TeamManagement from '../settings/TeamManagement.jsx';
 import ThemesTab from '../settings/ThemesTab';
 
 
-export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFontSizeChange, onStartOnboarding }) {
+export function SettingsModal({
+  show,
+  onClose,
+  settings,
+  onSave,
+  fontSize,
+  onFontSizeChange,
+  onStartOnboarding,
+  wallpaperEnabled,
+  wallpaperUrl,
+  wallpaperOpacity,
+  onWallpaperEnabledChange,
+  onWallpaperUrlChange,
+  onWallpaperOpacityChange
+}) {
   const [localSettings, setLocalSettings] = useState(settings)
   const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState('')
@@ -673,6 +687,12 @@ export function SettingsModal({ show, onClose, settings, onSave, fontSize, onFon
                 onThemeChange={handleThemeChange}
                 onFontSizeChange={handleFontSizeChange}
                 onFontFamilyChange={handleFontFamilyChange}
+                wallpaperEnabled={wallpaperEnabled}
+                wallpaperUrl={wallpaperUrl}
+                wallpaperOpacity={wallpaperOpacity}
+                onWallpaperEnabledChange={onWallpaperEnabledChange}
+                onWallpaperUrlChange={onWallpaperUrlChange}
+                onWallpaperOpacityChange={onWallpaperOpacityChange}
               />
             )}
             {activeTab === 2 && (

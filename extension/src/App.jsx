@@ -12,7 +12,6 @@ import {
   faUndo
 } from '@fortawesome/free-solid-svg-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import './App.css';
 import { QuickAccess } from './components/default/QuickAccess';
 import { Header } from './components/Header.jsx';
 import { ItemGrid } from './components/ItemGrid';
@@ -26,6 +25,8 @@ import WorkspacePillList from './components/WorkspacePillList.jsx';
 import './search.css';
 import './styles/components.css';
 import './styles/themes/components-vars.css';
+import './styles/theme.css';
+import './App.css'; // MUST BE LAST to override theme backgrounds
 
 // Add icons to the library
 library.add(
@@ -127,6 +128,31 @@ export default function App() {
   const [processes, setProcesses] = useState([])
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [fontSize, setFontSize] = useState('medium')
+
+  // Wallpaper settings
+  const [wallpaperEnabled, setWallpaperEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wallpaperEnabled');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [wallpaperUrl, setWallpaperUrl] = useState(() => {
+    try {
+      return localStorage.getItem('wallpaperUrl') || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&q=80';
+    } catch {
+      return 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&q=80';
+    }
+  });
+  const [wallpaperOpacity, setWallpaperOpacity] = useState(() => {
+    try {
+      const saved = localStorage.getItem('wallpaperOpacity');
+      return saved ? parseFloat(saved) : 0.3;
+    } catch {
+      return 0.3;
+    }
+  });
 
   // Pinned workspaces
   const [pinnedWorkspaces, setPinnedWorkspaces] = useState([])
@@ -616,6 +642,33 @@ export default function App() {
       localStorage.setItem('showFeedSection', String(showFeedSection));
     } catch { }
   }, [showFeedSection]);
+
+  // Persist wallpaper settings and toggle body class
+  useEffect(() => {
+    try {
+      console.log('[App] Wallpaper enabled changed to:', wallpaperEnabled);
+      localStorage.setItem('wallpaperEnabled', String(wallpaperEnabled));
+
+      // Toggle wallpaper-enabled class on body to override theme backgrounds
+      if (wallpaperEnabled) {
+        document.body.classList.add('wallpaper-enabled');
+      } else {
+        document.body.classList.remove('wallpaper-enabled');
+      }
+    } catch { }
+  }, [wallpaperEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('wallpaperUrl', wallpaperUrl);
+    } catch { }
+  }, [wallpaperUrl]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('wallpaperOpacity', String(wallpaperOpacity));
+    } catch { }
+  }, [wallpaperOpacity]);
 
   useEffect(() => {
     if (!activePinnedWorkspace) return;
@@ -1567,7 +1620,44 @@ export default function App() {
   const shouldShowVertical = windowWidth < 700;
 
   return (
-    <div className={`popup-wrap ${themeClass}`} style={{ '--section-spacing': '24px', '--card-spacing': '16px' }}>
+    <div className={`popup-wrap ${themeClass} ${wallpaperEnabled ? 'wallpaper-enabled' : ''}`} style={{
+      '--section-spacing': '24px',
+      '--card-spacing': '16px',
+      position: 'relative'
+    }}>
+      {/* Wallpaper Background */}
+      {wallpaperEnabled && (
+        <>
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundImage: `url(${wallpaperUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              opacity: wallpaperOpacity,
+              zIndex: -2,
+              pointerEvents: 'none'
+            }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backdropFilter: 'blur(8px)',
+              zIndex: -1,
+              pointerEvents: 'none'
+            }}
+          />
+        </>
+      )}
 
       {/* Main Content Area with conditional wrapper */}
       <div>
@@ -1797,6 +1887,12 @@ export default function App() {
             fontSize={fontSize}
             onFontSizeChange={handleFontSizeChange}
             onStartOnboarding={startOnboarding}
+            wallpaperEnabled={wallpaperEnabled}
+            wallpaperUrl={wallpaperUrl}
+            wallpaperOpacity={wallpaperOpacity}
+            onWallpaperEnabledChange={setWallpaperEnabled}
+            onWallpaperUrlChange={setWallpaperUrl}
+            onWallpaperOpacityChange={setWallpaperOpacity}
           />
         </div>
 

@@ -10,8 +10,8 @@ const BASE_SETTINGS = {
   voiceNavigationSection: false,
   aiChatsSection: false,
   notesSection: false,
-  pingsSection: false,
-  feedSection: false,
+  noticeBoard: false,
+  quickAccess: false,
 };
 
 const ALL_ON_SETTINGS = Object.fromEntries(

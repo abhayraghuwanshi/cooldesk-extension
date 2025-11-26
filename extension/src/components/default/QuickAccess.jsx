@@ -3,12 +3,14 @@ import { CoolFeedSection } from './CoolFeedSection';
 import { PingsSection } from './PingsSection';
 
 export function QuickAccess({
-    displaySettings = {},
-    initialShowPins = true,
-    initialShowFeed = true
+    displaySettings = {}
 }) {
-    const [showPingsSection, setShowPingsSection] = useState(initialShowPins);
-    const [showFeedSection, setShowFeedSection] = useState(initialShowFeed);
+    const [isExpanded, setIsExpanded] = useState(true);
+
+    // Single variable to control entire QuickAccess visibility
+    if (displaySettings.quickAccess === false) {
+        return null;
+    }
 
     return (
         <div style={{
@@ -22,48 +24,41 @@ export function QuickAccess({
             padding: '16px',
 
         }}>
-            {/* Feed Section */}
-            {displaySettings.feedSection !== false && (
-                <div className="feed-section" style={{
-                    flex: 1,
-                    position: 'relative'
-                }}>
-                    {showFeedSection ? (
-                        <div onDoubleClick={() => setShowFeedSection(false)}>
+            {isExpanded ? (
+                <>
+                    {/* Feed Section */}
+                    <div className="feed-section" style={{
+                        flex: 1,
+                        position: 'relative'
+                    }}>
+                        <div onDoubleClick={() => setIsExpanded(false)}>
                             <CoolFeedSection />
                         </div>
-                    ) : (
-                        <CollapsedSection
-                            label="Feed"
-                            onDoubleClick={() => setShowFeedSection(true)}
-                        />
-                    )}
-                </div>
-            )}
+                    </div>
 
-            {/* Vertical Divider */}
-            <div style={{
-                width: '1px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                margin: '0 8px'
-            }} />
+                    {/* Vertical Divider */}
+                    <div style={{
+                        width: '1px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        margin: '0 8px'
+                    }} />
 
-            {/* Pins Section */}
-            {displaySettings.pinsSection !== false && (
-                <div className="pins-section" style={{
-                    flex: 1,
-                    position: 'relative'
-                }}>
-                    {showPingsSection ? (
-                        <div onDoubleClick={() => setShowPingsSection(false)}>
+                    {/* Pins Section */}
+                    <div className="pins-section" style={{
+                        flex: 1,
+                        position: 'relative'
+                    }}>
+                        <div onDoubleClick={() => setIsExpanded(false)}>
                             <PingsSection />
                         </div>
-                    ) : (
-                        <CollapsedSection
-                            label="Pins"
-                            onDoubleClick={() => setShowPingsSection(true)}
-                        />
-                    )}
+                    </div>
+                </>
+            ) : (
+                <div style={{ flex: 1, position: 'relative' }}>
+                    <CollapsedSection
+                        label="Quick Access"
+                        onDoubleClick={() => setIsExpanded(true)}
+                    />
                 </div>
             )}
         </div>

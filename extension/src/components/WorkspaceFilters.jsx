@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CreateWorkspaceModal } from './popups/CreateWorkspaceModal';
 
 export function WorkspaceFilters({
@@ -25,11 +25,15 @@ export function WorkspaceFilters({
     return saved ? JSON.parse(saved) : {};
   });
 
-  const [sortBy, setSortBy] = useState('activity'); // 'activity', 'name', 'manual'
+  const [sortBy, setSortBy] = useState('manual'); // 'activity', 'name', 'manual' - changed to manual to prevent chaos
   const VISIBLE_WORKSPACES_LIMIT = 5;
+  const [isInteracting, setIsInteracting] = useState(false);
 
-  // Update workspaces when items change
+  // Update workspaces when items change (but not during interaction)
   useEffect(() => {
+    // Skip updates while user is interacting to prevent chaos
+    if (isInteracting) return;
+
     const newWorkspaces = [];
     const seen = new Set();
 
@@ -50,9 +54,9 @@ export function WorkspaceFilters({
     });
 
     setWorkspaces(newWorkspaces);
-  }, [items]);
+  }, [items, isInteracting]);
 
-  // Track workspace activity when switching
+  // Track workspace activity when switching (without causing re-sort immediately)
   const trackWorkspaceActivity = (workspaceName) => {
     const now = Date.now();
     const newActivity = {
@@ -63,12 +67,18 @@ export function WorkspaceFilters({
         totalItems: items.filter(item => item.workspaceGroup === workspaceName).length
       }
     };
-    setWorkspaceActivity(newActivity);
+
+    // Update activity in background without triggering re-sort
     localStorage.setItem('workspace_activity', JSON.stringify(newActivity));
+
+    // Delay the state update to prevent immediate re-sort chaos
+    setTimeout(() => {
+      setWorkspaceActivity(newActivity);
+    }, 300);
   };
 
-  // Sort workspaces based on selected method
-  const getSortedWorkspaces = () => {
+  // Sort workspaces based on selected method (memoized to prevent chaos)
+  const sortedWorkspaces = useMemo(() => {
     const sorted = [...workspaces];
 
     switch (sortBy) {
@@ -89,7 +99,7 @@ export function WorkspaceFilters({
       default:
         return sorted;
     }
-  };
+  }, [workspaces, sortBy, workspaceActivity]);
 
   // Handle drag start
   const handleDragStart = (e, index) => {
@@ -177,8 +187,6 @@ export function WorkspaceFilters({
       console.error('Error creating workspace:', error)
     }
   };
-
-  const sortedWorkspaces = getSortedWorkspaces();
 
   return (
     <>

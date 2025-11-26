@@ -51,17 +51,17 @@ const UI_COMPONENTS = [
         category: 'Activity Panel'
     },
     {
-        id: 'pingsSection',
-        label: 'Pins Section',
-        description: 'Pinned items and bookmarks',
-        icon: faMapPin,
-        category: 'Other Panels'
+        id: 'noticeBoard',
+        label: 'Notice Board',
+        description: 'Sticky notes and bulletin board',
+        icon: faNewspaper,
+        category: 'Activity Panel'
     },
     {
-        id: 'feedSection',
-        label: 'Feed Section',
-        description: 'Activity feed and updates',
-        icon: faNewspaper,
+        id: 'quickAccess',
+        label: 'Quick Access',
+        description: 'Combined Feed and Pins sections',
+        icon: faMapPin,
         category: 'Other Panels'
     },
 ]
