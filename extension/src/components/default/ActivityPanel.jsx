@@ -5,7 +5,6 @@ import { getDisplaySettings } from '../settings/DisplayData';
 import VoiceNavigationChatGPT from '../toolbar/VoiceNavigationChatGPT';
 import { AIChatsSection } from './AIChats';
 import { CurrentTabsSection } from './CurrentTabsSection';
-import { GlassNoticeBoard } from './GlassNoticeBoard';
 import { SimpleNotes } from './SimpleNotes';
 
 export function ActivityPanel({ activeSection = 0 }) {
@@ -262,13 +261,13 @@ export function ActivityPanel({ activeSection = 0 }) {
         <SimpleNotes />
       </div>
     },
-    {
-      id: 'noticeBoard',
-      name: 'Notice Board',
-      component: <div data-onboarding="notice-board-section">
-        <GlassNoticeBoard hideNoticeBoard={displaySettings.noticeBoard === false} />
-      </div>
-    }
+    // {
+    //   id: 'noticeBoard',
+    //   name: 'Notice Board',
+    //   component: <div data-onboarding="notice-board-section">
+    //     <GlassNoticeBoard hideNoticeBoard={displaySettings.noticeBoard === false} />
+    //   </div>
+    // }
   ];
 
   // Filter sections based on display settings

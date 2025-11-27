@@ -1,4 +1,4 @@
-import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack, faUser, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useMemo, useState } from 'react';
 import { listWorkspaces, saveWorkspace } from '../../db/index.js';
@@ -9,7 +9,6 @@ import { setAndSaveFontSize } from '../../utils/fontUtils';
 import DisplayData from '../settings/DisplayData';
 import ExportData from '../settings/ExportData';
 import { TabItem, Tabs } from '../settings/TabComponents';
-import TeamManagement from '../settings/TeamManagement.jsx';
 import ThemesTab from '../settings/ThemesTab';
 
 
@@ -651,9 +650,6 @@ export function SettingsModal({
               disabledTitles={[]} // Remove restrictions for better onboarding flow
               orientation="vertical"
             >
-              <TabItem title={<><FontAwesomeIcon icon={faUser} style={{ marginRight: '8px' }} />Account</>}>
-                {/* Content rendered in the right pane below */}
-              </TabItem>
               <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
                 {/* Content rendered in the right pane below */}
               </TabItem>
@@ -661,9 +657,6 @@ export function SettingsModal({
                 {/* Content rendered in the right pane below */}
               </TabItem>
               <TabItem title={<><FontAwesomeIcon icon={faEye} style={{ marginRight: '8px' }} />Display</>}>
-                {/* Content rendered in the right pane below */}
-              </TabItem>
-              <TabItem title={<><FontAwesomeIcon icon={faUsers} style={{ marginRight: '8px' }} />Team Management</>}>
                 {/* Content rendered in the right pane below */}
               </TabItem>
               <TabItem title={<><FontAwesomeIcon icon={faGraduationCap} style={{ marginRight: '8px' }} />Help</>}>
@@ -679,7 +672,7 @@ export function SettingsModal({
             maxHeight: '600px',
             overflowY: 'auto'
           }}>
-            {activeTab === 1 && (
+            {activeTab === 0 && (
               <ThemesTab
                 selectedTheme={selectedTheme}
                 fontSize={fontSize}
@@ -695,16 +688,13 @@ export function SettingsModal({
                 onWallpaperOpacityChange={onWallpaperOpacityChange}
               />
             )}
-            {activeTab === 2 && (
+            {activeTab === 1 && (
               <ExportData />
             )}
-            {activeTab === 3 && (
+            {activeTab === 2 && (
               <DisplayData />
             )}
-            {activeTab === 4 && (
-              <TeamManagement />
-            )}
-            {activeTab === 5 && (
+            {activeTab === 3 && (
               <div style={{ padding: '0', maxHeight: '560px', overflowY: 'auto' }}>
                 {/* Account Tab Content (duplicated features hidden in Account tab) */}
                 {/* Getting Started Section */}
@@ -885,30 +875,6 @@ export function SettingsModal({
                     <FontAwesomeIcon icon={faEnvelope} />
                     Report Bug or Request Feature
                   </button>
-                </div>
-              </div>
-            )}
-            {activeTab === 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{
-                  background: 'var(--bg-secondary, rgba(255,255,255,0.05))',
-                  border: '1px solid var(--border-primary, rgba(255,255,255,0.1))',
-                  borderRadius: '8px',
-                  padding: '16px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 600 }}>Account</div>
-                      <div style={{ fontSize: 13, color: 'var(--text-secondary, #999)' }}>
-                        {authUser ? `Signed in as ${authUser.email || authUser.uid}` : 'Not signed in'}
-                      </div>
-                    </div>
-                    {authUser ? (
-                      <button onClick={handleLogout} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border-primary, rgba(255,255,255,0.2))', background: 'transparent', color: 'inherit', cursor: 'pointer' }}>Logout</button>
-                    ) : (
-                      <button onClick={handleLogin} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border-primary, rgba(255,255,255,0.2))', background: 'transparent', color: 'inherit', cursor: 'pointer' }}>Login with Google</button>
-                    )}
-                  </div>
                 </div>
               </div>
             )}

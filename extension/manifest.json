@@ -27,25 +27,13 @@
     "activeTab",
     "sessions",
     "sidePanel",
-    "search",
-    "identity",
-    "alarms",
-    "tabGroups"
+    "search"
   ],
-  "oauth2": {
-    "client_id": "256165123494-q5n57e6750sik1f723vj5rb8i28fmmue.apps.googleusercontent.com",
-    "scopes": [
-      "openid",
-      "email",
-      "profile"
-    ]
-  },
   "host_permissions": [
     "https://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev",
-    "service_worker": "script-src 'self'; connect-src 'self' wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self'"
   },
   "web_accessible_resources": [
     {

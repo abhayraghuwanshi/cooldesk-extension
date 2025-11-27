@@ -15,13 +15,11 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css'; // MUST BE LAST to override theme backgrounds
-import { QuickAccess } from './components/default/QuickAccess';
 import { ItemGrid } from './components/ItemGrid';
 import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
 import { SettingsModal } from './components/popups/SettingsModal';
 import { ProjectGrid } from './components/ProjectGrid';
-import { SharedWorkspace } from './components/SharedWorkspace.jsx';
 import WorkspacePillList from './components/WorkspacePillList.jsx';
 import './search.css';
 import './styles/components.css';
@@ -43,19 +41,15 @@ library.add(
   faUndo
 );
 
-import { ActivityPanel } from './components/default/ActivityPanel';
-import { PinnedWorkspace } from './components/default/PinnedWorkspace';
+import { AIChatsSection } from './components/default/AIChats';
+import { CurrentTabsSection } from './components/default/CurrentTabsSection';
 import { SearchPanel } from './components/default/SearchPanel';
+import { SimpleNotes } from './components/default/SimpleNotes';
 import { WorkspaceSection } from './components/default/WorkspaceSection';
+import { DraggableSections } from './components/DraggableSections';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import { getDisplaySettings } from './components/settings/DisplayData';
-import { DraggableSections } from './components/DraggableSections';
-import { AIChatsSection } from './components/default/AIChats';
-import { CurrentTabsSection } from './components/default/CurrentTabsSection';
-import { GlassNoticeBoard } from './components/default/GlassNoticeBoard';
-import { SimpleNotes } from './components/default/SimpleNotes';
-import VoiceNavigationChatGPT from './components/toolbar/VoiceNavigationChatGPT';
 import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
@@ -1630,52 +1624,52 @@ export default function App() {
 
   // Define all draggable sections
   const allSections = useMemo(() => [
-    {
-      id: 'quick-access',
-      component: (
-        <ErrorBoundary key="quick-access">
-          <QuickAccess displaySettings={displaySettings} initialShowPings={showPingsSection} initialShowFeed={showFeedSection} />
-        </ErrorBoundary>
-      )
-    },
-    {
-      id: 'shared-workspace',
-      component: (
-        <div className="shared-workspace-container section" key="shared-workspace">
-          <ErrorBoundary>
-            <SharedWorkspace
-              teamId="demo-team"
-              userId="demo-user"
-              wsUrl="wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev"
-            />
-          </ErrorBoundary>
-        </div>
-      )
-    },
-    {
-      id: 'pinned-workspace',
-      component: (
-        <div className="pinned-workspace-container section" key="pinned-workspace">
-          {displaySettings.pinnedWorkspaces !== false && (
-            <ErrorBoundary>
-              <PinnedWorkspace
-                items={pinnedWorkspaces}
-                active={activePinnedWorkspace}
-                onSelect={(name) => setActivePinnedWorkspace(name)}
-                onUnpin={unpinWorkspace}
-                workspaces={savedWorkspaces}
-                onReorder={(order) => {
-                  if (Array.isArray(order)) {
-                    setPinnedWorkspaces(order);
-                    try { savePinnedWorkspaces(order); } catch { }
-                  }
-                }}
-              />
-            </ErrorBoundary>
-          )}
-        </div>
-      )
-    },
+    // {
+    //   id: 'quick-access',
+    //   component: (
+    //     <ErrorBoundary key="quick-access">
+    //       <QuickAccess displaySettings={displaySettings} initialShowPings={showPingsSection} initialShowFeed={showFeedSection} />
+    //     </ErrorBoundary>
+    //   )
+    // },
+    // {
+    //   id: 'shared-workspace',
+    //   component: (
+    //     <div className="shared-workspace-container section" key="shared-workspace">
+    //       <ErrorBoundary>
+    //         <SharedWorkspace
+    //           teamId="demo-team"
+    //           userId="demo-user"
+    //           wsUrl="wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev"
+    //         />
+    //       </ErrorBoundary>
+    //     </div>
+    //   )
+    // },
+    // {
+    //   id: 'pinned-workspace',
+    //   component: (
+    //     <div className="pinned-workspace-container section" key="pinned-workspace">
+    //       {displaySettings.pinnedWorkspaces !== false && (
+    //         <ErrorBoundary>
+    //           <PinnedWorkspace
+    //             items={pinnedWorkspaces}
+    //             active={activePinnedWorkspace}
+    //             onSelect={(name) => setActivePinnedWorkspace(name)}
+    //             onUnpin={unpinWorkspace}
+    //             workspaces={savedWorkspaces}
+    //             onReorder={(order) => {
+    //               if (Array.isArray(order)) {
+    //                 setPinnedWorkspaces(order);
+    //                 try { savePinnedWorkspaces(order); } catch { }
+    //               }
+    //             }}
+    //           />
+    //         </ErrorBoundary>
+    //       )}
+    //     </div>
+    //   )
+    // },
     {
       id: 'workspace-section',
       component: (
@@ -1727,16 +1721,16 @@ export default function App() {
         </div>
       )
     },
-    {
-      id: 'notice-board',
-      component: displaySettings.noticeBoard !== false && (
-        <div key="notice-board">
-          <ErrorBoundary>
-            <GlassNoticeBoard hideNoticeBoard={displaySettings.noticeBoard === false} />
-          </ErrorBoundary>
-        </div>
-      )
-    },
+    // {
+    //   id: 'notice-board',
+    //   component: displaySettings.noticeBoard !== false && (
+    //     <div key="notice-board">
+    //       <ErrorBoundary>
+    //         <GlassNoticeBoard hideNoticeBoard={displaySettings.noticeBoard === false} />
+    //       </ErrorBoundary>
+    //     </div>
+    //   )
+    // },
   ].filter(section => section.component !== false), [
     displaySettings,
     showPingsSection,
@@ -1877,43 +1871,6 @@ export default function App() {
             </div>
           )}
         </div>
-
-        {/* Conditional Header: VerticalHeader when small screen or user preference, otherwise horizontal Header */}
-        {shouldShowVertical ? (
-          <div>
-            {/* <VerticalHeader
-              search={search}
-              setSearch={setSearch}
-              populate={populate}
-              setShowSettings={setShowSettings}
-              openSyncControls={() => { }} // Placeholder function
-              progress={{ running: false }} // Placeholder progress object
-              setShowCreateWorkspace={setShowCreateWorkspace}
-              openInTab={openInTab}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              activeSection={activeSection}
-              setActiveSection={setActiveSection}
-            /> */}
-          </div>
-        ) : (
-          // <Header
-          //   search={search}
-          //   setSearch={setSearch}
-          //   populate={populate}
-          //   setShowSettings={setShowSettings}
-          //   openSyncControls={() => { }} // Placeholder function
-          //   progress={{ running: false }} // Placeholder progress object
-          //   setShowCreateWorkspace={setShowCreateWorkspace}
-          //   openInTab={openInTab}
-          //   isFooter={true}
-          //   activeTab={activeTab}
-          //   setActiveTab={setActiveTab}
-          //   activeSection={activeSection}
-          //   setActiveSection={setActiveSection}
-          // />
-          <div></div>
-        )}
 
         <div style={{ marginTop: 'var(--section-spacing)' }}>
           <AddToWorkspaceModal
