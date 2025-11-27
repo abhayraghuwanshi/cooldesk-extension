@@ -12,21 +12,19 @@ import {
   faUndo
 } from '@fortawesome/free-solid-svg-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import './App.css'; // MUST BE LAST to override theme backgrounds
 import { QuickAccess } from './components/default/QuickAccess';
-import { Header } from './components/Header.jsx';
 import { ItemGrid } from './components/ItemGrid';
 import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
 import { SettingsModal } from './components/popups/SettingsModal';
 import { ProjectGrid } from './components/ProjectGrid';
 import { SharedWorkspace } from './components/SharedWorkspace.jsx';
-import { WorkspaceFilters } from './components/WorkspaceFilters';
 import WorkspacePillList from './components/WorkspacePillList.jsx';
 import './search.css';
 import './styles/components.css';
-import './styles/themes/components-vars.css';
 import './styles/theme.css';
-import './App.css'; // MUST BE LAST to override theme backgrounds
+import './styles/themes/components-vars.css';
 
 // Add icons to the library
 library.add(
@@ -44,6 +42,7 @@ library.add(
 
 import { ActivityPanel } from './components/default/ActivityPanel';
 import { PinnedWorkspace } from './components/default/PinnedWorkspace';
+import { SearchPanel } from './components/default/SearchPanel';
 import { WorkspaceSection } from './components/default/WorkspaceSection';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
@@ -1663,6 +1662,13 @@ export default function App() {
       {/* Main Content Area with conditional wrapper */}
       <div>
 
+        {/* Chrome/Edge-style Search Panel */}
+        <div className="search-panel-section section" style={{ marginTop: '20vh' }}>
+          <ErrorBoundary>
+            <SearchPanel />
+          </ErrorBoundary>
+        </div>
+
         {/* Pins and Cool Feed Side by Side */}
         <ErrorBoundary>
           <QuickAccess displaySettings={displaySettings} initialShowPings={showPingsSection} initialShowFeed={showFeedSection} />
@@ -1784,21 +1790,22 @@ export default function App() {
             /> */}
           </div>
         ) : (
-          <Header
-            search={search}
-            setSearch={setSearch}
-            populate={populate}
-            setShowSettings={setShowSettings}
-            openSyncControls={() => { }} // Placeholder function
-            progress={{ running: false }} // Placeholder progress object
-            setShowCreateWorkspace={setShowCreateWorkspace}
-            openInTab={openInTab}
-            isFooter={true}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            activeSection={activeSection}
-            setActiveSection={setActiveSection}
-          />
+          // <Header
+          //   search={search}
+          //   setSearch={setSearch}
+          //   populate={populate}
+          //   setShowSettings={setShowSettings}
+          //   openSyncControls={() => { }} // Placeholder function
+          //   progress={{ running: false }} // Placeholder progress object
+          //   setShowCreateWorkspace={setShowCreateWorkspace}
+          //   openInTab={openInTab}
+          //   isFooter={true}
+          //   activeTab={activeTab}
+          //   setActiveTab={setActiveTab}
+          //   activeSection={activeSection}
+          //   setActiveSection={setActiveSection}
+          // />
+          <div></div>
         )}
 
         <div style={{ marginTop: 'var(--section-spacing)' }}>
