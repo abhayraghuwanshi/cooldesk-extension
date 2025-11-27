@@ -1,0 +1,15 @@
+Feture Request: Draggable and Persisted Components:
+Feature Number: 1
+Feature description:
+    @src\App.jsx 
+    make the component below the search draggable between each other. i can rearrange and when i refresh they should pesist 
+    Quick Access
+    Shared workspacee
+    Pinned workspacee
+    Active tabs
+    Ai Chats
+    Notes
+    Noticeboard
+    SOme of these are in the activity panel. some are in App.jsx. Make a clean solution to solve this, preferably using a library.
+Feture Request: END
+-------------------    

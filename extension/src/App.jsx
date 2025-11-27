@@ -2,6 +2,7 @@ import { library } from '@fortawesome/fontawesome-svg-core';
 import {
   faBroom,
   faClone,
+  faGear,
   faGlobe,
   faHistory,
   faPlus,
@@ -11,6 +12,7 @@ import {
   faTriangleExclamation,
   faUndo
 } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css'; // MUST BE LAST to override theme backgrounds
 import { QuickAccess } from './components/default/QuickAccess';
@@ -33,6 +35,7 @@ library.add(
   faTriangleExclamation,
   faBroom,
   faClone,
+  faGear,
   faGlobe,
   faHistory,
   faRotateRight,
@@ -47,6 +50,12 @@ import { WorkspaceSection } from './components/default/WorkspaceSection';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import { getDisplaySettings } from './components/settings/DisplayData';
+import { DraggableSections } from './components/DraggableSections';
+import { AIChatsSection } from './components/default/AIChats';
+import { CurrentTabsSection } from './components/default/CurrentTabsSection';
+import { GlassNoticeBoard } from './components/default/GlassNoticeBoard';
+import { SimpleNotes } from './components/default/SimpleNotes';
+import VoiceNavigationChatGPT from './components/toolbar/VoiceNavigationChatGPT';
 import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
@@ -1619,12 +1628,167 @@ export default function App() {
   // Determine if we should show vertical header (responsive or user preference)
   const shouldShowVertical = windowWidth < 700;
 
+  // Define all draggable sections
+  const allSections = useMemo(() => [
+    {
+      id: 'quick-access',
+      component: (
+        <ErrorBoundary key="quick-access">
+          <QuickAccess displaySettings={displaySettings} initialShowPings={showPingsSection} initialShowFeed={showFeedSection} />
+        </ErrorBoundary>
+      )
+    },
+    {
+      id: 'shared-workspace',
+      component: (
+        <div className="shared-workspace-container section" key="shared-workspace">
+          <ErrorBoundary>
+            <SharedWorkspace
+              teamId="demo-team"
+              userId="demo-user"
+              wsUrl="wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev"
+            />
+          </ErrorBoundary>
+        </div>
+      )
+    },
+    {
+      id: 'pinned-workspace',
+      component: (
+        <div className="pinned-workspace-container section" key="pinned-workspace">
+          {displaySettings.pinnedWorkspaces !== false && (
+            <ErrorBoundary>
+              <PinnedWorkspace
+                items={pinnedWorkspaces}
+                active={activePinnedWorkspace}
+                onSelect={(name) => setActivePinnedWorkspace(name)}
+                onUnpin={unpinWorkspace}
+                workspaces={savedWorkspaces}
+                onReorder={(order) => {
+                  if (Array.isArray(order)) {
+                    setPinnedWorkspaces(order);
+                    try { savePinnedWorkspaces(order); } catch { }
+                  }
+                }}
+              />
+            </ErrorBoundary>
+          )}
+        </div>
+      )
+    },
+    {
+      id: 'workspace-section',
+      component: (
+        <div className="workspace-filters-section section" key="workspace-section">
+          <WorkspaceSection
+            displaySettings={displaySettings}
+            workspace={workspace}
+            setWorkspace={setWorkspace}
+            filterItems={filterItems}
+            createWorkspace={createWorkspace}
+            togglePinWorkspace={togglePinWorkspace}
+            handleOpenAddLinkModal={handleOpenAddLinkModal}
+            pinnedWorkspaces={pinnedWorkspaces}
+            handleShareWorkspaceUrl={handleShareWorkspaceUrl}
+            savedWorkspaces={savedWorkspaces}
+            mergedWorkspaceItems={mergedWorkspaceItems}
+            renderWorkspaceGrid={renderWorkspaceGrid}
+          />
+        </div>
+      )
+    },
+    {
+      id: 'active-tabs',
+      component: displaySettings.currentTabsSection !== false && (
+        <div key="active-tabs">
+          <ErrorBoundary>
+            <CurrentTabsSection />
+          </ErrorBoundary>
+        </div>
+      )
+    },
+    {
+      id: 'ai-chats',
+      component: displaySettings.aiChatsSection !== false && (
+        <div key="ai-chats">
+          <ErrorBoundary>
+            <AIChatsSection />
+          </ErrorBoundary>
+        </div>
+      )
+    },
+    {
+      id: 'notes',
+      component: displaySettings.notesSection !== false && (
+        <div key="notes">
+          <ErrorBoundary>
+            <SimpleNotes />
+          </ErrorBoundary>
+        </div>
+      )
+    },
+    {
+      id: 'notice-board',
+      component: displaySettings.noticeBoard !== false && (
+        <div key="notice-board">
+          <ErrorBoundary>
+            <GlassNoticeBoard hideNoticeBoard={displaySettings.noticeBoard === false} />
+          </ErrorBoundary>
+        </div>
+      )
+    },
+  ].filter(section => section.component !== false), [
+    displaySettings,
+    showPingsSection,
+    showFeedSection,
+    pinnedWorkspaces,
+    activePinnedWorkspace,
+    savedWorkspaces,
+    workspace,
+    filterItems,
+    mergedWorkspaceItems,
+  ]);
+
   return (
     <div className={`popup-wrap ${themeClass} ${wallpaperEnabled ? 'wallpaper-enabled' : ''}`} style={{
       '--section-spacing': '24px',
       '--card-spacing': '16px',
       position: 'relative'
     }}>
+      {/* Settings Button - Top Right */}
+      <button
+        onClick={() => setShowSettings(true)}
+        title="Settings"
+        style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          width: '48px',
+          height: '48px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '12px',
+          background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
+          border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
+          color: 'var(--text, #e5e7eb)',
+          cursor: 'pointer',
+          zIndex: 1000,
+          transition: 'all 0.2s ease',
+          backdropFilter: 'blur(12px)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--interactive-hover, rgba(255, 255, 255, 0.15))';
+          e.currentTarget.style.transform = 'scale(1.05)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.1))';
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+      >
+        <FontAwesomeIcon icon={faGear} style={{ fontSize: '20px' }} />
+      </button>
+
       {/* Wallpaper Background */}
       {wallpaperEnabled && (
         <>
@@ -1669,65 +1833,8 @@ export default function App() {
           </ErrorBoundary>
         </div>
 
-        {/* Pins and Cool Feed Side by Side */}
-        <ErrorBoundary>
-          <QuickAccess displaySettings={displaySettings} initialShowPings={showPingsSection} initialShowFeed={showFeedSection} />
-        </ErrorBoundary>
-
-        {/* Shared Workspace (team) */}
-        <div className="shared-workspace-container section" style={{ marginTop: 'var(--section-spacing)' }}>
-          <ErrorBoundary>
-            <SharedWorkspace
-              teamId="demo-team"
-              userId="demo-user"
-              wsUrl="wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev"
-            />
-          </ErrorBoundary>
-        </div>
-
-        <div className="pinned-workspace-container section" style={{ marginTop: 'var(--section-spacing)' }}>
-          {displaySettings.pinnedWorkspaces !== false && (
-            <ErrorBoundary>
-              <PinnedWorkspace
-                items={pinnedWorkspaces}
-                active={activePinnedWorkspace}
-                onSelect={(name) => setActivePinnedWorkspace(name)}
-                onUnpin={unpinWorkspace}
-                workspaces={savedWorkspaces}
-                onReorder={(order) => {
-                  if (Array.isArray(order)) {
-                    setPinnedWorkspaces(order);
-                    try { savePinnedWorkspaces(order); } catch { }
-                  }
-                }}
-              />
-            </ErrorBoundary>
-          )}
-        </div>
-
-        <div className="workspace-filters-section section" style={{ marginTop: 'var(--section-spacing)' }}>
-          <WorkspaceSection
-            displaySettings={displaySettings}
-            workspace={workspace}
-            setWorkspace={setWorkspace}
-            filterItems={filterItems}
-            createWorkspace={createWorkspace}
-            togglePinWorkspace={togglePinWorkspace}
-            handleOpenAddLinkModal={handleOpenAddLinkModal}
-            pinnedWorkspaces={pinnedWorkspaces}
-            handleShareWorkspaceUrl={handleShareWorkspaceUrl}
-            savedWorkspaces={savedWorkspaces}
-            mergedWorkspaceItems={mergedWorkspaceItems}
-            renderWorkspaceGrid={renderWorkspaceGrid}
-          />
-        </div>
-
-        <div className="activity-panel-section section" style={{ marginTop: 'var(--section-spacing)' }}>
-          {/* Always render content; hydration refreshes in background */}
-          <ErrorBoundary>
-            <ActivityPanel activeSection={activeSection} />
-          </ErrorBoundary>
-        </div>
+        {/* All draggable sections below the search */}
+        <DraggableSections sections={allSections} storageKey="mainSectionOrder" />
 
         <div style={{ marginTop: 'var(--section-spacing)' }}>
           {addingToWorkspace && (

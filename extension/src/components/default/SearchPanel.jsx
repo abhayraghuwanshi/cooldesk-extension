@@ -163,6 +163,7 @@ export function SearchPanel() {
 
     return (
         <div style={{
+            position: 'relative',
             marginBottom: 'var(--section-spacing)',
             padding: '60px 40px 80px',
             background: 'var(--glass-bg, rgba(255, 255, 255, 0.03))',
