@@ -7,12 +7,12 @@ import { getActivityData } from '../../services/activityService';
 import { enqueueOpenInChrome, getHostActivity, getHostDashboard } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils';
 
-export function CoolFeedSection({ tabs, pings }) {
+export function CoolFeedSection({ tabs, pings, maxItems = 10 }) {
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
   const [sortBy, setSortBy] = React.useState('all'); // 'all' | 'time' | 'clicks' | 'scroll' | 'forms'
-  const [maxFeed, setMaxFeed] = React.useState(10);
+  const [maxFeed, setMaxFeed] = React.useState(maxItems);
   const [hiddenUrls, setHiddenUrls] = React.useState(() => new Set());
   const uiStateRef = React.useRef(null);
   const [ctxMenu, setCtxMenu] = React.useState({ show: false, x: 0, y: 0, url: null });
@@ -418,14 +418,14 @@ export function CoolFeedSection({ tabs, pings }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: '8px',
+                    padding: '10px',
                     cursor: 'pointer',
                     background: 'rgba(255, 255, 255, 0.02)',
-                    borderRadius: '8px',
+                    borderRadius: '10px',
                     border: `1px solid rgba(255, 255, 255, 0.05)`,
                     transition: 'all 0.2s ease',
-                    width: '32px',
-                    height: '32px',
+                    width: '48px',
+                    height: '48px',
                     position: 'relative'
                   }}
                   onMouseEnter={(e) => {
@@ -444,10 +444,10 @@ export function CoolFeedSection({ tabs, pings }) {
                       src={firstSrc}
                       alt={host}
                       style={{
-                        width: '20px',
-                        height: '20px',
+                        width: '28px',
+                        height: '28px',
                         objectFit: 'contain',
-                        borderRadius: '4px'
+                        borderRadius: '6px'
                       }}
                       onError={(e) => {
                         if (originIco && e.target.src !== originIco) {
@@ -457,14 +457,14 @@ export function CoolFeedSection({ tabs, pings }) {
                         // If all favicon attempts fail, show globe icon
                         const fallback = document.createElement('div');
                         fallback.style.cssText = `
-                          width: 20px;
-                          height: 20px;
-                          border-radius: 4px;
+                          width: 28px;
+                          height: 28px;
+                          border-radius: 6px;
                           background: rgba(52, 199, 89, 0.2);
                           display: flex;
                           align-items: center;
                           justify-content: center;
-                          font-size: 12px;
+                          font-size: 16px;
                           color: #34C759;
                         `;
                         fallback.innerHTML = '🌐';
@@ -473,14 +473,14 @@ export function CoolFeedSection({ tabs, pings }) {
                     />
                   ) : (
                     <div style={{
-                      width: '20px',
-                      height: '20px',
-                      borderRadius: '4px',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '6px',
                       background: 'rgba(52, 199, 89, 0.2)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 'var(--font-size-sm)',
+                      fontSize: '16px',
                       color: '#34C759'
                     }}>
                       <FontAwesomeIcon icon={faGlobe} />

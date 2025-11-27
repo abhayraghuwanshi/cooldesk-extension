@@ -746,7 +746,7 @@ const modal = (
                                 </svg>
                             </div>
                             <div>
-                                <div style={{ fontSize: '16px', fontWeight: '500' }}>Search Google</div>
+                                <div style={{ fontSize: '16px', fontWeight: '500' }}>Search with Default Engine</div>
                                 <div style={{ fontSize: '14px', color: 'color-mix(in srgb, var(--text, #e5e7eb) 52%, transparent)' }}>&quot;{search}&quot;</div>
                             </div>
                         </div>
