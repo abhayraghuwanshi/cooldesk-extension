@@ -501,356 +501,356 @@ const VoiceNavigationChatGPT = () => {
 
     // Simple bridge pattern - delegate all commands to processor
     const commands = {
-        // Special handling for numbered commands (annyang pattern)
-        'switch to tab :num': async (num) => {
-          await commandProcessorRef.current.processVoiceCommand(`switch to tab ${num}`);
-        },
-        'go to tab :num': async (num) => {
-          await commandProcessorRef.current.processVoiceCommand(`go to tab ${num}`);
-        },
-        'click :num': (num) => {
-          console.log('[VoiceNav] "click [num]" command triggered, num:', num);
-          clickByNumber(`click ${num}`);
-        },
-        'click number :num': (num) => {
-          console.log('[VoiceNav] "click number [num]" command triggered, num:', num);
-          clickByNumber(`click number ${num}`);
-        },
-        // Commands with parameters
-        'find tab *term': async (term) => {
-          showTabNotification(`Searching for tab: "${term}"...`, 'info');
-          await commandProcessorRef.current.processVoiceCommand(`find tab ${term}`);
-        },
-        'search tab *term': async (term) => {
-          showTabNotification(`Searching for tab: "${term}"...`, 'info');
-          await commandProcessorRef.current.processVoiceCommand(`search tab ${term}`);
-        },
-        'search for *term': async (term) => {
-          showTabNotification(`Searching for: "${term}"...`, 'info');
-          await commandProcessorRef.current.processVoiceCommand(`search for ${term}`);
-        },
-        'google search *term': async (term) => {
-          showTabNotification(`Google searching: "${term}"...`, 'info');
-          await commandProcessorRef.current.processVoiceCommand(`google search ${term}`);
-        },
-        'search *term': async (term) => {
-          showTabNotification(`Searching: "${term}"...`, 'info');
-          await commandProcessorRef.current.processVoiceCommand(`search ${term}`);
-        },
-        // Open commands
-        'open *term': async (term) => {
-          showTabNotification(`Opening: "${term}"...`, 'info');
-          await commandProcessorRef.current.processVoiceCommand(`open ${term}`);
-        },
-        'click *text': async (text) => {
-          showTabNotification(`Clicking: "${text}"...`, 'info');
-          await commandProcessorRef.current.processVoiceCommand(`click ${text}`);
-        },
-        'click on *text': async (text) => {
-          showTabNotification(`Clicking: "${text}"...`, 'info');
-          await commandProcessorRef.current.processVoiceCommand(`click on ${text}`);
-        },
+      // Special handling for numbered commands (annyang pattern)
+      'switch to tab :num': async (num) => {
+        await commandProcessorRef.current.processVoiceCommand(`switch to tab ${num}`);
+      },
+      'go to tab :num': async (num) => {
+        await commandProcessorRef.current.processVoiceCommand(`go to tab ${num}`);
+      },
+      'click :num': (num) => {
+        console.log('[VoiceNav] "click [num]" command triggered, num:', num);
+        clickByNumber(`click ${num}`);
+      },
+      'click number :num': (num) => {
+        console.log('[VoiceNav] "click number [num]" command triggered, num:', num);
+        clickByNumber(`click number ${num}`);
+      },
+      // Commands with parameters
+      'find tab *term': async (term) => {
+        showTabNotification(`Searching for tab: "${term}"...`, 'info');
+        await commandProcessorRef.current.processVoiceCommand(`find tab ${term}`);
+      },
+      'search tab *term': async (term) => {
+        showTabNotification(`Searching for tab: "${term}"...`, 'info');
+        await commandProcessorRef.current.processVoiceCommand(`search tab ${term}`);
+      },
+      'search for *term': async (term) => {
+        showTabNotification(`Searching for: "${term}"...`, 'info');
+        await commandProcessorRef.current.processVoiceCommand(`search for ${term}`);
+      },
+      'google search *term': async (term) => {
+        showTabNotification(`Google searching: "${term}"...`, 'info');
+        await commandProcessorRef.current.processVoiceCommand(`google search ${term}`);
+      },
+      'search *term': async (term) => {
+        showTabNotification(`Searching: "${term}"...`, 'info');
+        await commandProcessorRef.current.processVoiceCommand(`search ${term}`);
+      },
+      // Open commands
+      'open *term': async (term) => {
+        showTabNotification(`Opening: "${term}"...`, 'info');
+        await commandProcessorRef.current.processVoiceCommand(`open ${term}`);
+      },
+      'click *text': async (text) => {
+        showTabNotification(`Clicking: "${text}"...`, 'info');
+        await commandProcessorRef.current.processVoiceCommand(`click ${text}`);
+      },
+      'click on *text': async (text) => {
+        showTabNotification(`Clicking: "${text}"...`, 'info');
+        await commandProcessorRef.current.processVoiceCommand(`click on ${text}`);
+      },
 
-        // Special UI commands that need to stay in the component
-        'show numbers': () => {
-          console.log('[VoiceNav] "show numbers" command triggered');
-          showTabNotification('Showing clickable numbers...', 'info');
-          showElementNumbers();
-        },
-        'show numbers.': () => {
-          console.log('[VoiceNav] "show numbers." command triggered');
-          showTabNotification('Showing clickable numbers...', 'info');
-          showElementNumbers();
-        },
-        'show numbers!': () => {
-          console.log('[VoiceNav] "show numbers!" command triggered');
-          showTabNotification('Showing clickable numbers...', 'info');
-          showElementNumbers();
-        },
-        'number elements': () => {
-          console.log('[VoiceNav] "number elements" command triggered');
-          showTabNotification('Numbering page elements...', 'info');
-          showElementNumbers();
-        },
-        'number elements.': () => {
-          console.log('[VoiceNav] "number elements." command triggered');
-          showTabNotification('Numbering page elements...', 'info');
-          showElementNumbers();
-        },
-        'number elements!': () => {
-          console.log('[VoiceNav] "number elements!" command triggered');
-          showTabNotification('Numbering page elements...', 'info');
-          showElementNumbers();
-        },
-        'hide numbers': () => {
-          console.log('[VoiceNav] "hide numbers" command triggered');
-          showTabNotification('Hiding numbers...', 'info');
-          hideElementNumbers();
-        },
-        'hide numbers.': () => {
-          console.log('[VoiceNav] "hide numbers." command triggered');
-          showTabNotification('Hiding numbers...', 'info');
-          hideElementNumbers();
-        },
-        'hide numbers!': () => {
-          console.log('[VoiceNav] "hide numbers!" command triggered');
-          showTabNotification('Hiding numbers...', 'info');
-          hideElementNumbers();
-        },
-        'clear numbers': () => {
-          console.log('[VoiceNav] "clear numbers" command triggered');
-          showTabNotification('Clearing numbers...', 'info');
-          hideElementNumbers();
-        },
-        'clear numbers.': () => {
-          console.log('[VoiceNav] "clear numbers." command triggered');
-          showTabNotification('Clearing numbers...', 'info');
-          hideElementNumbers();
-        },
-        'clear numbers!': () => {
-          console.log('[VoiceNav] "clear numbers!" command triggered');
-          showTabNotification('Clearing numbers...', 'info');
-          hideElementNumbers();
-        },
-        // Media controls
-        'play': async () => {
-          await commandProcessorRef.current.processVoiceCommand('play');
-        },
-        'play.': async () => {
-          await commandProcessorRef.current.processVoiceCommand('play');
-        },
-        'play!': async () => {
-          await commandProcessorRef.current.processVoiceCommand('play');
-        },
-        'pause': async () => {
-          await commandProcessorRef.current.processVoiceCommand('pause');
-        },
-        'pause.': async () => {
-          await commandProcessorRef.current.processVoiceCommand('pause');
-        },
-        'pause!': async () => {
-          await commandProcessorRef.current.processVoiceCommand('pause');
-        },
-        'spacebar': async () => {
-          await commandProcessorRef.current.processVoiceCommand('spacebar');
-        },
-        'click play': async () => {
-          await commandProcessorRef.current.processVoiceCommand('click play');
-        },
-        'click pause': async () => {
-          await commandProcessorRef.current.processVoiceCommand('click pause');
-        },
-        // New workspace and note commands
-        'add note *note': async (note) => {
-          await commandProcessorRef.current.processVoiceCommand(`add note ${note}`);
-        },
-        'create note *note': async (note) => {
-          await commandProcessorRef.current.processVoiceCommand(`create note ${note}`);
-        },
-        'add todo *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
-        },
-        'add todo. *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
-        },
-        'add todo! *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
-        },
-        'add to do *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
-        },
-        'add to do. *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
-        },
-        'add to do! *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
-        },
-        'create todo *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
-        },
-        'create todo. *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
-        },
-        'create todo! *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
-        },
-        'create to do *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
-        },
-        'create to do. *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
-        },
-        'create to do! *todo': async (todo) => {
-          await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
-        },
-        'save url to workspace': async () => {
-          await commandProcessorRef.current.processVoiceCommand('save url to workspace');
-        },
-        'save to workspace': async () => {
-          await commandProcessorRef.current.processVoiceCommand('save to workspace');
-        },
-        'pin this page': async () => {
-          await commandProcessorRef.current.processVoiceCommand('pin this page');
-        },
-        'add to pins': async () => {
-          await commandProcessorRef.current.processVoiceCommand('add to pins');
-        },
-        'pin page': async () => {
-          await commandProcessorRef.current.processVoiceCommand('pin page');
-        },
-        // Navigation commands
-        'next tab': async () => {
-          showTabNotification('Switching to next tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('next tab');
-        },
-        'next tab.': async () => {
-          showTabNotification('Switching to next tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('next tab');
-        },
-        'next tab!': async () => {
-          showTabNotification('Switching to next tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('next tab');
-        },
-        'previous tab': async () => {
-          showTabNotification('Switching to previous tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('previous tab');
-        },
-        'previous tab.': async () => {
-          showTabNotification('Switching to previous tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('previous tab');
-        },
-        'previous tab!': async () => {
-          showTabNotification('Switching to previous tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('previous tab');
-        },
-        'prev tab': async () => {
-          showTabNotification('Switching to previous tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('prev tab');
-        },
-        'prev tab.': async () => {
-          showTabNotification('Switching to previous tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('prev tab');
-        },
-        'prev tab!': async () => {
-          showTabNotification('Switching to previous tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('prev tab');
-        },
-        'close tab': async () => {
-          showTabNotification('Closing current tab...', 'warning');
-          await commandProcessorRef.current.processVoiceCommand('close tab');
-        },
-        'close tab.': async () => {
-          showTabNotification('Closing current tab...', 'warning');
-          await commandProcessorRef.current.processVoiceCommand('close tab');
-        },
-        'close tab!': async () => {
-          showTabNotification('Closing current tab...', 'warning');
-          await commandProcessorRef.current.processVoiceCommand('close tab');
-        },
-        'new tab': async () => {
-          showTabNotification('Opening new tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('new tab');
-        },
-        'new tab.': async () => {
-          showTabNotification('Opening new tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('new tab');
-        },
-        'new tab!': async () => {
-          showTabNotification('Opening new tab...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('new tab');
-        },
-        'scroll down': async () => {
-          showTabNotification('Scrolling down...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('scroll down');
-        },
-        'scroll down.': async () => {
-          showTabNotification('Scrolling down...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('scroll down');
-        },
-        'scroll down!': async () => {
-          showTabNotification('Scrolling down...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('scroll down');
-        },
-        'scroll up': async () => {
-          showTabNotification('Scrolling up...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('scroll up');
-        },
-        'scroll up.': async () => {
-          showTabNotification('Scrolling up...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('scroll up');
-        },
-        'scroll up!': async () => {
-          showTabNotification('Scrolling up...', 'info');
-          await commandProcessorRef.current.processVoiceCommand('scroll up');
-        },
-        'go back': async () => {
-          await commandProcessorRef.current.processVoiceCommand('go back');
-        },
-        'go back.': async () => {
-          await commandProcessorRef.current.processVoiceCommand('go back');
-        },
-        'go back!': async () => {
-          await commandProcessorRef.current.processVoiceCommand('go back');
-        },
-        'go forward': async () => {
-          await commandProcessorRef.current.processVoiceCommand('go forward');
-        },
-        'go forward.': async () => {
-          await commandProcessorRef.current.processVoiceCommand('go forward');
-        },
-        'go forward!': async () => {
-          await commandProcessorRef.current.processVoiceCommand('go forward');
-        },
-        'reload': async () => {
-          await commandProcessorRef.current.processVoiceCommand('reload');
-        },
-        'reload.': async () => {
-          await commandProcessorRef.current.processVoiceCommand('reload');
-        },
-        'reload!': async () => {
-          await commandProcessorRef.current.processVoiceCommand('reload');
-        },
-        'refresh': async () => {
-          await commandProcessorRef.current.processVoiceCommand('refresh');
-        },
-        'refresh.': async () => {
-          await commandProcessorRef.current.processVoiceCommand('refresh');
-        },
-        'refresh!': async () => {
-          await commandProcessorRef.current.processVoiceCommand('refresh');
-        },
-        // Sleep mode commands
-        'stop listening': () => {
-          console.log('[VoiceNav] "stop listening" command triggered');
-          showTabNotification('Voice navigation sleeping...', 'warning');
-          enterSleepMode();
-        },
-        'stop listening.': () => {
-          console.log('[VoiceNav] "stop listening." command triggered');
-          showTabNotification('Voice navigation sleeping...', 'warning');
-          enterSleepMode();
-        },
-        'stop listening!': () => {
-          console.log('[VoiceNav] "stop listening!" command triggered');
-          showTabNotification('Voice navigation sleeping...', 'warning');
-          enterSleepMode();
-        },
-        'go to sleep': () => {
-          console.log('[VoiceNav] "go to sleep" command triggered');
-          showTabNotification('Voice navigation going to sleep...', 'warning');
-          enterSleepMode();
-        },
-        'go to sleep.': () => {
-          console.log('[VoiceNav] "go to sleep." command triggered');
-          showTabNotification('Voice navigation going to sleep...', 'warning');
-          enterSleepMode();
-        },
-        'go to sleep!': () => {
-          console.log('[VoiceNav] "go to sleep!" command triggered');
-          showTabNotification('Voice navigation going to sleep...', 'warning');
-          enterSleepMode();
-        }
-      };
+      // Special UI commands that need to stay in the component
+      'show numbers': () => {
+        console.log('[VoiceNav] "show numbers" command triggered');
+        showTabNotification('Showing clickable numbers...', 'info');
+        showElementNumbers();
+      },
+      'show numbers.': () => {
+        console.log('[VoiceNav] "show numbers." command triggered');
+        showTabNotification('Showing clickable numbers...', 'info');
+        showElementNumbers();
+      },
+      'show numbers!': () => {
+        console.log('[VoiceNav] "show numbers!" command triggered');
+        showTabNotification('Showing clickable numbers...', 'info');
+        showElementNumbers();
+      },
+      'number elements': () => {
+        console.log('[VoiceNav] "number elements" command triggered');
+        showTabNotification('Numbering page elements...', 'info');
+        showElementNumbers();
+      },
+      'number elements.': () => {
+        console.log('[VoiceNav] "number elements." command triggered');
+        showTabNotification('Numbering page elements...', 'info');
+        showElementNumbers();
+      },
+      'number elements!': () => {
+        console.log('[VoiceNav] "number elements!" command triggered');
+        showTabNotification('Numbering page elements...', 'info');
+        showElementNumbers();
+      },
+      'hide numbers': () => {
+        console.log('[VoiceNav] "hide numbers" command triggered');
+        showTabNotification('Hiding numbers...', 'info');
+        hideElementNumbers();
+      },
+      'hide numbers.': () => {
+        console.log('[VoiceNav] "hide numbers." command triggered');
+        showTabNotification('Hiding numbers...', 'info');
+        hideElementNumbers();
+      },
+      'hide numbers!': () => {
+        console.log('[VoiceNav] "hide numbers!" command triggered');
+        showTabNotification('Hiding numbers...', 'info');
+        hideElementNumbers();
+      },
+      'clear numbers': () => {
+        console.log('[VoiceNav] "clear numbers" command triggered');
+        showTabNotification('Clearing numbers...', 'info');
+        hideElementNumbers();
+      },
+      'clear numbers.': () => {
+        console.log('[VoiceNav] "clear numbers." command triggered');
+        showTabNotification('Clearing numbers...', 'info');
+        hideElementNumbers();
+      },
+      'clear numbers!': () => {
+        console.log('[VoiceNav] "clear numbers!" command triggered');
+        showTabNotification('Clearing numbers...', 'info');
+        hideElementNumbers();
+      },
+      // Media controls
+      'play': async () => {
+        await commandProcessorRef.current.processVoiceCommand('play');
+      },
+      'play.': async () => {
+        await commandProcessorRef.current.processVoiceCommand('play');
+      },
+      'play!': async () => {
+        await commandProcessorRef.current.processVoiceCommand('play');
+      },
+      'pause': async () => {
+        await commandProcessorRef.current.processVoiceCommand('pause');
+      },
+      'pause.': async () => {
+        await commandProcessorRef.current.processVoiceCommand('pause');
+      },
+      'pause!': async () => {
+        await commandProcessorRef.current.processVoiceCommand('pause');
+      },
+      'spacebar': async () => {
+        await commandProcessorRef.current.processVoiceCommand('spacebar');
+      },
+      'click play': async () => {
+        await commandProcessorRef.current.processVoiceCommand('click play');
+      },
+      'click pause': async () => {
+        await commandProcessorRef.current.processVoiceCommand('click pause');
+      },
+      // New workspace and note commands
+      'add note *note': async (note) => {
+        await commandProcessorRef.current.processVoiceCommand(`add note ${note}`);
+      },
+      'create note *note': async (note) => {
+        await commandProcessorRef.current.processVoiceCommand(`create note ${note}`);
+      },
+      'add todo *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+      },
+      'add todo. *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+      },
+      'add todo! *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+      },
+      'add to do *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+      },
+      'add to do. *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+      },
+      'add to do! *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+      },
+      'create todo *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+      },
+      'create todo. *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+      },
+      'create todo! *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+      },
+      'create to do *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+      },
+      'create to do. *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+      },
+      'create to do! *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`create todo ${todo}`);
+      },
+      'save url to workspace': async () => {
+        await commandProcessorRef.current.processVoiceCommand('save url to workspace');
+      },
+      'save to workspace': async () => {
+        await commandProcessorRef.current.processVoiceCommand('save to workspace');
+      },
+      'pin this page': async () => {
+        await commandProcessorRef.current.processVoiceCommand('pin this page');
+      },
+      'add to pins': async () => {
+        await commandProcessorRef.current.processVoiceCommand('add to pins');
+      },
+      'pin page': async () => {
+        await commandProcessorRef.current.processVoiceCommand('pin page');
+      },
+      // Navigation commands
+      'next tab': async () => {
+        showTabNotification('Switching to next tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('next tab');
+      },
+      'next tab.': async () => {
+        showTabNotification('Switching to next tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('next tab');
+      },
+      'next tab!': async () => {
+        showTabNotification('Switching to next tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('next tab');
+      },
+      'previous tab': async () => {
+        showTabNotification('Switching to previous tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('previous tab');
+      },
+      'previous tab.': async () => {
+        showTabNotification('Switching to previous tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('previous tab');
+      },
+      'previous tab!': async () => {
+        showTabNotification('Switching to previous tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('previous tab');
+      },
+      'prev tab': async () => {
+        showTabNotification('Switching to previous tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('prev tab');
+      },
+      'prev tab.': async () => {
+        showTabNotification('Switching to previous tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('prev tab');
+      },
+      'prev tab!': async () => {
+        showTabNotification('Switching to previous tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('prev tab');
+      },
+      'close tab': async () => {
+        showTabNotification('Closing current tab...', 'warning');
+        await commandProcessorRef.current.processVoiceCommand('close tab');
+      },
+      'close tab.': async () => {
+        showTabNotification('Closing current tab...', 'warning');
+        await commandProcessorRef.current.processVoiceCommand('close tab');
+      },
+      'close tab!': async () => {
+        showTabNotification('Closing current tab...', 'warning');
+        await commandProcessorRef.current.processVoiceCommand('close tab');
+      },
+      'new tab': async () => {
+        showTabNotification('Opening new tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('new tab');
+      },
+      'new tab.': async () => {
+        showTabNotification('Opening new tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('new tab');
+      },
+      'new tab!': async () => {
+        showTabNotification('Opening new tab...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('new tab');
+      },
+      'scroll down': async () => {
+        showTabNotification('Scrolling down...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('scroll down');
+      },
+      'scroll down.': async () => {
+        showTabNotification('Scrolling down...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('scroll down');
+      },
+      'scroll down!': async () => {
+        showTabNotification('Scrolling down...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('scroll down');
+      },
+      'scroll up': async () => {
+        showTabNotification('Scrolling up...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('scroll up');
+      },
+      'scroll up.': async () => {
+        showTabNotification('Scrolling up...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('scroll up');
+      },
+      'scroll up!': async () => {
+        showTabNotification('Scrolling up...', 'info');
+        await commandProcessorRef.current.processVoiceCommand('scroll up');
+      },
+      'go back': async () => {
+        await commandProcessorRef.current.processVoiceCommand('go back');
+      },
+      'go back.': async () => {
+        await commandProcessorRef.current.processVoiceCommand('go back');
+      },
+      'go back!': async () => {
+        await commandProcessorRef.current.processVoiceCommand('go back');
+      },
+      'go forward': async () => {
+        await commandProcessorRef.current.processVoiceCommand('go forward');
+      },
+      'go forward.': async () => {
+        await commandProcessorRef.current.processVoiceCommand('go forward');
+      },
+      'go forward!': async () => {
+        await commandProcessorRef.current.processVoiceCommand('go forward');
+      },
+      'reload': async () => {
+        await commandProcessorRef.current.processVoiceCommand('reload');
+      },
+      'reload.': async () => {
+        await commandProcessorRef.current.processVoiceCommand('reload');
+      },
+      'reload!': async () => {
+        await commandProcessorRef.current.processVoiceCommand('reload');
+      },
+      'refresh': async () => {
+        await commandProcessorRef.current.processVoiceCommand('refresh');
+      },
+      'refresh.': async () => {
+        await commandProcessorRef.current.processVoiceCommand('refresh');
+      },
+      'refresh!': async () => {
+        await commandProcessorRef.current.processVoiceCommand('refresh');
+      },
+      // Sleep mode commands
+      'stop listening': () => {
+        console.log('[VoiceNav] "stop listening" command triggered');
+        showTabNotification('Voice navigation sleeping...', 'warning');
+        enterSleepMode();
+      },
+      'stop listening.': () => {
+        console.log('[VoiceNav] "stop listening." command triggered');
+        showTabNotification('Voice navigation sleeping...', 'warning');
+        enterSleepMode();
+      },
+      'stop listening!': () => {
+        console.log('[VoiceNav] "stop listening!" command triggered');
+        showTabNotification('Voice navigation sleeping...', 'warning');
+        enterSleepMode();
+      },
+      'go to sleep': () => {
+        console.log('[VoiceNav] "go to sleep" command triggered');
+        showTabNotification('Voice navigation going to sleep...', 'warning');
+        enterSleepMode();
+      },
+      'go to sleep.': () => {
+        console.log('[VoiceNav] "go to sleep." command triggered');
+        showTabNotification('Voice navigation going to sleep...', 'warning');
+        enterSleepMode();
+      },
+      'go to sleep!': () => {
+        console.log('[VoiceNav] "go to sleep!" command triggered');
+        showTabNotification('Voice navigation going to sleep...', 'warning');
+        enterSleepMode();
+      }
+    };
 
     return commands;
   };
@@ -2010,7 +2010,6 @@ const VoiceNavigationChatGPT = () => {
           gap: '12px',
           marginBottom: '12px',
           cursor: 'pointer',
-          padding: '8px 16px',
           transition: 'opacity 0.2s ease',
         }}
         onMouseEnter={(e) => {

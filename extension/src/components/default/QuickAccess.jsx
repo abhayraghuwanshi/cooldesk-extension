@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { CoolFeedSection } from './CoolFeedSection';
 import { PingsSection } from './PingsSection';
 
@@ -87,7 +87,7 @@ export function QuickAccess({
             <div
                 onClick={() => setIsCollapsed(true)}
                 style={{
-                    padding: '8px 16px',
+
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',

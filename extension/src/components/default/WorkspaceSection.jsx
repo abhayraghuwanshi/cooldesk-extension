@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 import { WorkspaceFilters } from '../WorkspaceFilters';
+import { WorkspacePillList } from '../WorkspacePillList';
+import '../../styles/default/WorkspaceSection.css';
+import '../../styles/default/PinnedWorkspace.css';
+import '../../styles/WorkspacePillList.css';
 
 export function WorkspaceSection({
     displaySettings = {},
@@ -88,8 +92,8 @@ export function WorkspaceSection({
     }
 
     return (
-        <div style={{ marginBottom: 'var(--section-spacing)' }}>
-            {/* Header with toggle */}
+        <div className="workspace-section">
+            {/* Collapsible Header */}
             <div
                 onClick={() => setIsCollapsed(true)}
                 style={{
@@ -97,7 +101,6 @@ export function WorkspaceSection({
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     marginBottom: 16,
-                    padding: '8px 16px',
                     cursor: 'pointer',
                     transition: 'opacity 0.2s ease',
                 }}
@@ -129,9 +132,11 @@ export function WorkspaceSection({
                 </span>
             </div>
 
-            {/* Filters */}
-            <div style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap', margin: '24px 0 8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} data-onboarding="workspace-filters">
+            <div className="workspace-section__filters">
+                <div
+                    className="workspace-section__filters-inner"
+                    data-onboarding="workspace-filters"
+                >
                     <WorkspaceFilters
                         items={filterItems}
                         active={workspace}
@@ -145,16 +150,12 @@ export function WorkspaceSection({
                 </div>
             </div>
 
-            {/* Workspace Grid Content */}
             {workspace && (
-                <div className="workspace-grid-section section">
-                    <div key={`ws-${workspace}`} className="ws-animate-in">
-                        {renderWorkspaceGrid(
-                            savedWorkspaces.find(ws => ws.name === workspace) || { name: workspace, urls: [] },
-                            mergedWorkspaceItems,
-                            workspace
-                        )}
-                    </div>
+                <div className="workspace-pills-section workspace-section__pills">
+                    <WorkspacePillList
+                        items={mergedWorkspaceItems || []}
+                        embedded={true}
+                    />
                 </div>
             )}
         </div>

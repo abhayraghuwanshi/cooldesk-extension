@@ -1,3 +1,20 @@
+/* Workspace Pills Section Container */
+.workspace-pills-section {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 14px;
+    background: var(--glass-bg, rgba(28, 28, 33, 0.45));
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.12));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.workspace-section__pills {
+    transition: all 0.3s ease;
+}
+
+/* Pill Scroll Container */
 .workspace-pill-scroll {
     scrollbar-gutter: stable;
 }
@@ -24,4 +41,12 @@
 
 .workspace-pill-scroll::-webkit-scrollbar-corner {
     background: transparent;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .workspace-pills-section {
+        padding: 12px;
+        margin-top: 12px;
+    }
 }

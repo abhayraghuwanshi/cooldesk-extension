@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createSharedWorkspaceClient, createUseSharedWorkspaceHook } from '../services/sharedWorkspaceService.js';
 import { getFaviconUrl } from '../utils';
 import WorkspacePillList from './WorkspacePillList.jsx';
@@ -94,7 +94,6 @@ export function SharedWorkspace({ teamId, userId, wsUrl, title = 'Shared Workspa
                     justifyContent: 'space-between',
                     marginBottom: 8,
                     cursor: 'pointer',
-                    padding: '8px 16px',
                     transition: 'opacity 0.2s ease',
                 }}
                 onMouseEnter={(e) => {

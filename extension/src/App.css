@@ -508,7 +508,6 @@ html body.wallpaper-enabled.bg-ai-quantum {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
   background: var(--header-bg);
   border-bottom: 1px solid var(--border-color);
   backdrop-filter: blur(10px);

@@ -176,7 +176,7 @@ export function PinnedWorkspace({ items = [], active, onSelect, onUnpin, workspa
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     marginBottom: 16,
-                    padding: '8px 16px',
+
                     cursor: 'pointer',
                     transition: 'opacity 0.2s ease',
                 }}

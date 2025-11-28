@@ -46,6 +46,7 @@ import { CurrentTabsSection } from './components/default/CurrentTabsSection';
 import { SearchPanel } from './components/default/SearchPanel';
 import { SimpleNotes } from './components/default/SimpleNotes';
 import { WorkspaceSection } from './components/default/WorkspaceSection';
+import VoiceNavigationChatGPT from './components/toolbar/VoiceNavigationChatGPT';
 import { DraggableSections } from './components/DraggableSections';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
@@ -1660,7 +1661,7 @@ export default function App() {
     //             workspaces={savedWorkspaces}
     //             onReorder={(order) => {
     //               if (Array.isArray(order)) {
-    //                 setPinnedWorkspaces(order);
+    //                 setPinnedWorkspace s(order);
     //                 try { savePinnedWorkspaces(order); } catch { }
     //               }
     //             }}
@@ -1688,6 +1689,16 @@ export default function App() {
             mergedWorkspaceItems={mergedWorkspaceItems}
             renderWorkspaceGrid={renderWorkspaceGrid}
           />
+        </div>
+      )
+    },
+    {
+      id: 'voice-navigation',
+      component: displaySettings.voiceNavigationSection !== false && (
+        <div key="voice-navigation" className="section">
+          <ErrorBoundary>
+            <VoiceNavigationChatGPT />
+          </ErrorBoundary>
         </div>
       )
     },
