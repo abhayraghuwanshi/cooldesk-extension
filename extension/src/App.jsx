@@ -1695,7 +1695,7 @@ export default function App() {
     {
       id: 'voice-navigation',
       component: displaySettings.voiceNavigationSection !== false && (
-        <div key="voice-navigation" className="section">
+        <div key="voice-navigation" className="section" data-onboarding="voice-navigation-section">
           <ErrorBoundary>
             <VoiceNavigationChatGPT />
           </ErrorBoundary>
@@ -1705,7 +1705,7 @@ export default function App() {
     {
       id: 'active-tabs',
       component: displaySettings.currentTabsSection !== false && (
-        <div key="active-tabs">
+        <div key="active-tabs" data-onboarding="current-tabs-section">
           <ErrorBoundary>
             <CurrentTabsSection />
           </ErrorBoundary>
@@ -1715,7 +1715,7 @@ export default function App() {
     {
       id: 'ai-chats',
       component: displaySettings.aiChatsSection !== false && (
-        <div key="ai-chats">
+        <div key="ai-chats" data-onboarding="ai-chats-section">
           <ErrorBoundary>
             <AIChatsSection />
           </ErrorBoundary>
@@ -1725,7 +1725,7 @@ export default function App() {
     {
       id: 'notes',
       component: displaySettings.notesSection !== false && (
-        <div key="notes">
+        <div key="notes" data-onboarding="notes-section">
           <ErrorBoundary>
             <SimpleNotes />
           </ErrorBoundary>
@@ -1762,6 +1762,7 @@ export default function App() {
     }}>
       {/* Settings Button - Top Right */}
       <button
+        data-onboarding="settings-button"
         onClick={() => setShowSettings(true)}
         title="Settings"
         style={{

@@ -7,84 +7,63 @@ const ONBOARDING_STEPS = [
   {
     id: 'welcome',
     title: '👋 Welcome to CoolDesk!',
-    description: 'Let\'s take a quick tour of your new workspace dashboard.',
+    description: 'Let\'s take a quick tour of your new workspace dashboard. This will only take a minute!',
     target: null, // Center modal
     position: 'center'
   },
   {
-    id: 'view-modes',
-    title: '👁️ View Modes',
-    description: 'Switch between different view modes to customize your workspace. Try Focus Mode for distraction-free work!',
-    target: '.view-mode-selector',
-    position: 'bottom'
-  },
-  {
-    id: 'pinned-workspaces',
-    title: '📌 Pinned Workspaces',
-    description: 'Quick access to your favorite workspaces. Pin workspaces you use frequently for instant access.',
-    target: '[data-onboarding="pinned-workspaces"]',
-    position: 'bottom'
-  },
-  {
-    id: 'workspace-filters',
-    title: '💼 Workspace Filters',
-    description: 'Filter and organize your tabs by workspace. Create new workspaces to group related tabs together.',
+    id: 'workspace-section',
+    title: '💼 Workspaces',
+    description: 'Organize your tabs into workspaces. Auto-created workspaces group related sites (GitHub, ChatGPT, etc.). Click titles to collapse sections and save space!',
     target: '[data-onboarding="workspace-filters"]',
     position: 'bottom'
   },
   {
     id: 'current-tabs',
     title: '📑 Current Tabs',
-    description: 'See all your open browser tabs in one place. Quickly switch, close, or organize them by workspace.',
+    description: 'See all your open browser tabs in one place. Right-click URLs to add notes! Auto-cleanup keeps your tabs organized (20 tab limit, 10min timeout).',
     target: '[data-onboarding="current-tabs-section"]',
     position: 'left'
   },
   {
     id: 'voice-navigation',
     title: '🎤 Voice Navigation',
-    description: 'Control ChatGPT with voice commands. Navigate hands-free and boost your productivity!',
+    description: 'Control ChatGPT with voice commands. Say "scroll down", "click send", or "read response" for hands-free navigation!',
     target: '[data-onboarding="voice-navigation-section"]',
     position: 'left'
   },
   {
     id: 'ai-chats',
-    title: '🤖 AI Chats',
-    description: 'View your chat history from ChatGPT, Claude, Gemini, and other AI platforms all in one place.',
+    title: '🤖 AI Chats History',
+    description: 'All your AI conversations in one place! View chat history from ChatGPT, Claude, Gemini, and other platforms. Click to reopen chats.',
     target: '[data-onboarding="ai-chats-section"]',
     position: 'left'
   },
   {
     id: 'notes',
-    title: '📝 Notes',
-    description: 'Quick notes and reminders with markdown support. Jot down ideas as you work.',
+    title: '📝 Smart Notes',
+    description: 'Create quick notes, todos, or URL-specific notes! Use voice input 🎤 or type. Right-click any URL in workspaces to add a note for that link.',
     target: '[data-onboarding="notes-section"]',
     position: 'left'
   },
   {
-    id: 'daily-notes',
-    title: '📅 Daily Notes',
-    description: 'Keep a daily journal with calendar navigation. Perfect for tracking your daily progress and thoughts.',
-    target: '[data-onboarding="daily-notes-section"]',
+    id: 'drag-sections',
+    title: '🎯 Drag & Drop Sections',
+    description: 'Pro tip: You can drag and reorder ALL sections below! Click and hold the section title, then drag to rearrange your layout however you like.',
+    target: '[data-onboarding="current-tabs-section"]',
     position: 'left'
   },
   {
     id: 'settings',
-    title: '⚙️ Settings',
-    description: 'Customize your experience! Access help, control which components are visible, export your data, and more.',
+    title: '⚙️ Settings & Themes',
+    description: 'Customize everything! Change themes, fonts, wallpapers, toggle sections, export data, and restart this tour anytime from Help.',
     target: '[data-onboarding="settings-button"]',
-    position: 'top'
-  },
-  {
-    id: 'sidebar',
-    title: '📱 Open in Sidebar',
-    description: 'Open CoolDesk in your browser\'s sidebar for quick access while browsing.',
-    target: '[data-onboarding="sidebar-button"]',
-    position: 'top'
+    position: 'bottom'
   },
   {
     id: 'complete',
     title: '🎉 You\'re All Set!',
-    description: 'You\'re ready to boost your productivity with CoolDesk. You can always access this tour from Settings → Help.',
+    description: 'Remember: Sections are draggable, titles are collapsible, and you can right-click URLs for quick actions. Enjoy your personalized workspace!',
     target: null,
     position: 'center'
   }

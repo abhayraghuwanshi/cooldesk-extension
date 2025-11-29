@@ -165,7 +165,59 @@ export async function handleOpenAction(url, tabs = [], onSuccess, onError) {
 }
 
 /**
- * Add URL to browser bookmarks
+ * Get or create the "CoolDesk" bookmarks folder
+ * @returns {Promise<string>} The folder ID
+ */
+async function getOrCreateCoolDeskFolder() {
+  try {
+    // Search for existing "CoolDesk" folder
+    const bookmarks = await chrome.bookmarks.getTree();
+
+    const findCoolDeskFolder = (nodes) => {
+      for (const node of nodes) {
+        // Check if this is the CoolDesk folder
+        if (node.title === 'CoolDesk' && !node.url) {
+          return node.id;
+        }
+        // Recursively search children
+        if (node.children) {
+          const found = findCoolDeskFolder(node.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    let folderId = findCoolDeskFolder(bookmarks);
+
+    // If folder doesn't exist, create it in the "Other Bookmarks" folder
+    if (!folderId) {
+      // Find "Other Bookmarks" folder (usually id "2")
+      const otherBookmarks = bookmarks[0]?.children?.find(node =>
+        node.title === 'Other Bookmarks' || node.id === '2'
+      );
+
+      const parentId = otherBookmarks?.id || '1'; // Fallback to bookmarks bar
+
+      const folder = await chrome.bookmarks.create({
+        parentId: parentId,
+        title: 'CoolDesk'
+      });
+
+      folderId = folder.id;
+      console.log('[CoolDesk] Created bookmarks folder:', folderId);
+    }
+
+    return folderId;
+  } catch (error) {
+    console.error('[CoolDesk] Error getting/creating folder:', error);
+    // Fallback to bookmarks bar if folder creation fails
+    return '1';
+  }
+}
+
+/**
+ * Add URL to browser bookmarks in CoolDesk folder
  * @param {string} url - The URL to bookmark
  * @param {string} title - The title of the page
  * @param {Function} onSuccess - Success callback
@@ -180,11 +232,18 @@ export async function handleAddToBookmarksAction(url, title, onSuccess, onError)
     const hasBookmarksApi = typeof chrome !== 'undefined' && chrome?.bookmarks?.create;
 
     if (hasBookmarksApi) {
+      // Get or create the CoolDesk folder
+      const coolDeskFolderId = await getOrCreateCoolDeskFolder();
+
+      // Create bookmark in the CoolDesk folder
       const bookmark = await chrome.bookmarks.create({
+        parentId: coolDeskFolderId,
         title: title || url,
         url: url
       });
-      onSuccess?.({ action: 'bookmarked', url, title, bookmarkId: bookmark.id });
+
+      console.log('[CoolDesk] Bookmark created in CoolDesk folder:', bookmark);
+      onSuccess?.({ action: 'bookmarked', url, title, bookmarkId: bookmark.id, folderId: coolDeskFolderId });
     } else {
       throw new Error('Bookmarks API not available');
     }
