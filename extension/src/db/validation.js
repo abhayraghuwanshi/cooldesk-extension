@@ -169,6 +169,15 @@ export const VALIDATION_SCHEMAS = {
         updatedAt: {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
+        },
+        // URL-specific fields for URL notes
+        url: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 2000
+        },
+        urlTitle: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 500
         }
     },
 

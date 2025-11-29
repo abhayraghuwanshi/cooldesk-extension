@@ -1,4 +1,4 @@
-import { faBookmark, faCopy, faExternalLinkAlt, faFolder, faFolderPlus, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faBookmark, faCopy, faExternalLinkAlt, faFolder, faFolderPlus, faStickyNote, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -15,6 +15,7 @@ export function ContextMenu({
   onOpen,
   onAddToBookmarks,
   onAddToWorkspace,
+  onAddNote,
   isPinned = false,
   position = { x: 0, y: 0 }
 }) {
@@ -140,6 +141,13 @@ export function ContextMenu({
       icon: faThumbtack,
       action: () => handleAction(() => onPin?.(url, title)),
       color: '#FF9500'
+    },
+    {
+      id: 'note',
+      label: 'Add Note',
+      icon: faStickyNote,
+      action: () => handleAction(() => onAddNote?.(url, title)),
+      color: '#FFD60A'
     },
     {
       id: 'workspaces',

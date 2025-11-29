@@ -23,12 +23,20 @@ const ThemesTab = ({
   const [lastWallpaperChange, setLastWallpaperChange] = useState(null);
   const autoWallpaperTimerRef = useRef(null);
 
-  // Theme options with font family pairings
+  // Theme options with font family pairings (includes gradient themes + customizable wallpaper theme)
   const themes = [
+    {
+      id: 'wallpaper-custom',
+      name: 'Custom Wallpaper',
+      description: 'Use your own background image',
+      type: 'wallpaper',
+      fontFamily: 'inter'
+    },
     {
       id: 'ai-midnight-nebula',
       name: 'AI Midnight Nebula',
       description: 'Deep space theme with blue and purple nebula effects',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 10% 10%, #60a5fa1f, #0000 60%), radial-gradient(50% 60% at 90% 20%, #8b5cf61f, #0000 60%), linear-gradient(180deg, #0a0a0f 0%, #121218 100%)',
       fontFamily: 'inter'
     },
@@ -36,6 +44,7 @@ const ThemesTab = ({
       id: 'cosmic-aurora',
       name: 'Cosmic Aurora',
       description: 'Northern lights inspired with green and teal gradients',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), radial-gradient(50% 60% at 80% 10%, #06b6d420, #0000 60%), linear-gradient(180deg, #0f172a 0%, #1e293b 100%)',
       fontFamily: 'poppins'
     },
@@ -43,6 +52,7 @@ const ThemesTab = ({
       id: 'sunset-horizon',
       name: 'Sunset Horizon',
       description: 'Warm sunset colors with orange and pink tones',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 10% 70%, #f9731620, #0000 60%), radial-gradient(50% 60% at 90% 30%, #ec489920, #0000 60%), linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)',
       fontFamily: 'roboto'
     },
@@ -50,6 +60,7 @@ const ThemesTab = ({
       id: 'forest-depths',
       name: 'Forest Depths',
       description: 'Deep forest theme with emerald and jade accents',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 30% 20%, #059f4620, #0000 60%), radial-gradient(50% 60% at 70% 80%, #047c3a20, #0000 60%), linear-gradient(180deg, #0f1419 0%, #1a2332 100%)',
       fontFamily: 'system'
     },
@@ -57,6 +68,7 @@ const ThemesTab = ({
       id: 'minimal-dark',
       name: 'Minimal Dark',
       description: 'Clean minimal dark theme with subtle gradients',
+      type: 'gradient',
       preview: 'linear-gradient(135deg, #1f2937 0%, #111827 100%)',
       fontFamily: 'inter'
     },
@@ -64,6 +76,7 @@ const ThemesTab = ({
       id: 'ocean-depths',
       name: 'Ocean Depths',
       description: 'Deep mystical waters with purple and indigo depths',
+      type: 'gradient',
       preview: 'radial-gradient(50% 60% at 20% 30%, #8b5cf620, #0000 70%), radial-gradient(40% 50% at 80% 20%, #a78bfa20, #0000 60%), linear-gradient(140deg, #1a0c26 0%, #3b1e29 100%)',
       fontFamily: 'poppins'
     },
@@ -71,6 +84,7 @@ const ThemesTab = ({
       id: 'cherry-blossom',
       name: 'Cherry Blossom',
       description: 'Soft pink and purple spring theme',
+      type: 'gradient',
       preview: 'radial-gradient(60% 70% at 25% 25%, #ec489920, #0000 65%), radial-gradient(50% 60% at 75% 15%, #a855f720, #0000 70%), linear-gradient(130deg, #1f1729 0%, #2d1b3d 100%)',
       fontFamily: 'poppins'
     },
@@ -78,6 +92,7 @@ const ThemesTab = ({
       id: 'arctic-frost',
       name: 'Arctic Frost',
       description: 'Cool arctic with teal and mint ice accents',
+      type: 'gradient',
       preview: 'radial-gradient(40% 50% at 30% 20%, #14b8a615, #0000 70%), radial-gradient(60% 40% at 70% 80%, #5eead415, #0000 60%), linear-gradient(155deg, #0f1b1a 0%, #2d4a42 100%)',
       fontFamily: 'inter'
     },
@@ -85,6 +100,7 @@ const ThemesTab = ({
       id: 'volcanic-ember',
       name: 'Volcanic Ember',
       description: 'Fiery volcanic theme with red and orange embers',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 30% 20%, #dc262620, #0000 60%), radial-gradient(50% 60% at 80% 40%, #ea580c20, #0000 60%), linear-gradient(140deg, #1a0f0f 0%, #2d1b1b 100%)',
       fontFamily: 'roboto'
     },
@@ -92,6 +108,7 @@ const ThemesTab = ({
       id: 'neon-cyberpunk',
       name: 'Neon Cyberpunk',
       description: 'Futuristic cyberpunk with neon pink and cyan',
+      type: 'gradient',
       preview: 'radial-gradient(60% 50% at 30% 20%, #ec489920, #0000 65%), radial-gradient(40% 60% at 70% 80%, #06b6d420, #0000 70%), linear-gradient(135deg, #0a0a0f 0%, #2a1a2a 100%)',
       fontFamily: 'jetbrains'
     },
@@ -99,6 +116,7 @@ const ThemesTab = ({
       id: 'orange-warm',
       name: 'Orange Warm',
       description: 'Warm orange theme with cozy earth tones',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 20% 30%, #f9731620, #0000 60%), radial-gradient(50% 60% at 80% 10%, #ea580c20, #0000 60%), linear-gradient(180deg, #2d1b1b 0%, #451a03 100%)',
       fontFamily: 'roboto'
     },
@@ -106,6 +124,7 @@ const ThemesTab = ({
       id: 'brown-earth',
       name: 'Brown Earth',
       description: 'Earthy brown theme with natural tones',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 20% 30%, #92400e20, #0000 60%), radial-gradient(50% 60% at 80% 10%, #78350f20, #0000 60%), linear-gradient(180deg, #3c2415 0%, #451a03 100%)',
       fontFamily: 'system'
     },
@@ -113,6 +132,7 @@ const ThemesTab = ({
       id: 'royal-purple',
       name: 'Royal Purple',
       description: 'Elegant purple and lavender with gold accents',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 20% 30%, #8b5cf620, #0000 60%), radial-gradient(50% 60% at 80% 10%, #a855f720, #0000 60%), linear-gradient(180deg, #1e1b3a 0%, #2d1b69 100%)',
       fontFamily: 'poppins'
     },
@@ -120,6 +140,7 @@ const ThemesTab = ({
       id: 'golden-honey',
       name: 'Golden Honey',
       description: 'Warm golden yellows with amber and bronze accents',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 20% 30%, #f59e0b20, #0000 60%), radial-gradient(50% 60% at 80% 10%, #d9770620, #0000 60%), linear-gradient(180deg, #3a2817 0%, #451a03 100%)',
       fontFamily: 'roboto'
     },
@@ -127,6 +148,7 @@ const ThemesTab = ({
       id: 'mint-sage',
       name: 'Mint Sage',
       description: 'Fresh mint and sage greens with earthy undertones',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 20% 30%, #10b98120, #0000 60%), radial-gradient(50% 60% at 80% 10%, #6ee7b720, #0000 60%), linear-gradient(180deg, #1e2e23 0%, #0f2027 100%)',
       fontFamily: 'inter'
     },
@@ -134,6 +156,7 @@ const ThemesTab = ({
       id: 'crimson-fire',
       name: 'Crimson Fire',
       description: 'Bold red with deep crimson and rose gold accents',
+      type: 'gradient',
       preview: 'radial-gradient(60% 80% at 20% 30%, #dc262620, #0000 60%), radial-gradient(50% 60% at 80% 10%, #ef444420, #0000 60%), linear-gradient(180deg, #3c1518 0%, #220a0c 100%)',
       fontFamily: 'roboto'
     }
@@ -294,15 +317,24 @@ const ThemesTab = ({
       }}>
         {themes.map((theme) => {
           const themeFontFamily = fontFamilies.find(f => f.id === theme.fontFamily);
+          const isWallpaperTheme = theme.type === 'wallpaper';
+          const isSelected = selectedTheme === theme.id;
+
           return (
             <div
               key={theme.id}
               onClick={() => {
-                onThemeChange(theme.id);
+                if (isWallpaperTheme) {
+                  onWallpaperEnabledChange(true);
+                  onThemeChange(theme.id);
+                } else {
+                  onWallpaperEnabledChange(false);
+                  onThemeChange(theme.id);
+                }
               }}
               style={{
                 background: 'rgba(255, 255, 255, 0.05)',
-                border: selectedTheme === theme.id
+                border: isSelected
                   ? '2px solid #34C759'
                   : '1px solid rgba(255, 255, 255, 0.1)',
                 borderRadius: '12px',
@@ -314,14 +346,14 @@ const ThemesTab = ({
                 overflow: 'hidden'
               }}
               onMouseEnter={(e) => {
-                if (selectedTheme !== theme.id) {
+                if (!isSelected) {
                   e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
                   e.currentTarget.style.transform = 'translateY(-2px)';
                   e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
                 }
               }}
               onMouseLeave={(e) => {
-                if (selectedTheme !== theme.id) {
+                if (!isSelected) {
                   e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
                   e.currentTarget.style.transform = 'translateY(0)';
                   e.currentTarget.style.boxShadow = 'none';
@@ -331,14 +363,32 @@ const ThemesTab = ({
               <div style={{
                 width: '100%',
                 height: '50px',
-                background: theme.preview,
+                background: isWallpaperTheme ? '#1a1a1a' : theme.preview,
                 borderRadius: '8px',
                 marginBottom: '8px',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
                 position: 'relative',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                ...(isWallpaperTheme && wallpaperUrl ? {
+                  backgroundImage: `url(${wallpaperUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                } : {})
               }}>
-                {selectedTheme === theme.id && (
+                {isWallpaperTheme && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    color: 'white',
+                    fontSize: '20px',
+                    textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+                  }}>
+                    🖼️
+                  </div>
+                )}
+                {isSelected && (
                   <div style={{
                     position: 'absolute',
                     top: '4px',
@@ -390,7 +440,7 @@ const ThemesTab = ({
                 )}
               </div>
 
-              {selectedTheme === theme.id && (
+              {isSelected && (
                 <div style={{
                   position: 'absolute',
                   top: '0',
@@ -642,71 +692,21 @@ const ThemesTab = ({
         </div>
       </div>
 
-      {/* Wallpaper Section */}
-      <div style={{ marginTop: '32px' }}>
-        <h3 style={{
-          fontSize: '16px',
-          fontWeight: '600',
-          color: '#e5e7eb',
-          marginBottom: '16px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          🖼️ Background Wallpaper
-        </h3>
+      {/* Wallpaper Customization Section - Only show when wallpaper theme is selected */}
+      {wallpaperEnabled && (
+        <div style={{ marginTop: '32px' }}>
+          <h3 style={{
+            fontSize: '16px',
+            fontWeight: '600',
+            color: '#e5e7eb',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            🖼️ Wallpaper Customization
+          </h3>
 
-        {/* Enable/Disable Toggle */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '16px',
-          background: 'rgba(255, 255, 255, 0.03)',
-          borderRadius: '12px',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          marginBottom: '16px',
-          cursor: 'pointer'
-        }}
-        onClick={() => {
-          console.log('[Wallpaper] Toggle clicked, current:', wallpaperEnabled);
-          onWallpaperEnabledChange(!wallpaperEnabled);
-        }}
-        >
-          <div>
-            <div style={{ color: '#e5e7eb', fontWeight: '500', marginBottom: '4px' }}>
-              Enable Wallpaper
-            </div>
-            <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.5)' }}>
-              Add a custom background image to your dashboard
-            </div>
-          </div>
-          <div style={{ position: 'relative', display: 'inline-block', width: '48px', height: '28px' }}>
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: wallpaperEnabled ? '#34C759' : 'rgba(255, 255, 255, 0.2)',
-              transition: '0.3s',
-              borderRadius: '28px',
-            }}>
-              <div style={{
-                position: 'absolute',
-                height: '20px',
-                width: '20px',
-                left: wallpaperEnabled ? '24px' : '4px',
-                bottom: '4px',
-                background: 'white',
-                transition: '0.3s',
-                borderRadius: '50%',
-              }} />
-            </div>
-          </div>
-        </div>
-
-        {wallpaperEnabled && (
           <>
             {/* Wallpaper URL Input */}
             <div style={{ marginBottom: '16px' }}>
@@ -1006,8 +1006,8 @@ const ThemesTab = ({
               </div>
             </div>
           </>
-        )}
-      </div>
+        </div>
+      )}
 
       <div style={{
         marginTop: '20px',

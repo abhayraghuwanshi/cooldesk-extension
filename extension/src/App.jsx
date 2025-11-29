@@ -46,11 +46,11 @@ import { CurrentTabsSection } from './components/default/CurrentTabsSection';
 import { SearchPanel } from './components/default/SearchPanel';
 import { SimpleNotes } from './components/default/SimpleNotes';
 import { WorkspaceSection } from './components/default/WorkspaceSection';
-import VoiceNavigationChatGPT from './components/toolbar/VoiceNavigationChatGPT';
 import { DraggableSections } from './components/DraggableSections';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import { getDisplaySettings } from './components/settings/DisplayData';
+import VoiceNavigationChatGPT from './components/toolbar/VoiceNavigationChatGPT';
 import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
@@ -1832,7 +1832,7 @@ export default function App() {
       <div>
 
         {/* Chrome/Edge-style Search Panel */}
-        <div className="search-panel-section section" style={{ marginTop: '20vh' }}>
+        <div className="search-panel-section section" style={{ marginTop: '15vh' }}>
           <ErrorBoundary>
             <SearchPanel />
           </ErrorBoundary>

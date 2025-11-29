@@ -61,10 +61,7 @@
 /* Input Area */
 .simple-notes-input {
     margin-bottom: 16px;
-    padding: 14px 16px;
     border-radius: 14px;
-    background: var(--glass-bg, rgba(255, 255, 255, 0.06));
-    border: 1px solid var(--glass-border, var(--border-primary, rgba(255, 255, 255, 0.12)));
 
     backdrop-filter: var(--glass-backdrop, blur(12px));
 }
@@ -108,7 +105,6 @@
     align-items: center;
     padding: 6px;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--background-secondary, #000) 82%, transparent);
     border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.08));
 }
 

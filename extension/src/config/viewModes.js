@@ -10,7 +10,8 @@ const BASE_SETTINGS = {
   voiceNavigationSection: false,
   aiChatsSection: false,
   notesSection: false,
-  noticeBoard: false,
+  // noticeBoard: false,
+
   quickAccess: false,
 };
 

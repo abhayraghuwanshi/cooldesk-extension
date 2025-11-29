@@ -1,4 +1,4 @@
-import { faEyeSlash, faGlobe } from '@fortawesome/free-solid-svg-icons';
+import { faEyeSlash, faGlobe, faHistory, faStar } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { createPortal } from 'react-dom';
@@ -214,111 +214,165 @@ export function CoolFeedSection({ tabs, pings, maxItems = 10 }) {
     }
   }, [tabs]);
 
-  const { suggestions, fallbackUsed } = React.useMemo(() => {
-    // Helpers
+  // New intelligent feed processing
+  const processedFeed = React.useMemo(() => {
+    const now = Date.now();
+
+    // Helper: Extract Hostname
+    const getHost = (u) => { try { return new URL(u).hostname.replace('www.', ''); } catch { return u; } };
     const toHref = (u) => { try { return new URL(u).href; } catch { return null; } };
-    const getHost = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
 
-    // Build quick-lookup sets
-    const openSet = new Set(
-      (Array.isArray(tabs) ? tabs : [])
-        .map(t => toHref(t?.url))
-        .filter(Boolean)
-    );
-    const pingSet = new Set(
-      (Array.isArray(pings) ? pings : [])
-        .map(p => toHref(p?.url))
-        .filter(Boolean)
-    );
+    // Helper: Find Title from tabs
+    const findTitle = (url) => {
+      const tabMatch = tabs?.find(t => t.url === url);
+      return tabMatch?.title || getHost(url);
+    };
 
-    // Base enrich with score
-    const base = rows.map(r => {
-      const score = scoreRow(r);
-      return { ...r, score };
+    // Scoring with recency and context
+    const scored = rows
+      .filter(r => !hiddenUrls.has(toHref(r.url) || r.url))
+      .map(r => {
+        // Base engagement score
+        const engagementScore = (r.time / 3600000) * 0.4 + (r.clicks / 20) * 0.3 + (r.forms / 2) * 0.3;
+
+        // Recency decay (assuming we have lastVisit or using current time)
+        const lastVisit = r.lastVisit || now - (r.time || 0); // Fallback estimation
+        const hoursSince = Math.max(0, (now - lastVisit) / 3600000);
+        const recencyFactor = 1 / (1 + (hoursSince * 0.1));
+
+        // Context boost for habitual sites visited around same time daily
+        const isHabitual = engagementScore > 0.5;
+        const timeContextBonus = isHabitual && (hoursSince < 24 && hoursSince > 20) ? 0.3 : 0;
+
+        const totalScore = (engagementScore * 0.6) + (recencyFactor * 0.4) + timeContextBonus;
+
+        return {
+          ...r,
+          host: getHost(r.url),
+          displayTitle: findTitle(r.url),
+          totalScore,
+          isRecent: hoursSince < 12,  // Visited in last 12 hours
+          isActive: tabs?.some(t => t.url === r.url) // Currently open
+        };
+      });
+
+    // Grouping & Deduplication
+    const seenHosts = new Set();
+    const feed = {
+      jumpBackIn: [],  // Recent & Active
+      dailyTop: [],    // High score, general
+    };
+
+    // Sort by score
+    scored.sort((a, b) => b.totalScore - a.totalScore);
+
+    scored.forEach(item => {
+      // Skip duplicate hosts unless very high score
+      if (seenHosts.has(item.host)) {
+        if (item.totalScore < 0.8) return;
+      }
+      seenHosts.add(item.host);
+
+      // Categorize
+      if (item.isActive || (item.isRecent && item.totalScore > 0.1)) {
+        feed.jumpBackIn.push(item);
+      } else if (item.totalScore > 0.4) {
+        feed.dailyTop.push(item);
+      }
     });
 
-    // Apply non-linear engagement smoothing and context-aware boosts
-    const adjusted = base.map(r => {
-      const href = toHref(r.url);
-      const clicksNL = Math.sqrt(Math.max(0, r.clicks || 0));
-      const scrollNL = Math.sqrt(Math.max(0, r.scroll || 0));
-      const formsNL = Math.min(1, (r.forms || 0) / 2); // small but meaningful
-      let bonus = 0;
-      bonus += 0.06 * (clicksNL / Math.sqrt(WEIGHTS.clicks > 0 ? (NORMALIZERS.clicks) : 1));
-      bonus += 0.03 * (scrollNL / Math.sqrt(WEIGHTS.scroll > 0 ? (NORMALIZERS.scrollPct) : 1));
-      bonus += 0.08 * formsNL;
-      if (href && pingSet.has(href)) bonus += 0.12; // elevate pinned
-      if (href && openSet.has(href)) bonus -= 0.08; // slightly de-prioritize already-open exact URL
-      const adjustedScore = Math.max(0, Math.min(1.5, r.score + bonus));
-      return { ...r, adjustedScore };
-    });
+    return {
+      jumpBackIn: feed.jumpBackIn.slice(0, 4),
+      dailyTop: feed.dailyTop.slice(0, 8),
+      all: scored.slice(0, maxItems)
+    };
+  }, [rows, tabs, hiddenUrls, maxItems]);
 
-    // Sort according to UI selection
-    if (sortBy === 'all') {
-      adjusted.sort((a, b) => (b.adjustedScore || 0) - (a.adjustedScore || 0));
-    } else if (sortBy === 'time') {
-      adjusted.sort((a, b) => (b.time || 0) - (a.time || 0));
-    } else if (sortBy === 'clicks') {
-      adjusted.sort((a, b) => (b.clicks || 0) - (a.clicks || 0));
-    } else if (sortBy === 'scroll') {
-      adjusted.sort((a, b) => (b.scroll || 0) - (a.scroll || 0));
-    } else if (sortBy === 'forms') {
-      adjusted.sort((a, b) => (b.forms || 0) - (a.forms || 0));
-    }
+  // Activity Card Component
+  const ActivityCard = ({ item, badge, badgeColor }) => {
+    const favicon = getFaviconUrl(item.url, 64);
 
-    // Diversity & dedupe: cap per host and avoid exact URL duplicates
-    const PER_HOST_CAP = 3;
-    const hostCount = new Map();
-    const seenHref = new Set();
-    const pick = [];
-    for (const r of adjusted) {
-      const href = toHref(r.url);
-      if (!href || seenHref.has(href)) continue;
-      const host = getHost(href);
-      const cnt = hostCount.get(host) || 0;
-      if (cnt >= PER_HOST_CAP) continue;
-      seenHref.add(href);
-      hostCount.set(host, cnt + 1);
-      pick.push(r);
-      if (pick.length >= 50) break;
-    }
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          openOrFocusUrl(item.url);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const href = (() => { try { return new URL(item.url).href; } catch { return item.url; } })();
+          setCtxMenu({ show: true, x: e.clientX, y: e.clientY, url: href });
+        }}
+        title={`${item.displayTitle || item.host}\\n${item.url}`}
+        style={{
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          borderRadius: '12px',
+          padding: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          cursor: 'pointer',
+          transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          position: 'relative',
+          overflow: 'hidden',
+          minWidth: '200px',
+          flex: '1 1 200px',
+          maxWidth: '300px'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+          e.currentTarget.style.transform = 'none';
+          e.currentTarget.style.boxShadow = 'none';
+        }}
+      >
+        {/* Icon */}
+        <div style={{
+          minWidth: '32px', height: '32px', borderRadius: '8px',
+          background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden'
+        }}>
+          {favicon ? (
+            <img src={favicon} alt="" style={{ width: '20px', height: '20px' }} onError={(e) => e.target.style.display = 'none'} />
+          ) : (
+            <FontAwesomeIcon icon={faGlobe} size="sm" color="rgba(255,255,255,0.3)" />
+          )}
+        </div>
 
-    // If too few after filtering, fallback to time-based but still dedupe/diversify lightly
-    if (pick.length > 0) {
-      return {
-        suggestions: pick.map(r => ({ ...r, score: r.adjustedScore, category: categorize((r.adjustedScore || 0)) })),
-        fallbackUsed: false
-      };
-    }
+        {/* Text Content */}
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <span style={{
+            fontSize: '13px', color: '#fff', fontWeight: '500',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+          }}>
+            {item.displayTitle || item.host}
+          </span>
+          <span style={{
+            fontSize: '11px', color: 'rgba(255,255,255,0.5)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+          }}>
+            {item.host}
+          </span>
+        </div>
 
-    const fallbackSorted = [...rows].sort((a, b) => (b.time || 0) - (a.time || 0));
-    const fbPick = [];
-    seenHref.clear();
-    hostCount.clear();
-    for (const r of fallbackSorted) {
-      const href = toHref(r.url);
-      if (!href || seenHref.has(href)) continue;
-      const host = getHost(href);
-      const cnt = hostCount.get(host) || 0;
-      if (cnt >= PER_HOST_CAP) continue;
-      seenHref.add(href);
-      hostCount.set(host, cnt + 1);
-      const sc = scoreRow(r);
-      fbPick.push({ ...r, score: sc, category: categorize(sc) });
-      if (fbPick.length >= 50) break;
-    }
-    return { suggestions: fbPick, fallbackUsed: true };
-  }, [rows, sortBy, tabs, pings, scoreRow]);
-
-  // Limit the size of Cool Feed list via dropdown
-  const displayedSuggestions = React.useMemo(
-    () => suggestions
-      .filter(r => {
-        try { return !hiddenUrls.has(new URL(r.url).href); } catch { return !hiddenUrls.has(r.url); }
-      })
-      .slice(0, Math.max(1, Number(maxFeed) || 10)),
-    [suggestions, maxFeed, hiddenUrls]
-  );
+        {/* Badge Indicator */}
+        {badge && (
+          <div style={{
+            fontSize: '10px', fontWeight: 'bold', color: badgeColor,
+            background: `${badgeColor}20`, padding: '2px 6px', borderRadius: '4px'
+          }}>
+            {badge}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div data-onboarding="activity-section"
@@ -375,7 +429,7 @@ export function CoolFeedSection({ tabs, pings, maxItems = 10 }) {
             paddingBottom: '16px',
             flexWrap: 'wrap'
           }}>
-            {displayedSuggestions.map((r) => {
+            {processedFeed.all.map((r) => {
               let host = r.url;
               let originIco = '';
               try {

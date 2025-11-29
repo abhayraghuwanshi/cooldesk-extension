@@ -1,4 +1,4 @@
-import { faCheck, faCheckCircle, faCircle, faEdit, faLightbulb, faMicrophone, faPause, faPlay, faSquareCheck, faStop, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faCheckCircle, faCircle, faEdit, faLink, faLightbulb, faMicrophone, faPause, faPlay, faSquareCheck, faStop, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React from 'react';
 import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
@@ -51,6 +51,7 @@ const NoteItem = ({ note, onToggle, onDelete, onEdit, onPlay, isPlaying, onPin }
     const [editText, setEditText] = React.useState('');
     const { isChecked, content, hasCheckbox } = parseCheckboxText(note.text || '');
     const isTodo = note.type === 'todo' || hasCheckbox;
+    const isUrlNote = note.url && typeof note.url === 'string' && note.url.length > 0;
 
     const handleEdit = () => {
         setEditText(note.text);
@@ -93,6 +94,9 @@ const NoteItem = ({ note, onToggle, onDelete, onEdit, onPlay, isPlaying, onPin }
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
                             onKeyDown={(e) => {
+                                // Stop propagation to prevent parent handlers from interfering
+                                e.stopPropagation();
+
                                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                                     e.preventDefault();
                                     handleSaveEdit();
@@ -113,6 +117,39 @@ const NoteItem = ({ note, onToggle, onDelete, onEdit, onPlay, isPlaying, onPin }
                     </div>
                 ) : (
                     <>
+                        {/* URL Link if this is a URL note */}
+                        {isUrlNote && (
+                            <div style={{
+                                marginBottom: '8px',
+                                padding: '6px 10px',
+                                background: 'rgba(255, 213, 10, 0.1)',
+                                border: '1px solid rgba(255, 213, 10, 0.2)',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}>
+                                <FontAwesomeIcon icon={faLink} style={{ color: '#FFD60A', fontSize: '11px' }} />
+                                <a
+                                    href={note.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{
+                                        color: 'rgba(255, 255, 255, 0.8)',
+                                        fontSize: '12px',
+                                        textDecoration: 'none',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        flex: 1
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    {note.urlTitle || note.url}
+                                </a>
+                            </div>
+                        )}
+
                         <div className="simple-note-text">
                             {isTodo ? (
                                 <div className="simple-note-todo">
@@ -182,7 +219,7 @@ export function SimpleNotes() {
     const [notes, setNotes] = React.useState([]);
     const [text, setText] = React.useState('');
     const [noteType, setNoteType] = React.useState('text'); // 'text' for thoughts, todos identified by checkbox
-    const [filter, setFilter] = React.useState('all'); // 'all', 'todos', 'thoughts', 'completed'
+    const [filter, setFilter] = React.useState('all'); // 'all', 'todos', 'thoughts', 'completed', 'urlNotes'
     const [isRecording, setIsRecording] = React.useState(false);
     const [mediaRecorder, setMediaRecorder] = React.useState(null);
     const [recordingTime, setRecordingTime] = React.useState(0);
@@ -440,14 +477,17 @@ export function SimpleNotes() {
         const filtered = notes.filter(note => {
             const { isChecked, hasCheckbox } = parseCheckboxText(note.text || '');
             const isTodo = note.type === 'todo' || hasCheckbox;
+            const isUrlNote = note.url && typeof note.url === 'string' && note.url.length > 0;
 
             switch (filter) {
                 case 'todos':
                     return isTodo && !isChecked;
                 case 'thoughts':
-                    return !isTodo;
+                    return !isTodo && !isUrlNote;
                 case 'completed':
                     return isTodo && isChecked;
+                case 'urlNotes':
+                    return isUrlNote;
                 default:
                     return true;
             }
@@ -485,12 +525,16 @@ export function SimpleNotes() {
         let todos = 0;
         let thoughts = 0;
         let completed = 0;
+        let urlNotes = 0;
 
         notes.forEach(note => {
             const { isChecked, hasCheckbox } = parseCheckboxText(note.text || '');
             const isTodo = note.type === 'todo' || hasCheckbox;
+            const isUrlNote = note.url && typeof note.url === 'string' && note.url.length > 0;
 
-            if (isTodo) {
+            if (isUrlNote) {
+                urlNotes++;
+            } else if (isTodo) {
                 if (isChecked) completed++;
                 else todos++;
             } else {
@@ -498,7 +542,7 @@ export function SimpleNotes() {
             }
         });
 
-        return { todos, thoughts, completed };
+        return { todos, thoughts, completed, urlNotes };
     }, [notes]);
 
     // Auto-resize textarea
@@ -594,7 +638,7 @@ export function SimpleNotes() {
     return (
         <div className="simple-notes-root">
             {/* Header with Toolbar */}
-            <div className="simple-notes-header">
+            <div>
                 <div
                     onClick={() => setIsCollapsed(true)}
                     style={{
@@ -602,7 +646,6 @@ export function SimpleNotes() {
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         marginBottom: 16,
-
                         cursor: 'pointer',
                         transition: 'opacity 0.2s ease',
                     }}
@@ -635,7 +678,7 @@ export function SimpleNotes() {
                 </div>
 
                 {/* Apple-style Toolbar */}
-                <div className="simple-notes-toolbar">
+                <div className="simple-notes-toolbar" style={{ marginBottom: 16 }}>
                     <button
                         onClick={() => setFilter('all')}
                         className={`simple-notes-filter ${filter === 'all' ? 'is-active' : ''}`}
@@ -658,6 +701,13 @@ export function SimpleNotes() {
                         <FontAwesomeIcon icon={faLightbulb} /> {stats.thoughts > 0 && stats.thoughts}
                     </button>
                     <button
+                        onClick={() => setFilter('urlNotes')}
+                        className={`simple-notes-filter ${filter === 'urlNotes' ? 'is-active' : ''}`}
+                        title="URL Notes"
+                    >
+                        <FontAwesomeIcon icon={faLink} /> {stats.urlNotes > 0 && stats.urlNotes}
+                    </button>
+                    <button
                         onClick={() => setFilter('completed')}
                         className={`simple-notes-filter ${filter === 'completed' ? 'is-active' : ''}`}
                         title="Completed todos"
@@ -676,6 +726,9 @@ export function SimpleNotes() {
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         onKeyDown={(e) => {
+                            // Stop propagation to prevent parent handlers from interfering
+                            e.stopPropagation();
+
                             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                                 e.preventDefault();
                                 if (text.trim()) addNote();
@@ -726,6 +779,7 @@ export function SimpleNotes() {
                         {filter === 'all' && 'No notes yet'}
                         {filter === 'todos' && 'No active todos'}
                         {filter === 'thoughts' && 'No thoughts yet'}
+                        {filter === 'urlNotes' && 'No URL notes yet'}
                         {filter === 'completed' && 'No completed todos'}
                     </div>
                 ) : (

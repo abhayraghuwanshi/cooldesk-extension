@@ -444,13 +444,28 @@ const SearchModalComponent = function SearchModal({
         const workspaces = Array.isArray(workspacesRef.current) ? workspacesRef.current : [];
         const workspaceOut = workspaces.filter((workspace) => {
             if (!workspace) return false;
-            const fields = [
-                workspace.name,
-                workspace.description,
-                Array.isArray(workspace.matchedDomains) ? workspace.matchedDomains.join(' ') : '',
-                Array.isArray(workspace.tags) ? workspace.tags.join(' ') : ''
-            ];
-            return fields.some((field) => typeof field === 'string' && field.toLowerCase().includes(lower));
+
+            // Check workspace name and description
+            const name = (workspace?.name || '').toLowerCase();
+            const description = (workspace?.description || '').toLowerCase();
+            if (name.includes(lower) || description.includes(lower)) {
+                return true;
+            }
+
+            // Check tags and matchedDomains
+            const matchedDomains = Array.isArray(workspace.matchedDomains) ? workspace.matchedDomains.join(' ').toLowerCase() : '';
+            const tags = Array.isArray(workspace.tags) ? workspace.tags.join(' ').toLowerCase() : '';
+            if (matchedDomains.includes(lower) || tags.includes(lower)) {
+                return true;
+            }
+
+            // Check URLs and titles inside the workspace
+            const urls = workspace?.urls || [];
+            return urls.some(urlItem => {
+                const url = typeof urlItem === 'string' ? urlItem : urlItem?.url || '';
+                const title = typeof urlItem === 'string' ? '' : urlItem?.title || '';
+                return url.toLowerCase().includes(lower) || title.toLowerCase().includes(lower);
+            });
         }).slice(0, 8);
 
         const appStoreOut = appStoreCatalog

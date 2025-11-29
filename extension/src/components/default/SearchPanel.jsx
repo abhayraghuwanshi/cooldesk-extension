@@ -1,9 +1,10 @@
 import { faCalendar, faEnvelope, faSearch } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getUIState, saveUIState } from '../../db/index.js';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser } from '../../services/commandParser.js';
+import { fuzzySearch } from '../../utils/searchUtils.js';
 import { CoolFeedSection } from './CoolFeedSection.jsx';
 
 export function SearchPanel() {
@@ -12,6 +13,14 @@ export function SearchPanel() {
     const [quickUrlsLoaded, setQuickUrlsLoaded] = useState(false);
     const [showAddUrl, setShowAddUrl] = useState(false);
     const [newUrl, setNewUrl] = useState('');
+    const [userName, setUserName] = useState(() => {
+        try {
+            return localStorage.getItem('userName') || '';
+        } catch {
+            return '';
+        }
+    });
+    const [isEditingName, setIsEditingName] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(() => {
         try {
             const saved = localStorage.getItem('searchPanel_collapsed');
@@ -27,6 +36,9 @@ export function SearchPanel() {
     const [showCommandPalette, setShowCommandPalette] = useState(false);
     const [commandSuggestions, setCommandSuggestions] = useState([]);
     const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+
+    // Search suggestions state
+    const [searchSuggestions, setSearchSuggestions] = useState([]);
 
     // Activity feed state
     const [tabs, setTabs] = useState([]);
@@ -67,6 +79,154 @@ export function SearchPanel() {
         setSelectedSuggestionIndex(-1);
     }, [search]);
 
+    // Search suggestions from history and bookmarks
+    useEffect(() => {
+        // Only show suggestions for regular searches, not commands or URLs
+        if (search.startsWith('!') || search.length < 2 || /^https?:\/\//i.test(search)) {
+            setSearchSuggestions([]);
+            return;
+        }
+
+        const query = search.toLowerCase();
+
+        const fetchSuggestions = async () => {
+            try {
+                const suggestions = [];
+
+                // Search workspaces (top priority) with fuzzy search
+                try {
+                    const { listWorkspaces } = await import('../../db/index.js');
+                    const workspacesResult = await listWorkspaces();
+                    const workspaces = workspacesResult?.success ? workspacesResult.data : [];
+
+                    if (Array.isArray(workspaces)) {
+                        // Create searchable items from workspaces
+                        const workspaceItems = workspaces.map(ws => {
+                            // Combine all searchable text
+                            const urls = ws?.urls || [];
+                            const urlTexts = urls.map(urlItem => {
+                                const url = typeof urlItem === 'string' ? urlItem : urlItem?.url || '';
+                                const title = typeof urlItem === 'string' ? '' : urlItem?.title || '';
+                                return `${url} ${title}`;
+                            }).join(' ');
+
+                            const matchedDomains = Array.isArray(ws?.matchedDomains)
+                                ? ws.matchedDomains.join(' ')
+                                : '';
+                            const tags = Array.isArray(ws?.tags)
+                                ? ws.tags.join(' ')
+                                : '';
+
+                            return {
+                                name: ws.name || '',
+                                description: ws.description || '',
+                                tags: tags,
+                                domains: matchedDomains,
+                                urlContent: urlTexts,
+                                workspace: ws.name,
+                                urlCount: urls.length,
+                                original: ws
+                            };
+                        });
+
+                        // Use fuzzy search on all fields
+                        const fuzzyResults = fuzzySearch(workspaceItems, query,
+                            ['name', 'description', 'tags', 'domains', 'urlContent'],
+                            { threshold: 0.4 }
+                        );
+
+                        const matchingWorkspaces = fuzzyResults
+                            .slice(0, 3)
+                            .map(item => ({
+                                title: item.name,
+                                description: item.description || `${item.urlCount} items`,
+                                workspace: item.workspace,
+                                type: 'workspace'
+                            }));
+
+                        suggestions.push(...matchingWorkspaces);
+                    }
+                } catch (error) {
+                    console.warn('[SearchPanel] Failed to search workspaces:', error);
+                }
+
+                // Search history with fuzzy search
+                try {
+                    if (chrome?.history?.search) {
+                        const historyResults = await chrome.history.search({
+                            text: '',
+                            maxResults: 200,
+                            startTime: 0
+                        });
+
+                        if (historyResults && historyResults.length > 0) {
+                            const historyItems = historyResults.map(item => ({
+                                title: item.title || item.url,
+                                url: item.url,
+                                type: 'history',
+                                visitCount: item.visitCount || 0
+                            }));
+
+                            // Use fuzzy search
+                            const fuzzyHistoryResults = fuzzySearch(historyItems, query, ['title', 'url'], {
+                                threshold: 0.3
+                            });
+
+                            suggestions.push(...fuzzyHistoryResults.slice(0, 4));
+                        }
+                    }
+                } catch (error) {
+                    console.warn('[SearchPanel] Failed to search history:', error);
+                }
+
+                // Search bookmarks with fuzzy search
+                try {
+                    if (chrome?.bookmarks?.search) {
+                        const bookmarkResults = await chrome.bookmarks.search('');
+
+                        if (bookmarkResults && bookmarkResults.length > 0) {
+                            const bookmarkItems = bookmarkResults
+                                .filter(item => item.url)
+                                .map(item => ({
+                                    title: item.title || item.url,
+                                    url: item.url,
+                                    type: 'bookmark'
+                                }));
+
+                            // Use fuzzy search
+                            const fuzzyBookmarkResults = fuzzySearch(bookmarkItems, query, ['title', 'url'], {
+                                threshold: 0.3
+                            });
+
+                            suggestions.push(...fuzzyBookmarkResults.slice(0, 2));
+                        }
+                    }
+                } catch (error) {
+                    console.warn('[SearchPanel] Failed to search bookmarks:', error);
+                }
+
+                // Sort by type priority: workspace > bookmark > history (by visit count)
+                suggestions.sort((a, b) => {
+                    if (a.type === 'workspace' && b.type !== 'workspace') return -1;
+                    if (a.type !== 'workspace' && b.type === 'workspace') return 1;
+                    if (a.type === 'bookmark' && b.type !== 'bookmark' && b.type !== 'workspace') return -1;
+                    if (a.type !== 'bookmark' && b.type === 'bookmark' && a.type !== 'workspace') return 1;
+                    return (b.visitCount || 0) - (a.visitCount || 0);
+                });
+
+                // Limit to 6 total suggestions
+                setSearchSuggestions(suggestions.slice(0, 6));
+            } catch (error) {
+                console.warn('[SearchPanel] Failed to fetch suggestions:', error);
+                setSearchSuggestions([]);
+            }
+        };
+
+        // Debounce the search
+        const timeoutId = setTimeout(fetchSuggestions, 150);
+        return () => clearTimeout(timeoutId);
+    }, [search]);
+
     // Load quick URLs from UI state
     useEffect(() => {
         (async () => {
@@ -103,6 +263,27 @@ export function SearchPanel() {
         }
     }, [isCollapsed]);
 
+    // Persist user name to localStorage
+    useEffect(() => {
+        try {
+            if (userName) {
+                localStorage.setItem('userName', userName);
+            }
+        } catch (e) {
+            console.warn('[SearchPanel] Failed to save user name', e);
+        }
+    }, [userName]);
+
+    const handleNameEdit = () => {
+        setIsEditingName(true);
+    };
+
+    const handleNameSave = (e) => {
+        if (e.key === 'Enter' || e.type === 'blur') {
+            setIsEditingName(false);
+        }
+    };
+
     // Load tabs and pings for activity feed
     useEffect(() => {
         const loadTabsAndPings = async () => {
@@ -136,24 +317,73 @@ export function SearchPanel() {
 
     // Handle keyboard navigation for suggestions
     const handleKeyDown = (e) => {
-        if (commandSuggestions.length === 0) return;
+        const activeSuggestions = commandSuggestions.length > 0 ? commandSuggestions : searchSuggestions;
+        const isCommandMode = commandSuggestions.length > 0;
+
+        if (activeSuggestions.length === 0) return;
 
         if (e.key === 'ArrowDown') {
             e.preventDefault();
             setSelectedSuggestionIndex(prev =>
-                prev < commandSuggestions.length - 1 ? prev + 1 : prev
+                prev < activeSuggestions.length - 1 ? prev + 1 : prev
             );
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
         } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
             e.preventDefault();
-            const selected = commandSuggestions[selectedSuggestionIndex];
-            setSearch(selected.command);
-            setCommandSuggestions([]);
+            const selected = activeSuggestions[selectedSuggestionIndex];
+
+            if (isCommandMode) {
+                setSearch(selected.command);
+                setCommandSuggestions([]);
+            } else {
+                // Handle workspace selection
+                if (selected.type === 'workspace') {
+                    // Open workspace URLs
+                    (async () => {
+                        try {
+                            const { listWorkspaces } = await import('../../db/index.js');
+                            const workspacesResult = await listWorkspaces();
+                            const workspaces = workspacesResult?.success ? workspacesResult.data : workspacesResult || [];
+
+                            const workspace = workspaces.find(ws => ws.name === selected.workspace);
+
+                            if (workspace && workspace.urls) {
+                                // Open all workspace URLs in new tabs
+                                for (const urlItem of workspace.urls.slice(0, 10)) {
+                                    const url = typeof urlItem === 'string' ? urlItem : urlItem?.url;
+                                    if (url) {
+                                        if (chrome?.tabs?.create) {
+                                            chrome.tabs.create({ url, active: false });
+                                        } else {
+                                            window.open(url, '_blank');
+                                        }
+                                        await new Promise(resolve => setTimeout(resolve, 100));
+                                    }
+                                }
+                            }
+                        } catch (error) {
+                            console.error('[SearchPanel] Failed to open workspace:', error);
+                        }
+                    })();
+                    setSearch('');
+                    setSearchSuggestions([]);
+                } else {
+                    // Open the selected URL from search suggestions
+                    if (chrome?.tabs?.create) {
+                        chrome.tabs.create({ url: selected.url });
+                    } else {
+                        window.open(selected.url, '_blank');
+                    }
+                    setSearch('');
+                    setSearchSuggestions([]);
+                }
+            }
             setSelectedSuggestionIndex(-1);
         } else if (e.key === 'Escape') {
             setCommandSuggestions([]);
+            setSearchSuggestions([]);
             setSelectedSuggestionIndex(-1);
         }
     };
@@ -208,7 +438,18 @@ export function SearchPanel() {
         } else if (/\.\w{2,}/.test(query) && !query.includes(' ')) {
             url = `https://${query}`;
         } else {
-            url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+            // Use Chrome's default search engine via chrome.search.query API
+            if (chrome?.search?.query) {
+                chrome.search.query({
+                    text: query,
+                    disposition: 'NEW_TAB'
+                });
+                setSearch('');
+                return;
+            } else {
+                // Fallback to Google if API not available
+                url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+            }
         }
 
         // Open in new tab
@@ -315,8 +556,8 @@ export function SearchPanel() {
             position: 'relative',
             marginBottom: 'var(--section-spacing)',
             padding: '60px 40px 80px',
-            background: 'var(--glass-bg, rgba(255, 255, 255, 0.03))',
-            border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
+            // background: 'var(--glass-bg, rgba(255, 255, 255, 0.03))',
+            // border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
             borderRadius: '16px',
             minHeight: '320px',
             display: 'flex',
@@ -360,6 +601,59 @@ export function SearchPanel() {
                 justifyContent: 'center',
                 flex: 1,
             }}>
+                {/* Google-style Greeting */}
+                <div style={{
+                    marginBottom: '24px',
+                    textAlign: 'center',
+                }}>
+                    {isEditingName ? (
+                        <input
+                            type="text"
+                            value={userName}
+                            onChange={(e) => setUserName(e.target.value)}
+                            onKeyDown={handleNameSave}
+                            onBlur={handleNameSave}
+                            autoFocus
+                            placeholder="Enter your name"
+                            style={{
+                                fontSize: '48px',
+                                fontWeight: 400,
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: '2px solid rgba(255, 255, 255, 0.3)',
+                                color: 'var(--text, #e5e7eb)',
+                                outline: 'none',
+                                textAlign: 'center',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+                                padding: '4px 8px',
+                                maxWidth: '500px',
+                            }}
+                        />
+                    ) : (
+                        <h1
+                            onClick={handleNameEdit}
+                            style={{
+                                fontSize: '48px',
+                                fontWeight: 400,
+                                margin: 0,
+                                color: 'var(--text, #e5e7eb)',
+                                letterSpacing: '-0.5px',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+                                cursor: 'pointer',
+                                transition: 'opacity 0.2s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.opacity = '0.7';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.opacity = '1';
+                            }}
+                        >
+                            {userName ? `Hello, ${userName}` : 'Hello'}
+                        </h1>
+                    )}
+                </div>
+
                 <form onSubmit={handleSearch} style={{
                     width: '100%',
                     maxWidth: '680px',
@@ -385,7 +679,7 @@ export function SearchPanel() {
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="Search Google or type a URL"
+                            placeholder="Search the web, type a URL, or use ! for commands"
                             style={{
                                 width: '100%',
                                 height: '60px',
@@ -581,6 +875,131 @@ export function SearchPanel() {
                                     lineHeight: 1.3
                                 }}>
                                     {cmd.description}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Search Suggestions Dropdown - Similar to Command Suggestions */}
+                {searchSuggestions.length > 0 && commandSuggestions.length === 0 && (
+                    <div
+                        style={{
+                            width: '100%',
+                            maxWidth: '680px',
+                            marginTop: '8px',
+                            background: 'rgba(28, 28, 33, 0.98)',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderRadius: '12px',
+                            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)',
+                            overflow: 'hidden',
+                            zIndex: 1000
+                        }}
+                    >
+                        {searchSuggestions.map((suggestion, idx) => (
+                            <div
+                                key={idx}
+                                style={{
+                                    padding: '12px 20px',
+                                    cursor: 'pointer',
+                                    transition: 'background 0.1s ease',
+                                    background: selectedSuggestionIndex === idx
+                                        ? 'rgba(59, 130, 246, 0.2)'
+                                        : 'transparent',
+                                    borderBottom: idx < searchSuggestions.length - 1
+                                        ? '1px solid rgba(255, 255, 255, 0.05)'
+                                        : 'none'
+                                }}
+                                onMouseEnter={() => setSelectedSuggestionIndex(idx)}
+                                onMouseLeave={() => setSelectedSuggestionIndex(-1)}
+                                onClick={async () => {
+                                    if (suggestion.type === 'workspace') {
+                                        // Open workspace URLs
+                                        try {
+                                            const { listWorkspaces } = await import('../../db/index.js');
+                                            const workspacesResult = await listWorkspaces();
+                                            const workspaces = workspacesResult?.success ? workspacesResult.data : workspacesResult || [];
+
+                                            const workspace = workspaces.find(ws => ws.name === suggestion.workspace);
+
+                                            if (workspace && workspace.urls) {
+                                                // Open all workspace URLs in new tabs
+                                                for (const urlItem of workspace.urls.slice(0, 10)) { // Limit to 10 tabs
+                                                    const url = typeof urlItem === 'string' ? urlItem : urlItem?.url;
+                                                    if (url) {
+                                                        if (chrome?.tabs?.create) {
+                                                            chrome.tabs.create({ url, active: false });
+                                                        } else {
+                                                            window.open(url, '_blank');
+                                                        }
+                                                        // Small delay between tab creations
+                                                        await new Promise(resolve => setTimeout(resolve, 100));
+                                                    }
+                                                }
+                                            }
+                                        } catch (error) {
+                                            console.error('[SearchPanel] Failed to open workspace:', error);
+                                        }
+                                    } else {
+                                        // Open URL
+                                        if (chrome?.tabs?.create) {
+                                            chrome.tabs.create({ url: suggestion.url });
+                                        } else {
+                                            window.open(suggestion.url, '_blank');
+                                        }
+                                    }
+                                    setSearch('');
+                                    setSearchSuggestions([]);
+                                    setSelectedSuggestionIndex(-1);
+                                }}
+                            >
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    marginBottom: '4px'
+                                }}>
+                                    <div style={{
+                                        fontSize: '14px',
+                                        fontWeight: 500,
+                                        color: '#fff',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                        flex: 1
+                                    }}>
+                                        {suggestion.title}
+                                    </div>
+                                    <span style={{
+                                        fontSize: '10px',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        background: suggestion.type === 'workspace'
+                                            ? 'rgba(147, 51, 234, 0.15)'
+                                            : suggestion.type === 'bookmark'
+                                                ? 'rgba(251, 191, 36, 0.15)'
+                                                : 'rgba(59, 130, 246, 0.15)',
+                                        color: suggestion.type === 'workspace'
+                                            ? '#a855f7'
+                                            : suggestion.type === 'bookmark'
+                                                ? '#fbbf24'
+                                                : '#3b82f6',
+                                        fontWeight: 500,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.5px',
+                                        flexShrink: 0
+                                    }}>
+                                        {suggestion.type === 'workspace' ? '💼 Workspace' : suggestion.type === 'bookmark' ? '⭐ Bookmark' : '🕐 History'}
+                                    </span>
+                                </div>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: 'rgba(255, 255, 255, 0.6)',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    {suggestion.type === 'workspace' ? suggestion.description : suggestion.url}
                                 </div>
                             </div>
                         ))}

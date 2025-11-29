@@ -1,5 +1,5 @@
 // Activity tracking, time series, and session management
-import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, putActivityRow, putActivityTimeSeriesEvent } from '../db/index.js';
+import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, putActivityTimeSeriesEvent } from '../db/index.js';
 import { setHostActivity } from '../services/extensionApi.js';
 import { getUrlParts } from '../utils.js';
 
@@ -511,7 +511,7 @@ export function handleActivityMessage(msg, sender) {
     }
 
     console.log('[Activity Debug] Processing activity for URL:', cleaned, 'type:', msg.type);
-    
+
     if (!activityData[cleaned]) activityData[cleaned] = { time: 0, scroll: 0, clicks: 0, forms: 0 };
 
     // Create tab-based session ID for this message
@@ -850,7 +850,7 @@ async function processActivityData(msg, sender, sendResponse, startTime, timeout
         // Reset failure count on success
         failureCount = 0;
 
-        sendResponse({ ok: true, rows: sorted });
+        sendResponse({ ok: true, rows: sorted });@
     } catch (e) {
         // Track failures for circuit breaker
         failureCount++;
@@ -891,15 +891,15 @@ export async function handleCleanupTimeSeriesData(msg, sender, sendResponse) {
 
 export function handleActivityContentScriptMessage(msg, sender) {
     // Skip daily notes, text selection, and side panel messages - they should be handled by the main background script
-    if (msg.type === 'updateDailyNotes' || 
-        msg.type === 'getDailyNotes' || 
-        msg.type === 'deleteSelection' || 
-        msg.type === 'textSelected' || 
+    if (msg.type === 'updateDailyNotes' ||
+        msg.type === 'getDailyNotes' ||
+        msg.type === 'deleteSelection' ||
+        msg.type === 'textSelected' ||
         msg.type === 'textDeselected' ||
         msg.type === 'openSidePanel') {
         return false;
     }
-    
+
     // Handle activity tracking messages from content scripts
     if (msg.type && sender.tab) {
         console.log('[Activity Debug] Processing content script message:', {
