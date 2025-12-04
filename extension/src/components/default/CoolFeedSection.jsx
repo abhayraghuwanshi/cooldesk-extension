@@ -181,8 +181,28 @@ export function CoolFeedSection({ tabs, pings, maxItems = 10 }) {
     return 'low';
   };
 
-  const openOrFocusUrl = React.useCallback((url) => {
+  const openOrFocusUrl = React.useCallback(async (url) => {
     if (!url) return;
+
+    // Track click-through for recommendation analytics
+    try {
+      const base = uiStateRef.current || { id: 'default' };
+      const clickedRecs = base.clickedRecommendations || {};
+      const urlKey = url;
+
+      if (!clickedRecs[urlKey]) {
+        clickedRecs[urlKey] = { count: 0, lastClicked: 0, firstClicked: Date.now() };
+      }
+
+      clickedRecs[urlKey].count += 1;
+      clickedRecs[urlKey].lastClicked = Date.now();
+
+      uiStateRef.current = { ...base, clickedRecommendations: clickedRecs };
+      await saveUIState(uiStateRef.current).catch((e) => console.warn('[CoolFeed] saveUIState failed', e));
+    } catch (e) {
+      console.warn('[CoolFeed] Click tracking failed', e);
+    }
+
     try {
       let match = null;
       try {
@@ -228,36 +248,122 @@ export function CoolFeedSection({ tabs, pings, maxItems = 10 }) {
       return tabMatch?.title || getHost(url);
     };
 
-    // Scoring with recency and context
-    const scored = rows
-      .filter(r => !hiddenUrls.has(toHref(r.url) || r.url))
+    // Helper: Normalize value to 0-1 range
+    const normalize = (value, max) => Math.min(1, value / max);
+
+    // Helper: Calculate average session duration
+    const avgSessionDuration = (sessionDurations) => {
+      if (!sessionDurations || sessionDurations.length === 0) return 0;
+      return sessionDurations.reduce((sum, d) => sum + d, 0) / sessionDurations.length;
+    };
+
+    // Helper: Detect if URL matches time-of-day pattern
+    const matchesTimePattern = (visitTimes) => {
+      if (!visitTimes || visitTimes.length < 3) return false;
+      const currentHour = new Date().getHours();
+      const nearbyVisits = visitTimes.filter(hour => Math.abs(hour - currentHour) <= 2);
+      return nearbyVisits.length / visitTimes.length > 0.5;
+    };
+
+    // First, aggregate metrics by base URL (domain) to avoid duplicates
+    const aggregatedByDomain = new Map();
+
+    rows.forEach(r => {
+      if (hiddenUrls.has(toHref(r.url) || r.url)) return;
+
+      const domain = getHost(r.url);
+
+      if (!aggregatedByDomain.has(domain)) {
+        // First entry for this domain
+        aggregatedByDomain.set(domain, { ...r });
+      } else {
+        // Aggregate metrics: sum time/clicks/forms, max scroll
+        const existing = aggregatedByDomain.get(domain);
+        existing.time = (existing.time || 0) + (r.time || 0);
+        existing.clicks = (existing.clicks || 0) + (r.clicks || 0);
+        existing.forms = (existing.forms || 0) + (r.forms || 0);
+        existing.scroll = Math.max(existing.scroll || 0, r.scroll || 0);
+        existing.visitCount = (existing.visitCount || 0) + (r.visitCount || 0);
+        existing.returnVisits = Math.max(existing.returnVisits || 0, r.returnVisits || 0);
+        existing.lastVisit = Math.max(existing.lastVisit || 0, r.lastVisit || 0);
+        existing.bounced = (existing.bounced || 0) + (r.bounced || 0);
+
+        // Merge session durations
+        if (r.sessionDurations) {
+          existing.sessionDurations = [...(existing.sessionDurations || []), ...r.sessionDurations];
+        }
+
+        // Merge visit times
+        if (r.visitTimes) {
+          existing.visitTimes = [...(existing.visitTimes || []), ...r.visitTimes];
+        }
+
+        // Keep the title if we don't have one
+        if (!existing.title && r.title) {
+          existing.title = r.title;
+        }
+      }
+    });
+
+    // Now score the aggregated data
+    const scored = Array.from(aggregatedByDomain.values())
       .map(r => {
-        // Base engagement score
-        const engagementScore = (r.time / 3600000) * 0.4 + (r.clicks / 20) * 0.3 + (r.forms / 2) * 0.3;
+        // 1. Base engagement score (time, clicks, forms, scroll)
+        const engagementScore =
+          normalize(r.time || 0, 30 * 60 * 1000) * 0.25 +  // 30min cap
+          normalize(r.clicks || 0, 20) * 0.15 +             // 20 clicks cap
+          normalize(r.forms || 0, 3) * 0.15 +               // 3 forms cap
+          normalize(r.scroll || 0, 100) * 0.05;             // 100% scroll cap
 
-        // Recency decay (assuming we have lastVisit or using current time)
-        const lastVisit = r.lastVisit || now - (r.time || 0); // Fallback estimation
+        // 2. Frequency signals (visit count, return visits, avg session time)
+        const visitCount = r.visitCount || 0;
+        const returnVisits = r.returnVisits || 0;
+        const avgSession = avgSessionDuration(r.sessionDurations || []);
+        const frequencyScore =
+          normalize(visitCount, 50) * 0.10 +
+          normalize(returnVisits, 10) * 0.10;
+
+        // 3. Recency with exponential decay (FIXED: use actual lastVisit)
+        const lastVisit = r.lastVisit || r.firstVisit || now;
         const hoursSince = Math.max(0, (now - lastVisit) / 3600000);
-        const recencyFactor = 1 / (1 + (hoursSince * 0.1));
+        const recencyScore = Math.exp(-hoursSince / 24) * 0.10; // Exponential decay over 24h
 
-        // Context boost for habitual sites visited around same time daily
-        const isHabitual = engagementScore > 0.5;
-        const timeContextBonus = isHabitual && (hoursSince < 24 && hoursSince > 20) ? 0.3 : 0;
+        // 4. Quality signals (bounce rate, session duration, interaction density)
+        const bounceRate = visitCount > 0 ? (r.bounced || 0) / visitCount : 0;
+        const qualityScore =
+          (bounceRate < 0.3 ? 0.10 : 0) +                    // Low bounce = quality
+          (avgSession > 3 * 60 * 1000 ? 0.10 : 0) +          // Long sessions = quality
+          (returnVisits > 5 ? 0.10 : 0);                     // Many returns = quality
 
-        const totalScore = (engagementScore * 0.6) + (recencyFactor * 0.4) + timeContextBonus;
+        // 5. Context bonuses
+        const timeContextBonus = matchesTimePattern(r.visitTimes || []) ? 0.15 : 0;
+        const isActive = tabs?.some(t => t.url === r.url);
+        const activeBonus = isActive ? 0.10 : 0;
+
+        const totalScore =
+          engagementScore +
+          frequencyScore +
+          recencyScore +
+          qualityScore +
+          timeContextBonus +
+          activeBonus;
 
         return {
           ...r,
           host: getHost(r.url),
-          displayTitle: findTitle(r.url),
+          displayTitle: r.title || findTitle(r.url),
           totalScore,
           isRecent: hoursSince < 12,  // Visited in last 12 hours
-          isActive: tabs?.some(t => t.url === r.url) // Currently open
+          isActive: isActive,
+          pageType: r.pageType || 'general',
+          qualityIndicator: qualityScore > 0.15 ? 'high' : qualityScore > 0.05 ? 'medium' : 'low',
+          isHabitual: matchesTimePattern(r.visitTimes || []),
+          visitCount: visitCount,
+          returnVisits: returnVisits
         };
       });
 
-    // Grouping & Deduplication
-    const seenHosts = new Set();
+    // Since we already aggregated by domain, no need for complex deduplication
     const feed = {
       jumpBackIn: [],  // Recent & Active
       dailyTop: [],    // High score, general
@@ -267,16 +373,10 @@ export function CoolFeedSection({ tabs, pings, maxItems = 10 }) {
     scored.sort((a, b) => b.totalScore - a.totalScore);
 
     scored.forEach(item => {
-      // Skip duplicate hosts unless very high score
-      if (seenHosts.has(item.host)) {
-        if (item.totalScore < 0.8) return;
-      }
-      seenHosts.add(item.host);
-
-      // Categorize
-      if (item.isActive || (item.isRecent && item.totalScore > 0.1)) {
+      // Categorize each domain-aggregated item
+      if (item.isActive || (item.isRecent && item.totalScore > 0.15)) {
         feed.jumpBackIn.push(item);
-      } else if (item.totalScore > 0.4) {
+      } else if (item.totalScore > 0.3) {
         feed.dailyTop.push(item);
       }
     });
@@ -454,6 +554,35 @@ export function CoolFeedSection({ tabs, pings, maxItems = 10 }) {
               const activityColor = getActivityColor(r.category);
               const activityLevel = r.category === 'strong' ? 'High' : r.category === 'medium' ? 'Med' : 'Low';
 
+              // Get page type emoji/icon
+              const pageTypeIcon = {
+                tool: '🔧',
+                docs: '📚',
+                article: '📝',
+                social: '💬',
+                code: '💻',
+                'code-review': '🔍',
+                video: '🎥',
+                shopping: '🛒',
+                email: '📧',
+                storage: '💾',
+                general: '🌐'
+              }[r.pageType || 'general'] || '🌐';
+
+              // Quality indicator
+              const qualityEmoji = r.qualityIndicator === 'high' ? '⭐' : r.qualityIndicator === 'medium' ? '✨' : '';
+              const isHabitualIcon = r.isHabitual ? '🔥' : '';
+
+              const tooltipText = [
+                r.displayTitle || host,
+                `Score: ${(r.totalScore || 0).toFixed(2)}`,
+                `Visits: ${r.visitCount || 0} | Returns: ${r.returnVisits || 0}`,
+                `Time: ${Math.round((r.time || 0) / 1000)}s | Clicks: ${r.clicks || 0}`,
+                r.pageType ? `Type: ${r.pageType}` : '',
+                qualityEmoji ? `Quality: ${r.qualityIndicator}` : '',
+                isHabitualIcon ? 'Habitual site for this time' : ''
+              ].filter(Boolean).join('\n');
+
               return (
                 <div
                   key={r.url}
@@ -467,7 +596,7 @@ export function CoolFeedSection({ tabs, pings, maxItems = 10 }) {
                     const href = (() => { try { return new URL(r.url).href; } catch { return r.url; } })();
                     setCtxMenu({ show: true, x: e.clientX, y: e.clientY, url: href });
                   }}
-                  title={`${host}\n${r.url}\nActivity: ${activityLevel} | Time: ${Math.round((r.time || 0) / 1000)}s | Clicks: ${r.clicks || 0}`}
+                  title={tooltipText}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -493,6 +622,25 @@ export function CoolFeedSection({ tabs, pings, maxItems = 10 }) {
                     e.currentTarget.style.transform = 'scale(1)';
                   }}
                 >
+                  {/* Quality indicator badge */}
+                  {(qualityEmoji || isHabitualIcon) && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-4px',
+                      fontSize: '12px',
+                      background: 'rgba(0, 0, 0, 0.7)',
+                      borderRadius: '50%',
+                      width: '18px',
+                      height: '18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1px solid rgba(255, 255, 255, 0.2)'
+                    }}>
+                      {isHabitualIcon || qualityEmoji}
+                    </div>
+                  )}
                   {firstSrc ? (
                     <img
                       src={firstSrc}

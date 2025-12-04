@@ -5,6 +5,7 @@ import { getUIState, saveUIState } from '../../db/index.js';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser } from '../../services/commandParser.js';
 import { fuzzySearch } from '../../utils/searchUtils.js';
+import { ActivityInsightsWidget } from './ActivityInsightsWidget.jsx';
 import { CoolFeedSection } from './CoolFeedSection.jsx';
 
 export function SearchPanel() {
@@ -43,6 +44,7 @@ export function SearchPanel() {
     // Activity feed state
     const [tabs, setTabs] = useState([]);
     const [pings, setPings] = useState([]);
+    const [activityRows, setActivityRows] = useState([]);
 
     const [commandExecutor] = useState(() => new CommandExecutor((feedback) => {
         setCommandFeedback(feedback);
@@ -284,7 +286,7 @@ export function SearchPanel() {
         }
     };
 
-    // Load tabs and pings for activity feed
+    // Load tabs, pings, and activity data for insights
     useEffect(() => {
         const loadTabsAndPings = async () => {
             try {
@@ -304,6 +306,18 @@ export function SearchPanel() {
                         }))
                     );
                     setPings(allPings);
+                }
+
+                // Load activity data for insights widget
+                if (chrome?.runtime?.sendMessage) {
+                    try {
+                        const response = await chrome.runtime.sendMessage({ type: 'getActivityData' });
+                        if (response?.ok && Array.isArray(response.rows)) {
+                            setActivityRows(response.rows);
+                        }
+                    } catch (e) {
+                        console.warn('[SearchPanel] Failed to load activity data', e);
+                    }
                 }
             } catch (e) {
                 console.warn('[SearchPanel] Failed to load tabs/pings', e);
@@ -709,6 +723,16 @@ export function SearchPanel() {
                     </div>
 
                 </form>
+
+                {/* Activity Insights Widget */}
+                {!search.startsWith('!') && activityRows.length > 0 && (
+                    <div style={{
+                        width: '100%',
+                        maxWidth: '680px'
+                    }}>
+                        <ActivityInsightsWidget rows={activityRows} />
+                    </div>
+                )}
 
                 {/* Quick Access Links & Activity Feed Row */}
                 {!search.startsWith('!') && (

@@ -3,14 +3,86 @@ import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, pu
 import { setHostActivity } from '../services/extensionApi.js';
 import { getUrlParts } from '../utils.js';
 
-// Helper function to clean URLs
+// Helper function to clean URLs (returns base domain for app-like aggregation)
 function cleanUrl(url) {
     try {
         const parts = getUrlParts(url);
-        return parts?.key || null; // scheme + eTLD+1
+        return parts?.key || null; // scheme + eTLD+1 (e.g., https://github.com)
     } catch {
         return null;
     }
+}
+
+// Helper function to initialize activity data structure
+function initActivityData(url = '') {
+    let domain = '';
+    try {
+        domain = new URL(url).hostname.replace('www.', '');
+    } catch {
+        domain = '';
+    }
+
+    return {
+        time: 0,
+        scroll: 0,
+        clicks: 0,
+        forms: 0,
+        visitCount: 0,
+        returnVisits: 0,
+        lastVisit: 0,
+        visitTimes: [], // Array of visit hours (0-23) for pattern detection
+        sessionDurations: [], // Array of individual session durations
+        bounced: 0, // Count of sessions < 5s with no interaction
+        title: '',
+        domain: domain,
+        pageType: '', // 'article', 'tool', 'dashboard', etc.
+        firstVisit: Date.now(),
+        visitDays: new Set() // Set of day strings (YYYY-MM-DD) for return visit tracking
+    };
+}
+
+// Helper function to classify page type from URL
+function classifyPageType(url, title = '') {
+    const urlLower = url.toLowerCase();
+    const titleLower = title.toLowerCase();
+
+    // Specific subdomain/path patterns for better granularity
+    // Google services - distinguish by subdomain
+    if (urlLower.includes('mail.google.com')) return 'email';
+    if (urlLower.includes('drive.google.com')) return 'storage';
+    if (urlLower.includes('docs.google.com')) return 'docs';
+    if (urlLower.includes('sheets.google.com')) return 'tool';
+    if (urlLower.includes('calendar.google.com')) return 'tool';
+    if (urlLower.includes('meet.google.com')) return 'video';
+
+    // GitHub - distinguish by path
+    if (urlLower.includes('github.com')) {
+        if (urlLower.includes('/issues') || urlLower.includes('/pull')) return 'code-review';
+        if (urlLower.includes('/actions') || urlLower.includes('/settings')) return 'tool';
+        if (urlLower.includes('/wiki') || titleLower.includes('readme')) return 'docs';
+        return 'code';
+    }
+
+    // General patterns
+    const patterns = {
+        tool: /app\.|tool\.|editor\.|admin\.|dashboard|console\.|analytics\./i,
+        docs: /docs\.|documentation|api\.|reference|guide|wiki/i,
+        article: /blog\.|article\.|post\.|news\.|medium\.com/i,
+        social: /twitter\.|x\.com|facebook\.|linkedin\.|reddit\.|instagram\./i,
+        code: /gitlab\.|stackoverflow\.|codepen\.|repl\.it|codesandbox/i,
+        video: /youtube\.|vimeo\.|twitch\./i,
+        shopping: /amazon\.|ebay\.|shop\.|store\./i,
+        email: /outlook\.|mail\./i,
+        storage: /dropbox\.|onedrive\.|drive\./i
+    };
+
+    for (const [type, pattern] of Object.entries(patterns)) {
+        if (pattern.test(urlLower) || pattern.test(titleLower)) {
+            return type;
+        }
+    }
+
+    return 'general';
 }
 
 // Enhanced URL filtering to exclude system and low-value URLs
@@ -95,7 +167,7 @@ function isAudioStreamingSite(url) {
 
 // Activity tracking state
 let currentActive = { tabId: null, url: null, since: 0 };
-let activityData = {}; // { [cleanedUrl]: { time, scroll, clicks, forms } }
+let activityData = {}; // { [cleanedUrl]: { time, scroll, clicks, forms, visitCount, returnVisits, lastVisit, visitTimes, sessionDurations, bounced, title, domain, pageType, firstVisit, visitDays } }
 const activityDirty = new Set();
 const MAX_ACTIVITY_POST = 50; // limit rows per flush
 
@@ -117,6 +189,8 @@ let sessionEvents = new Map(); // Track events per URL in current session
 let urlSessions = new Map(); // Track ongoing sessions per URL to avoid duplicates
 let urlSessionIds = new Map(); // Track consistent session IDs per URL
 let tabSessions = new Map(); // Track sessions per tab ID to prevent duplicates
+let sessionStartTimes = new Map(); // Track session start times for bounce detection
+let sessionHadInteraction = new Map(); // Track if session had any interaction
 
 // Create unique session ID using tab ID and URL
 function createTabSessionId(tabId, url) {
@@ -124,9 +198,21 @@ function createTabSessionId(tabId, url) {
     if (!cleaned || !tabId) return null;
 
     // Create deterministic session ID: tab_<tabId>_<urlHash>_<day>
-    const urlHash = cleaned.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
+    // Use a simple hash to keep the ID short while being unique
+    const urlHash = simpleHash(cleaned).toString(36).substring(0, 8);
     const day = Math.floor(Date.now() / (24 * 60 * 60 * 1000)); // Same day = same session
     return `tab_${tabId}_${urlHash}_${day}`;
+}
+
+// Simple hash function for URL to session ID conversion
+function simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
 }
 
 // Flush activity batch to database
@@ -253,7 +339,60 @@ async function accumulateTime(url, now = Date.now()) {
     if (!cleaned) return;
 
     const delta = Math.max(0, now - currentActive.since);
-    if (!activityData[cleaned]) activityData[cleaned] = { time: 0, scroll: 0, clicks: 0, forms: 0 };
+
+    // Initialize activity data if needed
+    if (!activityData[cleaned]) {
+        activityData[cleaned] = initActivityData(url);
+    }
+
+    // Track visit metadata
+    const currentHour = new Date(now).getHours();
+    const currentDay = new Date(now).toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Check if this is a new session (30 min gap)
+    const isNewSession = now - (activityData[cleaned].lastVisit || 0) > 30 * 60 * 1000;
+
+    // Update visit count and times (only on new session start)
+    if (isNewSession) {
+        activityData[cleaned].visitCount = (activityData[cleaned].visitCount || 0) + 1;
+        activityData[cleaned].visitTimes.push(currentHour);
+
+        // Track unique days for return visits
+        const previousSize = activityData[cleaned].visitDays.size;
+        activityData[cleaned].visitDays.add(currentDay);
+        if (activityData[cleaned].visitDays.size > previousSize) {
+            activityData[cleaned].returnVisits = activityData[cleaned].visitDays.size - 1;
+        }
+
+        // Start tracking new session for bounce detection
+        sessionStartTimes.set(cleaned, now);
+        sessionHadInteraction.set(cleaned, false);
+    }
+
+    // Check for bounce when session ends (URL change or tab switch)
+    const previousUrl = Array.from(sessionStartTimes.keys()).find(u => u !== cleaned);
+    if (previousUrl && sessionStartTimes.has(previousUrl)) {
+        const sessionStart = sessionStartTimes.get(previousUrl);
+        const sessionDuration = now - sessionStart;
+        const hadInteraction = sessionHadInteraction.get(previousUrl);
+
+        // Bounce = session < 5s with no interactions
+        if (sessionDuration < 5000 && !hadInteraction) {
+            activityData[previousUrl].bounced = (activityData[previousUrl].bounced || 0) + 1;
+        }
+
+        // Store session duration
+        if (!activityData[previousUrl].sessionDurations) {
+            activityData[previousUrl].sessionDurations = [];
+        }
+        activityData[previousUrl].sessionDurations.push(sessionDuration);
+
+        // Clean up old session tracking
+        sessionStartTimes.delete(previousUrl);
+        sessionHadInteraction.delete(previousUrl);
+    }
+
+    activityData[cleaned].lastVisit = now;
 
     // Smart time tracking logic
     const isCurrentlyActive = currentActive.url === url;
@@ -352,6 +491,17 @@ async function handleActivated(tabId) {
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
         currentActive = { tabId, url: tab?.url || null, since: now }
+
+        // Store page title and classify page type
+        if (tab?.url) {
+            const cleaned = cleanUrl(tab.url);
+            if (cleaned && activityData[cleaned]) {
+                activityData[cleaned].title = tab.title || '';
+                if (!activityData[cleaned].pageType) {
+                    activityData[cleaned].pageType = classifyPageType(tab.url, tab.title || '');
+                }
+            }
+        }
     } catch {
         currentActive = { tabId, url: null, since: now }
     }
@@ -392,6 +542,17 @@ function handleTabUpdated(tabId, changeInfo, tab) {
         }
         currentActive.url = changeInfo.url
         currentActive.since = now
+    }
+
+    // Update title and page type when available
+    if (changeInfo.title && currentActive.url) {
+        const cleaned = cleanUrl(currentActive.url);
+        if (cleaned && activityData[cleaned]) {
+            activityData[cleaned].title = changeInfo.title;
+            if (!activityData[cleaned].pageType) {
+                activityData[cleaned].pageType = classifyPageType(currentActive.url, changeInfo.title);
+            }
+        }
     }
 }
 
@@ -512,7 +673,9 @@ export function handleActivityMessage(msg, sender) {
 
     console.log('[Activity Debug] Processing activity for URL:', cleaned, 'type:', msg.type);
 
-    if (!activityData[cleaned]) activityData[cleaned] = { time: 0, scroll: 0, clicks: 0, forms: 0 };
+    if (!activityData[cleaned]) {
+        activityData[cleaned] = initActivityData(sender.tab.url);
+    }
 
     // Create tab-based session ID for this message
     const tabSessionId = createTabSessionId(sender.tab.id, sender.tab.url);
@@ -541,6 +704,9 @@ export function handleActivityMessage(msg, sender) {
     const sessionEvent = sessionEvents.get(cleaned);
 
     if (msg.type !== 'visibility') {
+        // Mark that this session had interaction (for bounce tracking)
+        sessionHadInteraction.set(cleaned, true);
+
         switch (msg.type) {
             case 'scroll':
                 // Fix: Content script sends 'scrollPercent' but we were looking for 'depth'
@@ -634,7 +800,18 @@ export async function handleGetActivityData(msg, sender, sendResponse) {
             time: data.time || 0,
             clicks: data.clicks || 0,
             scroll: data.scroll || 0,
-            forms: data.forms || 0
+            forms: data.forms || 0,
+            visitCount: data.visitCount || 0,
+            returnVisits: data.returnVisits || 0,
+            lastVisit: data.lastVisit || 0,
+            visitTimes: data.visitTimes || [],
+            sessionDurations: data.sessionDurations || [],
+            bounced: data.bounced || 0,
+            title: data.title || '',
+            domain: data.domain || '',
+            pageType: data.pageType || 'general',
+            firstVisit: data.firstVisit || 0,
+            visitDays: Array.from(data.visitDays || [])
         }));
 
         // Also include session data if available
@@ -643,7 +820,18 @@ export async function handleGetActivityData(msg, sender, sendResponse) {
             time: session.timeSpent || 0,
             clicks: session.clicks || 0,
             scroll: session.scrollDepth || 0,
-            forms: session.forms || 0
+            forms: session.forms || 0,
+            visitCount: 0, // Session data doesn't track this
+            returnVisits: 0,
+            lastVisit: session.lastSeen || 0,
+            visitTimes: [],
+            sessionDurations: [],
+            bounced: 0,
+            title: '',
+            domain: '',
+            pageType: 'general',
+            firstVisit: session.firstSeen || 0,
+            visitDays: []
         }));
 
         // Merge and deduplicate data
@@ -656,14 +844,20 @@ export async function handleGetActivityData(msg, sender, sendResponse) {
 
         // Add/merge session data
         sessionRows.forEach(row => {
-            const existing = allData.get(row.url) || { url: row.url, time: 0, clicks: 0, scroll: 0, forms: 0 };
-            allData.set(row.url, {
-                url: row.url,
-                time: Math.max(existing.time, row.time),
-                clicks: Math.max(existing.clicks, row.clicks),
-                scroll: Math.max(existing.scroll, row.scroll),
-                forms: Math.max(existing.forms, row.forms)
-            });
+            const existing = allData.get(row.url);
+            if (!existing) {
+                allData.set(row.url, row);
+            } else {
+                // Merge session data with existing data, keeping the higher values
+                allData.set(row.url, {
+                    ...existing,
+                    time: Math.max(existing.time, row.time),
+                    clicks: Math.max(existing.clicks, row.clicks),
+                    scroll: Math.max(existing.scroll, row.scroll),
+                    forms: Math.max(existing.forms, row.forms),
+                    lastVisit: Math.max(existing.lastVisit, row.lastVisit)
+                });
+            }
         });
 
         const finalRows = Array.from(allData.values())
