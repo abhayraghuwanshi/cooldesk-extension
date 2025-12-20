@@ -1,4 +1,4 @@
-import { getSettings, addUrlToWorkspace, listWorkspaces, saveWorkspace } from '../db/index.js';
+import { getSettings, addUrlToWorkspace, listWorkspaces, saveWorkspace, getUrlNotes } from '../db/index.js';
 import { createCircuitBreaker, getUrlParts } from '../utils.js';
 import { buildCategoryListPrompt, buildEnrichmentPromptForWorkspace } from '../utils/prompts.js';
 import { activityData } from './activity.js';
@@ -554,7 +554,7 @@ export function initializeAI() {
 
                         // Check if there are URL notes for this item and include them in AI context
                         try {
-                            const { getUrlNotes } = await import('../db/url-notes-db.js')
+                            // Use statically imported getUrlNotes (imported at top of file)
                             const urlNotes = await getUrlNotes(it.url)
                             if (urlNotes && urlNotes.length > 0) {
                                 // Add URL notes context to the enriched data

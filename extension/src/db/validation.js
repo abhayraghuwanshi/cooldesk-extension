@@ -413,6 +413,14 @@ export const VALIDATION_SCHEMAS = {
                 maxItems: 5
             }
         },
+        // Quick URLs for header (alternative naming)
+        quickUrls: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'string',
+                maxItems: 5
+            }
+        },
         lastActiveTab: {
             [ValidationRules.TYPE]: 'string'
         },

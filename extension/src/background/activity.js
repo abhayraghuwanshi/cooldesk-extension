@@ -2,6 +2,7 @@
 import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, putActivityTimeSeriesEvent } from '../db/index.js';
 import { setHostActivity } from '../services/extensionApi.js';
 import { getUrlParts } from '../utils.js';
+import { autoSavePredictor } from '../ml/inference/autoSavePredictor.js';
 
 // Helper function to clean URLs (returns base domain for app-like aggregation)
 function cleanUrl(url) {
@@ -246,6 +247,26 @@ async function flushActivityBatch() {
             .sort((a, b) => (Number(b.time || 0) - Number(a.time || 0)))
             .slice(0, MAX_ACTIVITY_POST);
         try { await setHostActivity(top); } catch { /* ignore */ }
+    }
+
+    // ML Auto-Save: Check URLs for auto-save predictions (non-blocking, fire-and-forget)
+    for (const url of urls) {
+        const data = activityData[url];
+        if (!data) continue;
+
+        // Only check URLs with significant engagement
+        if (hasMinimumEngagement(data)) {
+            // Run prediction asynchronously (don't block activity tracking)
+            (async () => {
+                try {
+                    // Use statically imported autoSavePredictor (imported at top of file)
+                    await autoSavePredictor.autoSaveIfNeeded(url, data, {});
+                } catch (err) {
+                    // Silently catch errors to not interfere with activity tracking
+                    console.debug('[ML] Auto-save check failed:', err.message);
+                }
+            })();
+        }
     }
 }
 

@@ -25,6 +25,10 @@
  * - Production monitoring and health checks
  */
 
+// Import core functions directly for use in setup functions
+import { initializeDatabase, closeDatabaseConnection } from './unified-api.js'
+import { DB_CONFIG, getUnifiedDB as getIndexedDBInstance } from './unified-db.js'
+
 // Export all API functions
 export {
 
@@ -37,7 +41,7 @@ export {
     getSettings, getTimeSeriesDataRange, getTimeSeriesStorageStats,
     // UI State operations
     getUIState,
-    // URL Notes operations  
+    // URL Notes operations
     getUrlNotes, getUrlRecord, getWorkspace,
     // Initialization
     initializeDatabase,
@@ -97,8 +101,7 @@ export async function setupDatabase(options = {}) {
     try {
         console.log('[DB Setup] Initializing unified database system...')
 
-        // Import the function locally to avoid circular dependencies
-        const { initializeDatabase } = await import('./unified-api.js')
+        // Use statically imported function (imported at top of file)
         const result = await initializeDatabase()
 
         if (result.success) {
@@ -137,16 +140,15 @@ export async function resetDatabase() {
     }
 
     try {
-        // Import needed modules locally
-        const { DB_CONFIG, getIndexedDBInstance } = await import('./unified-db.js')
-        const { closeDatabaseConnection } = await import('./unified-api.js')
+        // Use statically imported functions (imported at top of file)
 
         // Close existing connections
         closeDatabaseConnection()
 
         // Delete the unified database
         await new Promise((resolve, reject) => {
-            const deleteReq = getIndexedDBInstance().deleteDatabase(DB_CONFIG.NAME)
+            const idbInstance = typeof indexedDB !== 'undefined' ? indexedDB : getIndexedDBInstance()
+            const deleteReq = idbInstance.deleteDatabase(DB_CONFIG.NAME)
             deleteReq.onsuccess = () => resolve()
             deleteReq.onerror = () => reject(deleteReq.error)
             deleteReq.onblocked = () => {

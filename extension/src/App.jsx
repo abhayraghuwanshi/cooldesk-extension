@@ -46,6 +46,7 @@ import { CurrentTabsSection } from './components/default/CurrentTabsSection';
 import { SearchPanel } from './components/default/SearchPanel';
 import { SimpleNotes } from './components/default/SimpleNotes';
 import { WorkspaceSection } from './components/default/WorkspaceSection';
+import MLDashboard from './components/default/MLDashboard';
 import { DraggableSections } from './components/DraggableSections';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
@@ -1728,6 +1729,16 @@ export default function App() {
         <div key="notes" data-onboarding="notes-section">
           <ErrorBoundary>
             <SimpleNotes />
+          </ErrorBoundary>
+        </div>
+      )
+    },
+    {
+      id: 'ml-dashboard',
+      component: displaySettings.mlDashboard !== false && (
+        <div key="ml-dashboard" data-onboarding="ml-dashboard-section">
+          <ErrorBoundary>
+            <MLDashboard />
           </ErrorBoundary>
         </div>
       )
