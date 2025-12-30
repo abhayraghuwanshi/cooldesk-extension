@@ -182,8 +182,9 @@
 .simple-notes-list {
     flex: 1;
     overflow-y: auto;
-    min-height: 200px;
-    max-height: 400px;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
 }
 
 /* Group Sections */
@@ -208,6 +209,9 @@
 /* Note Item */
 .simple-note-item {
     margin-bottom: 8px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .simple-note-content {
@@ -218,8 +222,12 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     transition: all 0.2s ease;
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .simple-note-item:hover .simple-note-content {
@@ -232,6 +240,10 @@
     font-size: var(--font-size-base);
     line-height: 1.5;
     flex: 1;
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
 }
 
 /* Todo */

@@ -25,6 +25,8 @@ import './search.css';
 import './styles/components.css';
 import './styles/theme.css';
 import './styles/themes/components-vars.css';
+import './styles/bento-layout.css';
+import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
 
 // Add icons to the library
 library.add(
@@ -46,8 +48,6 @@ import { CurrentTabsSection } from './components/default/CurrentTabsSection';
 import { SearchPanel } from './components/default/SearchPanel';
 import { SimpleNotes } from './components/default/SimpleNotes';
 import { WorkspaceSection } from './components/default/WorkspaceSection';
-import MLDashboard from './components/default/MLDashboard';
-import { DraggableSections } from './components/DraggableSections';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import { getDisplaySettings } from './components/settings/DisplayData';
@@ -1624,58 +1624,22 @@ export default function App() {
   // Determine if we should show vertical header (responsive or user preference)
   const shouldShowVertical = windowWidth < 700;
 
-  // Define all draggable sections
+  // Define all draggable sections with bento sizes - Pinterest-style aesthetic
   const allSections = useMemo(() => [
-    // {
-    //   id: 'quick-access',
-    //   component: (
-    //     <ErrorBoundary key="quick-access">
-    //       <QuickAccess displaySettings={displaySettings} initialShowPings={showPingsSection} initialShowFeed={showFeedSection} />
-    //     </ErrorBoundary>
-    //   )
-    // },
-    // {
-    //   id: 'shared-workspace',
-    //   component: (
-    //     <div className="shared-workspace-container section" key="shared-workspace">
-    //       <ErrorBoundary>
-    //         <SharedWorkspace
-    //           teamId="demo-team"
-    //           userId="demo-user"
-    //           wsUrl="wss://cooldesk-team-sync.raghuwanshi-abhay405.workers.dev"
-    //         />
-    //       </ErrorBoundary>
-    //     </div>
-    //   )
-    // },
-    // {
-    //   id: 'pinned-workspace',
-    //   component: (
-    //     <div className="pinned-workspace-container section" key="pinned-workspace">
-    //       {displaySettings.pinnedWorkspaces !== false && (
-    //         <ErrorBoundary>
-    //           <PinnedWorkspace
-    //             items={pinnedWorkspaces}
-    //             active={activePinnedWorkspace}
-    //             onSelect={(name) => setActivePinnedWorkspace(name)}
-    //             onUnpin={unpinWorkspace}
-    //             workspaces={savedWorkspaces}
-    //             onReorder={(order) => {
-    //               if (Array.isArray(order)) {
-    //                 setPinnedWorkspace s(order);
-    //                 try { savePinnedWorkspaces(order); } catch { }
-    //               }
-    //             }}
-    //           />
-    //         </ErrorBoundary>
-    //       )}
-    //     </div>
-    //   )
-    // },
+    {
+      id: 'search-panel',
+      size: 'featured', // Hero search - full width
+      component: (
+        <ErrorBoundary key="search-panel">
+          <SearchPanel />
+        </ErrorBoundary>
+      )
+    },
     {
       id: 'workspace-section',
+      size: 'large', // Main workspace - 8 columns
       component: (
-        <div className="workspace-filters-section section" key="workspace-section">
+        <ErrorBoundary key="workspace-section">
           <WorkspaceSection
             displaySettings={displaySettings}
             workspace={workspace}
@@ -1690,69 +1654,45 @@ export default function App() {
             mergedWorkspaceItems={mergedWorkspaceItems}
             renderWorkspaceGrid={renderWorkspaceGrid}
           />
-        </div>
-      )
-    },
-    {
-      id: 'voice-navigation',
-      component: displaySettings.voiceNavigationSection !== false && (
-        <div key="voice-navigation" className="section" data-onboarding="voice-navigation-section">
-          <ErrorBoundary>
-            <VoiceNavigationChatGPT />
-          </ErrorBoundary>
-        </div>
-      )
-    },
-    {
-      id: 'active-tabs',
-      component: displaySettings.currentTabsSection !== false && (
-        <div key="active-tabs" data-onboarding="current-tabs-section">
-          <ErrorBoundary>
-            <CurrentTabsSection />
-          </ErrorBoundary>
-        </div>
-      )
-    },
-    {
-      id: 'ai-chats',
-      component: displaySettings.aiChatsSection !== false && (
-        <div key="ai-chats" data-onboarding="ai-chats-section">
-          <ErrorBoundary>
-            <AIChatsSection />
-          </ErrorBoundary>
-        </div>
+        </ErrorBoundary>
       )
     },
     {
       id: 'notes',
+      size: 'small', // Compact notes - 4 columns
       component: displaySettings.notesSection !== false && (
-        <div key="notes" data-onboarding="notes-section">
-          <ErrorBoundary>
-            <SimpleNotes />
-          </ErrorBoundary>
-        </div>
+        <ErrorBoundary key="notes">
+          <SimpleNotes />
+        </ErrorBoundary>
       )
     },
     {
-      id: 'ml-dashboard',
-      component: displaySettings.mlDashboard !== false && (
-        <div key="ml-dashboard" data-onboarding="ml-dashboard-section">
-          <ErrorBoundary>
-            <MLDashboard />
-          </ErrorBoundary>
-        </div>
+      id: 'ai-chats',
+      size: 'medium', // AI chats - 6 columns
+      component: displaySettings.aiChatsSection !== false && (
+        <ErrorBoundary key="ai-chats">
+          <AIChatsSection />
+        </ErrorBoundary>
       )
     },
-    // {
-    //   id: 'notice-board',
-    //   component: displaySettings.noticeBoard !== false && (
-    //     <div key="notice-board">
-    //       <ErrorBoundary>
-    //         <GlassNoticeBoard hideNoticeBoard={displaySettings.noticeBoard === false} />
-    //       </ErrorBoundary>
-    //     </div>
-    //   )
-    // },
+    {
+      id: 'active-tabs',
+      size: 'medium', // Active tabs - 6 columns
+      component: displaySettings.currentTabsSection !== false && (
+        <ErrorBoundary key="active-tabs">
+          <CurrentTabsSection />
+        </ErrorBoundary>
+      )
+    },
+    {
+      id: 'voice-navigation',
+      size: 'compact', // Small voice nav - 3 columns
+      component: displaySettings.voiceNavigationSection !== false && (
+        <ErrorBoundary key="voice-navigation">
+          <VoiceNavigationChatGPT />
+        </ErrorBoundary>
+      )
+    },
   ].filter(section => section.component !== false), [
     displaySettings,
     showPingsSection,
@@ -1771,177 +1711,114 @@ export default function App() {
       '--card-spacing': '16px',
       position: 'relative'
     }}>
-      {/* Settings Button - Top Right */}
-      <button
-        data-onboarding="settings-button"
-        onClick={() => setShowSettings(true)}
-        title="Settings"
-        style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          width: '48px',
-          height: '48px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: '12px',
-          background: 'var(--glass-bg, rgba(255, 255, 255, 0.1))',
-          border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
-          color: 'var(--text, #e5e7eb)',
-          cursor: 'pointer',
-          zIndex: 1000,
-          transition: 'all 0.2s ease',
-          backdropFilter: 'blur(12px)',
+      {/* Cooldesk UI */}
+      <CoolDeskContainer
+        savedWorkspaces={savedWorkspaces}
+        onOpenWorkspace={(ws) => {
+          setWorkspace(ws.name);
+          console.log('[CoolDesk] Opening workspace:', ws.name);
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--interactive-hover, rgba(255, 255, 255, 0.15))';
-          e.currentTarget.style.transform = 'scale(1.05)';
+        onOpenAllWorkspace={(ws) => {
+          // Open all URLs in workspace
+          if (ws.urls && Array.isArray(ws.urls)) {
+            ws.urls.forEach((urlObj) => {
+              if (urlObj.url) {
+                window.open(urlObj.url, '_blank');
+              }
+            });
+          }
         }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'var(--glass-bg, rgba(255, 255, 255, 0.1))';
-          e.currentTarget.style.transform = 'scale(1)';
+        onCreateWorkspace={() => {
+          setShowCreateWorkspace(true);
         }}
-      >
-        <FontAwesomeIcon icon={faGear} style={{ fontSize: '20px' }} />
-      </button>
+        onSearch={(query) => {
+          setSearch(query);
+          console.log('[CoolDesk] Search:', query);
+        }}
+        onOpenSettings={() => {
+          setShowSettings(true);
+        }}
+      />
 
-      {/* Wallpaper Background */}
-      {wallpaperEnabled && (
-        <>
-          <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundImage: `url(${wallpaperUrl})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
-              opacity: wallpaperOpacity,
-              zIndex: -2,
-              pointerEvents: 'none'
-            }}
-          />
-          <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backdropFilter: 'blur(8px)',
-              zIndex: -1,
-              pointerEvents: 'none'
-            }}
-          />
-        </>
+      {/* Modals */}
+      {addingToWorkspace && (
+        <div
+          className="modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setAddingToWorkspace(null) }}
+        >
+          <div className="modal">
+            <div
+              className="modal-header"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
+              }}
+            >
+              <h3 style={{ margin: 0 }}>Add to "{addingToWorkspace}"</h3>
+              <button
+                onClick={() => setAddingToWorkspace(null)}
+                className="cancel-btn"
+                aria-label="Close"
+                title="Close"
+                style={{ padding: '4px 8px' }}
+              >
+                ×
+              </button>
+            </div>
+            <AddLinkFlow
+              allItems={data}
+              savedItems={savedWorkspaces.flatMap(ws => (ws.urls || []).map(u => ({
+                ...u,
+                workspaceGroup: ws.name,
+                id: `${ws.id}-${u.url}`,
+              })))}
+              currentWorkspace={addingToWorkspace}
+              onAdd={handleAddItemToWorkspace}
+              onAddSaved={handleAddSavedUrlToWorkspace}
+              onCancel={() => setAddingToWorkspace(null)}
+            />
+          </div>
+        </div>
       )}
 
-      {/* Main Content Area with conditional wrapper */}
-      <div>
+      <AddToWorkspaceModal
+        show={showAddLinkModal}
+        workspace={workspaceForLinkAdd}
+        onClose={handleCloseAddLinkModal}
+        onSave={handleSaveLink}
+        suggestions={data.filter(it => !it.workspaceGroup)}
+      />
 
-        {/* Chrome/Edge-style Search Panel */}
-        <div className="search-panel-section section" style={{ marginTop: '15vh' }}>
-          <ErrorBoundary>
-            <SearchPanel />
-          </ErrorBoundary>
-        </div>
+      <CreateWorkspaceModal
+        show={showCreateWorkspace}
+        onClose={() => setShowCreateWorkspace(false)}
+        onCreate={createWorkspace}
+        currentTab={currentTab}
+      />
 
-        {/* All draggable sections below the search */}
-        <DraggableSections sections={allSections} storageKey="mainSectionOrder" />
+      <SettingsModal
+        show={showSettings}
+        onClose={() => setShowSettings(false)}
+        settings={settings}
+        onSave={saveSettings}
+        fontSize={fontSize}
+        onFontSizeChange={handleFontSizeChange}
+        onStartOnboarding={startOnboarding}
+        wallpaperEnabled={wallpaperEnabled}
+        wallpaperUrl={wallpaperUrl}
+        wallpaperOpacity={wallpaperOpacity}
+        onWallpaperEnabledChange={setWallpaperEnabled}
+        onWallpaperUrlChange={setWallpaperUrl}
+        onWallpaperOpacityChange={setWallpaperOpacity}
+      />
 
-        <div style={{ marginTop: 'var(--section-spacing)' }}>
-          {addingToWorkspace && (
-            <div
-              className="modal-overlay"
-              onClick={(e) => { if (e.target === e.currentTarget) setAddingToWorkspace(null) }}
-            >
-              <div className="modal">
-                <div
-                  className="modal-header"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
-                  }}
-                >
-                  <h3 style={{ margin: 0 }}>Add to "{addingToWorkspace}"</h3>
-                  <button
-                    onClick={() => setAddingToWorkspace(null)}
-                    className="cancel-btn"
-                    aria-label="Close"
-                    title="Close"
-                    style={{ padding: '4px 8px' }}
-                  >
-                    ×
-                  </button>
-                </div>
-                <AddLinkFlow
-                  allItems={data}
-                  savedItems={savedWorkspaces.flatMap(ws => (ws.urls || []).map(u => ({
-                    ...u,
-                    workspaceGroup: ws.name,
-                    id: `${ws.id}-${u.url}`,
-                  })))}
-                  currentWorkspace={addingToWorkspace}
-                  onAdd={handleAddItemToWorkspace}
-                  onAddSaved={handleAddSavedUrlToWorkspace}
-                  onCancel={() => setAddingToWorkspace(null)}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div style={{ marginTop: 'var(--section-spacing)' }}>
-          <AddToWorkspaceModal
-            show={showAddLinkModal}
-            workspace={workspaceForLinkAdd}
-            onClose={handleCloseAddLinkModal}
-            onSave={handleSaveLink}
-            suggestions={data.filter(it => !it.workspaceGroup)}
-          />
-        </div>
-
-        <div style={{ marginTop: 'var(--section-spacing)' }}>
-          <CreateWorkspaceModal
-            show={showCreateWorkspace}
-            onClose={() => setShowCreateWorkspace(false)}
-            onCreate={createWorkspace}
-            currentTab={currentTab}
-          />
-        </div>
-
-        <div style={{ marginTop: 'var(--section-spacing)' }}>
-          <SettingsModal
-            show={showSettings}
-            onClose={() => setShowSettings(false)}
-            settings={settings}
-            onSave={saveSettings}
-            fontSize={fontSize}
-            onFontSizeChange={handleFontSizeChange}
-            onStartOnboarding={startOnboarding}
-            wallpaperEnabled={wallpaperEnabled}
-            wallpaperUrl={wallpaperUrl}
-            wallpaperOpacity={wallpaperOpacity}
-            onWallpaperEnabledChange={setWallpaperEnabled}
-            onWallpaperUrlChange={setWallpaperUrl}
-            onWallpaperOpacityChange={setWallpaperOpacity}
-          />
-        </div>
-
-        {/* Onboarding Tour */}
-        <div style={{ marginTop: 'var(--section-spacing)' }}>
-          {shouldShowOnboarding && (
-            <OnboardingTour
-              onComplete={completeOnboarding}
-              onSkip={skipOnboarding}
-            />
-          )}
-        </div>
-      </div>
+      {/* Onboarding Tour */}
+      {shouldShowOnboarding && (
+        <OnboardingTour
+          onComplete={completeOnboarding}
+          onSkip={skipOnboarding}
+        />
+      )}
     </div>
   )
 }

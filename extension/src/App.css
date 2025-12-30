@@ -234,39 +234,36 @@ html body.wallpaper-enabled.bg-ai-quantum {
   }
 }
 
-/* Layout: visually 15% side margins on wider viewports (background stays 100%) */
+/* Layout: minimal side padding for bento grid */
 @media (min-width: 1000px) {
   .popup-wrap {
     width: 100%;
     margin-left: 0;
     margin-right: 0;
-    padding-left: 20vw;
-    /* simulate 15% side margins via padding */
-    padding-right: 20vw;
+    padding-left: 0;
+    padding-right: 0;
   }
 }
 
-/* Medium screens: slightly smaller side padding to keep space */
+/* Medium screens: minimal side padding */
 @media (min-width: 700px) and (max-width: 999px) {
   .popup-wrap {
     width: 100%;
     margin-left: 0;
     margin-right: 0;
-    padding-left: 8vw;
-    /* ~8% side padding */
-    padding-right: 8vw;
+    padding-left: 0;
+    padding-right: 0;
   }
 }
 
-/* Small screens: use full width with internal padding for comfort */
+/* Small screens: minimal padding */
 @media (max-width: 699px) {
   .popup-wrap {
     width: 100%;
     margin-left: 0;
     margin-right: 0;
-    padding-left: 4vw;
-    /* ~4% side padding */
-    padding-right: 4vw;
+    padding-left: 0;
+    padding-right: 0;
   }
 }
 
@@ -275,23 +272,23 @@ html body.wallpaper-enabled.bg-ai-quantum {
 .header.ai-header {
   box-sizing: border-box;
   width: 100%;
-  padding-left: 4vw;
-  padding-right: 4vw;
+  padding-left: 16px;
+  padding-right: 16px;
 }
 
 /* Medium screens */
 @media (min-width: 700px) and (max-width: 999px) {
   .header.ai-header {
-    padding-left: 8vw;
-    padding-right: 8vw;
+    padding-left: 20px;
+    padding-right: 20px;
   }
 }
 
 /* Wide screens */
 @media (min-width: 1000px) {
   .header.ai-header {
-    padding-left: 15vw;
-    padding-right: 15vw;
+    padding-left: 24px;
+    padding-right: 24px;
   }
 }
 
@@ -545,18 +542,18 @@ html body.wallpaper-enabled.bg-ai-quantum {
 /* Make header actions respect the same right padding as the header */
 .header.ai-header .header-actions {
   box-sizing: border-box;
-  padding-right: 4vw;
+  padding-right: 0;
 }
 
 @media (min-width: 700px) and (max-width: 999px) {
   .header.ai-header .header-actions {
-    padding-right: 8vw;
+    padding-right: 0;
   }
 }
 
 @media (min-width: 1000px) {
   .header.ai-header .header-actions {
-    padding-right: 15vw;
+    padding-right: 0;
   }
 }
 
