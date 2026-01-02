@@ -1,14 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMicrophone, faSearch } from '@fortawesome/free-solid-svg-icons';
+import annyang from 'annyang';
+import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser } from '../../services/commandParser.js';
 import { fuzzySearch } from '../../utils/searchUtils.js';
 
-export function CoolSearch({ onSearch, placeholder = "Search or ask AI..." }) {
+export function CoolSearch({ onSearch, placeholder = "Search or type ! for commands..." }) {
   const [searchValue, setSearchValue] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef(null);
+  const [transcript, setTranscript] = useState('');
 
   // Command execution state
   const [commandFeedback, setCommandFeedback] = useState(null);
@@ -17,6 +19,19 @@ export function CoolSearch({ onSearch, placeholder = "Search or ask AI..." }) {
 
   // Search suggestions state
   const [searchSuggestions, setSearchSuggestions] = useState([]);
+
+  // Audio visualization state
+  const [voiceLevel, setVoiceLevel] = useState(0);
+  const [waveformData, setWaveformData] = useState(Array(5).fill(0));
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const microphoneRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const feedbackTimeoutRef = useRef(null);
+
+  // Voice command processor
+  const commandProcessorRef = useRef(null);
+  const [workspaceData, setWorkspaceData] = useState(null);
 
   const [commandExecutor] = useState(() => new CommandExecutor((feedback) => {
     setCommandFeedback(feedback);
@@ -27,9 +42,133 @@ export function CoolSearch({ onSearch, placeholder = "Search or ask AI..." }) {
     }
   }));
 
+  const showFeedback = (message, type = 'success') => {
+    setCommandFeedback({ message, type });
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
+    feedbackTimeoutRef.current = setTimeout(() => {
+      setCommandFeedback(null);
+      setTranscript('');
+    }, 3000);
+  };
+
+  // Audio visualization functions
+  const startAudioAnalysis = async (retryCount = 0) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      microphoneRef.current = stream;
+
+      if (audioContextRef.current && audioContextRef.current.state === 'running') {
+        return; // Reuse existing context
+      }
+
+      // Close suspended contexts before creating new ones
+      if (audioContextRef.current?.state === 'suspended') {
+        await audioContextRef.current.close();
+      }
+
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+
+      analyserRef.current.fftSize = 256;
+      source.connect(analyserRef.current);
+
+      updateAudioData();
+    } catch (error) {
+      if (error.name === 'NotAllowedError') {
+        console.error('Microphone permission denied');
+      } else if (retryCount < 2) {
+        console.warn('getUserMedia error - retrying', error);
+        setTimeout(() => startAudioAnalysis(retryCount + 1), 1000);
+      }
+    }
+  };
+
+  const stopAudioAnalysis = async () => {
+    // Cancel animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    // Stop microphone stream
+    if (microphoneRef.current) {
+      microphoneRef.current.getTracks().forEach(track => {
+        track.stop();
+      });
+      microphoneRef.current = null;
+    }
+
+    // Close audio context properly
+    if (audioContextRef.current) {
+      try {
+        if (audioContextRef.current.state !== 'closed') {
+          await audioContextRef.current.close();
+        }
+      } catch (error) {
+        console.warn('Error closing audio context:', error);
+      }
+      audioContextRef.current = null;
+    }
+
+    // Clear analyser
+    if (analyserRef.current) {
+      analyserRef.current = null;
+    }
+
+    // Reset UI state
+    setVoiceLevel(0);
+    setWaveformData(Array(5).fill(0));
+  };
+
+  const updateAudioData = () => {
+    if (!analyserRef.current) return;
+
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+
+    // Calculate average volume
+    const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+    const normalizedLevel = Math.min(average / 128, 1);
+    setVoiceLevel(normalizedLevel);
+
+    // Create waveform data (5 bars)
+    const barCount = 5;
+    const barSize = Math.floor(dataArray.length / barCount);
+    const waveform = [];
+
+    for (let i = 0; i < barCount; i++) {
+      const start = i * barSize;
+      const end = start + barSize;
+      const barData = dataArray.slice(start, end);
+      const barAverage = barData.reduce((sum, value) => sum + value, 0) / barData.length;
+      waveform.push(Math.min(barAverage / 128, 1));
+    }
+
+    setWaveformData(waveform);
+
+    animationFrameRef.current = requestAnimationFrame(updateAudioData);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopAudioAnalysis();
+    };
+  }, []);
+
   // Command suggestions based on input
   useEffect(() => {
-    if (!searchValue.startsWith('!') || searchValue.length < 2) {
+    if (!searchValue.startsWith('!')) {
       setCommandSuggestions([]);
       setSelectedSuggestionIndex(-1);
       return;
@@ -37,6 +176,13 @@ export function CoolSearch({ onSearch, placeholder = "Search or ask AI..." }) {
 
     const query = searchValue.slice(1).toLowerCase();
     const allCommands = CommandParser.getAllCommands();
+
+    // If just "!" is typed, show all commands
+    if (query === '') {
+      setCommandSuggestions(allCommands.slice(0, 5));
+      setSelectedSuggestionIndex(-1);
+      return;
+    }
 
     const matches = allCommands.filter(cmd => {
       const cmdName = cmd.command.toLowerCase();
@@ -183,44 +329,199 @@ export function CoolSearch({ onSearch, placeholder = "Search or ask AI..." }) {
     return () => clearTimeout(timeoutId);
   }, [searchValue]);
 
+  // Fetch workspace data for voice commands
+  const fetchWorkspaceData = async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'getWorkspaceData'
+      });
+
+      if (response?.success) {
+        setWorkspaceData(response.data);
+        if (commandProcessorRef.current) {
+          commandProcessorRef.current.updateWorkspaceData(response.data);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch workspace data:', error);
+    }
+  };
+
+  // Initialize voice commands
+  const initializeCommands = () => {
+    if (!annyang) return null;
+
+    const commands = {
+      // Number commands
+      'show numbers': () => {
+        console.log('[CoolSearch] Show numbers command');
+        showElementNumbers();
+      },
+      'hide numbers': () => {
+        console.log('[CoolSearch] Hide numbers command');
+        hideElementNumbers();
+      },
+      'click :num': (num) => {
+        console.log('[CoolSearch] Click number command:', num);
+        clickByNumber(`click ${num}`);
+      },
+      'click number :num': (num) => {
+        console.log('[CoolSearch] Click number command:', num);
+        clickByNumber(`click number ${num}`);
+      },
+      // Tab switching - MUST come before general search commands
+      'switch to tab :num': async (num) => {
+        await commandProcessorRef.current.processVoiceCommand(`switch to tab ${num}`);
+      },
+      'go to tab :num': async (num) => {
+        await commandProcessorRef.current.processVoiceCommand(`go to tab ${num}`);
+      },
+      'find tab *term': async (term) => {
+        console.log('[CoolSearch] Finding tab:', term);
+        await commandProcessorRef.current.processVoiceCommand(`find tab ${term}`);
+      },
+      'search tab *term': async (term) => {
+        console.log('[CoolSearch] Searching tab:', term);
+        await commandProcessorRef.current.processVoiceCommand(`search tab ${term}`);
+      },
+      // Tab navigation
+      'next tab': async () => {
+        await commandProcessorRef.current.processVoiceCommand('next tab');
+      },
+      'previous tab': async () => {
+        await commandProcessorRef.current.processVoiceCommand('previous tab');
+      },
+      'close tab': async () => {
+        await commandProcessorRef.current.processVoiceCommand('close tab');
+      },
+      'new tab': async () => {
+        await commandProcessorRef.current.processVoiceCommand('new tab');
+      },
+      // Search commands - come AFTER tab commands to avoid conflicts
+      'search for *term': async (term) => {
+        console.log('[CoolSearch] Search for:', term);
+        setSearchValue(term);
+        onSearch?.(term);
+      },
+      'google search *term': async (term) => {
+        console.log('[CoolSearch] Google search:', term);
+        await commandProcessorRef.current.processVoiceCommand(`google search ${term}`);
+      },
+      'search *term': async (term) => {
+        // Only process if it's not a tab search (those are handled above)
+        if (!term.toLowerCase().startsWith('tab ')) {
+          console.log('[CoolSearch] Search:', term);
+          setSearchValue(term);
+          onSearch?.(term);
+        }
+      },
+      'open *term': async (term) => {
+        console.log('[CoolSearch] Open:', term);
+        await commandProcessorRef.current.processVoiceCommand(`open ${term}`);
+      },
+      'go to *term': async (term) => {
+        // This will match "go to Gmail", "go to GitHub", etc.
+        console.log('[CoolSearch] Go to:', term);
+        await commandProcessorRef.current.processVoiceCommand(`go to ${term}`);
+      },
+      // Page navigation
+      'scroll down': async () => {
+        await commandProcessorRef.current.processVoiceCommand('scroll down');
+      },
+      'scroll up': async () => {
+        await commandProcessorRef.current.processVoiceCommand('scroll up');
+      },
+      'go back': async () => {
+        await commandProcessorRef.current.processVoiceCommand('go back');
+      },
+      'go forward': async () => {
+        await commandProcessorRef.current.processVoiceCommand('go forward');
+      },
+      // Notes and todos
+      'add note *note': async (note) => {
+        await commandProcessorRef.current.processVoiceCommand(`add note ${note}`);
+      },
+      'add todo *todo': async (todo) => {
+        await commandProcessorRef.current.processVoiceCommand(`add todo ${todo}`);
+      }
+    };
+
+    return commands;
+  };
+
+  // Initialize annyang and command processor
   useEffect(() => {
-    // Initialize speech recognition if available
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = 'en-US';
+    // Fetch workspace data on mount
+    fetchWorkspaceData();
 
-      recognitionRef.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setSearchValue(transcript);
-        onSearch?.(transcript);
-        setIsListening(false);
-      };
+    // Initialize command processor
+    if (!commandProcessorRef.current) {
+      commandProcessorRef.current = new VoiceCommandProcessor(showFeedback, workspaceData);
+    }
 
-      recognitionRef.current.onerror = () => {
-        setIsListening(false);
-      };
+    if (annyang) {
+      const commands = initializeCommands();
+      if (commands) {
+        annyang.addCommands(commands);
+      }
 
-      recognitionRef.current.onend = () => {
+      annyang.setLanguage('en-US');
+
+      // Handle results
+      annyang.addCallback('result', (phrases) => {
+        if (phrases.length > 0) {
+          const command = phrases[0];
+          console.log('[CoolSearch] Voice command:', command);
+          setTranscript(command);
+
+          // If it looks like a search, populate search box
+          if (command.toLowerCase().startsWith('search')) {
+            const searchTerm = command.replace(/^search\s+(for\s+)?/i, '').trim();
+            setSearchValue(searchTerm);
+          }
+        }
+      });
+
+      annyang.addCallback('error', (error) => {
+        console.warn('Speech recognition error:', error);
         setIsListening(false);
-      };
+        stopAudioAnalysis();
+      });
+
+      annyang.addCallback('start', () => {
+        setIsListening(true);
+        startAudioAnalysis();
+      });
+
+      annyang.addCallback('end', () => {
+        setIsListening(false);
+        setVoiceLevel(0);
+        setWaveformData(Array(5).fill(0));
+      });
     }
 
     return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (e) {
-          // Ignore
-        }
+      if (annyang) {
+        annyang.removeCommands();
+        annyang.removeCallback('result');
+        annyang.removeCallback('error');
+        annyang.removeCallback('start');
+        annyang.removeCallback('end');
+        annyang.abort();
       }
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+      }
+      stopAudioAnalysis();
     };
   }, [onSearch]);
 
   const handleChange = (e) => {
     setSearchValue(e.target.value);
+    // Clear command feedback when user starts typing again
+    if (commandFeedback && commandFeedback.type === 'help') {
+      setCommandFeedback(null);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -356,24 +657,180 @@ export function CoolSearch({ onSearch, placeholder = "Search or ask AI..." }) {
     setSearchValue('');
   };
 
-  const toggleVoice = () => {
-    if (!recognitionRef.current) {
+  const toggleVoice = async () => {
+    if (!annyang) {
       alert('Speech recognition is not supported in your browser.');
       return;
     }
 
     if (isListening) {
-      recognitionRef.current.stop();
+      annyang.abort();
       setIsListening(false);
+      stopAudioAnalysis();
     } else {
       try {
-        recognitionRef.current.start();
+        await startAudioAnalysis();
+        annyang.start({ autoRestart: false, continuous: true });
         setIsListening(true);
       } catch (e) {
         console.warn('Speech recognition error:', e);
         setIsListening(false);
+        stopAudioAnalysis();
       }
     }
+  };
+
+  // Show/hide numbers functionality
+  const showElementNumbers = async () => {
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: addNumbersToElements
+      });
+
+      if (results && results[0] && results[0].result) {
+        const elementCount = results[0].result.count;
+        showFeedback(`Showing numbers on ${elementCount} clickable elements`, 'success');
+      }
+    } catch (error) {
+      showFeedback(`Failed to show numbers: ${error.message}`, 'error');
+    }
+  };
+
+  const hideElementNumbers = async () => {
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: removeNumbers
+      });
+      showFeedback('Numbers hidden', 'success');
+    } catch (error) {
+      showFeedback(`Failed to hide numbers: ${error.message}`, 'error');
+    }
+  };
+
+  const clickByNumber = async (command) => {
+    try {
+      const numberMatch = command.match(/click (\d+)/) || command.match(/click number (\d+)/);
+      if (!numberMatch) {
+        showFeedback('Please specify a number to click', 'error');
+        return;
+      }
+
+      const clickNumber = parseInt(numberMatch[1]);
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: clickElementByNumber,
+        args: [clickNumber]
+      });
+
+      if (results && results[0] && results[0].result) {
+        const result = results[0].result;
+        if (result.success) {
+          showFeedback(`Clicked element ${clickNumber}: ${result.elementText}`, 'success');
+        } else {
+          showFeedback(`Element ${clickNumber} not found. Say "show numbers" first.`, 'error');
+        }
+      }
+    } catch (error) {
+      showFeedback(`Failed to click by number: ${error.message}`, 'error');
+    }
+  };
+
+  // Injected page functions
+  const addNumbersToElements = () => {
+    document.querySelectorAll('.voice-nav-number').forEach(el => el.remove());
+
+    const selectors = [
+      'a:not([style*="display: none"])',
+      'button:not([disabled])',
+      '[role="button"]',
+      '[onclick]',
+      'input[type="submit"]',
+      'input[type="button"]'
+    ];
+
+    let elements = [];
+    selectors.forEach(selector => {
+      try { elements.push(...document.querySelectorAll(selector)); } catch { }
+    });
+
+    const visibleElements = elements.filter((el, index, arr) => {
+      if (arr.indexOf(el) !== index) return false;
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      return style.display !== 'none' &&
+             style.visibility !== 'hidden' &&
+             rect.width > 0 &&
+             rect.height > 0 &&
+             rect.top < window.innerHeight &&
+             rect.bottom > 0;
+    });
+
+    const limitedElements = visibleElements.slice(0, 20);
+    limitedElements.forEach((element, index) => {
+      const number = index + 1;
+      const numberEl = document.createElement('div');
+      numberEl.className = 'voice-nav-number';
+      numberEl.textContent = number;
+      numberEl.setAttribute('data-element-index', number);
+
+      Object.assign(numberEl.style, {
+        position: 'absolute',
+        height: '22px',
+        minWidth: '22px',
+        padding: '0 6px',
+        borderRadius: '9999px',
+        background: 'rgba(17,24,39,0.75)',
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '12px',
+        fontWeight: '700',
+        border: '1px solid rgba(255,255,255,0.35)',
+        boxShadow: '0 4px 10px rgba(0,0,0,0.35)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        zIndex: '10001',
+        pointerEvents: 'none'
+      });
+
+      const rect = element.getBoundingClientRect();
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+
+      numberEl.style.top = `${rect.top + scrollTop - 12}px`;
+      numberEl.style.left = `${rect.left + scrollLeft - 12}px`;
+
+      document.body.appendChild(numberEl);
+      element.setAttribute('data-voice-nav-number', number);
+    });
+
+    return { count: limitedElements.length };
+  };
+
+  const removeNumbers = () => {
+    document.querySelectorAll('.voice-nav-number').forEach(el => el.remove());
+    document.querySelectorAll('[data-voice-nav-number]').forEach(el =>
+      el.removeAttribute('data-voice-nav-number')
+    );
+  };
+
+  const clickElementByNumber = (number) => {
+    const element = document.querySelector(`[data-voice-nav-number="${number}"]`);
+    if (!element) return { success: false };
+
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => element.click(), 200);
+
+    return {
+      success: true,
+      elementText: element.textContent?.trim() || element.getAttribute('title') || `Element ${number}`
+    };
   };
 
   return (
@@ -390,14 +847,34 @@ export function CoolSearch({ onSearch, placeholder = "Search or ask AI..." }) {
         />
         <button
           type="button"
-          className="cooldesk-voice-btn"
+          className={`cooldesk-voice-btn ${isListening ? 'listening' : ''}`}
           onClick={toggleVoice}
           title={isListening ? 'Stop listening' : 'Voice search'}
-          style={{
-            animation: isListening ? 'pulse 1.5s ease-in-out infinite' : 'none',
-          }}
         >
-          <FontAwesomeIcon icon={faMicrophone} />
+          <FontAwesomeIcon
+            icon={faMicrophone}
+          />
+          {isListening && (
+            <div style={{
+              display: 'flex',
+              gap: 3,
+              alignItems: 'center',
+              marginLeft: 8,
+              position: 'relative',
+              zIndex: 1
+            }}>
+              {waveformData.map((v, i) => (
+                <div key={i} style={{
+                  width: 2.5,
+                  height: `${6 + v * 14}px`,
+                  background: 'currentColor',
+                  opacity: 0.9,
+                  borderRadius: 2,
+                  transition: 'height 0.1s ease'
+                }} />
+              ))}
+            </div>
+          )}
         </button>
       </form>
 
@@ -578,8 +1055,8 @@ export function CoolSearch({ onSearch, placeholder = "Search or ask AI..." }) {
         </div>
       )}
 
-      {/* Command Feedback */}
-      {commandFeedback && (
+      {/* Command Feedback - Only show when no suggestions */}
+      {commandFeedback && commandSuggestions.length === 0 && searchSuggestions.length === 0 && (
         <div style={{
           position: 'absolute',
           top: '100%',
@@ -605,9 +1082,35 @@ export function CoolSearch({ onSearch, placeholder = "Search or ask AI..." }) {
               : '#60A5FA',
           fontSize: '12px',
           fontWeight: 500,
-          zIndex: 1000
+          zIndex: 1001,
+          maxHeight: '200px',
+          overflowY: 'auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: '8px'
         }}>
-          {commandFeedback.message}
+          <div style={{ flex: 1, whiteSpace: 'pre-wrap' }}>
+            {commandFeedback.message}
+          </div>
+          <button
+            onClick={() => setCommandFeedback(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'inherit',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '0 4px',
+              opacity: 0.6,
+              flexShrink: 0
+            }}
+            onMouseEnter={(e) => e.target.style.opacity = '1'}
+            onMouseLeave={(e) => e.target.style.opacity = '0.6'}
+            title="Close"
+          >
+            ✕
+          </button>
         </div>
       )}
 

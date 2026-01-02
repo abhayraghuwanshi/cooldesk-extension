@@ -1731,6 +1731,28 @@ export default function App() {
         onCreateWorkspace={() => {
           setShowCreateWorkspace(true);
         }}
+        onAddUrlToWorkspace={async (workspaceId, urlData) => {
+          try {
+            // Find workspace by ID
+            const workspace = savedWorkspaces.find(ws => ws.id === workspaceId);
+            if (!workspace) {
+              console.error('Workspace not found:', workspaceId);
+              return;
+            }
+
+            // Add URL using existing handler
+            await handleAddSavedUrlToWorkspace(urlData.url, workspace.name);
+            console.log('[CoolDesk] Added URL to workspace:', { workspace: workspace.name, url: urlData.url });
+          } catch (error) {
+            console.error('[CoolDesk] Failed to add URL:', error);
+          }
+        }}
+        onAddNote={async (noteText) => {
+          // Note: Integrate with your notes system
+          // For now, just log it
+          console.log('[CoolDesk] Adding note:', noteText);
+          // You can add this to SimpleNotes or NotesWidget
+        }}
         onSearch={(query) => {
           setSearch(query);
           console.log('[CoolDesk] Search:', query);
@@ -1738,6 +1760,10 @@ export default function App() {
         onOpenSettings={() => {
           setShowSettings(true);
         }}
+        themeClass={themeClass}
+        wallpaperEnabled={wallpaperEnabled}
+        wallpaperUrl={wallpaperUrl}
+        wallpaperOpacity={wallpaperOpacity}
       />
 
       {/* Modals */}

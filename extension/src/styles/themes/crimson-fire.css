@@ -34,12 +34,27 @@
   --interactive-disabled: rgba(255, 255, 255, 0.05);
 
   /* Font size variables */
+  --base-font-size: 14px;
   --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);
   --font-size-sm: calc(var(--base-font-size, 14px) * 0.875);
   --font-size-base: var(--base-font-size, 14px);
   --font-size-xl: calc(var(--base-font-size, 14px) * 1.25);
   --font-size-2xl: calc(var(--base-font-size, 14px) * 1.5);
   --font-size-3xl: calc(var(--base-font-size, 14px) * 1.875);
+}
+
+/* Large Screens (27" monitors - 2560px+) */
+@media (min-width: 2560px) {
+  .bg-crimson-fire {
+    --base-font-size: 16px;
+  }
+}
+
+/* Very Large Screens (32"+ monitors - 3440px+) */
+@media (min-width: 3440px) {
+  .bg-crimson-fire {
+    --base-font-size: 18px;
+  }
 }
 
 /* Button styles */

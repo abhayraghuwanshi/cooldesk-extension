@@ -4,9 +4,9 @@ import {
   faStickyNote,
   faPlus,
   faTrash,
-  faEdit,
+  faPenToSquare,
   faCheck,
-  faTimes,
+  faXmark,
 } from '@fortawesome/free-solid-svg-icons';
 import { listNotes as dbListNotes, upsertNote as dbUpsertNote, deleteNote as dbDeleteNote } from '../../db/index.js';
 
@@ -311,7 +311,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                           cursor: 'pointer',
                         }}
                       >
-                        <FontAwesomeIcon icon={faTimes} />
+                        <FontAwesomeIcon icon={faXmark} />
                       </button>
                     </div>
                   </div>
@@ -349,7 +349,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                             fontSize: '9px',
                           }}
                         >
-                          <FontAwesomeIcon icon={faEdit} />
+                          <FontAwesomeIcon icon={faPenToSquare} />
                         </button>
                         <button
                           onClick={() => handleDeleteNote(note.id)}
@@ -385,7 +385,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
           Notes
         </div>
         <div className="panel-action" onClick={() => setShowAddNote(!showAddNote)}>
-          <FontAwesomeIcon icon={showAddNote ? faTimes : faPlus} />
+          <FontAwesomeIcon icon={showAddNote ? faXmark : faPlus} />
           <span>{showAddNote ? 'Cancel' : 'New'}</span>
         </div>
       </div>
@@ -597,7 +597,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                         e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.3)';
                       }}
                     >
-                      <FontAwesomeIcon icon={faTimes} style={{ marginRight: '5px' }} />
+                      <FontAwesomeIcon icon={faXmark} style={{ marginRight: '5px' }} />
                       Cancel
                     </button>
                   </div>
@@ -651,7 +651,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                         }}
                         title="Edit"
                       >
-                        <FontAwesomeIcon icon={faEdit} />
+                        <FontAwesomeIcon icon={faPenToSquare} />
                       </button>
                       <button
                         onClick={() => handleDeleteNote(note.id)}

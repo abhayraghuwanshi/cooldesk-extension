@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { faArrowRight, faComments, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faComments, faSync, faArrowRight } from '@fortawesome/free-solid-svg-icons';
+import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils.js';
 
@@ -277,7 +277,7 @@ export function RecentChats({ maxItems = 5 }) {
       </div>
 
       {/* View All Chats - Below Horizontal Line */}
-      <div
+      {/* <div
         style={{
           marginTop: '12px',
           paddingTop: '12px',
@@ -299,7 +299,7 @@ export function RecentChats({ maxItems = 5 }) {
           <span>View All Chats</span>
           <FontAwesomeIcon icon={faArrowRight} />
         </div>
-      </div>
+      </div> */}
 
       <style jsx>{`
         .recent-chat-item:hover .chat-arrow {
