@@ -8,16 +8,23 @@
 .workspace-shell {
   position: relative;
   width: 100%;
-  flex: 1; /* Take remaining height in cooldesk-container flex column */
-  min-height: 0; /* Allow flex shrinking */
+  flex: 1;
+  /* Take remaining height in cooldesk-container flex column */
+  min-height: 0;
+  /* Allow flex shrinking */
   overflow: hidden;
   perspective: 2000px;
+  display: flex;
+  flex-direction: column;
 }
 
 .workspace-faces {
   display: flex;
-  width: 500%; /* 5 faces: chat, workspace, overview, tabs, notes */
+  width: 500%;
+  /* 5 faces: chat, workspace, overview, tabs, notes */
+  flex: 1;
   height: 100%;
+  min-height: 0;
   transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
@@ -36,17 +43,24 @@
 }
 
 /* Add padding to chat, workspace, tabs, and notes faces, not overview */
+/* Add padding to chat, tabs, and notes faces only */
 .workspace-face[data-face="chat"],
-.workspace-face[data-face="workspace"],
 .workspace-face[data-face="tabs"],
 .workspace-face[data-face="notes"] {
   padding: 16px;
 }
 
-/* Overview face should have no padding to preserve original layout */
+/* Workspace and Overview faces: Flex column, hidden overflow (child handles scroll) */
+.workspace-face[data-face="workspace"],
 .workspace-face[data-face="overview"] {
-  padding: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
+
+/* Overview face specific overrides if needed */
+/* .workspace-face[data-face="overview"] { padding: 0; } was previous logic, but now unified */
 
 /* Overview content wrapper - matches original cooldesk layout */
 .cooldesk-overview-content {
@@ -157,6 +171,7 @@
     opacity: 0;
     transform: translateX(-50%) translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
@@ -231,6 +246,7 @@
     transform: scale(0.95);
     opacity: 0.8;
   }
+
   to {
     transform: scale(1);
     opacity: 1;
@@ -529,7 +545,6 @@
   border-radius: 20px;
   overflow: hidden;
   border: 1px solid var(--border-color, rgba(59, 130, 246, 0.15));
-  box-shadow: 0 8px 32px var(--shadow-color, rgba(0, 0, 0, 0.3));
 }
 
 .chat-context-header {
@@ -812,8 +827,13 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 /* Loading State */
@@ -839,7 +859,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Header */
@@ -948,8 +970,15 @@
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* Icon Buttons */
@@ -1026,9 +1055,9 @@
   padding: 10px 12px 10px 36px;
   border: 1px solid var(--border-color, #E5E7EB);
   border-radius: 8px;
+  background: var(--background-primary, #FFFFFF);
   font-size: var(--font-size-base, 14px);
   color: var(--text-primary, #111827);
-  background: var(--background-secondary, rgba(249, 250, 251, 0.5));
   transition: all 0.2s ease;
   outline: none;
 }
@@ -1273,21 +1302,120 @@
   }
 }
 
-@media (max-width: 768px) {
-  .notes-sidebar-v2 {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    z-index: 10;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
-  }
+/* Rich Text Editor Styles */
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border-color, #E5E7EB);
+  background: var(--background-primary, #FFFFFF);
+  flex-shrink: 0;
+}
 
-  .notes-textarea-v2 {
+.toolbar-btn {
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary, #6B7280);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar-btn:hover {
+  background: var(--interactive-hover, rgba(243, 244, 246, 0.5));
+  color: var(--text-primary, #111827);
+}
+
+.toolbar-btn.active {
+  background: var(--accent-color, #8B5CF6);
+  color: #FFFFFF;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color, #E5E7EB);
+  margin: 0 4px;
+}
+
+.notes-rich-editor {
+  flex: 1;
+  padding: 24px 64px;
+  overflow-y: auto;
+  outline: none;
+  font-size: var(--font-size-lg, 16px);
+  line-height: 1.75;
+  color: var(--text-primary, #111827);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--background-primary, #FFFFFF);
+}
+
+.notes-rich-editor:focus {
+  background: var(--background-primary, #FFFFFF);
+}
+
+.notes-rich-editor ul,
+.notes-rich-editor ol {
+  padding-left: 24px;
+  margin: 0.5em 0;
+}
+
+.notes-rich-editor li {
+  margin-bottom: 4px;
+}
+
+/* Checklist Styles */
+.notes-rich-editor .todo-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.notes-rich-editor .todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.notes-rich-editor input[type="checkbox"] {
+  margin-top: 6px;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-color, #8B5CF6);
+}
+
+.notes-rich-editor .todo-text {
+  flex: 1;
+  min-width: 0;
+  outline: none;
+}
+
+.notes-rich-editor .todo-checked {
+  text-decoration: line-through;
+  color: var(--text-muted, #9CA3AF);
+  opacity: 0.8;
+}
+
+@media (max-width: 900px) {
+  .notes-rich-editor {
+    padding: 24px 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .notes-rich-editor {
     padding: 24px 20px;
   }
 
-  .notes-editor-footer {
-    padding: 12px 20px;
+  .editor-toolbar {
+    padding: 12px 16px;
+    overflow-x: auto;
   }
 }

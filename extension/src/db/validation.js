@@ -137,7 +137,7 @@ export const VALIDATION_SCHEMAS = {
         },
         type: {
             [ValidationRules.TYPE]: 'string',
-            [ValidationRules.ENUM]: ['text', 'voice', 'voice-text']
+            [ValidationRules.ENUM]: ['text', 'voice', 'voice-text', 'richtext']
         },
         status: {
             [ValidationRules.TYPE]: 'string',
@@ -425,13 +425,13 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.TYPE]: 'string'
         },
         lastAutoCreateHash: {
-          [ValidationRules.TYPE]: 'string'
+            [ValidationRules.TYPE]: 'string'
         },
         categoryLastCheck: {
-          [ValidationRules.TYPE]: 'object'
+            [ValidationRules.TYPE]: 'object'
         },
         lastWorkspace: {
-          [ValidationRules.TYPE]: 'string'
+            [ValidationRules.TYPE]: 'string'
         },
         autoSync: {
             [ValidationRules.TYPE]: 'boolean'

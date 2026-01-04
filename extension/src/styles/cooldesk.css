@@ -266,6 +266,7 @@
 }
 
 /* Main Search Bar */
+/* Main Search Bar */
 .cooldesk-search-container {
   flex-shrink: 0;
   position: relative;
@@ -274,54 +275,94 @@
 }
 
 .cooldesk-search-box {
-  background: var(--glass-bg, rgba(30, 41, 59, 0.6));
-  backdrop-filter: blur(12px);
-  border-radius: 16px;
-  padding: 16px 24px;
+  width: 100%;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  /* Boxier terminal look */
   display: flex;
   align-items: center;
   gap: 12px;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  padding: 8px 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+}
+
+.cooldesk-search-box:hover {
+  background: rgba(10, 15, 25, 0.95);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 130, 246, 0.1) inset;
+  transform: translateY(-1px);
 }
 
 .cooldesk-search-box:focus-within {
-  border-color: var(--border-hover, rgba(96, 165, 250, 0.5));
-  box-shadow: 0 4px 32px var(--shadow-color, rgba(59, 130, 246, 0.3));
+  background: rgba(5, 5, 10, 0.98);
+  border-color: var(--accent-color, #34C759);
+  box-shadow: 0 8px 30px rgba(52, 199, 89, 0.15), 0 0 0 1px var(--accent-color, #34C759) inset;
+  transform: translateY(-1px);
 }
 
 .cooldesk-search-input {
   flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #E5E7EB;
-  font-size: 1.15em;
-  /* Scales with base font size */
-  font-weight: 400;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: #F8FAFC;
+  font-size: 15px;
+  font-weight: 500;
+  min-width: 0;
+  height: 100%;
+  padding: 8px 0;
+  font-family: 'Fira Code', 'Roboto Mono', monospace;
+  /* Monospace for terminal feel */
+  letter-spacing: -0.01em;
+  box-shadow: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Remove Chrome Autofill Background */
+.cooldesk-search-input:-webkit-autofill,
+.cooldesk-search-input:-webkit-autofill:hover,
+.cooldesk-search-input:-webkit-autofill:focus,
+.cooldesk-search-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #0F172A inset !important;
+  -webkit-text-fill-color: #F8FAFC !important;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 .cooldesk-search-input::placeholder {
+  color: #475569;
+  font-weight: 400;
+  font-style: italic;
+  font-family: inherit;
+  transition: color 0.2s;
+}
+
+.cooldesk-search-box:focus-within .cooldesk-search-input::placeholder {
   color: #64748B;
 }
 
 .cooldesk-voice-btn {
-  min-width: 44px;
-  height: 44px;
-  background: var(--glass-bg, rgba(30, 41, 59, 0.6));
-  border: 1.5px solid var(--border-primary, rgba(148, 163, 184, 0.25));
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  /* Slightly rounded square */
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 12px;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
   color: var(--text-secondary, #94A3B8);
-  font-size: 16px;
-  backdrop-filter: blur(12px);
+  font-size: 14px;
   position: relative;
   overflow: hidden;
+  margin-right: 0;
 }
 
 .cooldesk-voice-btn::before {
@@ -330,14 +371,15 @@
   inset: 0;
   background: linear-gradient(135deg, var(--accent-color, #34C759) 0%, var(--primary-color, #3B82F6) 100%);
   opacity: 0;
-  transition: opacity 0.3s ease;
-  border-radius: 11px;
+  transition: opacity 0.2s ease;
+  border-radius: 8px;
 }
 
 .cooldesk-voice-btn:hover {
-  border-color: var(--border-hover, rgba(148, 163, 184, 0.4));
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  color: #F1F5F9;
 }
 
 .cooldesk-voice-btn:hover::before {
@@ -558,15 +600,15 @@
   white-space: nowrap;
 }
 
-.workspace-card .workspace-count {
+.cooldesk-workspace-card .workspace-count {
   font-size: 0.9em;
   /* Scales with base font size */
   color: var(--text-secondary, #fecaca);
   font-weight: 500;
-  background: rgba(220, 38, 38, 0.15);
   padding: 2px 8px;
   border-radius: 10px;
   display: inline-block;
+  background: var(--glass-bg, rgba(30, 41, 59, 0.7));
 }
 
 .workspace-links {
@@ -605,7 +647,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--font-md, 13px);
   color: #CBD5E1;
   padding: 6px 8px;
   border-bottom: none;
@@ -629,7 +671,7 @@
 }
 
 .workspace-link-icon {
-  font-size: 9px;
+  font-size: var(--font-xs, 10px);
   color: #64748B;
   flex-shrink: 0;
   width: 12px;
@@ -640,14 +682,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--font-sm, 12px);
   line-height: 1.3;
   max-width: 100%;
 }
 
 .workspace-link-external {
   opacity: 0;
-  font-size: 10px;
+  font-size: var(--font-xs, 10px);
   color: var(--accent-color, #60A5FA);
   transition: opacity 0.2s ease;
   margin-left: auto;
@@ -657,33 +699,7 @@
   opacity: 1;
 }
 
-/* Active workspace indicator */
-.cooldesk-workspace-card.active {
-  border-color: var(--accent-color, #34C759);
-  box-shadow: 0 0 0 2px rgba(52, 199, 89, 0.2),
-    0 8px 24px rgba(52, 199, 89, 0.2);
-}
 
-.workspace-active-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: linear-gradient(135deg, var(--accent-color, #34C759) 0%, #10B981 100%);
-  color: white;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  z-index: 10;
-  box-shadow: 0 2px 8px rgba(52, 199, 89, 0.3);
-}
-
-.workspace-active-badge svg {
-  font-size: 10px;
-}
 
 /* Add URL button and form */
 .workspace-add-url-btn {
@@ -966,10 +982,10 @@
   list-style: none;
   padding: 0;
   margin: 0 0 12px 0;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  max-height: 280px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
   width: 100%;
 }
 
@@ -994,14 +1010,16 @@
 .quick-link-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px;
+  gap: 8px;
+  padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
-  margin-bottom: 6px;
-  width: 100%;
-  box-sizing: border-box;
+  margin-bottom: 0;
+  width: auto;
+  max-width: 200px;
+  background: rgba(30, 41, 59, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .quick-link-item:hover {
@@ -1388,7 +1406,7 @@
     padding-left: 8vw;
     padding-right: 8vw;
     gap: 20px;
-    font-size: 16px;
+    font-size: inherit;
   }
 
   .cooldesk-logo {
@@ -1457,7 +1475,7 @@
   .cooldesk-container {
     padding-left: 12vw;
     padding-right: 12vw;
-    font-size: 18px;
+    font-size: inherit;
   }
 
   .cooldesk-workspaces {
@@ -1476,7 +1494,8 @@
   }
 
   .cooldesk-logo {
-    font-size: 32px;
+    font-size: 2.5em;
+    /* Scale relatively */
   }
 
   .panel-title {
@@ -1628,4 +1647,122 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+/* Compact Workspace Card */
+.cooldesk-workspace-card.compact {
+  height: auto;
+  max-height: none;
+  padding: 12px;
+  min-height: 100px;
+}
+
+.cooldesk-workspace-card.compact .workspace-card-header {
+  margin-bottom: 8px;
+}
+
+.cooldesk-workspace-card.compact .workspace-icon {
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  border-radius: 10px;
+}
+
+.cooldesk-workspace-card.compact .workspace-logo {
+  font-size: 1em;
+}
+
+/* List View Mode */
+.cooldesk-list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cooldesk-list-view .cooldesk-workspace-card {
+  height: auto;
+  max-height: none;
+  flex-direction: row;
+  align-items: center;
+  padding: 12px 16px;
+  min-height: 64px;
+}
+
+.cooldesk-list-view .cooldesk-workspace-card .workspace-card-header {
+  margin-bottom: 0;
+  width: 250px;
+  /* Fixed width for name section */
+  margin-right: 16px;
+  align-items: center;
+}
+
+.cooldesk-list-view .cooldesk-workspace-card .workspace-links {
+  display: none;
+  /* Hide individual links in list view to save space */
+}
+
+/* Pagination Controls */
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-bottom: 8px;
+}
+
+.pagination-btn {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #E5E7EB;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.4);
+  color: #A78BFA;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  font-size: 13px;
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+/* View Toggle */
+.view-toggle {
+  display: flex;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 8px;
+  padding: 2px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.view-toggle-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: #94A3B8;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: all 0.2s;
+}
+
+.view-toggle-btn.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #E5E7EB;
+  font-weight: 600;
 }

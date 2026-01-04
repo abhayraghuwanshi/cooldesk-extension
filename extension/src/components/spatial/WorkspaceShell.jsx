@@ -1,4 +1,4 @@
-import { faComments, faHome, faStickyNote, faFolder, faTh } from '@fortawesome/free-solid-svg-icons';
+import { faComments, faFolder, faHome, faStickyNote, faTh } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import '../../styles/spatial.css';
@@ -179,6 +179,11 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
 
   return (
     <div className="workspace-shell">
+      {/* Global Search Bar - Common to all faces */}
+      <div style={{ padding: '0 24px 16px 24px', flexShrink: 0, zIndex: 101 }}>
+        <CoolSearch onSearch={onSearch} />
+      </div>
+
       {/* Face indicator dots */}
       <div className="face-indicator">
         <button

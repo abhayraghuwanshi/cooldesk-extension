@@ -1,55 +1,46 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faStickyNote,
-  faPlus,
-  faTrash,
-  faExpand,
-  faCompress,
-  faMicrophone,
-  faSearch,
-  faEllipsisV,
+  faBold,
+  faCheckSquare,
   faClock,
-  faFileExport,
-  faTags,
+  faCompress,
+  faExpand,
+  faItalic,
+  faListUl,
+  faMicrophone,
+  faPlus,
+  faSearch,
+  faStickyNote,
+  faTrash
 } from '@fortawesome/free-solid-svg-icons';
-import { listNotes as dbListNotes, upsertNote as dbUpsertNote, deleteNote as dbDeleteNote } from '../../db/index.js';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
 
-/**
- * NotesCanvas - Modern, clean notes interface
- *
- * Features:
- * - Minimalist design with focus on content
- * - Instant search and filter
- * - Auto-save with visual feedback
- * - Full-screen distraction-free mode
- * - Smart timestamps and metadata
- */
 export function NotesCanvas({ workspaceId }) {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeNote, setActiveNote] = useState(null);
-  const [noteText, setNoteText] = useState('');
+  const [noteContent, setNoteContent] = useState('');
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const textareaRef = useRef(null);
+  const editorRef = useRef(null);
   const autoSaveTimeout = useRef(null);
 
   // Load notes
-  const loadNotes = useCallback(async () => {
+  const loadNotes = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const result = await dbListNotes();
       const allNotes = result?.data || result || [];
       setNotes(Array.isArray(allNotes) ? allNotes : []);
     } catch (error) {
       console.error('[NotesCanvas] Error loading notes:', error);
-      setNotes([]);
+      if (showLoading) setNotes([]);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
 
@@ -58,48 +49,201 @@ export function NotesCanvas({ workspaceId }) {
   }, [loadNotes]);
 
   // Auto-save note
-  const saveNote = useCallback(async (text, noteId = null) => {
-    if (!text.trim()) return;
+  const saveNote = useCallback(async (content, noteId = null) => {
+    // Avoid saving empty new notes
+    if (!content.trim() && !noteId) return;
 
     try {
       setAutoSaveStatus('saving');
 
       const note = {
         id: noteId || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        text: text.trim(),
-        type: 'text',
+        text: content, // We store HTML in 'text' field for now, or should we use a new field? 'text' is fine if we render it safely.
+        title: extractTitle(content),
+        type: 'richtext',
         createdAt: noteId ? (notes.find(n => n.id === noteId)?.createdAt || Date.now()) : Date.now(),
+        updatedAt: Date.now()
       };
 
-      console.log('[NotesCanvas] Saving note:', note);
-      const result = await dbUpsertNote(note);
-      console.log('[NotesCanvas] Save result:', result);
+      await dbUpsertNote(note);
 
-      await loadNotes();
+      // Update local state without full reload if possible, but loadNotes ensures sync
+      await loadNotes(false);
+
+      // If it was a new note, update activeNote to having the ID
+      if (!noteId && activeNote?.id !== note.id) {
+        // This is tricky because loadNotes replaces the array reference.
+        // We'll rely on loadNotes updating the list, and if we are editing, we stay on it?
+        // Actually, if we just created a new ID, we should set it.
+        setActiveNote(note);
+      }
 
       setAutoSaveStatus('saved');
-
-      // Auto-hide saved status after 2 seconds
-      setTimeout(() => {
-        setAutoSaveStatus('idle');
-      }, 2000);
+      setTimeout(() => setAutoSaveStatus('idle'), 2000);
     } catch (error) {
       console.error('[NotesCanvas] Error saving note:', error);
       setAutoSaveStatus('error');
     }
-  }, [notes, loadNotes]);
+  }, [notes, loadNotes, activeNote]);
 
-  // Handle text change with auto-save
-  const handleTextChange = (text) => {
-    setNoteText(text);
+  const extractTitle = (html) => {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    const text = temp.textContent || temp.innerText || '';
+    return text.trim().split('\n')[0].substring(0, 50) || 'Untitled Note';
+  };
+
+  // Handle content change
+  const handleContentChange = (e) => {
+    const html = e.currentTarget.innerHTML;
+    setNoteContent(html);
     setAutoSaveStatus('unsaved');
 
     clearTimeout(autoSaveTimeout.current);
     autoSaveTimeout.current = setTimeout(() => {
-      if (text.trim()) {
-        saveNote(text, activeNote?.id);
+      saveNote(html, activeNote?.id);
+    }, 1000);
+  };
+
+
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef(null);
+  const streamRef = useRef(null);
+
+  // Sync content when active note changes
+  useEffect(() => {
+    if (editorRef.current) {
+      if (activeNote) {
+        // If we are currently editing (focused) and this is just an ID change (e.g. New -> Saved)
+        // or a background update, we should trust the local editor state to avoid cursor jumps.
+        // We only forcefully update if we are NOT focused (e.g. clicked a different note in sidebar).
+        if (document.activeElement === editorRef.current) {
+          return;
+        }
+
+        // Use trimmed comparison to avoid refreshing just for whitespace
+        const currentHTML = editorRef.current.innerHTML || '';
+        const newText = activeNote.text || '';
+
+        if (currentHTML !== newText && currentHTML.trim() !== newText.trim()) {
+          editorRef.current.innerHTML = newText;
+        }
+      } else {
+        editorRef.current.innerHTML = '';
       }
-    }, 800);
+    }
+  }, [activeNote?.id]);
+
+  // Handle recording cleanup
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          // Ignore errors on cleanup
+        }
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // Voice recording
+  const toggleRecording = async () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      // proper permission request like SimpleNotes
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert('Speech recognition is not supported in this browser.');
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+        }
+      };
+
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+
+        // Get the latest results
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
+
+        if (finalTranscript && editorRef.current) {
+          // Ensure editor has focus before inserting
+          editorRef.current.focus();
+
+          // Let's use execCommand to insert text at cursor position
+          document.execCommand('insertText', false, finalTranscript + ' ');
+
+          // Trigger save
+          handleContentChange({ currentTarget: editorRef.current });
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.warn('[NotesCanvas] Speech recognition error:', event.error);
+        setIsRecording(false);
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+        }
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+
+    } catch (error) {
+      console.error('[NotesCanvas] Failed to enable microphone:', error);
+      setIsRecording(false);
+      alert('Could not access microphone. Please allow microphone access.');
+    }
+  };
+
+  // Editor Commands
+  const execCommand = (command, value = null) => {
+    // Prevent focus loss is handled by onMouseDown preventDefault on buttons
+    document.execCommand(command, false, value);
+    editorRef.current?.focus();
+  };
+
+  const insertCheckbox = () => {
+    const checkboxHtml = '<input type="checkbox" style="margin-right: 8px; transform: scale(1.2);" />&nbsp;';
+    document.execCommand('insertHTML', false, checkboxHtml);
+    editorRef.current?.focus();
   };
 
   // Delete note
@@ -108,7 +252,8 @@ export function NotesCanvas({ workspaceId }) {
       await dbDeleteNote(noteId);
       if (activeNote?.id === noteId) {
         setActiveNote(null);
-        setNoteText('');
+        setNoteContent('');
+        setIsEditing(false);
       }
       loadNotes();
     } catch (error) {
@@ -119,56 +264,32 @@ export function NotesCanvas({ workspaceId }) {
   // Select note
   const selectNote = (note) => {
     setActiveNote(note);
-    setNoteText(note.text);
+    setNoteContent(note.text || '');
     setAutoSaveStatus('idle');
     setIsEditing(true);
-    setTimeout(() => textareaRef.current?.focus(), 100);
   };
 
   // Create new note
   const createNewNote = () => {
     setActiveNote(null);
-    setNoteText('');
+    setNoteContent('');
     setAutoSaveStatus('idle');
     setIsEditing(true);
-    setTimeout(() => textareaRef.current?.focus(), 100);
+    setTimeout(() => {
+      editorRef.current?.focus();
+      if (editorRef.current) editorRef.current.innerHTML = '';
+    }, 100);
   };
 
-  // Toggle full screen
-  const toggleFullScreen = () => {
-    setIsFullScreen(!isFullScreen);
-    if (!isFullScreen) {
-      setShowSidebar(false);
-    } else {
-      setShowSidebar(true);
-    }
-  };
+  const filteredNotes = notes.filter(note => {
+    const textContent = note.title || note.text || '';
+    return textContent.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
-  // Filter notes by search
-  const filteredNotes = notes.filter(note =>
-    note.text.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Format timestamp
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  // Get word count
-  const getWordCount = (text) => {
+  const getWordCount = (html) => {
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    const text = temp.textContent || temp.innerText || '';
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
   };
 
@@ -185,7 +306,7 @@ export function NotesCanvas({ workspaceId }) {
 
   return (
     <div className={`notes-canvas-v2 ${isFullScreen ? 'fullscreen' : ''}`}>
-      {/* Minimal Header */}
+      {/* Header */}
       <div className="notes-header-v2">
         <div className="notes-header-left">
           <button
@@ -200,33 +321,19 @@ export function NotesCanvas({ workspaceId }) {
         </div>
 
         <div className="notes-header-right">
-          {/* Auto-save indicator */}
           {autoSaveStatus !== 'idle' && (
             <div className={`notes-save-indicator ${autoSaveStatus}`}>
-              {autoSaveStatus === 'saving' && (
-                <>
-                  <span className="save-dot saving"></span>
-                  <span>Saving...</span>
-                </>
-              )}
-              {autoSaveStatus === 'saved' && (
-                <>
-                  <span className="save-dot saved"></span>
-                  <span>Saved</span>
-                </>
-              )}
-              {autoSaveStatus === 'unsaved' && (
-                <>
-                  <span className="save-dot unsaved"></span>
-                  <span>Unsaved</span>
-                </>
-              )}
+              <span className={`save-dot ${autoSaveStatus}`}></span>
+              <span>
+                {autoSaveStatus === 'saving' ? 'Saving...' :
+                  autoSaveStatus === 'saved' ? 'Saved' : 'Unsaved'}
+              </span>
             </div>
           )}
 
           <button
             className="notes-icon-btn"
-            onClick={toggleFullScreen}
+            onClick={() => setIsFullScreen(!isFullScreen)}
             title={isFullScreen ? 'Exit focus mode' : 'Focus mode'}
           >
             <FontAwesomeIcon icon={isFullScreen ? faCompress : faExpand} />
@@ -235,19 +342,17 @@ export function NotesCanvas({ workspaceId }) {
           <button
             className="notes-icon-btn primary"
             onClick={createNewNote}
-            title="New note (Ctrl+N)"
+            title="New note"
           >
             <FontAwesomeIcon icon={faPlus} />
           </button>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="notes-content-v2">
         {/* Sidebar */}
         {showSidebar && !isFullScreen && (
           <div className="notes-sidebar-v2">
-            {/* Search */}
             <div className="notes-search-box">
               <FontAwesomeIcon icon={faSearch} className="search-icon" />
               <input
@@ -259,99 +364,130 @@ export function NotesCanvas({ workspaceId }) {
               />
             </div>
 
-            {/* Notes List */}
             <div className="notes-list-v2">
               {filteredNotes.length === 0 ? (
                 <div className="notes-empty-state">
-                  {searchQuery ? (
-                    <>
-                      <div className="empty-icon-v2">🔍</div>
-                      <p className="empty-text-v2">No notes found</p>
-                      <p className="empty-hint-v2">Try a different search term</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="empty-icon-v2">✨</div>
-                      <p className="empty-text-v2">No notes yet</p>
-                      <p className="empty-hint-v2">Start writing to create your first note</p>
-                    </>
-                  )}
+                  <p className="empty-text-v2">No notes found</p>
                 </div>
               ) : (
-                <>
-                  {filteredNotes.map((note) => (
-                    <div
-                      key={note.id}
-                      className={`note-card-v2 ${activeNote?.id === note.id ? 'active' : ''}`}
-                      onClick={() => selectNote(note)}
-                    >
-                      <div className="note-card-content">
-                        <p className="note-card-preview">
-                          {note.text.substring(0, 120)}
-                          {note.text.length > 120 ? '...' : ''}
-                        </p>
-                      </div>
-                      <div className="note-card-footer">
-                        <span className="note-card-time">
-                          <FontAwesomeIcon icon={faClock} />
-                          {formatTime(note.updatedAt || note.createdAt)}
-                        </span>
-                        <button
-                          className="note-card-delete"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm('Delete this note?')) {
-                              handleDeleteNote(note.id);
-                            }
-                          }}
-                          title="Delete"
-                        >
-                          <FontAwesomeIcon icon={faTrash} />
-                        </button>
-                      </div>
+                filteredNotes.map((note) => (
+                  <div
+                    key={note.id}
+                    className={`note-card-v2 ${activeNote?.id === note.id ? 'active' : ''}`}
+                    onClick={() => selectNote(note)}
+                  >
+                    <div className="note-card-content">
+                      <div className="note-card-preview"
+                        dangerouslySetInnerHTML={{
+                          __html: note.text ?
+                            (note.text.length > 200 ? note.text.substring(0, 200) + '...' : note.text)
+                            : '<i>Empty note</i>'
+                        }}
+                      />
                     </div>
-                  ))}
-                </>
+                    <div className="note-card-footer">
+                      <span className="note-card-time">
+                        <FontAwesomeIcon icon={faClock} />
+                        {new Date(note.updatedAt || note.createdAt).toLocaleDateString()}
+                      </span>
+                      <button
+                        className="note-card-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm('Delete this note?')) handleDeleteNote(note.id);
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faTrash} />
+                      </button>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
         )}
 
-        {/* Editor */}
+        {/* Editor Area */}
         <div className="notes-editor-v2">
           {isEditing ? (
             <>
-              <textarea
-                ref={textareaRef}
-                className="notes-textarea-v2"
-                value={noteText}
-                onChange={(e) => handleTextChange(e.target.value)}
-                placeholder="Start writing..."
-                spellCheck
-                autoFocus
+              {/* Formatting Toolbar */}
+              <div className="editor-toolbar">
+                <button
+                  className="toolbar-btn"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => execCommand('bold')}
+                  title="Bold (Ctrl+B)"
+                >
+                  <FontAwesomeIcon icon={faBold} />
+                </button>
+                <button
+                  className="toolbar-btn"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => execCommand('italic')}
+                  title="Italic (Ctrl+I)"
+                >
+                  <FontAwesomeIcon icon={faItalic} />
+                </button>
+                <div className="toolbar-separator"></div>
+                <button
+                  className="toolbar-btn"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => execCommand('insertUnorderedList')}
+                  title="Bullet List"
+                >
+                  <FontAwesomeIcon icon={faListUl} />
+                </button>
+                <button
+                  className="toolbar-btn"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={insertCheckbox}
+                  title="Insert Checkbox"
+                >
+                  <FontAwesomeIcon icon={faCheckSquare} />
+                </button>
+                <div className="toolbar-separator"></div>
+                <button
+                  className={`toolbar-btn ${isRecording ? 'active' : ''}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={toggleRecording}
+                  title={isRecording ? 'Stop Recording' : 'Start Recording'}
+                  style={{ color: isRecording ? '#ef4444' : undefined }}
+                >
+                  <FontAwesomeIcon icon={isRecording ? faMicrophone : faMicrophone} beat={isRecording} />
+                </button>
+              </div>
+
+              {/* Rich Text Editor */}
+              <div
+                ref={editorRef}
+                className="notes-rich-editor"
+                contentEditable
+                onInput={handleContentChange}
+                suppressContentEditableWarning={true}
+                placeholder="Start typing..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
+                  }
+                }}
               />
 
-              {/* Editor Footer - Word Count */}
-              {noteText && (
-                <div className="notes-editor-footer">
-                  <span className="word-count">
-                    {getWordCount(noteText)} {getWordCount(noteText) === 1 ? 'word' : 'words'}
-                  </span>
-                </div>
-              )}
+              <div className="notes-editor-footer">
+                <span className="word-count">
+                  {getWordCount(noteContent)} words
+                </span>
+                <span className="word-count">
+                  {activeNote ? 'Last edited: ' + new Date(activeNote.updatedAt).toLocaleTimeString() : 'New Note'}
+                </span>
+              </div>
             </>
           ) : (
             <div className="notes-editor-empty">
               <div className="editor-empty-icon">📝</div>
-              <h3 className="editor-empty-title">Start Writing</h3>
-              <p className="editor-empty-text">
-                Select a note from the sidebar or create a new one
-              </p>
-              <button
-                className="editor-empty-btn"
-                onClick={createNewNote}
-              >
-                <FontAwesomeIcon icon={faPlus} />
+              <h3 className="editor-empty-title">Select a Note</h3>
+              <button className="editor-empty-btn" onClick={createNewNote}>
                 Create New Note
               </button>
             </div>

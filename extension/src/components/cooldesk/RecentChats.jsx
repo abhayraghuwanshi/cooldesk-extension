@@ -141,10 +141,10 @@ export function RecentChats({ maxItems = 5 }) {
         }}>
           <div style={{ fontSize: 'var(--font-5xl, 28px)', marginBottom: '10px' }}>💬</div>
           <div>No AI chats yet</div>
-          <div style={{ fontSize: 'var(--font-md, 12px)', marginTop: '6px', opacity: 0.7 }}>
+          <div style={{ fontSize: 'var(--font-base, 13px)', marginTop: '6px', opacity: 0.7 }}>
             Visit ChatGPT, Claude, or Gemini to start tracking your chats
           </div>
-          <div style={{ fontSize: 'var(--font-md, 12px)', marginTop: '4px', opacity: 0.5, fontStyle: 'italic' }}>
+          <div style={{ fontSize: 'var(--font-sm, 12px)', marginTop: '4px', opacity: 0.5, fontStyle: 'italic' }}>
             Chats will automatically appear here when you visit AI platforms
           </div>
         </div>

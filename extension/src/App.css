@@ -198,7 +198,7 @@ html body.wallpaper-enabled.bg-ai-quantum {
   /* background: radial-gradient(800px circle at 0% 0%, #0b1220 0%, #121720 40%, #0b0f16 100%),
     linear-gradient(135deg, #121720 0%, #151a24 100%); */
   color: #e5e7eb;
-  font-family: 'Poppins', 'Segoe UI', Roboto, Arial, sans-serif;
+  font-family: inherit;
 
   font-size: 14px;
   box-sizing: border-box;

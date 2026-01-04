@@ -1,4 +1,4 @@
-import { faChevronLeft, faChevronRight, faGear, faStickyNote } from '@fortawesome/free-solid-svg-icons';
+import { faGear } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import '../../styles/cooldesk.css';
@@ -8,13 +8,14 @@ import '../../styles/tabCard.css';
 import { ChatContext } from '../spatial/ChatContext';
 import { NotesCanvas } from '../spatial/NotesCanvas';
 import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
-import { CoolSearch } from './CoolSearch';
 import { GlobalAddButton } from './GlobalAddButton';
-import { NotesWidget } from './NotesWidget';
-import { QuickAccess } from './QuickAccess';
-import { RecentChats } from './RecentChats';
+import { OverviewDashboard } from './OverviewDashboard';
 import { TabCard, TabGroupCard } from './TabCard';
-import { WorkspaceCard } from './WorkspaceCard';
+import { WorkspaceList } from './WorkspaceList';
+
+
+console.log('[CoolDesk] Module loaded. OverviewDashboard:', OverviewDashboard);
+
 
 export function CoolDeskContainer({
   savedWorkspaces = [],
@@ -47,7 +48,7 @@ export function CoolDeskContainer({
     }
   }, [savedWorkspaces, currentWorkspace]);
 
-  const WORKSPACES_PER_PAGE = 3; // Show 3 workspaces in overview
+  const WORKSPACES_PER_PAGE = 2; // Show 3 workspaces in overview
   const totalPages = Math.ceil(savedWorkspaces.length / WORKSPACES_PER_PAGE);
   const startIdx = workspacePage * WORKSPACES_PER_PAGE;
   const displayedWorkspaces = savedWorkspaces.slice(startIdx, startIdx + WORKSPACES_PER_PAGE);
@@ -210,167 +211,24 @@ export function CoolDeskContainer({
 
         {/* Face 2: Workspace Details (Left) - Shows ALL Workspaces */}
         <Face index="workspace">
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            height: '100%'
-          }}>
-            <h2 style={{
-              fontSize: 'var(--font-2xl, 16px)',
-              fontWeight: 600,
-              color: 'var(--text-primary, #F1F5F9)',
-              margin: 0
-            }}>
-              All Workspaces ({savedWorkspaces.length})
-            </h2>
-
-            {savedWorkspaces.length > 0 ? (
-              <div style={{
-                flex: 1,
-                overflowY: 'auto',
-                display: 'grid',
-                gridTemplateColumns: '1fr',
-                gap: '12px',
-                alignContent: 'start'
-              }}>
-                {savedWorkspaces.map((workspace) => (
-                  <WorkspaceCard
-                    key={workspace.id}
-                    workspace={workspace}
-                    onClick={handleWorkspaceClick}
-                    isExpanded={expandedWorkspace?.id === workspace.id}
-                    isActive={currentWorkspace?.id === workspace.id}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '16px',
-                color: 'var(--text-secondary, #64748B)',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '48px', opacity: 0.3 }}>📁</div>
-                <div>
-                  <div style={{
-                    fontSize: 'var(--font-lg, 14px)',
-                    fontWeight: 500,
-                    marginBottom: '8px'
-                  }}>
-                    No Workspaces Yet
-                  </div>
-                  <div style={{ fontSize: 'var(--font-sm, 10px)' }}>
-                    Create a workspace to get started
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <WorkspaceList
+            savedWorkspaces={savedWorkspaces}
+            onWorkspaceClick={handleWorkspaceClick}
+            activeWorkspaceId={currentWorkspace?.id}
+            expandedWorkspaceId={expandedWorkspace?.id}
+          />
         </Face>
 
         {/* Face 3: Overview (Center) */}
+        {/* Face 3: Overview (Center) - Custom 2-Column Dashboard */}
         <Face index="overview">
-          <div className="cooldesk-overview-content">
-            {/* Main Search Bar */}
-            <CoolSearch onSearch={handleSearch} />
-
-            {/* Workspace Navigation */}
-            {totalPages > 1 && (
-              <div className="workspace-navigation">
-                <button
-                  className="workspace-nav-btn"
-                  onClick={() => setWorkspacePage(Math.max(0, workspacePage - 1))}
-                  disabled={workspacePage === 0}
-                >
-                  <FontAwesomeIcon icon={faChevronLeft} />
-                  <span>Previous</span>
-                </button>
-                <div className="workspace-page-indicator">
-                  <span className="page-dots">
-                    {Array.from({ length: totalPages }).map((_, idx) => (
-                      <button
-                        key={idx}
-                        className={`page-dot ${idx === workspacePage ? 'active' : ''}`}
-                        onClick={() => setWorkspacePage(idx)}
-                        title={`Page ${idx + 1}`}
-                      />
-                    ))}
-                  </span>
-                  <span className="page-text">
-                    Page {workspacePage + 1} of {totalPages}
-                  </span>
-                </div>
-                <button
-                  className="workspace-nav-btn"
-                  onClick={() => setWorkspacePage(Math.min(totalPages - 1, workspacePage + 1))}
-                  disabled={workspacePage === totalPages - 1}
-                >
-                  <span>Next</span>
-                  <FontAwesomeIcon icon={faChevronRight} />
-                </button>
-              </div>
-            )}
-
-            {/* Workspace Cards Grid - Show current page + Notes */}
-            <div className="cooldesk-workspaces">
-              {displayedWorkspaces.map((workspace) => (
-                <WorkspaceCard
-                  key={workspace.id}
-                  workspace={workspace}
-                  onClick={handleWorkspaceClick}
-                  isExpanded={expandedWorkspace?.id === workspace.id}
-                  isActive={currentWorkspace?.id === workspace.id}
-                />
-              ))}
-              {/* <CreateWorkspaceCard onClick={handleCreateWorkspace} /> */}
-              {/* Notes Widget in 4th position */}
-              <div className="cooldesk-workspace-card" style={{
-                background: 'rgba(139, 92, 246, 0.15)',
-                display: 'flex',
-                flexDirection: 'column'
-              }}>
-                <div className="workspace-card-header">
-                  <div className="workspace-icon purple">
-                    <FontAwesomeIcon icon={faStickyNote} />
-                  </div>
-                  <div className="workspace-info">
-                    <div className="workspace-name">Notes</div>
-                    <div className="workspace-count">Jot down a thought...</div>
-                  </div>
-                </div>
-                <div style={{
-                  flex: 1,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  minHeight: 0
-                }}>
-                  <NotesWidget maxNotes={5} compact={true} />
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom Grid - Quick Access and Recent Chats Only */}
-            <div className="cooldesk-bottom-grid">
-              <QuickAccess />
-              <RecentChats maxItems={5} />
-            </div>
-
-            {/* Mascot Character */}
-            <div className="cooldesk-mascot">
-              <div className="mascot-character">☁️</div>
-              <div className="mascot-sparkles">
-                <span className="sparkle">✨</span>
-                <span className="sparkle">✨</span>
-                <span className="sparkle">✨</span>
-              </div>
-            </div>
-          </div>
+          <OverviewDashboard
+            savedWorkspaces={savedWorkspaces}
+            onWorkspaceClick={handleWorkspaceClick}
+            activeWorkspaceId={currentWorkspace?.id}
+            expandedWorkspaceId={expandedWorkspace?.id}
+            onAddNote={onAddNote}
+          />
         </Face>
 
         {/* Face 4: Tabs (Right) */}
@@ -403,7 +261,7 @@ export function CoolDeskContainer({
                   padding: '6px 12px',
                   color: '#60A5FA',
                   cursor: 'pointer',
-                  fontSize: 'var(--font-sm, 10px)',
+                  fontSize: 'var(--font-sm, 12px)',
                   fontWeight: 500,
                   transition: 'all 0.2s ease'
                 }}
@@ -431,7 +289,7 @@ export function CoolDeskContainer({
               {tabs.filter(tab => tab.pinned).length > 0 && (
                 <div>
                   <h3 style={{
-                    fontSize: 'var(--font-sm, 10px)',
+                    fontSize: 'var(--font-sm, 12px)',
                     fontWeight: 600,
                     color: 'var(--text-secondary, #94A3B8)',
                     marginBottom: '8px',
@@ -459,7 +317,7 @@ export function CoolDeskContainer({
               {/* All Tabs Section */}
               <div>
                 <h3 style={{
-                  fontSize: 'var(--font-sm, 10px)',
+                  fontSize: 'var(--font-sm, 12px)',
                   fontWeight: 600,
                   color: 'var(--text-secondary, #94A3B8)',
                   marginBottom: '8px',
@@ -505,7 +363,7 @@ export function CoolDeskContainer({
                       }}>
                         No Tabs Found
                       </div>
-                      <div style={{ fontSize: 'var(--font-sm, 10px)' }}>
+                      <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
                         Open some browser tabs to see them here
                       </div>
                     </div>
@@ -517,7 +375,7 @@ export function CoolDeskContainer({
               {Object.keys(tabsByDomain()).length > 1 && (
                 <div>
                   <h3 style={{
-                    fontSize: 'var(--font-sm, 10px)',
+                    fontSize: 'var(--font-sm, 12px)',
                     fontWeight: 600,
                     color: 'var(--text-secondary, #94A3B8)',
                     marginBottom: '8px',

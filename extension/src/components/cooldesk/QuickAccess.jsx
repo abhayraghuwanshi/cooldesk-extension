@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faPlus,
-  faLink,
   faBookmark,
-  faHistory,
-  faEdit,
-  faTimes,
   faGlobe,
+  faHistory,
+  faLink,
+  faPlus,
+  faTimes
 } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useEffect, useState } from 'react';
 import { getFaviconUrl } from '../../utils.js';
 
 const DEFAULT_LINKS = [
@@ -207,7 +206,7 @@ export function QuickAccess() {
               borderRadius: '8px',
               padding: '8px 12px',
               color: '#E5E7EB',
-              fontSize: '13px',
+              fontSize: 'var(--font-md, 13px)',
               marginBottom: '8px',
               outline: 'none',
             }}
@@ -260,9 +259,9 @@ export function QuickAccess() {
             color: '#64748B',
             fontSize: '13px',
           }}>
-            <FontAwesomeIcon icon={faLink} style={{ fontSize: '28px', marginBottom: '10px', display: 'block' }} />
+            <FontAwesomeIcon icon={faLink} style={{ fontSize: 'var(--font-4xl, 28px)', marginBottom: '10px', display: 'block' }} />
             <div>No quick links yet</div>
-            <div style={{ fontSize: '11px', marginTop: '6px', opacity: 0.7 }}>
+            <div style={{ fontSize: 'var(--font-sm, 11px)', marginTop: '6px', opacity: 0.7 }}>
               Add your favorite URLs or they'll auto-populate from history
             </div>
           </div>
@@ -320,10 +319,10 @@ export function QuickAccess() {
         <div className="recommended-chips">
           {recommendations.map((rec) => (
             <div key={rec.id} className="recommended-chip">
-              <FontAwesomeIcon icon={rec.icon || faBookmark} style={{ fontSize: '12px' }} />
+              <FontAwesomeIcon icon={rec.icon || faBookmark} style={{ fontSize: 'var(--font-md, 12px)' }} />
               <span>{rec.title}</span>
               <span className="close-chip-btn" onClick={() => handleRemoveRecommendation(rec.id)}>
-                <FontAwesomeIcon icon={faTimes} style={{ fontSize: '10px' }} />
+                <FontAwesomeIcon icon={faTimes} style={{ fontSize: 'var(--font-xs, 10px)' }} />
               </span>
             </div>
           ))}
@@ -339,9 +338,9 @@ export function QuickAccess() {
             textAlign: 'center',
             padding: '20px 12px',
             color: '#64748B',
-            fontSize: '12px',
+            fontSize: 'var(--font-md, 12px)',
           }}>
-            <FontAwesomeIcon icon={faHistory} style={{ fontSize: '20px', marginBottom: '8px', display: 'block' }} />
+            <FontAwesomeIcon icon={faHistory} style={{ fontSize: 'var(--font-3xl, 20px)', marginBottom: '8px', display: 'block' }} />
             <div>No recent tabs</div>
           </div>
         ) : (
@@ -365,13 +364,13 @@ export function QuickAccess() {
                     }}
                   />
                 ) : (
-                  <div className="quick-link-icon" style={{ width: '16px', height: '16px', fontSize: '10px' }}>
+                  <div className="quick-link-icon" style={{ width: '16px', height: '16px', fontSize: 'var(--font-xs, 10px)' }}>
                     <FontAwesomeIcon icon={faGlobe} />
                   </div>
                 )}
                 <div style={{
                   flex: 1,
-                  fontSize: '12px',
+                  fontSize: 'var(--font-md, 12px)',
                   color: '#E5E7EB',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',

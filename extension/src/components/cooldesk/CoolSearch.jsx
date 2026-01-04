@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { faMicrophone } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMicrophone, faSearch } from '@fortawesome/free-solid-svg-icons';
 import annyang from 'annyang';
-import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
+import { useEffect, useRef, useState } from 'react';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser } from '../../services/commandParser.js';
+import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
 import { fuzzySearch } from '../../utils/searchUtils.js';
 
 export function CoolSearch({ onSearch, placeholder = "Search or type ! for commands..." }) {
@@ -763,11 +763,11 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
       return style.display !== 'none' &&
-             style.visibility !== 'hidden' &&
-             rect.width > 0 &&
-             rect.height > 0 &&
-             rect.top < window.innerHeight &&
-             rect.bottom > 0;
+        style.visibility !== 'hidden' &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.top < window.innerHeight &&
+        rect.bottom > 0;
     });
 
     const limitedElements = visibleElements.slice(0, 20);
@@ -836,7 +836,16 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
   return (
     <div className="cooldesk-search-container">
       <form onSubmit={handleSubmit} className="cooldesk-search-box">
-        <FontAwesomeIcon icon={faSearch} style={{ color: '#64748B', fontSize: '18px' }} />
+        <span className="terminal-prompt" style={{
+          fontFamily: "'Fira Code', monospace",
+          fontWeight: '700',
+          fontSize: '18px',
+          color: 'var(--accent-color, #34C759)',
+          marginRight: '4px',
+          userSelect: 'none',
+          display: 'flex',
+          alignItems: 'center'
+        }}>{'>'}</span>
         <input
           type="text"
           className="cooldesk-search-input"

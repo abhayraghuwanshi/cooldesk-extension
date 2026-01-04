@@ -1,4 +1,4 @@
-import { faCheck, faExternalLinkAlt, faFolder, faFolderOpen, faLink, faPlus } from '@fortawesome/free-solid-svg-icons';
+import { faExternalLinkAlt, faFolder, faFolderOpen, faLink, faPlus } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { getFaviconUrl } from '../../utils.js';
 
@@ -10,7 +10,7 @@ const ICON_MAP = {
   link: faLink,
 };
 
-export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false }) {
+export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false }) {
   if (!workspace) return null;
 
   const { name, urls = [], description, icon = 'folder' } = workspace;
@@ -22,18 +22,15 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
     onClick?.(workspace);
   };
 
-  // Show first 5 links (more space now without Add URL button)
-  const displayLinks = urls.slice(0, 5);
+  // Show fewer links in compact mode
+  const linkLimit = compact ? 3 : 5;
+  const displayLinks = urls.slice(0, linkLimit);
 
   return (
-    <div className={`cooldesk-workspace-card ${isActive ? 'active' : ''}`} onClick={handleCardClick}>
-      {/* Active indicator badge */}
-      {isActive && (
-        <div className="workspace-active-badge">
-          <FontAwesomeIcon icon={faCheck} />
-          <span>Active</span>
-        </div>
-      )}
+    <div
+      className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''}`}
+      onClick={handleCardClick}
+    >
 
       <div className="workspace-card-header">
         <div className={`workspace-icon ${colorClass}`}>
@@ -93,17 +90,17 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
               </li>
             );
           })}
-          {urls.length > 5 && (
+          {urls.length > linkLimit && (
             <li className="workspace-link-item" style={{ opacity: 0.6, fontStyle: 'italic' }}>
               <span className="workspace-link-text">
-                +{urls.length - 5} more...
+                +{urls.length - linkLimit} more...
               </span>
             </li>
           )}
         </ul>
       )}
 
-      {urlCount === 0 && (
+      {urlCount === 0 && !compact && (
         <div className="workspace-empty-state">
           <div className="empty-icon">
             <FontAwesomeIcon icon={faLink} />

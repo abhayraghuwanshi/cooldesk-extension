@@ -27,11 +27,11 @@ export const applyBaseFontSize = (fontSizeId) => {
   document.documentElement.style.setProperty('--base-font-size', fontSizeObj.size);
 
   // Font scale variables (based on base font size)
-  document.documentElement.style.setProperty('--font-xs', `${Math.round(baseSize * 0.65)}px`);   // 65% - timestamps, icons
-  document.documentElement.style.setProperty('--font-sm', `${Math.round(baseSize * 0.7)}px`);    // 70% - small buttons
-  document.documentElement.style.setProperty('--font-md', `${Math.round(baseSize * 0.8)}px`);    // 80% - metadata
-  document.documentElement.style.setProperty('--font-base', `${Math.round(baseSize * 0.85)}px`); // 85% - secondary text
-  document.documentElement.style.setProperty('--font-lg', `${Math.round(baseSize * 0.95)}px`);   // 95% - main text
+  document.documentElement.style.setProperty('--font-xs', `${Math.round(baseSize * 0.75)}px`);   // 75% - timestamps, icons
+  document.documentElement.style.setProperty('--font-sm', `${Math.round(baseSize * 0.85)}px`);    // 85% - small buttons
+  document.documentElement.style.setProperty('--font-md', `${Math.round(baseSize * 0.9)}px`);    // 90% - metadata
+  document.documentElement.style.setProperty('--font-base', `${Math.round(baseSize * 0.95)}px`); // 95% - secondary text
+  document.documentElement.style.setProperty('--font-lg', `${Math.round(baseSize * 1.05)}px`);   // 105% - main text
   document.documentElement.style.setProperty('--font-xl', `${Math.round(baseSize * 1)}px`);      // 100% - base
   document.documentElement.style.setProperty('--font-2xl', `${Math.round(baseSize * 1.15)}px`);  // 115% - titles
   document.documentElement.style.setProperty('--font-3xl', `${Math.round(baseSize * 1.4)}px`);   // 140% - headings
