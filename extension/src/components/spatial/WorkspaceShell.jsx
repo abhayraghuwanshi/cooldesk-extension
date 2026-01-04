@@ -20,12 +20,23 @@ import { CoolSearch } from '../cooldesk/CoolSearch';
  * - Props: onFaceChange callback
  */
 export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange, onSearch }) {
-  const [currentFace, setCurrentFace] = useState(activeFace);
+  const [currentFace, setCurrentFace] = useState(() => {
+    // Try to recover state from localStorage
+    const savedFace = localStorage.getItem('cooldesk-active-face');
+    return savedFace || activeFace;
+  });
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // Update when parent changes active face
+  // Persist state to localStorage
   useEffect(() => {
-    setCurrentFace(activeFace);
+    localStorage.setItem('cooldesk-active-face', currentFace);
+  }, [currentFace]);
+
+  // Update when parent changes active face (only if strictly different and not just initial mount)
+  useEffect(() => {
+    if (activeFace && activeFace !== 'overview') {
+      setCurrentFace(activeFace);
+    }
   }, [activeFace]);
 
   // Navigate to a specific face

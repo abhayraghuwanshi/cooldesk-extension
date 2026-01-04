@@ -1273,9 +1273,9 @@
 
 /* Editor Footer */
 .notes-editor-footer {
-  padding: 12px 64px;
-  border-top: 1px solid var(--border-color, #E5E7EB);
-  background: var(--background-secondary, #FAFAFA);
+  padding: 12px 64px 80px 64px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  background: transparent;
   display: flex;
   justify-content: space-between;
   align-items: center;

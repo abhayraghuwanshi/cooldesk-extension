@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { faArrowRight, faComments, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faComments, faSync, faArrowRight } from '@fortawesome/free-solid-svg-icons';
+import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils.js';
 
@@ -103,7 +103,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
       </div>
 
       {/* Workspace-aware prompts */}
-      <div className="chat-prompts">
+      {/* <div className="chat-prompts">
         <div className="prompts-title">Workspace Suggestions</div>
         <div className="prompts-grid">
           {WORKSPACE_PROMPTS.map((prompt, index) => (
@@ -117,7 +117,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
             </button>
           ))}
         </div>
-      </div>
+      </div> */}
 
       {/* Recent chats */}
       <div className="chat-section">

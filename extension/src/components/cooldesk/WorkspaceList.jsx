@@ -1,6 +1,6 @@
-import { faList, faSearch, faThLarge } from '@fortawesome/free-solid-svg-icons';
+import { faList, faThLarge } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import '../../styles/cooldesk.css';
 import { WorkspaceCard } from './WorkspaceCard';
 
@@ -10,18 +10,7 @@ export function WorkspaceList({
     activeWorkspaceId,
     expandedWorkspaceId
 }) {
-    const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
-
-    const filteredWorkspaces = useMemo(() => {
-        if (!searchQuery.trim()) return savedWorkspaces;
-
-        const query = searchQuery.toLowerCase();
-        return savedWorkspaces.filter(workspace =>
-            workspace.name.toLowerCase().includes(query) ||
-            (workspace.description && workspace.description.toLowerCase().includes(query))
-        );
-    }, [savedWorkspaces, searchQuery]);
 
     return (
         <div style={{
@@ -84,27 +73,8 @@ export function WorkspaceList({
                 paddingRight: '4px',
                 minHeight: 0 // Crucial for nested flex scrolling
             }}>
-
-                {/* Search Bar */}
-                <div className="cooldesk-search-box" style={{
-                    padding: '10px 16px',
-                    borderRadius: '12px',
-                    background: 'var(--glass-bg, rgba(30, 41, 59, 0.4))',
-                    border: '1px solid rgba(148, 163, 184, 0.1)',
-                    flexShrink: 0
-                }}>
-                    <FontAwesomeIcon icon={faSearch} style={{ color: '#64748B' }} />
-                    <input
-                        type="text"
-                        className="cooldesk-search-input"
-                        placeholder="Search workspaces..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
-
                 {/* Local Workspace List */}
-                {filteredWorkspaces.length > 0 ? (
+                {savedWorkspaces.length > 0 ? (
                     <div
                         className={viewMode === 'list' ? 'cooldesk-list-view' : ''}
                         style={viewMode === 'grid' ? {
@@ -119,7 +89,7 @@ export function WorkspaceList({
                             paddingBottom: '24px'
                         }}
                     >
-                        {filteredWorkspaces.map((workspace) => (
+                        {savedWorkspaces.map((workspace) => (
                             <WorkspaceCard
                                 key={workspace.id}
                                 workspace={workspace}
@@ -142,17 +112,17 @@ export function WorkspaceList({
                         textAlign: 'center',
                         minHeight: '200px'
                     }}>
-                        <div style={{ fontSize: '40px', opacity: 0.3 }}>🔍</div>
+                        <div style={{ fontSize: '40px', opacity: 0.3 }}>�</div>
                         <div>
                             <div style={{
                                 fontSize: 'var(--font-lg, 14px)',
                                 fontWeight: 500,
                                 marginBottom: '4px'
                             }}>
-                                No Workspaces Found
+                                No Workspaces Yet
                             </div>
                             <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
-                                {searchQuery ? `No results for "${searchQuery}"` : 'Create your first workspace to get started!'}
+                                Create your first workspace to get started!
                             </div>
                         </div>
                     </div>

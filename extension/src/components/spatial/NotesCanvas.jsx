@@ -8,7 +8,6 @@ import {
   faListUl,
   faMicrophone,
   faPlus,
-  faSearch,
   faStickyNote,
   faTrash
 } from '@fortawesome/free-solid-svg-icons';
@@ -281,11 +280,6 @@ export function NotesCanvas({ workspaceId }) {
     }, 100);
   };
 
-  const filteredNotes = notes.filter(note => {
-    const textContent = note.title || note.text || '';
-    return textContent.toLowerCase().includes(searchQuery.toLowerCase());
-  });
-
   const getWordCount = (html) => {
     const temp = document.createElement('div');
     temp.innerHTML = html;
@@ -353,24 +347,14 @@ export function NotesCanvas({ workspaceId }) {
         {/* Sidebar */}
         {showSidebar && !isFullScreen && (
           <div className="notes-sidebar-v2">
-            <div className="notes-search-box">
-              <FontAwesomeIcon icon={faSearch} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Search notes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="notes-search-input"
-              />
-            </div>
-
             <div className="notes-list-v2">
-              {filteredNotes.length === 0 ? (
+              {notes.length === 0 ? (
                 <div className="notes-empty-state">
-                  <p className="empty-text-v2">No notes found</p>
+                  <p className="empty-text-v2">No notes yet</p>
+                  <p className="empty-hint-v2">Click + to create one</p>
                 </div>
               ) : (
-                filteredNotes.map((note) => (
+                notes.map((note) => (
                   <div
                     key={note.id}
                     className={`note-card-v2 ${activeNote?.id === note.id ? 'active' : ''}`}
