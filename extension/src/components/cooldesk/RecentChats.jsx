@@ -112,8 +112,8 @@ export function RecentChats({ maxItems = 5 }) {
           <div className="panel-title">Recent Chats</div>
         </div>
         <div style={{ textAlign: 'center', padding: '30px 16px', color: '#64748B' }}>
-          <FontAwesomeIcon icon={faSync} spin style={{ fontSize: '20px', marginBottom: '10px' }} />
-          <div style={{ fontSize: '13px' }}>Loading chats...</div>
+          <FontAwesomeIcon icon={faSync} spin style={{ fontSize: 'var(--font-3xl, 20px)', marginBottom: '10px' }} />
+          <div style={{ fontSize: 'var(--font-lg, 14px)' }}>Loading chats...</div>
         </div>
       </div>
     );
@@ -137,14 +137,14 @@ export function RecentChats({ maxItems = 5 }) {
           textAlign: 'center',
           padding: '30px 16px',
           color: '#64748B',
-          fontSize: '13px',
+          fontSize: 'var(--font-lg, 14px)',
         }}>
-          <div style={{ fontSize: '28px', marginBottom: '10px' }}>💬</div>
+          <div style={{ fontSize: 'var(--font-5xl, 28px)', marginBottom: '10px' }}>💬</div>
           <div>No AI chats yet</div>
-          <div style={{ fontSize: '11px', marginTop: '6px', opacity: 0.7 }}>
+          <div style={{ fontSize: 'var(--font-md, 12px)', marginTop: '6px', opacity: 0.7 }}>
             Visit ChatGPT, Claude, or Gemini to start tracking your chats
           </div>
-          <div style={{ fontSize: '11px', marginTop: '4px', opacity: 0.5, fontStyle: 'italic' }}>
+          <div style={{ fontSize: 'var(--font-md, 12px)', marginTop: '4px', opacity: 0.5, fontStyle: 'italic' }}>
             Chats will automatically appear here when you visit AI platforms
           </div>
         </div>
@@ -204,7 +204,7 @@ export function RecentChats({ maxItems = 5 }) {
                   icon={faArrowRight}
                   style={{
                     color: '#64748B',
-                    fontSize: '14px',
+                    fontSize: 'var(--font-xl, 14px)',
                     opacity: 0,
                     transition: 'opacity 0.2s ease',
                   }}
@@ -237,7 +237,7 @@ export function RecentChats({ maxItems = 5 }) {
                   borderRadius: '6px',
                   padding: '6px 10px',
                   color: platform.textColor,
-                  fontSize: '11px',
+                  fontSize: 'var(--font-md, 12px)',
                   fontWeight: 500,
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',

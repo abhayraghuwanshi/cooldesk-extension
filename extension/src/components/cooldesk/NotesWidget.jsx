@@ -120,7 +120,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
         textAlign: 'center',
         padding: '20px',
         color: '#64748B',
-        fontSize: '12px'
+        fontSize: 'var(--font-base, 12px)'
       }}>
         Loading...
       </div>
@@ -165,7 +165,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                 borderRadius: '8px',
                 padding: '8px 50px 8px 10px',
                 color: '#E5E7EB',
-                fontSize: '11px',
+                fontSize: 'var(--font-md, 12px)',
                 fontFamily: 'inherit',
                 resize: 'none',
                 minHeight: '42px',
@@ -202,7 +202,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                 borderRadius: '6px',
                 padding: '6px 10px',
                 color: 'white',
-                fontSize: '10px',
+                fontSize: 'var(--font-sm, 10px)',
                 fontWeight: 600,
                 cursor: newNoteText.trim() ? 'pointer' : 'not-allowed',
                 opacity: newNoteText.trim() ? 1 : 0.4,
@@ -234,9 +234,9 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
             textAlign: 'center',
             padding: '20px 10px',
             color: '#64748B',
-            fontSize: '11px',
+            fontSize: 'var(--font-md, 12px)',
           }}>
-            <div style={{ fontSize: '24px', marginBottom: '6px' }}>📝</div>
+            <div style={{ fontSize: 'var(--font-4xl, 24px)', marginBottom: '6px' }}>📝</div>
             <div>No notes yet</div>
           </div>
         ) : (
@@ -258,7 +258,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                   border: '1px solid rgba(139, 92, 246, 0.2)',
                   borderRadius: '6px',
                   padding: '8px',
-                  fontSize: '11px',
+                  fontSize: 'var(--font-md, 12px)',
                   transition: 'all 0.2s ease',
                 }}
               >
@@ -274,7 +274,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                         borderRadius: '4px',
                         padding: '6px',
                         color: '#E5E7EB',
-                        fontSize: '11px',
+                        fontSize: 'var(--font-md, 12px)',
                         fontFamily: 'inherit',
                         resize: 'none',
                         minHeight: '40px',
@@ -291,7 +291,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                           borderRadius: '4px',
                           padding: '4px 8px',
                           color: 'white',
-                          fontSize: '10px',
+                          fontSize: 'var(--font-sm, 10px)',
                           fontWeight: 600,
                           cursor: 'pointer',
                         }}
@@ -306,7 +306,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                           borderRadius: '4px',
                           padding: '4px 8px',
                           color: '#CBD5E1',
-                          fontSize: '10px',
+                          fontSize: 'var(--font-sm, 10px)',
                           fontWeight: 600,
                           cursor: 'pointer',
                         }}
@@ -319,7 +319,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                   <>
                     <div style={{
                       color: '#E5E7EB',
-                      fontSize: '11px',
+                      fontSize: 'var(--font-md, 12px)',
                       lineHeight: '1.4',
                       marginBottom: '6px',
                       wordWrap: 'break-word',
@@ -332,7 +332,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                       justifyContent: 'space-between',
                     }}>
                       <div style={{
-                        fontSize: '9px',
+                        fontSize: 'var(--font-xs, 9px)',
                         color: '#64748B',
                       }}>
                         {formatTime(note.updatedAt || note.createdAt)}
@@ -346,7 +346,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                             color: '#A78BFA',
                             cursor: 'pointer',
                             padding: '2px 4px',
-                            fontSize: '9px',
+                            fontSize: 'var(--font-xs, 9px)',
                           }}
                         >
                           <FontAwesomeIcon icon={faPenToSquare} />
@@ -359,7 +359,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                             color: '#F87171',
                             cursor: 'pointer',
                             padding: '2px 4px',
-                            fontSize: '9px',
+                            fontSize: 'var(--font-xs, 9px)',
                           }}
                         >
                           <FontAwesomeIcon icon={faTrash} />
@@ -411,7 +411,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
               borderRadius: '10px',
               padding: '12px 14px',
               color: '#E5E7EB',
-              fontSize: '13px',
+              fontSize: '0.95em',
               fontFamily: 'inherit',
               resize: 'none',
               minHeight: '90px',
@@ -445,7 +445,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
               borderRadius: '10px',
               padding: '10px',
               color: 'white',
-              fontSize: '13px',
+              fontSize: '0.95em',
               fontWeight: 600,
               cursor: newNoteText.trim() ? 'pointer' : 'not-allowed',
               opacity: newNoteText.trim() ? 1 : 0.6,
@@ -476,11 +476,11 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
           textAlign: 'center',
           padding: '30px 16px',
           color: '#64748B',
-          fontSize: '13px',
+          fontSize: 'var(--font-lg, 14px)',
         }}>
-          <div style={{ fontSize: '28px', marginBottom: '10px' }}>📝</div>
+          <div style={{ fontSize: 'var(--font-5xl, 28px)', marginBottom: '10px' }}>📝</div>
           <div>No notes yet</div>
-          <div style={{ fontSize: '11px', marginTop: '6px', opacity: 0.7 }}>
+          <div style={{ fontSize: 'var(--font-md, 12px)', marginTop: '6px', opacity: 0.7 }}>
             Click "New" to create your first note
           </div>
         </div>
@@ -531,7 +531,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                       borderRadius: '8px',
                       padding: '10px 12px',
                       color: '#E5E7EB',
-                      fontSize: '13px',
+                      fontSize: 'var(--font-lg, 14px)',
                       fontFamily: 'inherit',
                       resize: 'none',
                       minHeight: '70px',
@@ -557,7 +557,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                         borderRadius: '8px',
                         padding: '7px 14px',
                         color: 'white',
-                        fontSize: '12px',
+                        fontSize: 'var(--font-base, 12px)',
                         fontWeight: 600,
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
@@ -583,7 +583,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                         borderRadius: '8px',
                         padding: '7px 14px',
                         color: '#CBD5E1',
-                        fontSize: '12px',
+                        fontSize: 'var(--font-base, 12px)',
                         fontWeight: 600,
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
@@ -606,7 +606,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                 <>
                   <div style={{
                     color: '#E5E7EB',
-                    fontSize: '13px',
+                    fontSize: 'var(--font-lg, 14px)',
                     lineHeight: '1.5',
                     marginBottom: '10px',
                     wordWrap: 'break-word',
@@ -620,7 +620,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                     justifyContent: 'space-between',
                   }}>
                     <div style={{
-                      fontSize: '11px',
+                      fontSize: 'var(--font-md, 12px)',
                       color: '#64748B',
                       fontWeight: 500,
                     }}>
@@ -636,7 +636,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                           color: '#A78BFA',
                           cursor: 'pointer',
                           padding: '5px 8px',
-                          fontSize: '11px',
+                          fontSize: 'var(--font-md, 12px)',
                           transition: 'all 0.2s ease',
                         }}
                         onMouseEnter={(e) => {
@@ -662,7 +662,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                           color: '#F87171',
                           cursor: 'pointer',
                           padding: '5px 8px',
-                          fontSize: '11px',
+                          fontSize: 'var(--font-md, 12px)',
                           transition: 'all 0.2s ease',
                         }}
                         onMouseEnter={(e) => {

@@ -291,10 +291,10 @@ export class AutoSaveModel {
         [ML_CONFIG.storage.autoSaveModel]: data
       });
 
-      console.log('[ML] Auto-save model saved to storage');
+      console.log('[ML] Model saved');
       return true;
     } catch (error) {
-      console.error('[ML] Failed to save model:', error);
+      console.error('[ML] Failed to save model:', error.message);
       return false;
     }
   }
@@ -310,15 +310,14 @@ export class AutoSaveModel {
       ]);
 
       if (!result[ML_CONFIG.storage.autoSaveModel]) {
-        console.log('[ML] No saved model found');
         return false;
       }
 
       this.fromJSON(result[ML_CONFIG.storage.autoSaveModel]);
-      console.log('[ML] Auto-save model loaded from storage');
+      console.log('[ML] Model loaded');
       return true;
     } catch (error) {
-      console.error('[ML] Failed to load model:', error);
+      console.error('[ML] Failed to load model:', error.message);
       return false;
     }
   }

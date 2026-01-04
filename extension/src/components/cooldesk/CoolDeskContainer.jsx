@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { faChevronLeft, faChevronRight, faGear, faStickyNote } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faGear, faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
-import { WorkspaceCard, CreateWorkspaceCard } from './WorkspaceCard';
-import { CoolSearch } from './CoolSearch';
-import { QuickAccess } from './QuickAccess';
-import { RecentChats } from './RecentChats';
-import { NotesWidget } from './NotesWidget';
-import { GlobalAddButton } from './GlobalAddButton';
+import { useState } from 'react';
 import '../../styles/cooldesk.css';
 import '../../styles/global-add.css';
+import { CoolSearch } from './CoolSearch';
+import { GlobalAddButton } from './GlobalAddButton';
+import { NotesWidget } from './NotesWidget';
+import { QuickAccess } from './QuickAccess';
+import { RecentChats } from './RecentChats';
+import { WorkspaceCard } from './WorkspaceCard';
 
 export function CoolDeskContainer({
   savedWorkspaces = [],
@@ -148,6 +148,7 @@ export function CoolDeskContainer({
             isActive={currentWorkspace?.id === workspace.id}
           />
         ))}
+        {/* <CreateWorkspaceCard onClick={handleCreateWorkspace} /> */}
         {/* Notes Widget in 4th position */}
         <div className="cooldesk-workspace-card" style={{
           background: 'rgba(139, 92, 246, 0.15)',
@@ -156,7 +157,7 @@ export function CoolDeskContainer({
         }}>
           <div className="workspace-card-header">
             <div className="workspace-icon purple">
-              📝
+              <FontAwesomeIcon icon={faStickyNote} />
             </div>
             <div className="workspace-info">
               <div className="workspace-name">Notes</div>

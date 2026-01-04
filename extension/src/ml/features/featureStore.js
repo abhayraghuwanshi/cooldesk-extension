@@ -135,9 +135,9 @@ export class FeatureStore {
         ml_featureCache_savedAt: Date.now()
       });
 
-      console.log('[ML] Feature cache saved:', this.cache.size, 'entries');
+      console.log('[ML] Feature cache saved');
     } catch (error) {
-      console.error('[ML] Failed to save feature cache:', error);
+      console.error('[ML] Failed to save feature cache:', error.message);
     }
   }
 
@@ -171,11 +171,11 @@ export class FeatureStore {
         this.cache.set(url, data);
       }
 
-      console.log('[ML] Feature cache loaded:', this.cache.size, 'entries');
+      console.log('[ML] Feature cache loaded');
       return true;
 
     } catch (error) {
-      console.error('[ML] Failed to load feature cache:', error);
+      console.error('[ML] Failed to load feature cache:', error.message);
       return false;
     }
   }

@@ -2,9 +2,9 @@
  * Data Preparation - Prepare training data from activity logs and labels
  */
 
+import { getAllActivity } from '../../db/index.js';
 import { FeatureExtractor } from '../features/featureExtractor.js';
 import { LabelGenerator } from './labelGenerator.js';
-import { getAllActivity } from '../../db/index.js';
 
 /**
  * Data Preparation Class
@@ -247,7 +247,6 @@ export class DataPreparation {
    */
   static augmentDataset(examples, augmentFactor = 0.5) {
     // Future: Add noise, interpolate between examples, etc.
-    console.log('[ML] Data augmentation not yet implemented');
-    return examples;
+    return examples; // Placeholder
   }
 }

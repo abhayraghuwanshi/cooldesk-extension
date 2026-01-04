@@ -1,15 +1,16 @@
-import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack } from '@fortawesome/free-solid-svg-icons';
+import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack, faCog } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useMemo, useState } from 'react';
-import { listWorkspaces, saveWorkspace } from '../../db/index.js';
+import { listWorkspaces, saveWorkspace, getSettings as getSettingsDB, saveSettings as saveSettingsDB } from '../../db/index.js';
 import { getSyncStatus } from '../../services/conditionalSync';
-import { sendMessage, storageGet } from '../../services/extensionApi';
+import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
 import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontSize } from '../../utils/fontUtils';
 import DisplayData from '../settings/DisplayData';
 import ExportData from '../settings/ExportData';
 import { TabItem, Tabs } from '../settings/TabComponents';
 import ThemesTab from '../settings/ThemesTab';
+import SetupTab from '../settings/SetupTab';
 
 
 export function SettingsModal({
@@ -41,6 +42,7 @@ export function SettingsModal({
   const [syncStatus, setSyncStatus] = useState(null)
   const [syncConfigLoading, setSyncConfigLoading] = useState(false)
   const [authUser, setAuthUser] = useState(null)
+  const [sessionTrackingEnabled, setSessionTrackingEnabled] = useState(true)
 
   // Load any stored auth info from chrome.storage
   useEffect(() => {
@@ -219,6 +221,20 @@ export function SettingsModal({
     }
   };
 
+  // Session tracking handler
+  const handleToggleSessionTracking = async (enabled) => {
+    try {
+      await chrome.runtime.sendMessage({
+        action: 'toggleSessionTracking',
+        enabled
+      });
+      setSessionTrackingEnabled(enabled);
+    } catch (error) {
+      console.warn('Failed to toggle session tracking:', error);
+      setError('Failed to toggle session tracking. Please try again.');
+    }
+  };
+
   // Sync configuration handlers
   const handleSyncConfigChange = async (key, value) => {
     try {
@@ -266,7 +282,7 @@ export function SettingsModal({
     setBasicSaved(Boolean((settings?.geminiApiKey || '').trim()))
   }, [settings])
 
-  // Load and apply saved theme preferences on component mount
+  // Load saved theme preferences on component mount (READ ONLY - don't re-apply)
   useEffect(() => {
     try {
       const savedTheme = localStorage.getItem('cooldesk-theme') || 'crimson-fire';
@@ -286,45 +302,11 @@ export function SettingsModal({
         setFontFamily(themeFontFamily);
       }
 
-      // Only apply theme without font size (font size is handled by App.jsx and fontUtils)
-      // Just apply theme class and font family
-      const body = document.body;
-      const themeClasses = [
-        'bg-ai-midnight-nebula',
-        'bg-cosmic-aurora',
-        'bg-sunset-horizon',
-        'bg-forest-depths',
-        'bg-minimal-dark',
-        'bg-ocean-depths',
-        'bg-cherry-blossom',
-        'bg-arctic-frost',
-        'bg-volcanic-ember',
-        'bg-neon-cyberpunk',
-        'bg-orange-warm',
-        'bg-brown-earth',
-        'bg-royal-purple',
-        'bg-golden-honey',
-        'bg-mint-sage',
-        'bg-crimson-fire'
-      ];
+      // DON'T re-apply themes/fonts here - App.jsx already did it on mount
+      // This modal should only READ current settings and display them
+      // Actual application happens only when user actively changes theme/font
+      console.log('[SettingsModal] Loaded current theme:', savedTheme, 'font:', fontFamilyToUse);
 
-      // Remove all theme classes and add the saved one
-      themeClasses.forEach(cls => body.classList.remove(cls));
-      body.classList.add(`bg-${savedTheme}`);
-
-      // Apply font family only
-      const fontFamilies = [
-        { id: 'system', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' },
-        { id: 'inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' },
-        { id: 'roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif' },
-        { id: 'poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif' },
-        { id: 'jetbrains', family: 'JetBrains Mono, Consolas, Monaco, monospace' }
-      ];
-
-      const selectedFontFamily = fontFamilies.find(f => f.id === fontFamilyToUse);
-      if (selectedFontFamily) {
-        body.style.fontFamily = selectedFontFamily.family;
-      }
     } catch (e) {
       console.warn('Failed to load theme preferences:', e);
     }
@@ -349,6 +331,22 @@ export function SettingsModal({
     };
 
     loadSync();
+  }, [show]);
+
+  // Load session tracking state
+  useEffect(() => {
+    if (!show) return;
+
+    const loadSessionTracking = async () => {
+      try {
+        const { sessionTracking } = await chrome.storage.local.get(['sessionTracking']);
+        setSessionTrackingEnabled(sessionTracking?.enabled !== false);
+      } catch (error) {
+        console.warn('Failed to load session tracking state:', error);
+      }
+    };
+
+    loadSessionTracking();
   }, [show]);
 
   // Auth initialization removed for this build
@@ -650,6 +648,9 @@ export function SettingsModal({
               disabledTitles={[]} // Remove restrictions for better onboarding flow
               orientation="vertical"
             >
+              <TabItem title={<><FontAwesomeIcon icon={faCog} style={{ marginRight: '8px' }} />AI Setup</>}>
+                {/* Content rendered in the right pane below */}
+              </TabItem>
               <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
                 {/* Content rendered in the right pane below */}
               </TabItem>
@@ -673,6 +674,91 @@ export function SettingsModal({
             overflowY: 'auto'
           }}>
             {activeTab === 0 && (
+              <div>
+                <h2 style={{ marginTop: 0, marginBottom: '20px', fontSize: '20px', fontWeight: 600 }}>
+                  AI & Project Settings
+                </h2>
+
+                <SetupTab
+                  localSettings={localSettings}
+                  setLocalSettings={setLocalSettings}
+                  markEdited={markEdited}
+                  basicSaved={basicSaved}
+                  setBasicSaved={setBasicSaved}
+                  suggesting={suggesting}
+                  error={error}
+                  setError={setError}
+                  handleSuggestCategories={handleSuggestCategories}
+                  saveSettingsDB={saveSettingsDB}
+                  storageSet={storageSet}
+                />
+
+                {/* Session Tracking Toggle */}
+                <div style={{
+                  marginTop: '32px',
+                  padding: '20px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '12px'
+                }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600 }}>
+                    Smart Project Detection
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6, fontSize: '14px' }}>
+                    Monitor your browser tabs to automatically detect projects and intelligently categorize URLs based on context.
+                  </p>
+
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    cursor: 'pointer',
+                    padding: '12px',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: '8px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={sessionTrackingEnabled}
+                      onChange={(e) => handleToggleSessionTracking(e.target.checked)}
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        cursor: 'pointer',
+                        accentColor: '#34C759'
+                      }}
+                    />
+                    <div>
+                      <div style={{ fontSize: '16px', fontWeight: 500, color: '#e5e7eb' }}>
+                        Enable Session Tracking
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#9ca3af', marginTop: '2px' }}>
+                        Track tabs, detect projects, and auto-categorize URLs
+                      </div>
+                    </div>
+                  </label>
+
+                  {sessionTrackingEnabled && (
+                    <div style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      background: 'rgba(52, 199, 89, 0.1)',
+                      border: '1px solid rgba(52, 199, 89, 0.2)',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      color: '#34C759'
+                    }}>
+                      ✓ Session tracking is active. The system will detect projects and categorize URLs automatically.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {activeTab === 1 && (
               <ThemesTab
                 selectedTheme={selectedTheme}
                 fontSize={fontSize}
@@ -688,13 +774,13 @@ export function SettingsModal({
                 onWallpaperOpacityChange={onWallpaperOpacityChange}
               />
             )}
-            {activeTab === 1 && (
+            {activeTab === 2 && (
               <ExportData />
             )}
-            {activeTab === 2 && (
+            {activeTab === 3 && (
               <DisplayData />
             )}
-            {activeTab === 3 && (
+            {activeTab === 4 && (
               <div style={{ padding: '0', maxHeight: '560px', overflowY: 'auto' }}>
                 {/* Account Tab Content (duplicated features hidden in Account tab) */}
                 {/* Getting Started Section */}

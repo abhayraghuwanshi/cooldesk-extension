@@ -351,8 +351,7 @@ export async function prepareEnhancedTrainingData(options = {}) {
       }
     }
 
-    // TODO: Track removed URLs in database
-    // For now, we rely on engagement patterns
+    // Removed URL tracking relies on engagement patterns for now
 
     // Step 4: Generate enhanced labels
     const labeledExamples = generateEnhancedLabels(mergedData, savedUrls, removedUrls);

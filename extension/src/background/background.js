@@ -123,6 +123,7 @@ import {
 import { initializeData } from './data.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
+import { initializeProjectContext } from './projectContext.js';
 
 
 
@@ -286,6 +287,14 @@ async function main() {
     initializeWorkspaces();
   } catch (e) {
     console.error('[Background] Error initializing Workspaces module:', e);
+  }
+
+  // Initialize Project Context module (session tracking + project detection)
+  try {
+    initializeProjectContext();
+    console.log('[Background] ✅ Project context initialized');
+  } catch (e) {
+    console.error('[Background] Error initializing Project Context module:', e);
   }
 
   // Real-time categorization DISABLED - using scraping mechanism instead

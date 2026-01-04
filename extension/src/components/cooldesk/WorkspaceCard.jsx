@@ -1,6 +1,5 @@
-import React from 'react';
+import { faCheck, faExternalLinkAlt, faFolder, faFolderOpen, faLink, faPlus } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFolder, faFolderOpen, faLink, faCheck, faExternalLinkAlt } from '@fortawesome/free-solid-svg-icons';
 import { getFaviconUrl } from '../../utils.js';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];

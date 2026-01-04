@@ -3,8 +3,8 @@
  * Integrates with existing activity tracking in src/background/activity.js
  */
 
-import { FEATURE_SCHEMA, validateFeatures } from './featureSchema.js';
 import { ML_CONFIG } from '../config.js';
+import { FEATURE_SCHEMA, validateFeatures } from './featureSchema.js';
 
 /**
  * Feature Extractor Class
@@ -76,14 +76,13 @@ export class FeatureExtractor {
       const value = features[schema.name];
 
       if (value === undefined || value === null) {
-        console.warn(`[ML] Missing feature: ${schema.name}, using default 0`);
         return 0;
       }
 
       try {
         return schema.normalize(value);
       } catch (error) {
-        console.error(`[ML] Error normalizing feature ${schema.name}:`, error);
+        console.error(`[ML] Error normalizing ${schema.name}:`, error.message);
         return 0;
       }
     });
@@ -91,8 +90,7 @@ export class FeatureExtractor {
     // Validate normalized features
     const validation = validateFeatures(normalized);
     if (!validation.valid) {
-      console.error('[ML] Feature validation failed:', validation.error);
-      throw new Error(validation.error);
+      throw new Error(`[ML] Feature validation failed: ${validation.error}`);
     }
 
     return normalized;

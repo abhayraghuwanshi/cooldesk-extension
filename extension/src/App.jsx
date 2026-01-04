@@ -107,7 +107,7 @@ export default function App() {
   const SHARED_WS_URL = 'wss://YOUR_WORKER_URL';
   const { data, loading, refreshing, populate } = useDashboardData()
   const [workspace, setWorkspace] = useState('')
-  const [themeClass, setThemeClass] = useState('bg-ai-quantum') // Default theme
+  const [themeClass, setThemeClass] = useState('bg-crimson-fire') // Default theme
   const [search, setSearch] = useState('')
   const [focusSearchTick, setFocusSearchTick] = useState(0)
   const [showDeskMetaReminder, setShowDeskMetaReminder] = useState(false);
@@ -904,8 +904,8 @@ export default function App() {
           // Remove all theme classes
           themeClasses.forEach(cls => body.classList.remove(cls));
 
-          // Apply saved theme or default to ai-quantum
-          const themeToApply = savedTheme || 'ai-quantum';
+          // Apply saved theme or default to crimson-fire
+          const themeToApply = savedTheme || 'crimson-fire';
           const newThemeClass = `bg-${themeToApply}`;
           body.classList.add(newThemeClass);
           setThemeClass(newThemeClass);

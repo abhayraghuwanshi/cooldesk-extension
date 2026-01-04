@@ -5,8 +5,9 @@
   max-height: 100vh;
   /* Background removed - controlled by theme classes */
   color: var(--text-primary, #E5E7EB);
-  /* Font family inherited from body element (set by theme system) */
+  /* Font family AND size inherited from body element (set by theme system) */
   font-family: inherit;
+  font-size: inherit;
   padding: 16px;
   padding-left: 15vw;
   padding-right: 15vw;
@@ -31,7 +32,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 24px;
+  font-size: 1.7em;
+  /* Scales with base font size */
   font-weight: 600;
   color: #FFFFFF;
 }
@@ -78,7 +80,6 @@
 .cooldesk-search-box {
   background: var(--glass-bg, rgba(30, 41, 59, 0.6));
   backdrop-filter: blur(12px);
-  border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.2));
   border-radius: 16px;
   padding: 16px 24px;
   display: flex;
@@ -99,7 +100,8 @@
   border: none;
   outline: none;
   color: #E5E7EB;
-  font-size: 16px;
+  font-size: 1.15em;
+  /* Scales with base font size */
   font-weight: 400;
 }
 
@@ -152,7 +154,7 @@
   border-color: var(--accent-color, #34C759);
   color: var(--accent-color, #34C759);
   box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.1),
-              0 4px 16px rgba(52, 199, 89, 0.2);
+    0 4px 16px rgba(52, 199, 89, 0.2);
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
@@ -161,13 +163,16 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.1),
-                0 4px 16px rgba(52, 199, 89, 0.2);
+      0 4px 16px rgba(52, 199, 89, 0.2);
   }
+
   50% {
     box-shadow: 0 0 0 6px rgba(52, 199, 89, 0.15),
-                0 4px 20px rgba(52, 199, 89, 0.3);
+      0 4px 20px rgba(52, 199, 89, 0.3);
   }
 }
 
@@ -279,7 +284,6 @@
 .cooldesk-workspace-card {
   background: var(--glass-bg, rgba(30, 41, 59, 0.7));
   backdrop-filter: blur(16px);
-  border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.2));
   border-radius: 12px;
   padding: 18px;
   transition: all 0.2s ease;
@@ -345,7 +349,8 @@
 }
 
 .workspace-name {
-  font-size: 16px;
+  font-size: 1.15em;
+  /* Scales with base font size */
   font-weight: 600;
   color: #F1F5F9;
   margin-bottom: 4px;
@@ -358,7 +363,8 @@
 }
 
 .workspace-card .workspace-count {
-  font-size: 13px;
+  font-size: 0.9em;
+  /* Scales with base font size */
   color: var(--text-secondary, #fecaca);
   font-weight: 500;
   background: rgba(220, 38, 38, 0.15);
@@ -459,7 +465,7 @@
 .cooldesk-workspace-card.active {
   border-color: var(--accent-color, #34C759);
   box-shadow: 0 0 0 2px rgba(52, 199, 89, 0.2),
-              0 8px 24px rgba(52, 199, 89, 0.2);
+    0 8px 24px rgba(52, 199, 89, 0.2);
 }
 
 .workspace-active-badge {
@@ -693,7 +699,6 @@
 .cooldesk-panel {
   background: var(--glass-bg, rgba(30, 41, 59, 0.7));
   backdrop-filter: blur(16px);
-  border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.2));
   border-radius: 12px;
   padding: 16px;
   display: flex;
@@ -714,14 +719,16 @@
 }
 
 .panel-title {
-  font-size: 16px;
+  font-size: 1.15em;
+  /* Scales with base font size */
   font-weight: 600;
   color: #F1F5F9;
 }
 
 .panel-action {
   color: #60A5FA;
-  font-size: 14px;
+  font-size: 1em;
+  /* Scales with base font size */
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -944,7 +951,7 @@
 }
 
 .chat-title {
-  font-size: 13px;
+  font-size: var(--font-lg, 14px);
   font-weight: 500;
   color: #E5E7EB;
   margin-bottom: 3px;
@@ -954,7 +961,7 @@
 }
 
 .chat-time {
-  font-size: 11px;
+  font-size: var(--font-md, 12px);
   color: #64748B;
 }
 
@@ -1031,21 +1038,21 @@
 }
 
 /* Notes List Scrollbar */
-.notes-widget > div > div:last-child::-webkit-scrollbar {
+.notes-widget>div>div:last-child::-webkit-scrollbar {
   width: 6px;
 }
 
-.notes-widget > div > div:last-child::-webkit-scrollbar-track {
+.notes-widget>div>div:last-child::-webkit-scrollbar-track {
   background: rgba(15, 23, 42, 0.3);
   border-radius: 3px;
 }
 
-.notes-widget > div > div:last-child::-webkit-scrollbar-thumb {
+.notes-widget>div>div:last-child::-webkit-scrollbar-thumb {
   background: rgba(139, 92, 246, 0.3);
   border-radius: 3px;
 }
 
-.notes-widget > div > div:last-child::-webkit-scrollbar-thumb:hover {
+.notes-widget>div>div:last-child::-webkit-scrollbar-thumb:hover {
   background: rgba(139, 92, 246, 0.5);
 }
 
@@ -1107,9 +1114,12 @@
 }
 
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-12px);
   }
@@ -1149,10 +1159,13 @@
 }
 
 @keyframes sparkle {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0;
     transform: scale(0.5) rotate(0deg);
   }
+
   50% {
     opacity: 1;
     transform: scale(1) rotate(180deg);
@@ -1160,10 +1173,13 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.8;
     transform: scale(1.1);
