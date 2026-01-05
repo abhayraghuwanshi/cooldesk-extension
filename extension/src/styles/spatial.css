@@ -439,6 +439,7 @@
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
@@ -1143,6 +1144,7 @@
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1307,7 +1309,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
+  padding: 8px 24px;
   border-bottom: 1px solid var(--border-color, #E5E7EB);
   background: var(--background-primary, #FFFFFF);
   flex-shrink: 0;
@@ -1346,7 +1348,7 @@
 
 .notes-rich-editor {
   flex: 1;
-  padding: 24px 64px;
+  padding: 16px 64px;
   overflow-y: auto;
   outline: none;
   font-size: var(--font-size-lg, 16px);
@@ -1418,4 +1420,27 @@
     padding: 12px 16px;
     overflow-x: auto;
   }
+}
+
+/* Note Title Input */
+.note-title-container {
+  padding: 12px 24px 4px 24px;
+  background: var(--background-primary, #FFFFFF);
+}
+
+.note-title-input {
+  width: 100%;
+  font-size: 24px;
+  font-weight: 600;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary, #111827);
+  font-family: inherit;
+  padding: 4px 0;
+}
+
+.note-title-input::placeholder {
+  color: var(--text-muted, #9CA3AF);
+  font-weight: 400;
 }

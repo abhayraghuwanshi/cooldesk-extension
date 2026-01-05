@@ -1,6 +1,6 @@
 import {
   faMicrophone,
-  faPlus,
+  faPaperPlane,
   faStickyNote,
   faStop
 } from '@fortawesome/free-solid-svg-icons';
@@ -63,7 +63,6 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
 
       await dbUpsertNote(note);
       setNewNoteText('');
-      // Optional: Give feedback that note was saved
     } catch (error) {
       console.error('[NotesWidget] Error adding note:', error);
     } finally {
@@ -72,8 +71,13 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
   };
 
   return (
-    <div className="cooldesk-panel notes-widget">
-      <div className="panel-header">
+    <div className="cooldesk-panel notes-widget" style={{
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      boxSizing: 'border-box'
+    }}>
+      <div className="panel-header" style={{ flexShrink: 0 }}>
         <div className="panel-title">
           <FontAwesomeIcon icon={faStickyNote} style={{ marginRight: '8px' }} />
           Quick Note
@@ -81,32 +85,42 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
       </div>
 
       <div style={{
+        flex: 1,
+        padding: '10px 0',
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
-        padding: '10px 0',
-        gap: '12px'
+        boxSizing: 'border-box',
+        minHeight: 0, // Critical for nested flex scrolling
+        overflow: 'hidden'
       }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+        {/* Unified Input Card */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'rgba(30, 41, 59, 0.4)',
+          border: `1px solid ${isListening ? '#ef4444' : 'rgba(148, 163, 184, 0.2)'}`,
+          borderRadius: '12px',
+          overflow: 'hidden',
+          transition: 'all 0.2s ease',
+        }}>
+
+          {/* Text Area Area */}
           <textarea
             value={newNoteText}
             onChange={(e) => setNewNoteText(e.target.value)}
             placeholder={isListening ? "Listening..." : "Type or use voice to add a note..."}
             style={{
+              flex: 1,
               width: '100%',
-              height: '100%',
-              minHeight: '120px',
-              background: 'rgba(30, 41, 59, 0.4)',
-              border: `1px solid ${isListening ? '#ef4444' : 'rgba(148, 163, 184, 0.2)'}`,
-              borderRadius: '12px',
+              background: 'transparent',
+              border: 'none',
               padding: '16px',
               color: '#E5E7EB',
               fontSize: 'var(--font-md, 14px)',
               fontFamily: 'inherit',
               resize: 'none',
               outline: 'none',
-              transition: 'all 0.2s ease',
-              boxShadow: 'none'
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -115,74 +129,86 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
             }}
           />
 
-          {/* Voice Button */}
-          <button
-            onClick={toggleVoice}
-            className={`voice-btn ${isListening ? 'listening' : ''}`}
-            title={isListening ? "Stop listening" : "Start voice input"}
-            style={{
-              position: 'absolute',
-              bottom: '12px',
-              right: '12px',
-              background: isListening ? '#ef4444' : 'rgba(139, 92, 246, 0.2)',
-              color: isListening ? 'white' : '#A78BFA',
-              border: 'none',
-              borderRadius: '50%',
-              width: '36px',
-              height: '36px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              animation: isListening ? 'pulse 1.5s infinite' : 'none'
-            }}
-          >
-            <FontAwesomeIcon icon={isListening ? faStop : faMicrophone} />
-          </button>
-        </div>
-
-        <button
-          onClick={handleAddNote}
-          disabled={!newNoteText.trim() || isSaving}
-          style={{
-            width: '100%',
-            background: newNoteText.trim()
-              ? 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)'
-              : 'rgba(139, 92, 246, 0.2)',
-            border: 'none',
-            borderRadius: '10px',
-            padding: '10px',
-            color: 'white',
-            fontSize: 'var(--font-sm, 13px)',
-            fontWeight: 600,
-            cursor: newNoteText.trim() ? 'pointer' : 'not-allowed',
-            opacity: newNoteText.trim() ? 1 : 0.6,
-            transition: 'all 0.2s ease',
+          {/* Action Bar (Bottom of card) */}
+          <div style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px'
-          }}
-        >
-          {isSaving ? (
-            <span>Saving...</span>
-          ) : (
-            <>
-              <FontAwesomeIcon icon={faPlus} />
-              <span>Save Note</span>
-            </>
-          )}
-        </button>
-      </div>
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            borderTop: '1px solid rgba(148, 163, 184, 0.1)',
+            background: 'rgba(30, 41, 59, 0.3)'
+          }}>
+            {/* Left: Character Count or Status */}
+            <div style={{
+              fontSize: '12px',
+              color: '#64748B',
+              opacity: newNoteText.length > 0 ? 1 : 0
+            }}>
+              {newNoteText.length} chars
+            </div>
 
-      <style jsx>{`
-        @keyframes pulse {
-          0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-          70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-      `}</style>
+            {/* Right: Actions */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {/* Voice Button */}
+              <button
+                onClick={toggleVoice}
+                title={isListening ? "Stop listening" : "Start voice input"}
+                style={{
+                  background: isListening ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
+                  color: isListening ? '#EF4444' : '#94A3B8',
+                  border: 'none',
+                  borderRadius: '8px',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => !isListening && (e.currentTarget.style.color = '#F1F5F9')}
+                onMouseLeave={(e) => !isListening && (e.currentTarget.style.color = '#94A3B8')}
+              >
+                <FontAwesomeIcon icon={isListening ? faStop : faMicrophone} />
+              </button>
+
+              {/* Send Button */}
+              <button
+                onClick={handleAddNote}
+                disabled={!newNoteText.trim() || isSaving}
+                title="Save Note (Ctrl+Enter)"
+                style={{
+                  background: newNoteText.trim()
+                    ? 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)'
+                    : 'rgba(148, 163, 184, 0.1)',
+                  color: newNoteText.trim() ? 'white' : '#64748B',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '0 16px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: newNoteText.trim() ? 'pointer' : 'not-allowed',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {isSaving ? (
+                  <span>...</span>
+                ) : (
+                  <>
+                    <span>Save</span>
+                    <FontAwesomeIcon icon={faPaperPlane} size="sm" />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -931,8 +931,8 @@
 }
 
 .panel-title {
-  font-size: 1.15em;
-  /* Scales with base font size */
+  font-size: var(--font-xl, 16px);
+  /* Standardized header size */
   font-weight: 600;
   color: #F1F5F9;
 }

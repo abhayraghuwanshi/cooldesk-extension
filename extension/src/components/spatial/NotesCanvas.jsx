@@ -20,6 +20,7 @@ export function NotesCanvas({ workspaceId }) {
   const [loading, setLoading] = useState(true);
   const [activeNote, setActiveNote] = useState(null);
   const [noteContent, setNoteContent] = useState('');
+  const [noteTitle, setNoteTitle] = useState('');
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved');
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,7 +59,7 @@ export function NotesCanvas({ workspaceId }) {
       const note = {
         id: noteId || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         text: content, // We store HTML in 'text' field for now, or should we use a new field? 'text' is fine if we render it safely.
-        title: extractTitle(content),
+        title: titleRef.current || extractTitle(content),
         type: 'richtext',
         createdAt: noteId ? (notes.find(n => n.id === noteId)?.createdAt || Date.now()) : Date.now(),
         updatedAt: Date.now()
@@ -83,7 +84,22 @@ export function NotesCanvas({ workspaceId }) {
       console.error('[NotesCanvas] Error saving note:', error);
       setAutoSaveStatus('error');
     }
-  }, [notes, loadNotes, activeNote]);
+  }, [notes, loadNotes, activeNote]); // We use titleRef, so no need to depend on noteTitle directly if we rely on Ref
+
+  const titleRef = useRef('');
+  useEffect(() => { titleRef.current = noteTitle; }, [noteTitle]);
+
+  const handleTitleChange = (e) => {
+    const newTitle = e.target.value;
+    setNoteTitle(newTitle);
+    setAutoSaveStatus('unsaved');
+
+    clearTimeout(autoSaveTimeout.current);
+    autoSaveTimeout.current = setTimeout(() => {
+      // saveNote uses titleRef, so it will see the updated title even from stale closure
+      saveNote(noteContent, activeNote?.id);
+    }, 1000);
+  };
 
   const extractTitle = (html) => {
     const temp = document.createElement('div');
@@ -264,6 +280,7 @@ export function NotesCanvas({ workspaceId }) {
   const selectNote = (note) => {
     setActiveNote(note);
     setNoteContent(note.text || '');
+    setNoteTitle(note.title || '');
     setAutoSaveStatus('idle');
     setIsEditing(true);
   };
@@ -272,6 +289,7 @@ export function NotesCanvas({ workspaceId }) {
   const createNewNote = () => {
     setActiveNote(null);
     setNoteContent('');
+    setNoteTitle('');
     setAutoSaveStatus('idle');
     setIsEditing(true);
     setTimeout(() => {
@@ -395,8 +413,38 @@ export function NotesCanvas({ workspaceId }) {
         <div className="notes-editor-v2">
           {isEditing ? (
             <>
+              {/* Title Input */}
+              <div className="note-title-container">
+                <input
+                  type="text"
+                  placeholder="Note Title"
+                  value={noteTitle}
+                  onChange={handleTitleChange}
+                  className="note-title-input"
+                />
+              </div>
+
               {/* Formatting Toolbar */}
               <div className="editor-toolbar">
+                <button
+                  className="toolbar-btn"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => execCommand('formatBlock', 'H1')}
+                  title="Heading 1"
+                  style={{ fontWeight: 'bold', fontSize: '14px' }}
+                >
+                  H1
+                </button>
+                <button
+                  className="toolbar-btn"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => execCommand('formatBlock', 'H2')}
+                  title="Heading 2"
+                  style={{ fontWeight: 'bold', fontSize: '12px' }}
+                >
+                  H2
+                </button>
+                <div className="toolbar-separator"></div>
                 <button
                   className="toolbar-btn"
                   onMouseDown={(e) => e.preventDefault()}

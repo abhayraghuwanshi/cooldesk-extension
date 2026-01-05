@@ -153,9 +153,42 @@ export function injectFooterBar() {
         animation: loading-spin 1s linear infinite;
       }
 
-      @keyframes loading-spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
+    // ... (existing styles) ...
+
+      /* Add Note Button */
+      .add-note-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        margin-top: 10px;
+        transition: all 0.2s ease;
+        font-size: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin-left: auto; /* Align to right like toggle btn */
+        margin-right: 10px;
+      }
+
+      .add-note-btn:hover {
+        background: rgba(16, 185, 129, 0.8); /* Green */
+        transform: scale(1.1);
+        border-color: rgba(16, 185, 129, 1);
+      }
+      
+      .sticky-editor {
+        animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      
+      @keyframes popIn {
+        from { transform: scale(0.8) rotate(-5deg); opacity: 0; }
+        to { transform: scale(1) rotate(0deg); opacity: 1; }
       }
     `;
 
@@ -163,6 +196,7 @@ export function injectFooterBar() {
     const container = document.createElement('div');
     container.className = 'floating-container';
 
+    // Main Toggle Button
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'toggle-btn pulse';
     toggleBtn.setAttribute('aria-label', 'Open CoolDesk sidebar');
@@ -205,13 +239,117 @@ export function injectFooterBar() {
     }
 
     toggleBtn.appendChild(logoImg);
+    container.appendChild(toggleBtn);
 
+    // Add Note Button
+    const addNoteBtn = document.createElement('button');
+    addNoteBtn.className = 'add-note-btn';
+    addNoteBtn.innerHTML = '+';
+    addNoteBtn.title = 'Add Sticky Note';
+    addNoteBtn.onclick = (e) => {
+      e.stopPropagation(); // Don't drag
+      spawnNewStickyNote();
+    };
+    // Prevent drag on this button too
+    addNoteBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+
+    container.appendChild(addNoteBtn);
+
+    // Tooltip
     const tooltip = document.createElement('div');
     tooltip.className = 'tooltip';
     tooltip.textContent = 'Open CoolDesk';
-
-    container.appendChild(toggleBtn);
     container.appendChild(tooltip);
+
+    // Spawn New Sticky Note
+    const spawnNewStickyNote = () => {
+      const stickyNote = document.createElement('div');
+      stickyNote.className = 'cooldesk-sticky-note sticky-editor';
+
+      const right = 300;
+      const top = 100;
+
+      stickyNote.style.cssText = `
+          position: fixed;
+          top: ${top}px;
+          right: ${right}px;
+          width: 220px;
+          min-height: 180px;
+          background: #fef08a;
+          padding: 12px;
+          border-radius: 4px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+          z-index: 2147483646;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          font-family: sans-serif;
+       `;
+
+      const textarea = document.createElement('textarea');
+      textarea.placeholder = 'Type your note here...';
+      textarea.style.cssText = `
+         flex: 1;
+         background: transparent;
+         border: none;
+         outline: none;
+         resize: none;
+         font-family: 'Comic Sans MS', sans-serif;
+         font-size: 14px;
+         min-height: 100px;
+       `;
+      textarea.focus();
+
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end; margin-top: auto;';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = 'background: transparent; border: 1px solid #9ca3af; padding: 4px 8px; border-radius: 4px; cursor: pointer; color: #4b5563; font-size: 12px;';
+      cancelBtn.onclick = () => stickyNote.remove();
+
+      const saveBtn = document.createElement('button');
+      saveBtn.textContent = 'Save';
+      saveBtn.style.cssText = 'background: #10b981; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; color: white; font-size: 12px; font-weight: bold;';
+      saveBtn.onclick = async () => {
+        const text = textarea.value.trim();
+        if (!text) return;
+
+        try {
+          const note = {
+            id: 'note_' + Date.now(),
+            url: window.location.href,
+            text: text,
+            type: 'text',
+            createdAt: Date.now()
+          };
+
+          await new Promise(resolve => {
+            chrome.runtime.sendMessage({ action: 'saveUrlNote', note }, resolve);
+          });
+
+          stickyNote.remove();
+          renderStickyNotes(); // Refresh to show the new saved note
+          showNotification('Note saved!', '#10b981');
+        } catch (e) {
+          console.error('Failed to save note:', e);
+          showNotification('Failed to save', '#ef4444');
+        }
+      };
+
+      btnRow.appendChild(cancelBtn);
+      btnRow.appendChild(saveBtn);
+
+      stickyNote.appendChild(textarea);
+      stickyNote.appendChild(btnRow);
+
+      shadow.appendChild(stickyNote);
+
+      // Focus
+      setTimeout(() => textarea.focus(), 50);
+    };
+
+    // ... (rest of logic) ...
 
     // Add elements to shadow DOM
     shadow.appendChild(style);
@@ -464,13 +602,107 @@ export function injectFooterBar() {
       console.warn('Could not load saved button position:', e);
     }
 
-    // Add event listeners
-    container.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    // ... (existing resize/drag logic) ...
 
-    // Prevent the button from interfering with page interactions
-    container.addEventListener('dragstart', (e) => e.preventDefault());
+    // Sticky Notes Functionality
+    const renderStickyNotes = async () => {
+      try {
+        console.log('[CoolDesk] Fetching notes for URL:', window.location.href);
+        const response = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ action: 'getUrlNotes', url: window.location.href }, resolve);
+        });
+
+        console.log('[CoolDesk] Notes response:', response);
+
+        // Remove existing sticky notes (but preserve open editors if any)
+        const existingNotes = shadow.querySelectorAll('.cooldesk-sticky-note:not(.sticky-editor)');
+        existingNotes.forEach(n => n.remove());
+
+        if (response && response.success && response.notes && response.notes.length > 0) {
+          console.log('[CoolDesk] Rendering', response.notes.length, 'notes');
+          response.notes.forEach((note, index) => {
+            // Only show recent or pinned-like notes to avoid clutter? 
+            // For now, show all but stacked or scattered.
+            const stickyNote = document.createElement('div');
+            stickyNote.className = 'cooldesk-sticky-note';
+
+            // Randomish position or stacked
+            const top = 100 + (index * 120);
+            const right = 80; // Left of the floating button
+
+            stickyNote.style.cssText = `
+              position: fixed;
+              top: ${top}px;
+              right: ${right}px;
+              width: 200px;
+              min-height: 150px;
+              background: #fef08a; /* Yellow sticky note */
+              color: #1f2937;
+              padding: 16px;
+              border-radius: 4px;
+              box-shadow: 2px 4px 12px rgba(0,0,0,0.15);
+              font-family: 'Comic Sans MS', 'Chalkboard SE', sans-serif;
+              font-size: 14px;
+              z-index: 2147483645;
+              transform: rotate(${Math.random() * 4 - 2}deg);
+              transition: transform 0.2s ease, opacity 0.2s ease;
+              cursor: default;
+              opacity: 0.9;
+            `;
+
+            stickyNote.innerHTML = `
+              <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 4px;">
+                ${new Date(note.createdAt).toLocaleDateString()}
+              </div>
+              <div style="white-space: pre-wrap; word-break: break-word;">
+                ${note.text || note.description || 'No content'}
+              </div>
+              <div style="position: absolute; bottom: 8px; right: 8px; font-size: 10px; color: #6b7280;">
+                ${note.type === 'voice' ? '🎤 Voice' : note.type === 'screenshot' ? '📸 Image' : '📝 Note'}
+              </div>
+            `;
+
+            // Hover effect
+            stickyNote.onmouseenter = () => { stickyNote.style.opacity = '1'; stickyNote.style.transform = 'scale(1.05)'; };
+            stickyNote.onmouseleave = () => { stickyNote.style.opacity = '0.9'; stickyNote.style.transform = `rotate(${Math.random() * 4 - 2}deg)`; };
+
+            // Allow closing/hiding locally
+            const closeBtn = document.createElement('div');
+            closeBtn.textContent = '×';
+            closeBtn.style.cssText = `
+              position: absolute;
+              top: 4px;
+              right: 8px;
+              cursor: pointer;
+              font-size: 18px;
+              font-weight: bold;
+              opacity: 0.5;
+            `;
+            closeBtn.onclick = (e) => {
+              e.stopPropagation();
+              stickyNote.remove();
+            };
+            closeBtn.onmouseenter = () => closeBtn.style.opacity = '1';
+            closeBtn.onmouseleave = () => closeBtn.style.opacity = '0.5';
+
+            stickyNote.appendChild(closeBtn);
+            shadow.appendChild(stickyNote);
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load sticky notes:', e);
+      }
+    };
+
+    // Initial load
+    setTimeout(renderStickyNotes, 1000);
+
+    // Listen for refreshes
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.action === 'refreshNotesCount') {
+        renderStickyNotes();
+      }
+    });
 
   } catch (e) {
     console.error('Error injecting CoolDesk floating button:', e);

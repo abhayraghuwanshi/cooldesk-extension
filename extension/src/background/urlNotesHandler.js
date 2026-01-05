@@ -287,8 +287,8 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
                           <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px;">
                             <span style="font-size: 16px;">
                               ${note.type === 'voice' ? '🎤' :
-                                note.type === 'screenshot' ? '📸' :
-                                isTodo ? (isCompleted ? '☑️' : '☐') : '📝'}
+                          note.type === 'screenshot' ? '📸' :
+                            isTodo ? (isCompleted ? '☑️' : '☐') : '📝'}
                             </span>
                             <div style="flex: 1;">
                               <div style="color: #e5e7eb; line-height: 1.5; ${isCompleted ? 'text-decoration: line-through; opacity: 0.7;' : ''}">
@@ -431,7 +431,8 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
 async function handleGetUrlNotesCount(message, sendResponse) {
   try {
     console.log('[Background Debug] Getting notes count for URL:', message.url);
-    const notes = await getUrlNotes(message.url);
+    const result = await getUrlNotes(message.url);
+    const notes = result.success ? result.data : [];
     console.log('[Background Debug] Notes retrieved:', notes.length, 'notes');
     if (notes.length > 0) {
       console.log('[Background Debug] Sample note IDs:', notes.slice(0, 3).map(n => n.id));
@@ -487,18 +488,21 @@ async function handleSaveUrlNote(message, sendResponse) {
 async function handleGetUrlNotes(message, sendResponse) {
   try {
     console.log('[Background Debug] Getting URL notes for:', message.url);
-    const notes = await getUrlNotes(message.url);
+    const result = await getUrlNotes(message.url);
+    const notes = result.success ? result.data : [];
+    console.log('[Background Debug] Raw notes from DB:', JSON.stringify(notes));
+    console.log('[Background Debug] Is array?', Array.isArray(notes));
     console.log('[Background Debug] Found', notes?.length || 0, 'URL notes');
-    sendResponse({ 
+    sendResponse({
       success: true,
-      notes: notes || [] 
+      notes: notes || []
     });
   } catch (error) {
     console.error('[Background Debug] Failed to get URL notes:', error);
-    sendResponse({ 
-      success: false, 
+    sendResponse({
+      success: false,
       notes: [],
-      error: error.message 
+      error: error.message
     });
   }
 }
@@ -536,12 +540,12 @@ async function handleCaptureScreenshot(message, sendResponse) {
 
     const base64Data = dataUrl.split(',')[1];
     console.log('[Background Debug] Screenshot captured, size:', Math.round(base64Data.length / 1024), 'KB');
-    sendResponse({ 
-      success: true, 
+    sendResponse({
+      success: true,
       imageData: base64Data,
       screenshot: dataUrl,  // Keep both formats for compatibility
       url: message.url,
-      title: message.title 
+      title: message.title
     });
   } catch (error) {
     console.error('[Background Debug] Failed to capture screenshot:', error);
@@ -589,16 +593,16 @@ async function handleGetSelectedText(message, sender, sendResponse) {
 
     const selectedText = results?.[0]?.result;
     console.log('[Background Debug] Selected text:', selectedText ? 'found' : 'none');
-    sendResponse({ 
+    sendResponse({
       success: true,
-      selectedText 
+      selectedText
     });
   } catch (error) {
     console.error('[Background Debug] Failed to get selected text:', error);
-    sendResponse({ 
+    sendResponse({
       success: false,
       selectedText: null,
-      error: error.message 
+      error: error.message
     });
   }
 }
@@ -606,7 +610,8 @@ async function handleGetSelectedText(message, sender, sendResponse) {
 // Enhanced AI enrichment with URL notes context
 export async function enrichWithUrlNotes(url, aiData) {
   try {
-    const urlNotes = await getUrlNotes(url);
+    const result = await getUrlNotes(url);
+    const urlNotes = result.success ? result.data : [];
     if (!urlNotes || urlNotes.length === 0) return aiData;
 
     // Add URL notes context to AI enrichment

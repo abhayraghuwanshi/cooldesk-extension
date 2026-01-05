@@ -1,6 +1,5 @@
 import {
     faBookmark,
-    faComments,
     faGlobe,
     faLink
 } from '@fortawesome/free-solid-svg-icons';
@@ -125,8 +124,27 @@ export function ActivityFeed() {
         return () => clearInterval(interval);
     }, [loadQuickLinks, loadFeed]);
 
-    const handleItemClick = (url) => {
-        if (url) window.open(url, '_blank');
+    const handleItemClick = async (url) => {
+        if (!url) return;
+
+        try {
+            if (chrome?.tabs?.query) {
+                const tabs = await chrome.tabs.query({});
+                const existingTab = tabs.find(t => t.url === url || t.url === url + '/' || t.url.replace(/\/$/, '') === url);
+
+                if (existingTab) {
+                    await chrome.tabs.update(existingTab.id, { active: true });
+                    if (existingTab.windowId && chrome.windows?.update) {
+                        await chrome.windows.update(existingTab.windowId, { focused: true });
+                    }
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error('Navigation error:', e);
+        }
+
+        window.open(url, '_blank');
     };
 
     const formatTime = (ts) => {
@@ -154,7 +172,16 @@ export function ActivityFeed() {
                 }}>
                     <FontAwesomeIcon icon={faBookmark} /> Favorites
                 </div>
-                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', scrollbarWidth: 'none' }}>
+                <div
+                    className="favorites-scroll-container"
+                    style={{
+                        display: 'flex',
+                        gap: '8px',
+                        overflowX: 'auto',
+                        paddingBottom: '8px', // Space for scrollbar
+                        // Removed scrollbarWidth: none to ensure it is scrollable
+                    }}
+                >
                     {quickLinks.length > 0 ? quickLinks.map(link => (
                         <div key={link.id}
                             onClick={() => handleItemClick(link.url)}
@@ -171,7 +198,8 @@ export function ActivityFeed() {
                                 color: '#E2E8F0',
                                 cursor: 'pointer',
                                 whiteSpace: 'nowrap',
-                                transition: 'all 0.2s'
+                                transition: 'all 0.2s',
+                                flexShrink: 0 // Prevent squashing
                             }}
                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)'}
                             onMouseLeave={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'}
@@ -182,7 +210,7 @@ export function ActivityFeed() {
                                 style={{ width: '14px', height: '14px', borderRadius: '2px' }}
                             />
                             <FontAwesomeIcon icon={faLink} style={{ display: 'none', fontSize: '10px' }} />
-                            <span style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{link.title}</span>
+                            <span style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{link.title}</span>
                         </div>
                     )) : (
                         <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
@@ -193,36 +221,33 @@ export function ActivityFeed() {
             {/* Feed Tabs & List */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0', display: 'flex', flexDirection: 'column' }}>
                 <div style={{
-                    padding: '16px 16px 0',
+                    padding: '0 16px',
                     position: 'sticky',
                     top: 0,
-                    background: 'var(--glass-bg, rgba(15, 23, 42, 0.9))',
-                    zIndex: 1,
+                    background: 'var(--glass-bg, rgba(15, 23, 42, 0.95))',
+                    zIndex: 10,
                     backdropFilter: 'blur(8px)',
                     borderBottom: '1px solid rgba(148, 163, 184, 0.1)'
                 }}>
                     <div style={{
                         display: 'flex',
-                        gap: '4px',
-                        paddingBottom: '12px'
+                        gap: '24px' // More spacing
                     }}>
                         {['all', 'chats', 'tabs'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 style={{
-                                    padding: '6px 12px',
-                                    borderRadius: '8px',
-                                    background: activeTab === tab ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                                    padding: '12px 0',
+                                    background: 'transparent',
                                     color: activeTab === tab ? '#60A5FA' : '#94A3B8',
                                     border: 'none',
-                                    fontSize: '12px',
-                                    fontWeight: 600,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.05em',
+                                    borderBottom: activeTab === tab ? '2px solid #60A5FA' : '2px solid transparent',
+                                    fontSize: '13px',
+                                    fontWeight: activeTab === tab ? 600 : 500,
                                     cursor: 'pointer',
                                     transition: 'all 0.2s',
-                                    flex: 1
+                                    textTransform: 'capitalize'
                                 }}
                             >
                                 {tab === 'all' ? 'All Activity' : tab}
@@ -254,52 +279,98 @@ export function ActivityFeed() {
                                                 padding: '12px 16px',
                                                 cursor: 'pointer',
                                                 borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
-                                                transition: 'background 0.2s'
+                                                transition: 'background 0.2s',
+                                                position: 'relative'
                                             }}
                                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
                                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                         >
+                                            {/* Icon */}
                                             <div style={{
-                                                width: '32px', height: '32px',
-                                                borderRadius: '8px',
-                                                background: isChat ? 'rgba(139, 92, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)',
+                                                width: '36px', height: '36px',
+                                                borderRadius: isChat ? '12px' : '8px',
+                                                background: isChat ? 'var(--accent-purple-soft, rgba(139, 92, 246, 0.15))' : 'var(--accent-blue-soft, rgba(96, 165, 250, 0.15))',
+                                                border: isChat ? '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))' : '1px solid var(--accent-blue-border, rgba(96, 165, 250, 0.2))',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                fontSize: '16px',
-                                                flexShrink: 0
+                                                fontSize: '18px',
+                                                flexShrink: 0,
+                                                color: isChat ? 'var(--accent-purple, #8b5cf6)' : 'var(--accent-blue, #60a5fa)',
+                                                overflow: 'hidden'
                                             }}>
-                                                {icon ? icon : (
-                                                    <img src={item.favIconUrl || getFaviconUrl(item.url, 32)}
-                                                        style={{ width: '16px', height: '16px' }}
-                                                        onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block' }}
-                                                    />
-                                                )}
-                                                {!icon && <FontAwesomeIcon icon={faGlobe} style={{ display: 'none', fontSize: '14px', color: '#60A5FA' }} />}
+                                                <img
+                                                    src={item.favIconUrl || getFaviconUrl(item.url, 32)}
+                                                    alt=""
+                                                    style={{ width: '18px', height: '18px', objectFit: 'contain' }}
+                                                    onError={e => {
+                                                        e.target.style.display = 'none';
+                                                        // Show fallback icon if image fails
+                                                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                                    }}
+                                                />
+                                                <div style={{ display: 'none' }}>
+                                                    {icon ? icon : <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />}
+                                                </div>
                                             </div>
 
+                                            {/* Info */}
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{
                                                     fontSize: '13px',
-                                                    color: '#F1F5F9',
+                                                    color: 'var(--text-primary, #F1F5F9)',
                                                     fontWeight: 500,
                                                     whiteSpace: 'nowrap',
                                                     overflow: 'hidden',
-                                                    textOverflow: 'ellipsis'
+                                                    textOverflow: 'ellipsis',
+                                                    marginBottom: '2px'
                                                 }}>
                                                     {item.title}
                                                 </div>
                                                 <div style={{
                                                     fontSize: '11px',
-                                                    color: '#64748B',
+                                                    color: 'var(--text-secondary, #64748B)',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     gap: '6px'
                                                 }}>
-                                                    {isChat && <FontAwesomeIcon icon={faComments} style={{ fontSize: '10px' }} />}
-                                                    {!isChat && <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '10px' }} />}
                                                     <span>{item.subtitle}</span>
-                                                    <span style={{ width: '2px', height: '2px', background: '#475569', borderRadius: '50%' }}></span>
+                                                    <span style={{ width: '2px', height: '2px', background: 'currentColor', borderRadius: '50%', opacity: 0.5 }}></span>
                                                     <span>{formatTime(item.timestamp)}</span>
                                                 </div>
+                                            </div>
+
+                                            {/* Badge */}
+                                            <div style={{ flexShrink: 0, marginLeft: '8px' }}>
+                                                {isChat ? (
+                                                    <div style={{
+                                                        fontSize: '10px',
+                                                        fontWeight: 600,
+                                                        color: 'var(--accent-purple, #8B5CF6)',
+                                                        background: 'var(--accent-purple-soft, rgba(139, 92, 246, 0.1))',
+                                                        border: '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px',
+                                                        textTransform: 'uppercase'
+                                                    }}>
+                                                        Chat
+                                                    </div>
+                                                ) : (
+                                                    <div style={{
+                                                        fontSize: '10px',
+                                                        fontWeight: 600,
+                                                        color: 'var(--accent-blue, #3B82F6)',
+                                                        background: 'var(--accent-blue-soft, rgba(59, 130, 246, 0.1))',
+                                                        border: '1px solid var(--accent-blue-border, rgba(59, 130, 246, 0.2))',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px',
+                                                        textTransform: 'uppercase',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px'
+                                                    }}>
+                                                        <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'currentColor' }}></div>
+                                                        Tab
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     );

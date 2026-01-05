@@ -1,4 +1,4 @@
-import { faGear } from '@fortawesome/free-solid-svg-icons';
+import { faGear, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import '../../styles/cooldesk.css';
@@ -38,6 +38,7 @@ export function CoolDeskContainer({
 
   // Tab management state
   const [tabs, setTabs] = useState([]);
+  const [tabsLoading, setTabsLoading] = useState(true);
   const [pinnedTabs, setPinnedTabs] = useState(new Set());
   const [expandedDomain, setExpandedDomain] = useState(null);
 
@@ -55,22 +56,62 @@ export function CoolDeskContainer({
 
   // Fetch browser tabs
   const refreshTabs = useCallback(async () => {
+    // Only set loading on initial empty state to avoid flickering
+    if (tabs.length === 0) setTabsLoading(true);
+
     try {
       if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
-        const allTabs = await chrome.tabs.query({ currentWindow: true });
-        setTabs(allTabs);
+        // Fix: Query ALL tabs from ALL windows (removed { currentWindow: true })
+        const allTabs = await chrome.tabs.query({});
+
+        // Sort: Active tabs first, then by windowId + index
+        const sortedTabs = (allTabs || []).sort((a, b) => {
+          if (a.active && !b.active) return -1;
+          if (!a.active && b.active) return 1;
+          if (a.windowId !== b.windowId) return a.windowId - b.windowId;
+          return a.index - b.index;
+        });
+
+        setTabs(sortedTabs);
       }
     } catch (error) {
       console.error('[CoolDesk] Failed to fetch tabs:', error);
+    } finally {
+      setTabsLoading(false);
     }
-  }, []);
+  }, []); // tabs dependency removed to avoid loops, though it wasn't there before
 
-  // Load tabs on mount and when activeFace changes to tabs
+  // Load tabs on mount and keep updated
   useEffect(() => {
-    if (activeFace === 'tabs') {
-      refreshTabs();
-    }
-  }, [activeFace, refreshTabs]);
+    refreshTabs();
+
+    // Add listeners for real-time updates
+    const events = [
+      chrome?.tabs?.onCreated,
+      chrome?.tabs?.onUpdated,
+      chrome?.tabs?.onRemoved,
+      chrome?.tabs?.onActivated,
+      chrome?.tabs?.onMoved,
+      chrome?.tabs?.onDetached,
+      chrome?.tabs?.onAttached
+    ];
+
+    const handleEvent = () => refreshTabs();
+
+    events.forEach(event => {
+      if (event?.addListener) {
+        event.addListener(handleEvent);
+      }
+    });
+
+    return () => {
+      events.forEach(event => {
+        if (event?.removeListener) {
+          event.removeListener(handleEvent);
+        }
+      });
+    };
+  }, [refreshTabs]);
 
   // Group tabs by domain
   const tabsByDomain = useCallback(() => {
@@ -95,6 +136,9 @@ export function CoolDeskContainer({
     try {
       if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
         await chrome.tabs.update(tab.id, { active: true });
+        if (tab.windowId && chrome?.windows?.update) {
+          await chrome.windows.update(tab.windowId, { focused: true });
+        }
       }
     } catch (error) {
       console.error('[CoolDesk] Failed to activate tab:', error);
@@ -105,12 +149,12 @@ export function CoolDeskContainer({
     try {
       if (typeof chrome !== 'undefined' && chrome?.tabs?.remove) {
         await chrome.tabs.remove(tab.id);
-        await refreshTabs();
+        // Event listener will trigger refresh
       }
     } catch (error) {
       console.error('[CoolDesk] Failed to close tab:', error);
     }
-  }, [refreshTabs]);
+  }, []);
 
   const handleTabPin = useCallback(async (tab) => {
     try {
@@ -125,12 +169,12 @@ export function CoolDeskContainer({
           newPinned.add(tab.id);
         }
         setPinnedTabs(newPinned);
-        await refreshTabs();
+        // Event listener will trigger refresh
       }
     } catch (error) {
       console.error('[CoolDesk] Failed to pin/unpin tab:', error);
     }
-  }, [pinnedTabs, refreshTabs]);
+  }, [pinnedTabs]);
 
   const handleWorkspaceClick = (workspace) => {
     if (expandedWorkspace?.id === workspace.id) {
@@ -285,119 +329,138 @@ export function CoolDeskContainer({
               flexDirection: 'column',
               gap: '12px'
             }}>
-              {/* Pinned Tabs Section */}
-              {tabs.filter(tab => tab.pinned).length > 0 && (
-                <div>
-                  <h3 style={{
-                    fontSize: 'var(--font-sm, 12px)',
-                    fontWeight: 600,
-                    color: 'var(--text-secondary, #94A3B8)',
-                    marginBottom: '8px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em'
-                  }}>
-                    Pinned ({tabs.filter(tab => tab.pinned).length})
-                  </h3>
-                  <div className="tabs-grid">
-                    {tabs.filter(tab => tab.pinned).map(tab => (
-                      <TabCard
-                        key={tab.id}
-                        tab={tab}
-                        onClick={handleTabClick}
-                        onClose={handleTabClose}
-                        onPin={handleTabPin}
-                        isPinned={true}
-                        isActive={tab.active}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* All Tabs Section */}
-              <div>
-                <h3 style={{
-                  fontSize: 'var(--font-sm, 12px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
+              {tabsLoading ? (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '40px 20px',
+                  color: 'var(--text-secondary, #64748B)',
+                  textAlign: 'center',
+                  height: '100%'
                 }}>
-                  All Tabs ({tabs.length})
-                </h3>
-                {tabs.length > 0 ? (
-                  <div className="tabs-grid">
-                    {tabs.map(tab => (
-                      <TabCard
-                        key={tab.id}
-                        tab={tab}
-                        onClick={handleTabClick}
-                        onClose={handleTabClose}
-                        onPin={handleTabPin}
-                        isPinned={tab.pinned}
-                        isActive={tab.active}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '12px',
-                    padding: '40px 20px',
-                    color: 'var(--text-secondary, #64748B)',
-                    textAlign: 'center',
-                    background: 'var(--glass-bg, rgba(30, 41, 59, 0.95))',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(59, 130, 246, 0.2)'
-                  }}>
-                    <div style={{ fontSize: '48px', opacity: 0.3 }}>📑</div>
+                  <FontAwesomeIcon icon={faSync} spin size="2x" style={{ opacity: 0.5 }} />
+                  <div style={{ fontSize: 'var(--font-sm, 12px)' }}>Loading tabs...</div>
+                </div>
+              ) : (
+                <>
+                  {/* Pinned Tabs Section */}
+                  {tabs.filter(tab => tab.pinned).length > 0 && (
                     <div>
-                      <div style={{
-                        fontSize: 'var(--font-lg, 14px)',
-                        fontWeight: 500,
-                        marginBottom: '8px'
+                      <h3 style={{
+                        fontSize: 'var(--font-sm, 12px)',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary, #94A3B8)',
+                        marginBottom: '8px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
                       }}>
-                        No Tabs Found
-                      </div>
-                      <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
-                        Open some browser tabs to see them here
+                        Pinned ({tabs.filter(tab => tab.pinned).length})
+                      </h3>
+                      <div className="tabs-grid">
+                        {tabs.filter(tab => tab.pinned).map(tab => (
+                          <TabCard
+                            key={tab.id}
+                            tab={tab}
+                            onClick={handleTabClick}
+                            onClose={handleTabClose}
+                            onPin={handleTabPin}
+                            isPinned={true}
+                            isActive={tab.active}
+                          />
+                        ))}
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
 
-              {/* Grouped by Domain Section */}
-              {Object.keys(tabsByDomain()).length > 1 && (
-                <div>
-                  <h3 style={{
-                    fontSize: 'var(--font-sm, 12px)',
-                    fontWeight: 600,
-                    color: 'var(--text-secondary, #94A3B8)',
-                    marginBottom: '8px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em'
-                  }}>
-                    Grouped by Domain
-                  </h3>
-                  <div className="tabs-grid">
-                    {Object.entries(tabsByDomain())
-                      .filter(([_, domainTabs]) => domainTabs.length > 1)
-                      .map(([domain, domainTabs]) => (
-                        <TabGroupCard
-                          key={domain}
-                          domain={domain}
-                          tabs={domainTabs}
-                          onClick={() => setExpandedDomain(expandedDomain === domain ? null : domain)}
-                          isExpanded={expandedDomain === domain}
-                        />
-                      ))}
+                  {/* All Tabs Section */}
+                  <div>
+                    <h3 style={{
+                      fontSize: 'var(--font-sm, 12px)',
+                      fontWeight: 600,
+                      color: 'var(--text-secondary, #94A3B8)',
+                      marginBottom: '8px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      All Tabs ({tabs.length})
+                    </h3>
+                    {tabs.length > 0 ? (
+                      <div className="tabs-grid">
+                        {tabs.map(tab => (
+                          <TabCard
+                            key={tab.id}
+                            tab={tab}
+                            onClick={handleTabClick}
+                            onClose={handleTabClose}
+                            onPin={handleTabPin}
+                            isPinned={tab.pinned}
+                            isActive={tab.active}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '12px',
+                        padding: '40px 20px',
+                        color: 'var(--text-secondary, #64748B)',
+                        textAlign: 'center',
+                        background: 'var(--glass-bg, rgba(30, 41, 59, 0.95))',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(59, 130, 246, 0.2)'
+                      }}>
+                        <div style={{ fontSize: '48px', opacity: 0.3 }}>📑</div>
+                        <div>
+                          <div style={{
+                            fontSize: 'var(--font-lg, 14px)',
+                            fontWeight: 500,
+                            marginBottom: '8px'
+                          }}>
+                            No Tabs Found
+                          </div>
+                          <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
+                            Open some browser tabs to see them here
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+
+                  {/* Grouped by Domain Section */}
+                  {Object.keys(tabsByDomain()).length > 1 && (
+                    <div>
+                      <h3 style={{
+                        fontSize: 'var(--font-sm, 12px)',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary, #94A3B8)',
+                        marginBottom: '8px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
+                      }}>
+                        Grouped by Domain
+                      </h3>
+                      <div className="tabs-grid">
+                        {Object.entries(tabsByDomain())
+                          .filter(([_, domainTabs]) => domainTabs.length > 1)
+                          .map(([domain, domainTabs]) => (
+                            <TabGroupCard
+                              key={domain}
+                              domain={domain}
+                              tabs={domainTabs}
+                              onClick={() => setExpandedDomain(expandedDomain === domain ? null : domain)}
+                              isExpanded={expandedDomain === domain}
+                            />
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

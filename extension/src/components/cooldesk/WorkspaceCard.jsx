@@ -1,4 +1,20 @@
-import { faExternalLinkAlt, faFolder, faFolderOpen, faLink, faPlus } from '@fortawesome/free-solid-svg-icons';
+import {
+  faChartLine,
+  faExternalLinkAlt,
+  faFilm,
+  faFolder,
+  faFolderOpen,
+  faFutbol,
+  faGraduationCap,
+  faHashtag,
+  faHeartPulse,
+  faLink,
+  faPlane,
+  faPlus,
+  faShoppingBag,
+  faTools,
+  faUtensils
+} from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { getFaviconUrl } from '../../utils.js';
 
@@ -10,13 +26,31 @@ const ICON_MAP = {
   link: faLink,
 };
 
+const CATEGORY_ICONS = {
+  finance: faChartLine,
+  health: faHeartPulse,
+  education: faGraduationCap,
+  sports: faFutbol,
+  social: faHashtag,
+  travel: faPlane,
+  entertainment: faFilm,
+  shopping: faShoppingBag,
+  food: faUtensils,
+  utilities: faTools
+};
+
 export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false }) {
   if (!workspace) return null;
 
   const { name, urls = [], description, icon = 'folder' } = workspace;
   const urlCount = urls.length;
   const colorClass = ICON_COLORS[Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
-  const iconToUse = isActive ? faFolderOpen : (ICON_MAP[icon] || faFolder);
+
+  const normalizedName = name.toLowerCase();
+  // Check if name matches a category (exact match or contained) - simple exact for now based on appstore keys
+  const categoryIcon = CATEGORY_ICONS[normalizedName];
+
+  const iconToUse = categoryIcon || (isActive ? faFolderOpen : (ICON_MAP[icon] || faFolder));
 
   const handleCardClick = () => {
     onClick?.(workspace);

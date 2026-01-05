@@ -1,4 +1,4 @@
-import { faArrowRight, faComments, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
@@ -44,7 +44,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
       });
 
       const allChats = response?.data || response || [];
-      setChats(Array.isArray(allChats) ? allChats.slice(0, 10) : []);
+      setChats(Array.isArray(allChats) ? allChats.slice(0, 40) : []);
     } catch (error) {
       console.error('[ChatContext] Error loading chats:', error);
       setChats([]);
@@ -90,7 +90,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
   return (
     <div className="chat-context">
       {/* Header */}
-      <div className="chat-context-header">
+      {/* <div className="chat-context-header">
         <div className="header-left">
           <FontAwesomeIcon icon={faComments} className="header-icon" />
           <h2 className="header-title">AI Chats</h2>
@@ -100,7 +100,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
         <button className="icon-btn" onClick={loadChats} title="Refresh">
           <FontAwesomeIcon icon={faSync} />
         </button>
-      </div>
+      </div> */}
 
       {/* Workspace-aware prompts */}
       {/* <div className="chat-prompts">
