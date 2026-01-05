@@ -1444,3 +1444,125 @@
   color: var(--text-muted, #9CA3AF);
   font-weight: 400;
 }
+
+/* Folder Input */
+.note-meta-inputs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.folder-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--glass-bg, rgba(243, 244, 246, 0.5));
+  border-radius: 6px;
+  border: 1px solid transparent;
+  width: fit-content;
+  transition: all 0.2s ease;
+}
+
+.folder-input-wrapper:focus-within {
+  background: var(--background-primary, #FFFFFF);
+  border-color: var(--accent-color, #8B5CF6);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+}
+
+.folder-input-icon {
+  color: var(--text-muted, #9CA3AF);
+  font-size: 12px;
+}
+
+.note-folder-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: var(--text-secondary, #4B5563);
+  font-weight: 500;
+  width: 120px;
+  font-family: inherit;
+}
+
+.note-folder-input::placeholder {
+  color: var(--text-muted, #9CA3AF);
+}
+
+/* Folder List in Sidebar */
+.notes-folder-list {
+  padding: 12px 12px 4px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-color, #E5E7EB);
+  margin-bottom: 4px;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-secondary, #6B7280);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.folder-item:hover {
+  background: var(--background-secondary, rgba(243, 244, 246, 0.6));
+  color: var(--text-primary, #111827);
+}
+
+.folder-item.active {
+  background: var(--accent-color, rgba(139, 92, 246, 0.1));
+  color: var(--accent-color, #8B5CF6);
+}
+
+.folder-icon {
+  font-size: 14px;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.folder-item.active .folder-icon {
+  opacity: 1;
+}
+
+.folder-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-count {
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 10px;
+  color: var(--text-muted, #9CA3AF);
+}
+
+/* Note Card Folder Badge */
+.note-card-folder {
+  font-size: 10px;
+  background: var(--background-secondary, #F3F4F6);
+  color: var(--text-secondary, #6B7280);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

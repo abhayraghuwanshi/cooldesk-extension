@@ -4,6 +4,8 @@ import {
   faClock,
   faCompress,
   faExpand,
+  faFolder,
+  faFolderOpen,
   faItalic,
   faListUl,
   faMicrophone,
@@ -21,6 +23,8 @@ export function NotesCanvas({ workspaceId }) {
   const [activeNote, setActiveNote] = useState(null);
   const [noteContent, setNoteContent] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
+  const [noteFolder, setNoteFolder] = useState('');
+  const [activeFolder, setActiveFolder] = useState('All Notes');
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved');
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,6 +52,14 @@ export function NotesCanvas({ workspaceId }) {
     loadNotes();
   }, [loadNotes]);
 
+  // Derived folders list
+  const folders = ['All Notes', ...new Set(notes.map(n => n.folder).filter(Boolean).filter(f => f.trim() !== ''))].sort();
+
+  // Filtered notes
+  const filteredNotes = notes
+    .filter(note => activeFolder === 'All Notes' || note.folder === activeFolder)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+
   // Auto-save note
   const saveNote = useCallback(async (content, noteId = null) => {
     // Avoid saving empty new notes
@@ -56,10 +68,15 @@ export function NotesCanvas({ workspaceId }) {
     try {
       setAutoSaveStatus('saving');
 
+      // Use refs to get latest state inside callback/timeout
+      const currentTitle = titleRef.current || extractTitle(content);
+      const currentFolder = folderRef.current;
+
       const note = {
         id: noteId || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        text: content, // We store HTML in 'text' field for now, or should we use a new field? 'text' is fine if we render it safely.
-        title: titleRef.current || extractTitle(content),
+        text: content,
+        title: currentTitle,
+        folder: currentFolder,
         type: 'richtext',
         createdAt: noteId ? (notes.find(n => n.id === noteId)?.createdAt || Date.now()) : Date.now(),
         updatedAt: Date.now()
@@ -72,9 +89,6 @@ export function NotesCanvas({ workspaceId }) {
 
       // If it was a new note, update activeNote to having the ID
       if (!noteId && activeNote?.id !== note.id) {
-        // This is tricky because loadNotes replaces the array reference.
-        // We'll rely on loadNotes updating the list, and if we are editing, we stay on it?
-        // Actually, if we just created a new ID, we should set it.
         setActiveNote(note);
       }
 
@@ -84,22 +98,33 @@ export function NotesCanvas({ workspaceId }) {
       console.error('[NotesCanvas] Error saving note:', error);
       setAutoSaveStatus('error');
     }
-  }, [notes, loadNotes, activeNote]); // We use titleRef, so no need to depend on noteTitle directly if we rely on Ref
+  }, [notes, loadNotes, activeNote]);
 
   const titleRef = useRef('');
+  const folderRef = useRef('');
+
   useEffect(() => { titleRef.current = noteTitle; }, [noteTitle]);
+  useEffect(() => { folderRef.current = noteFolder; }, [noteFolder]);
 
   const handleTitleChange = (e) => {
     const newTitle = e.target.value;
     setNoteTitle(newTitle);
-    setAutoSaveStatus('unsaved');
+    triggerAutoSave();
+  };
 
+  const handleFolderChange = (e) => {
+    const newFolder = e.target.value;
+    setNoteFolder(newFolder);
+    triggerAutoSave();
+  };
+
+  const triggerAutoSave = () => {
+    setAutoSaveStatus('unsaved');
     clearTimeout(autoSaveTimeout.current);
     autoSaveTimeout.current = setTimeout(() => {
-      // saveNote uses titleRef, so it will see the updated title even from stale closure
       saveNote(noteContent, activeNote?.id);
     }, 1000);
-  };
+  }
 
   const extractTitle = (html) => {
     const temp = document.createElement('div');
@@ -112,12 +137,7 @@ export function NotesCanvas({ workspaceId }) {
   const handleContentChange = (e) => {
     const html = e.currentTarget.innerHTML;
     setNoteContent(html);
-    setAutoSaveStatus('unsaved');
-
-    clearTimeout(autoSaveTimeout.current);
-    autoSaveTimeout.current = setTimeout(() => {
-      saveNote(html, activeNote?.id);
-    }, 1000);
+    triggerAutoSave();
   };
 
 
@@ -129,14 +149,10 @@ export function NotesCanvas({ workspaceId }) {
   useEffect(() => {
     if (editorRef.current) {
       if (activeNote) {
-        // If we are currently editing (focused) and this is just an ID change (e.g. New -> Saved)
-        // or a background update, we should trust the local editor state to avoid cursor jumps.
-        // We only forcefully update if we are NOT focused (e.g. clicked a different note in sidebar).
         if (document.activeElement === editorRef.current) {
           return;
         }
 
-        // Use trimmed comparison to avoid refreshing just for whitespace
         const currentHTML = editorRef.current.innerHTML || '';
         const newText = activeNote.text || '';
 
@@ -180,7 +196,6 @@ export function NotesCanvas({ workspaceId }) {
     }
 
     try {
-      // proper permission request like SimpleNotes
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
@@ -210,7 +225,6 @@ export function NotesCanvas({ workspaceId }) {
       recognition.onresult = (event) => {
         let finalTranscript = '';
 
-        // Get the latest results
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
             finalTranscript += event.results[i][0].transcript;
@@ -218,13 +232,8 @@ export function NotesCanvas({ workspaceId }) {
         }
 
         if (finalTranscript && editorRef.current) {
-          // Ensure editor has focus before inserting
           editorRef.current.focus();
-
-          // Let's use execCommand to insert text at cursor position
           document.execCommand('insertText', false, finalTranscript + ' ');
-
-          // Trigger save
           handleContentChange({ currentTarget: editorRef.current });
         }
       };
@@ -250,7 +259,6 @@ export function NotesCanvas({ workspaceId }) {
 
   // Editor Commands
   const execCommand = (command, value = null) => {
-    // Prevent focus loss is handled by onMouseDown preventDefault on buttons
     document.execCommand(command, false, value);
     editorRef.current?.focus();
   };
@@ -281,6 +289,7 @@ export function NotesCanvas({ workspaceId }) {
     setActiveNote(note);
     setNoteContent(note.text || '');
     setNoteTitle(note.title || '');
+    setNoteFolder(note.folder || '');
     setAutoSaveStatus('idle');
     setIsEditing(true);
   };
@@ -290,6 +299,8 @@ export function NotesCanvas({ workspaceId }) {
     setActiveNote(null);
     setNoteContent('');
     setNoteTitle('');
+    // If we are in a specific folder, default to that folder
+    setNoteFolder(activeFolder === 'All Notes' ? '' : activeFolder);
     setAutoSaveStatus('idle');
     setIsEditing(true);
     setTimeout(() => {
@@ -365,14 +376,38 @@ export function NotesCanvas({ workspaceId }) {
         {/* Sidebar */}
         {showSidebar && !isFullScreen && (
           <div className="notes-sidebar-v2">
+
+            {/* Folder List */}
+            <div className="notes-folder-list">
+              <button
+                className={`folder-item ${activeFolder === 'All Notes' ? 'active' : ''}`}
+                onClick={() => setActiveFolder('All Notes')}
+              >
+                <FontAwesomeIcon icon={activeFolder === 'All Notes' ? faFolderOpen : faFolder} className="folder-icon" />
+                <span className="folder-name">All Notes</span>
+                <span className="folder-count">{notes.length}</span>
+              </button>
+              {folders.filter(f => f !== 'All Notes').map(folder => (
+                <button
+                  key={folder}
+                  className={`folder-item ${activeFolder === folder ? 'active' : ''}`}
+                  onClick={() => setActiveFolder(folder)}
+                >
+                  <FontAwesomeIcon icon={activeFolder === folder ? faFolderOpen : faFolder} className="folder-icon" />
+                  <span className="folder-name">{folder}</span>
+                  <span className="folder-count">{notes.filter(n => n.folder === folder).length}</span>
+                </button>
+              ))}
+            </div>
+
             <div className="notes-list-v2">
-              {notes.length === 0 ? (
+              {filteredNotes.length === 0 ? (
                 <div className="notes-empty-state">
-                  <p className="empty-text-v2">No notes yet</p>
+                  <p className="empty-text-v2">No notes here</p>
                   <p className="empty-hint-v2">Click + to create one</p>
                 </div>
               ) : (
-                notes.map((note) => (
+                filteredNotes.map((note) => (
                   <div
                     key={note.id}
                     className={`note-card-v2 ${activeNote?.id === note.id ? 'active' : ''}`}
@@ -392,6 +427,7 @@ export function NotesCanvas({ workspaceId }) {
                         <FontAwesomeIcon icon={faClock} />
                         {new Date(note.updatedAt || note.createdAt).toLocaleDateString()}
                       </span>
+                      {note.folder && <span className="note-card-folder">{note.folder}</span>}
                       <button
                         className="note-card-delete"
                         onClick={(e) => {
@@ -415,6 +451,22 @@ export function NotesCanvas({ workspaceId }) {
             <>
               {/* Title Input */}
               <div className="note-title-container">
+                <div className="note-meta-inputs">
+                  <div className="folder-input-wrapper">
+                    <FontAwesomeIcon icon={faFolder} className="folder-input-icon" />
+                    <input
+                      type="text"
+                      placeholder="Folder..."
+                      value={noteFolder}
+                      onChange={handleFolderChange}
+                      className="note-folder-input"
+                      list="existing-folders"
+                    />
+                    <datalist id="existing-folders">
+                      {folders.filter(f => f !== 'All Notes').map(f => <option key={f} value={f} />)}
+                    </datalist>
+                  </div>
+                </div>
                 <input
                   type="text"
                   placeholder="Note Title"

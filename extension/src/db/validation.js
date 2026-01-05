@@ -130,6 +130,10 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.MAX_LENGTH]: 50000 // 50KB limit
         },
+        folder: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 50
+        },
         // Current fields used by NotesSection
         text: {
             [ValidationRules.TYPE]: 'string',
