@@ -12,9 +12,9 @@ import {
   faTriangleExclamation,
   faUndo
 } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css'; // MUST BE LAST to override theme backgrounds
+import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
 import { ItemGrid } from './components/ItemGrid';
 import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
 import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
@@ -22,11 +22,10 @@ import { SettingsModal } from './components/popups/SettingsModal';
 import { ProjectGrid } from './components/ProjectGrid';
 import WorkspacePillList from './components/WorkspacePillList.jsx';
 import './search.css';
+import './styles/bento-layout.css';
 import './styles/components.css';
 import './styles/theme.css';
 import './styles/themes/components-vars.css';
-import './styles/bento-layout.css';
-import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
 
 // Add icons to the library
 library.add(
@@ -685,9 +684,21 @@ export default function App() {
     if (!name || typeof name !== 'string') return;
     setPinnedWorkspaces((prev) => {
       const exists = prev.includes(name);
-      const next = exists ? prev.filter(n => n !== name) : [...prev, name];
-      savePinnedWorkspaces(next);
-      return next;
+      if (exists) {
+        // Unpin: allow
+        const next = prev.filter(n => n !== name);
+        savePinnedWorkspaces(next);
+        return next;
+      } else {
+        // Pin: enforce max 2
+        // FIFO: remove first (oldest) if we have 2 or more
+        let next = [...prev, name];
+        if (next.length > 2) {
+          next = next.slice(next.length - 2); // Keep last 2 (newest)
+        }
+        savePinnedWorkspaces(next);
+        return next;
+      }
     });
   };
 
@@ -1764,6 +1775,8 @@ export default function App() {
         wallpaperEnabled={wallpaperEnabled}
         wallpaperUrl={wallpaperUrl}
         wallpaperOpacity={wallpaperOpacity}
+        pinnedWorkspaces={pinnedWorkspaces}
+        onTogglePin={togglePinWorkspace}
       />
 
       {/* Modals */}

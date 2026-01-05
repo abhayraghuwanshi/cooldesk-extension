@@ -198,7 +198,27 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.URL]: true,
             [ValidationRules.MAX_LENGTH]: 2000
         },
+        // Content/Text fields
         content: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 10000
+        },
+        text: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 50000
+        },
+        type: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.ENUM]: ['text', 'voice', 'voice-text', 'screenshot', 'todo', 'highlight']
+        },
+        completed: {
+            [ValidationRules.TYPE]: 'boolean'
+        },
+        selectedText: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 10000
+        },
+        description: {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.MAX_LENGTH]: 10000
         },

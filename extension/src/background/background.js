@@ -5,30 +5,30 @@
 if (typeof document === 'undefined') {
   // Create a mock DOM element with common methods
   const createMockElement = () => ({
-    appendChild: () => {},
-    removeChild: () => {},
-    insertBefore: () => {},
-    replaceChild: () => {},
+    appendChild: () => { },
+    removeChild: () => { },
+    insertBefore: () => { },
+    replaceChild: () => { },
     cloneNode: () => createMockElement(),
     getAttribute: () => null,
-    setAttribute: () => {},
-    removeAttribute: () => {},
+    setAttribute: () => { },
+    removeAttribute: () => { },
     hasAttribute: () => false,
     getElementsByTagName: () => [],
     getElementsByClassName: () => [],
     querySelector: () => null,
     querySelectorAll: () => [],
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: () => { },
+    removeEventListener: () => { },
     dispatchEvent: () => true,
     innerHTML: '',
     textContent: '',
     style: {},
     classList: {
-      add: () => {},
-      remove: () => {},
+      add: () => { },
+      remove: () => { },
       contains: () => false,
-      toggle: () => {}
+      toggle: () => { }
     },
     dataset: {},
     children: [],
@@ -51,8 +51,8 @@ if (typeof document === 'undefined') {
     getElementsByName: () => [],
     querySelector: () => null,
     querySelectorAll: () => [],
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: () => { },
+    removeEventListener: () => { },
     dispatchEvent: () => true,
     body: createMockElement(),
     head: createMockElement(),
@@ -100,16 +100,16 @@ self.addEventListener('error', (event) => {
 // Offscreen auth has been deprecated in favor of chrome.identity-based login.
 
 // Database imports (static imports required for service worker compatibility)
-import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats, getUIState, saveUIState, listWorkspaces, listWorkspaceUrls } from '../db/index.js';
+import { cleanupOldTimeSeriesData, getTimeSeriesStorageStats, getUIState, listWorkspaces, listWorkspaceUrls, saveUIState } from '../db/index.js';
 import { DB_CONFIG, getUnifiedDB } from '../db/unified-db.js';
 import { storageGetWithTTL } from '../services/extensionApi.js';
 import { populateAndStore } from './data.js';
 
 // ML imports (static imports required for service worker compatibility)
-import { mlEngine } from '../ml/index.js';
-import { ModelTrainer } from '../ml/training/trainer.js';
-import { AutoSaveModel } from '../ml/models/autoSaveModel.js';
 import { FeatureExtractor } from '../ml/features/featureExtractor.js';
+import { mlEngine } from '../ml/index.js';
+import { AutoSaveModel } from '../ml/models/autoSaveModel.js';
+import { ModelTrainer } from '../ml/training/trainer.js';
 
 // Modular background pieces - these initialize their own message handlers
 // NOTE: realTimeCategorizor is lazy-loaded to avoid window reference errors in service worker
@@ -121,9 +121,9 @@ import {
   initializeActivity
 } from './activity.js';
 import { initializeData } from './data.js';
+import { initializeProjectContext } from './projectContext.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
-import { initializeProjectContext } from './projectContext.js';
 
 
 
@@ -1128,8 +1128,8 @@ async function main() {
                   reason: probability > 0.8 ?
                     `High confidence - similar to pages you frequently save` :
                     probability > 0.7 ?
-                    `Good match based on your browsing patterns` :
-                    `Might interest you based on recent activity`
+                      `Good match based on your browsing patterns` :
+                      `Might interest you based on recent activity`
                 });
               }
             } catch (error) {
@@ -2303,6 +2303,22 @@ async function main() {
   }, 24 * 60 * 60 * 1000); // 24 hours
 
   // (Legacy devlink-ai migration code removed after successful migration)
+
+  // Listen for global commands (shortcuts)
+  chrome.commands.onCommand.addListener(async (command) => {
+    console.log('[Background] Command received:', command);
+    if (command === 'open-spotlight') {
+      try {
+        const window = await chrome.windows.getLastFocused();
+        if (chrome.sidePanel && chrome.sidePanel.open) {
+          await chrome.sidePanel.open({ windowId: window.id });
+          console.log('[Background] Opened side panel via shortcut');
+        }
+      } catch (error) {
+        console.error('[Background] Failed to open side panel via command:', error);
+      }
+    }
+  });
 
 }
 

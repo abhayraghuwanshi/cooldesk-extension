@@ -12,6 +12,7 @@ import {
   faPlane,
   faPlus,
   faShoppingBag,
+  faThumbtack,
   faTools,
   faUtensils
 } from '@fortawesome/free-solid-svg-icons';
@@ -39,17 +40,15 @@ const CATEGORY_ICONS = {
   utilities: faTools
 };
 
-export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false }) {
+export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin }) {
   if (!workspace) return null;
 
   const { name, urls = [], description, icon = 'folder' } = workspace;
   const urlCount = urls.length;
+
   const colorClass = ICON_COLORS[Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
-
   const normalizedName = name.toLowerCase();
-  // Check if name matches a category (exact match or contained) - simple exact for now based on appstore keys
   const categoryIcon = CATEGORY_ICONS[normalizedName];
-
   const iconToUse = categoryIcon || (isActive ? faFolderOpen : (ICON_MAP[icon] || faFolder));
 
   const handleCardClick = () => {
@@ -64,8 +63,8 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
     <div
       className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''}`}
       onClick={handleCardClick}
+      style={{ position: 'relative' }} // ensure positioning for pin
     >
-
       <div className="workspace-card-header">
         <div className={`workspace-icon ${colorClass}`}>
           <FontAwesomeIcon icon={iconToUse} />
@@ -74,6 +73,43 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
           <div className="workspace-name">{name}</div>
           <div className="workspace-count">{urlCount} URL{urlCount !== 1 ? 's' : ''}</div>
         </div>
+
+        {/* Pin Button */}
+        {onPin && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPin(workspace);
+            }}
+            className={`workspace-pin-btn ${isPinned ? 'pinned' : ''}`}
+            title={isPinned ? "Unpin Workspace" : "Pin Workspace"}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: isPinned ? '#FDE047' : 'rgba(148, 163, 184, 0.4)',
+              cursor: 'pointer',
+              padding: '8px',
+              marginLeft: 'auto',
+              transition: 'all 0.2s ease',
+              opacity: isPinned ? 1 : 0.6,
+              fontSize: '14px'
+            }}
+            onMouseEnter={(e) => {
+              if (!isPinned) {
+                e.currentTarget.style.color = '#FDE047';
+                e.currentTarget.style.opacity = '1';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isPinned) {
+                e.currentTarget.style.color = 'rgba(148, 163, 184, 0.4)';
+                e.currentTarget.style.opacity = '0.6';
+              }
+            }}
+          >
+            <FontAwesomeIcon icon={faThumbtack} transform={isPinned ? "" : { rotate: 45 }} />
+          </button>
+        )}
       </div>
 
       {displayLinks.length > 0 && (

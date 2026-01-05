@@ -10,10 +10,17 @@ export function OverviewDashboard({
     onWorkspaceClick,
     activeWorkspaceId,
     expandedWorkspaceId,
-    onAddNote
+    onAddNote,
+    pinnedWorkspaces = [] // New prop
 }) {
-    // Get first 2 workspaces
-    const displayedWorkspaces = savedWorkspaces.slice(0, 2);
+    // Prioritize pinned workspaces, then recent ones
+    // Max 2 workspaces shown
+    const pinned = savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name));
+    const unpinned = savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name));
+
+    // Sort logic? Usually just recent order from savedWorkspaces is fine.
+    // If user pins something, show it first.
+    const displayedWorkspaces = [...pinned, ...unpinned].slice(0, 2);
 
     return (
         <div style={{

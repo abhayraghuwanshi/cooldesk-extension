@@ -8,7 +8,9 @@ export function WorkspaceList({
     savedWorkspaces = [],
     onWorkspaceClick,
     activeWorkspaceId,
-    expandedWorkspaceId
+    expandedWorkspaceId,
+    pinnedWorkspaces = [], // New prop
+    onTogglePin            // New prop
 }) {
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
 
@@ -97,6 +99,8 @@ export function WorkspaceList({
                                 isExpanded={expandedWorkspaceId === workspace.id}
                                 isActive={activeWorkspaceId === workspace.id}
                                 compact={viewMode === 'list'}
+                                isPinned={pinnedWorkspaces.includes(workspace.name)}
+                                onPin={() => onTogglePin && onTogglePin(workspace.name)}
                             />
                         ))}
                     </div>

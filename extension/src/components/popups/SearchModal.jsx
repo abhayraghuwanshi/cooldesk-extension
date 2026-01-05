@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import appstoreData from '../../data/appstore.json';
 import { getUIState, listNotes, listWorkspaces, saveUIState } from '../../db/index.js';
 import { getHostTabs } from '../../services/extensionApi';
 import { getFaviconUrl } from '../../utils.js';
 import { fuzzySearch } from '../../utils/searchUtils.js';
-import appstoreData from '../../data/appstore.json';
 
 const SearchModalComponent = function SearchModal({
     isOpen,
@@ -415,11 +415,60 @@ const SearchModalComponent = function SearchModal({
 
         const lower = q.toLowerCase();
 
+        // MATH CALCULATION
+        let mathResult = null;
+        try {
+            // Check if query is a math expression (allow 0-9, +, -, *, /, (, ), ., and spaces)
+            // Must contain at least one operator to be worth calculating
+            if (/^[0-9\+\-\*\/\(\)\.\s]+$/.test(q) && /[\+\-\*\/]/.test(q)) {
+                // Use Function constructor for safer evaluation than eval
+                const safeQuery = q.replace(/[^-()\d/*+.]/g, '');
+                const result = new Function('return ' + safeQuery)();
+                if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
+                    mathResult = result;
+                }
+            }
+        } catch (e) {
+            // Ignore calc errors
+        }
+
+        // QUICK ACTIONS
+        const actions = [];
+        if ('new note'.includes(lower) || 'create note'.includes(lower)) {
+            actions.push({
+                type: 'action',
+                action: 'new-note',
+                title: 'New Note',
+                subtitle: 'Create a new note',
+                icon: 'faPen'
+            });
+        }
+        if ('new workspace'.includes(lower) || 'create workspace'.includes(lower)) {
+            actions.push({
+                type: 'action',
+                action: 'new-workspace',
+                title: 'New Workspace',
+                subtitle: 'Create a new workspace',
+                icon: 'faPlus'
+            });
+        }
+
         const contentItems = Array.isArray(dataRef.current.list) ? dataRef.current.list : [];
         const contentResults = fuzzySearch(contentItems, q, ['title', 'url']);
         const tabMatches = contentResults.filter(item => item?.type === 'tab');
         const otherMatches = contentResults.filter(item => item?.type !== 'tab');
-        const contentOut = [...tabMatches, ...otherMatches].slice(0, 12);
+
+        // Add math result and actions to content
+        let contentOut = [...actions, ...tabMatches, ...otherMatches].slice(0, 12);
+        if (mathResult !== null) {
+            contentOut.unshift({
+                type: 'math',
+                title: `= ${mathResult}`,
+                subtitle: 'Press Enter to Copy',
+                value: mathResult,
+                icon: 'faCalculator'
+            });
+        }
 
         const notes = Array.isArray(notesRef.current.notes) ? notesRef.current.notes : [];
         const notesOut = notes.filter((note) => {
@@ -483,357 +532,372 @@ const SearchModalComponent = function SearchModal({
         setAppStoreMatches(appStoreOut);
     }, [isOpen, search, appStoreCatalog]);
 
-const onKeyDown = (e) => {
-    const lower = (search || '').toLowerCase();
-    const recentFiltered = lower ? recent.filter(r => r.toLowerCase().includes(lower)) : recent;
+    const onKeyDown = (e) => {
+        const lower = (search || '').toLowerCase();
+        const recentFiltered = lower ? recent.filter(r => r.toLowerCase().includes(lower)) : recent;
 
-    // Build all navigable items in order
-    const allItems = [];
+        // Build all navigable items in order
+        const allItems = [];
 
-    // Add main search option if there's a query
-    if (search?.trim()) {
-        allItems.push({ type: 'search', value: search.trim() });
-    }
+        // Add main search option if there's a query
+        if (search?.trim()) {
+            allItems.push({ type: 'search', value: search.trim() });
+        }
 
-    // Add search engines if there's a query
-    if (search?.trim()) {
-        engines.forEach(engine => {
-            allItems.push({ type: 'engine', value: engine.id, engine });
+        // Add search engines if there's a query
+        if (search?.trim()) {
+            engines.forEach(engine => {
+                allItems.push({ type: 'engine', value: engine.id, engine });
+            });
+        }
+
+        // Add recent searches
+        recentFiltered.forEach(item => {
+            allItems.push({ type: 'recent', value: item });
         });
-    }
 
-    // Add recent searches
-    recentFiltered.forEach(item => {
-        allItems.push({ type: 'recent', value: item });
-    });
+        // Add content matches
+        contentMatches.forEach(item => {
+            allItems.push({ type: 'content', value: item });
+        });
 
-    // Add content matches
-    contentMatches.forEach(item => {
-        allItems.push({ type: 'content', value: item });
-    });
+        // Add notes matches
+        notesMatches.forEach(item => {
+            allItems.push({ type: 'note', value: item });
+        });
 
-    // Add notes matches
-    notesMatches.forEach(item => {
-        allItems.push({ type: 'note', value: item });
-    });
+        // Add daily notes matches
+        dailyNotesMatches.forEach(item => {
+            allItems.push({ type: 'dailyNote', value: item });
+        });
 
-    // Add daily notes matches
-    dailyNotesMatches.forEach(item => {
-        allItems.push({ type: 'dailyNote', value: item });
-    });
+        // Add workspace matches
+        workspaceMatches.forEach(value => {
+            allItems.push({ type: 'workspace', value });
+        });
 
-    // Add workspace matches
-    workspaceMatches.forEach(value => {
-        allItems.push({ type: 'workspace', value });
-    });
+        // Add app store matches
+        appStoreMatches.forEach(value => {
+            allItems.push({ type: 'appStore', value });
+        });
 
-    // Add app store matches
-    appStoreMatches.forEach(value => {
-        allItems.push({ type: 'appStore', value });
-    });
-
-    if (e.key === 'ArrowDown') {
-        if (allItems.length === 0) return;
-        e.preventDefault();
-        setActiveIndex((i) => (i + 1) % allItems.length);
-    } else if (e.key === 'ArrowUp') {
-        if (allItems.length === 0) return;
-        e.preventDefault();
-        setActiveIndex((i) => (i <= 0 ? allItems.length - 1 : i - 1));
-    } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (activeIndex >= 0 && activeIndex < allItems.length) {
-            const selectedItem = allItems[activeIndex];
-            switch (selectedItem.type) {
-                case 'search':
-                    runSearch(selectedItem.value);
-                    break;
-                case 'engine':
-                    openWithEngine(selectedItem.value, search);
-                    break;
-                case 'recent':
-                    runSearch(selectedItem.value);
-                    break;
-                case 'content':
-                    try {
-                        const item = selectedItem.value;
-                        if (item.type === 'tab' && item.tabId) {
-                            // Focus existing tab
-                            const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
-                            if (hasTabsUpdate) {
-                                chrome.tabs.update(item.tabId, { active: true });
-                                if (item.windowId != null && chrome?.windows?.update) {
-                                    chrome.windows.update(item.windowId, { focused: true });
+        if (e.key === 'ArrowDown') {
+            if (allItems.length === 0) return;
+            e.preventDefault();
+            setActiveIndex((i) => (i + 1) % allItems.length);
+        } else if (e.key === 'ArrowUp') {
+            if (allItems.length === 0) return;
+            e.preventDefault();
+            setActiveIndex((i) => (i <= 0 ? allItems.length - 1 : i - 1));
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (activeIndex >= 0 && activeIndex < allItems.length) {
+                const selectedItem = allItems[activeIndex];
+                switch (selectedItem.type) {
+                    case 'search':
+                        runSearch(selectedItem.value);
+                        break;
+                    case 'engine':
+                        openWithEngine(selectedItem.value, search);
+                        break;
+                    case 'recent':
+                        runSearch(selectedItem.value);
+                        break;
+                    case 'content':
+                        try {
+                            const item = selectedItem.value;
+                            if (item.type === 'tab' && item.tabId) {
+                                // Focus existing tab
+                                const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
+                                if (hasTabsUpdate) {
+                                    chrome.tabs.update(item.tabId, { active: true });
+                                    if (item.windowId != null && chrome?.windows?.update) {
+                                        chrome.windows.update(item.windowId, { focused: true });
+                                    }
+                                } else {
+                                    // Fallback: open URL
+                                    if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
                                 }
                             } else {
-                                // Fallback: open URL
+                                // Open bookmark/history item in new tab
                                 if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
                             }
-                        } else {
-                            // Open bookmark/history item in new tab
-                            if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
+                        } catch { }
+                        onClose();
+                        break;
+                    case 'note':
+                        try {
+                            const note = selectedItem.value;
+                            // Open note URL if available, otherwise focus side panel
+                            if (note.url && chrome?.tabs?.create) {
+                                chrome.tabs.create({ url: note.url });
+                            } else {
+                                // Focus side panel or show note content somehow
+                                console.log('Selected note:', note.title, note.content);
+                            }
+                        } catch { }
+                        onClose();
+                        break;
+                    case 'dailyNote':
+                        try {
+                            const dailyNote = selectedItem.value;
+                            // Open side panel to show daily note for that date
+                            console.log('Selected daily note for date:', dailyNote.date);
+                            // Could potentially open side panel and navigate to that date
+                        } catch { }
+                        onClose();
+                        break;
+                    case 'action':
+                        if (selectedItem.value.action === 'new-note') {
+                            window.dispatchEvent(new CustomEvent('navigateToFace', { detail: 'notes' }));
+                        } else if (selectedItem.value.action === 'new-workspace') {
+                            window.dispatchEvent(new CustomEvent('openWorkspaceCreator'));
                         }
-                    } catch { }
-                    onClose();
-                    break;
-                case 'note':
-                    try {
-                        const note = selectedItem.value;
-                        // Open note URL if available, otherwise focus side panel
-                        if (note.url && chrome?.tabs?.create) {
-                            chrome.tabs.create({ url: note.url });
-                        } else {
-                            // Focus side panel or show note content somehow
-                            console.log('Selected note:', note.title, note.content);
-                        }
-                    } catch { }
-                    onClose();
-                    break;
-                case 'dailyNote':
-                    try {
-                        const dailyNote = selectedItem.value;
-                        // Open side panel to show daily note for that date
-                        console.log('Selected daily note for date:', dailyNote.date);
-                        // Could potentially open side panel and navigate to that date
-                    } catch { }
-                    onClose();
-                    break;
-                case 'workspace':
-                    try {
-                        const workspace = selectedItem.value;
-                        // Open side panel and switch to workspace
-                        console.log('Selected workspace:', workspace.name);
-                        if (openInSidePanel) {
-                            openInSidePanel(workspace.name);
-                        }
-                    } catch { }
-                    onClose();
-                    break;
+                        onClose();
+                        break;
+                    case 'math':
+                        try {
+                            const result = String(selectedItem.value.value);
+                            navigator.clipboard.writeText(result);
+                        } catch { }
+                        onClose();
+                        break;
+                    case 'workspace':
+                        try {
+                            const workspace = selectedItem.value;
+                            // Open side panel and switch to workspace
+                            console.log('Selected workspace:', workspace.name);
+                            if (openInSidePanel) {
+                                openInSidePanel(workspace.name);
+                            }
+                        } catch { }
+                        onClose();
+                        break;
+                }
+            } else if (search?.trim()) {
+                runSearch(search.trim());
             }
-        } else if (search?.trim()) {
-            runSearch(search.trim());
+        } else if (e.key === 'Escape') {
+            onClose();
         }
-    } else if (e.key === 'Escape') {
-        onClose();
-    }
-};
+    };
 
-const filtered = (search ? recent.filter(r => r.toLowerCase().includes((search || '').toLowerCase())) : recent);
+    const filtered = (search ? recent.filter(r => r.toLowerCase().includes((search || '').toLowerCase())) : recent);
 
-if (!isOpen) return null;
+    if (!isOpen) return null;
 
-const modal = (
-    <div
-        style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'color-mix(in srgb, var(--background-primary, #0a0a0f) 85%, transparent)',
-            backdropFilter: 'blur(12px)',
-            zIndex: 2147483647,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
-        }}
-        onClick={(e) => {
-            if (e.target === e.currentTarget) onClose();
-        }}
-    >
-        <div className="ai-card" style={{
-            width: '90vw',
-            maxWidth: '1200px',
-            height: '70vh',
-            background: 'linear-gradient(180deg, color-mix(in srgb, var(--background-primary, #121218) 94%, transparent) 0%, color-mix(in srgb, var(--background-secondary, #1f2937) 96%, transparent) 100%)',
-            borderRadius: '16px',
-            overflow: 'hidden',
-            border: '1px solid var(--border-primary)',
-            boxShadow: 'var(--shadow-xl, 0 20px 40px rgba(0, 0, 0, 0.4))',
-            display: 'flex',
-            flexDirection: 'column'
-        }}>
-            {/* Search Input */}
-            <div style={{
-                padding: '20px',
-                borderBottom: '1px solid var(--border-primary)',
+    const modal = (
+        <div
+            style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'color-mix(in srgb, var(--background-primary, #0a0a0f) 85%, transparent)',
+                backdropFilter: 'blur(12px)',
+                zIndex: 2147483647,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '16px',
-                background: 'var(--background-primary, #121218)'
-            }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--text-secondary)">
-                    <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-                </svg>
-                <input
-                    ref={inputRef}
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setActiveIndex(-1); }}
-                    onKeyDown={onKeyDown}
-                    type="text"
-                    placeholder="Almighty Search "
-                    style={{
-                        flex: 1,
-                        background: 'transparent',
-                        border: 'transparent',
-                        outline: 'none',
-                        fontSize: '18px',
-                        color: 'var(--text)',
-                        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-                        fontWeight: '400'
-                    }}
-                />
-                <button
-                    onClick={onClose}
-                    style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        padding: '4px',
-                        borderRadius: '4px',
-                        fontSize: '14px',
-                        fontWeight: '500',
-                        transition: 'color 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => e.target.style.color = 'var(--text-secondary)'}
-                    onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}
-                >
-                    ESC
-                </button>
-            </div>
-
-            {/* Search Results - Two Column Layout */}
-            <div style={{
-                flex: 1,
+                justifyContent: 'center',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif'
+            }}
+            onClick={(e) => {
+                if (e.target === e.currentTarget) onClose();
+            }}
+        >
+            <div className="ai-card" style={{
+                width: '90vw',
+                maxWidth: '1200px',
+                height: '70vh',
+                background: 'linear-gradient(180deg, color-mix(in srgb, var(--background-primary, #121218) 94%, transparent) 0%, color-mix(in srgb, var(--background-secondary, #1f2937) 96%, transparent) 100%)',
+                borderRadius: '16px',
+                overflow: 'hidden',
+                border: '1px solid var(--border-primary)',
+                boxShadow: 'var(--shadow-xl, 0 20px 40px rgba(0, 0, 0, 0.4))',
                 display: 'flex',
-                minHeight: 0
+                flexDirection: 'column'
             }}>
-                {/* Main Search Results Column */}
+                {/* Search Input */}
                 <div style={{
-                    flex: (notesMatches.length > 0 || dailyNotesMatches.length > 0) ? '1' : '1',
-                    overflowY: 'auto',
-                    borderRight: (notesMatches.length > 0 || dailyNotesMatches.length > 0) ? '1px solid var(--border-primary)' : 'none',
-                    background: 'color-mix(in srgb, var(--background-secondary, #1a1a24) 96%, transparent)'
+                    padding: '20px',
+                    borderBottom: '1px solid var(--border-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    background: 'var(--background-primary, #121218)'
                 }}>
-                    {recent.length === 0 && !search && (
-                        <div style={{
-                            padding: '40px 20px',
-                            textAlign: 'center',
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--text-secondary)">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                    </svg>
+                    <input
+                        ref={inputRef}
+                        value={search}
+                        onChange={(e) => { setSearch(e.target.value); setActiveIndex(-1); }}
+                        onKeyDown={onKeyDown}
+                        type="text"
+                        placeholder="Almighty Search "
+                        style={{
+                            flex: 1,
+                            background: 'transparent',
+                            border: 'transparent',
+                            outline: 'none',
+                            fontSize: '18px',
+                            color: 'var(--text)',
+                            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+                            fontWeight: '400'
+                        }}
+                    />
+                    <button
+                        onClick={onClose}
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
                             color: 'var(--text-muted)',
-                            fontSize: '16px'
-                        }}>
-                            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
-                            <div>Start typing to search...</div>
-                        </div>
-                    )}
+                            cursor: 'pointer',
+                            padding: '4px',
+                            borderRadius: '4px',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            transition: 'color 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => e.target.style.color = 'var(--text-secondary)'}
+                        onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}
+                    >
+                        ESC
+                    </button>
+                </div>
 
-                    {!!search && (
-                        <div
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => runSearch(search)}
-                            style={{
-                                padding: '16px 20px',
-                                cursor: 'pointer',
-                                borderBottom: (filtered.length || contentMatches.length) ? '1px solid var(--border-primary)' : 'none',
-                                color: 'var(--text)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                transition: 'background 0.2s ease',
-                                background: activeIndex === 0 ? 'var(--interactive-hover)' : 'transparent'
-                            }}
-                            onMouseEnter={(e) => e.target.style.background = 'var(--interactive-hover)'}
-                            onMouseLeave={(e) => e.target.style.background = activeIndex === 0 ? 'var(--interactive-hover)' : 'transparent'}
-                        >
+                {/* Search Results - Two Column Layout */}
+                <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    minHeight: 0
+                }}>
+                    {/* Main Search Results Column */}
+                    <div style={{
+                        flex: (notesMatches.length > 0 || dailyNotesMatches.length > 0) ? '1' : '1',
+                        overflowY: 'auto',
+                        borderRight: (notesMatches.length > 0 || dailyNotesMatches.length > 0) ? '1px solid var(--border-primary)' : 'none',
+                        background: 'color-mix(in srgb, var(--background-secondary, #1a1a24) 96%, transparent)'
+                    }}>
+                        {recent.length === 0 && !search && (
                             <div style={{
-                                width: '32px',
-                                height: '32px',
-                                borderRadius: '8px',
-                                background: 'color-mix(in srgb, var(--accent-blue, #60a5fa) 28%, transparent)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="#4285F4">
-                                    <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <div style={{ fontSize: '16px', fontWeight: '500' }}>Search with Default Engine</div>
-                                <div style={{ fontSize: '14px', color: 'color-mix(in srgb, var(--text, #e5e7eb) 52%, transparent)' }}>&quot;{search}&quot;</div>
-                            </div>
-                        </div>
-                    )}
-
-                    {!!search && (
-                        <div style={{
-                            padding: '0 20px',
-                            borderBottom: (filtered.length || contentMatches.length) ? '1px solid var(--border-primary)' : 'none'
-                        }}>
-                            <div style={{
-                                fontSize: '12px',
+                                padding: '40px 20px',
+                                textAlign: 'center',
                                 color: 'var(--text-muted)',
-                                padding: '16px 0 12px 0',
-                                fontWeight: '600',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1px'
+                                fontSize: '16px'
                             }}>
-                                Search Engines
+                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+                                <div>Start typing to search...</div>
                             </div>
-                            <div style={{
-                                display: 'flex',
-                                gap: '8px',
-                                paddingBottom: '16px',
-                                flexWrap: 'wrap'
-                            }}>
-                                {engines.map((e, idx) => {
-                                    // Calculate this engine's position in the active index
-                                    const engineIndex = search?.trim() ? 1 + idx : -1; // +1 for main search option
-                                    const isActive = activeIndex === engineIndex;
+                        )}
 
-                                    return (
-                                        <div
-                                            key={e.id}
-                                            onMouseDown={(ev) => ev.preventDefault()}
-                                            onClick={() => openWithEngine(e.id, search)}
-                                            title={`Search in ${e.name}`}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                padding: '8px',
-                                                cursor: 'pointer',
-                                                background: isActive ? 'var(--interactive-hover)' : 'color-mix(in srgb, var(--background-tertiary, #242430) 92%, transparent)',
-                                                borderRadius: '8px',
-                                                border: `1px solid ${isActive ? 'var(--border-primary)' : 'var(--border-secondary)'}`,
-                                                transition: 'all 0.2s ease',
-                                                width: '40px',
-                                                height: '40px'
-                                            }}
-                                            onMouseEnter={(ev) => {
-                                                ev.target.style.background = 'var(--interactive-hover)';
-                                                ev.target.style.borderColor = 'var(--border-primary)';
-                                            }}
-                                            onMouseLeave={(ev) => {
-                                                ev.target.style.background = isActive ? 'var(--interactive-hover)' : 'var(--surface-2)';
-                                                ev.target.style.borderColor = isActive ? 'var(--border-primary)' : 'var(--border-secondary)';
-                                            }}
-                                        >
-                                            <img
-                                                src={e.favicon}
-                                                alt={e.name}
+                        {!!search && (
+                            <div
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => runSearch(search)}
+                                style={{
+                                    padding: '16px 20px',
+                                    cursor: 'pointer',
+                                    borderBottom: (filtered.length || contentMatches.length) ? '1px solid var(--border-primary)' : 'none',
+                                    color: 'var(--text)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    transition: 'background 0.2s ease',
+                                    background: activeIndex === 0 ? 'var(--interactive-hover)' : 'transparent'
+                                }}
+                                onMouseEnter={(e) => e.target.style.background = 'var(--interactive-hover)'}
+                                onMouseLeave={(e) => e.target.style.background = activeIndex === 0 ? 'var(--interactive-hover)' : 'transparent'}
+                            >
+                                <div style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '8px',
+                                    background: 'color-mix(in srgb, var(--accent-blue, #60a5fa) 28%, transparent)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#4285F4">
+                                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '16px', fontWeight: '500' }}>Search with Default Engine</div>
+                                    <div style={{ fontSize: '14px', color: 'color-mix(in srgb, var(--text, #e5e7eb) 52%, transparent)' }}>&quot;{search}&quot;</div>
+                                </div>
+                            </div>
+                        )}
+
+                        {!!search && (
+                            <div style={{
+                                padding: '0 20px',
+                                borderBottom: (filtered.length || contentMatches.length) ? '1px solid var(--border-primary)' : 'none'
+                            }}>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: 'var(--text-muted)',
+                                    padding: '16px 0 12px 0',
+                                    fontWeight: '600',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1px'
+                                }}>
+                                    Search Engines
+                                </div>
+                                <div style={{
+                                    display: 'flex',
+                                    gap: '8px',
+                                    paddingBottom: '16px',
+                                    flexWrap: 'wrap'
+                                }}>
+                                    {engines.map((e, idx) => {
+                                        // Calculate this engine's position in the active index
+                                        const engineIndex = search?.trim() ? 1 + idx : -1; // +1 for main search option
+                                        const isActive = activeIndex === engineIndex;
+
+                                        return (
+                                            <div
+                                                key={e.id}
+                                                onMouseDown={(ev) => ev.preventDefault()}
+                                                onClick={() => openWithEngine(e.id, search)}
+                                                title={`Search in ${e.name}`}
                                                 style={{
-                                                    width: '24px',
-                                                    height: '24px',
-                                                    objectFit: 'contain',
-                                                    borderRadius: '4px'
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    padding: '8px',
+                                                    cursor: 'pointer',
+                                                    background: isActive ? 'var(--interactive-hover)' : 'color-mix(in srgb, var(--background-tertiary, #242430) 92%, transparent)',
+                                                    borderRadius: '8px',
+                                                    border: `1px solid ${isActive ? 'var(--border-primary)' : 'var(--border-secondary)'}`,
+                                                    transition: 'all 0.2s ease',
+                                                    width: '40px',
+                                                    height: '40px'
                                                 }}
-                                                onError={(ev) => {
-                                                    // Fallback to colored background with icon text
-                                                    const fallback = document.createElement('div');
-                                                    fallback.style.cssText = `
+                                                onMouseEnter={(ev) => {
+                                                    ev.target.style.background = 'var(--interactive-hover)';
+                                                    ev.target.style.borderColor = 'var(--border-primary)';
+                                                }}
+                                                onMouseLeave={(ev) => {
+                                                    ev.target.style.background = isActive ? 'var(--interactive-hover)' : 'var(--surface-2)';
+                                                    ev.target.style.borderColor = isActive ? 'var(--border-primary)' : 'var(--border-secondary)';
+                                                }}
+                                            >
+                                                <img
+                                                    src={e.favicon}
+                                                    alt={e.name}
+                                                    style={{
+                                                        width: '24px',
+                                                        height: '24px',
+                                                        objectFit: 'contain',
+                                                        borderRadius: '4px'
+                                                    }}
+                                                    onError={(ev) => {
+                                                        // Fallback to colored background with icon text
+                                                        const fallback = document.createElement('div');
+                                                        fallback.style.cssText = `
                                                         width: 24px;
                                                         height: 24px;
                                                         border-radius: 4px;
@@ -845,644 +909,743 @@ const modal = (
                                                         color: white;
                                                         font-weight: 600;
                                                     `;
-                                                    fallback.textContent = e.icon;
-                                                    ev.target.parentNode.replaceChild(fallback, ev.target);
-                                                }}
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Recent Searches */}
-                    {filtered.length > 0 && (
-                        <div style={{ padding: '0 20px' }}>
-                            <div style={{
-                                fontSize: '12px',
-                                color: 'var(--text-muted)',
-                                padding: '16px 0 12px 0',
-                                fontWeight: '600',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1px'
-                            }}>
-                                Recent Searches
-                            </div>
-                            {filtered.map((item, idx) => (
-                                <div
-                                    key={item}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => runSearch(item)}
-                                    style={{
-                                        padding: '12px 0',
-                                        cursor: 'pointer',
-                                        background: idx === activeIndex ? 'var(--interactive-hover)' : 'transparent',
-                                        color: 'var(--text-secondary)',
-                                        borderRadius: '6px',
-                                        marginBottom: '4px',
-                                        paddingLeft: '12px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '12px',
-                                        transition: 'background 0.2s ease'
-                                    }}
-                                >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--text-muted)">
-                                        <path d="M13,3A9,9 0 0,0 4,12H1L4.89,15.89L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3Z" />
-                                    </svg>
-                                    <span>{item}</span>
+                                                        fallback.textContent = e.icon;
+                                                        ev.target.parentNode.replaceChild(fallback, ev.target);
+                                                    }}
+                                                />
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Content Matches */}
-                    {contentMatches.length > 0 && (
-                        <div style={{
-                            borderTop: filtered.length > 0 ? '1px solid var(--border-primary)' : 'none',
-                            padding: '0 20px'
-                        }}>
-                            <div style={{
-                                fontSize: '12px',
-                                color: 'var(--text-muted)',
-                                padding: '16px 0 12px 0',
-                                fontWeight: '600',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1px'
-                            }}>
-                                Tabs, Bookmarks & History
                             </div>
-                            {contentMatches.map((m, i) => {
-                                // Calculate this item's position in the active index
-                                const enginesCount = search?.trim() ? engines.length : 0;
-                                const searchCount = search?.trim() ? 1 : 0;
-                                const recentCount = filtered.length;
-                                const contentIndex = searchCount + enginesCount + recentCount + i;
-                                const isActive = activeIndex === contentIndex;
+                        )}
 
-                                return (
-                                    <div
-                                        key={`${m.url}-${i}`}
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => {
-                                            try {
-                                                if (m.type === 'tab' && m.tabId) {
-                                                    // Focus existing tab
-                                                    const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
-                                                    if (hasTabsUpdate) {
-                                                        chrome.tabs.update(m.tabId, { active: true });
-                                                        if (m.windowId != null && chrome?.windows?.update) {
-                                                            chrome.windows.update(m.windowId, { focused: true });
-                                                        }
-                                                    } else {
-                                                        // Fallback: open URL
-                                                        if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
-                                                    }
-                                                } else {
-                                                    // Open bookmark/history item in new tab
-                                                    if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
-                                                }
-                                            } catch { }
-                                            onClose();
-                                        }}
-                                        style={{
-                                            padding: '12px',
-                                            cursor: 'pointer',
-                                            color: 'var(--text-secondary)',
-                                            borderRadius: '8px',
-                                            marginBottom: '4px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '12px',
-                                            transition: 'all 0.2s ease',
-                                            background: isActive ? 'var(--interactive-hover)' : 'transparent',
-                                            // Visual styling based on type using theme colors
-                                            border: m.type === 'tab' ? '1px solid var(--accent-blue)' :
-                                                m.type === 'bookmark' ? '1px solid var(--accent-warning)' :
-                                                    '1px solid var(--border-primary)',
-                                            borderLeft: m.type === 'tab' ? '3px solid var(--accent-blue)' :
-                                                m.type === 'bookmark' ? '3px solid var(--accent-warning)' :
-                                                    '3px solid var(--text-muted)'
-                                        }}
-                                        title={`${m.type === 'tab' ? 'Switch to tab' : m.type === 'bookmark' ? 'Open bookmark' : 'Open from history'}: ${m.url}`}
-                                        onMouseEnter={(e) => {
-                                            e.target.style.background = 'var(--interactive-hover)';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.target.style.background = isActive ? 'var(--interactive-hover)' : 'transparent';
-                                        }}
-                                    >
-                                        <img
-                                            src={m.favicon || getFaviconUrl(m.url)}
-                                            alt="favicon"
-                                            style={{
-                                                width: '24px',
-                                                height: '24px',
-                                                objectFit: 'contain',
-                                                borderRadius: '4px',
-                                                flexShrink: 0
-                                            }}
-                                            onError={(ev) => {
-                                                // Try fallback favicon from origin
-                                                try {
-                                                    const u = new URL(m.url);
-                                                    const originFavicon = `${u.origin}/favicon.ico`;
-                                                    if (ev.target.src !== originFavicon) {
-                                                        ev.target.src = originFavicon;
-                                                        return;
-                                                    }
-                                                } catch { }
-                                                // If all favicon attempts fail, hide the image
-                                                ev.target.style.opacity = '0.3';
-                                            }}
-                                        />
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                whiteSpace: 'nowrap',
-                                                fontSize: '14px',
-                                                fontWeight: '500',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '8px'
-                                            }}>
-                                                {m.title || m.url}
-                                                <span style={{
-                                                    fontSize: '10px',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '4px',
-                                                    fontWeight: '600',
-                                                    textTransform: 'uppercase',
-                                                    background: m.type === 'tab' ? 'color-mix(in srgb, var(--accent-blue, #60a5fa) 24%, transparent)' :
-                                                        m.type === 'bookmark' ? 'color-mix(in srgb, var(--accent-warning, #fbbf24) 24%, transparent)' :
-                                                            'color-mix(in srgb, var(--background-tertiary, #2e2e3c) 92%, transparent)',
-                                                    color: m.type === 'tab' ? 'var(--accent-blue)' :
-                                                        m.type === 'bookmark' ? 'var(--accent-warning)' :
-                                                            'var(--text-muted)'
-                                                }}>
-                                                    {m.type === 'tab' ? 'TAB' : m.type === 'bookmark' ? 'BOOKMARK' : 'HISTORY'}
-                                                </span>
-                                            </div>
-                                            <div style={{
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                whiteSpace: 'nowrap',
-                                                fontSize: '12px',
-                                                color: 'var(--text-muted)',
-                                                marginTop: '2px'
-                                            }}>
-                                                {m.url}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-
-
-                    {/* Workspace Matches */}
-                    {workspaceMatches.length > 0 && (
-                        <div style={{
-                            borderTop: (filtered.length > 0 || contentMatches.length > 0) ? '1px solid var(--border-primary)' : 'none',
-                            padding: '0 20px'
-                        }}>
-                            <div style={{
-                                fontSize: '12px',
-                                color: 'var(--text-muted)',
-                                padding: '16px 0 12px 0',
-                                fontWeight: '600',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1px'
-                            }}>
-                                Workspaces
-                            </div>
-                            {workspaceMatches.map((workspace, i) => {
-                                const enginesCount = search?.trim() ? engines.length : 0;
-                                const searchCount = search?.trim() ? 1 : 0;
-                                const recentCount = filtered.length;
-                                const contentCount = contentMatches.length;
-                                const workspaceIndex = searchCount + enginesCount + recentCount + contentCount + i;
-                                const isActive = activeIndex === workspaceIndex;
-
-                                return (
-                                    <div
-                                        key={`workspace-${workspace.id || workspace.name}-${i}`}
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => {
-                                            console.log('Selected workspace:', workspace.name);
-                                            if (openInSidePanel) {
-                                                openInSidePanel(workspace.name);
-                                            }
-                                            onClose();
-                                        }}
-                                        style={{
-                                            padding: '12px',
-                                            cursor: 'pointer',
-                                            color: 'var(--text-secondary)',
-                                            borderRadius: '8px',
-                                            marginBottom: '4px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '12px',
-                                            transition: 'all 0.2s ease',
-                                            background: isActive ? 'var(--interactive-hover)' : 'transparent',
-                                            border: '1px solid var(--border-secondary)',
-                                            borderLeft: '3px solid var(--accent-primary)'
-                                        }}
-                                        title={`Open workspace: ${workspace.name}`}
-                                        onMouseEnter={(e) => {
-                                            e.target.style.background = 'var(--interactive-hover)';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.target.style.background = isActive ? 'var(--interactive-hover)' : 'transparent';
-                                        }}
-                                    >
-                                        <div style={{
-                                            width: '24px',
-                                            height: '24px',
-                                            background: 'var(--accent-primary)',
-                                            borderRadius: '4px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '12px',
-                                            color: 'white',
-                                            fontWeight: '600',
-                                            flexShrink: 0
-                                        }}>
-                                            {workspace.gridType === 'ProjectGrid' ? '📂' : '🔗'}
-                                        </div>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                whiteSpace: 'nowrap',
-                                                fontSize: '14px',
-                                                fontWeight: '500',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '8px'
-                                            }}>
-                                                {workspace.name}
-                                                <span style={{
-                                                    fontSize: '10px',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '4px',
-                                                    fontWeight: '600',
-                                                    textTransform: 'uppercase',
-                                                    background: 'color-mix(in srgb, var(--accent-primary, #34C759) 24%, transparent)',
-                                                    color: 'var(--accent-primary)'
-                                                }}>
-                                                    {workspace.gridType === 'ProjectGrid' ? 'PROJECT' : 'WORKSPACE'}
-                                                </span>
-                                            </div>
-                                            <div style={{
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                whiteSpace: 'nowrap',
-                                                fontSize: '12px',
-                                                color: 'var(--text-muted)',
-                                                marginTop: '2px'
-                                            }}>
-                                                {workspace.matchedDomains && workspace.matchedDomains.length > 0
-                                                    ? `Contains: ${workspace.matchedDomains.slice(0, 2).join(', ')}${workspace.matchedDomains.length > 2 ? ` +${workspace.matchedDomains.length - 2} more` : ''}`
-                                                    : workspace.description || `${workspace.itemCount} items`}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-
-                    {/* App Store Matches */}
-                    {appStoreMatches.length > 0 && (
-                        <div style={{
-                            borderTop: (filtered.length > 0 || contentMatches.length > 0 || workspaceMatches.length > 0) ? '1px solid var(--border-primary)' : 'none',
-                            padding: '0 20px'
-                        }}>
-                            <div style={{
-                                fontSize: '12px',
-                                color: 'var(--text-muted)',
-                                padding: '16px 0 12px 0',
-                                fontWeight: '600',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1px'
-                            }}>
-                                App Store Domains
-                            </div>
-                            {appStoreMatches.map((entry, i) => {
-                                const enginesCount = search?.trim() ? engines.length : 0;
-                                const searchCount = search?.trim() ? 1 : 0;
-                                const recentCount = filtered.length;
-                                const contentCount = contentMatches.length;
-                                const notesCount = notesMatches.length;
-                                const dailyCount = dailyNotesMatches.length;
-                                const workspaceCount = workspaceMatches.length;
-                                const appStoreIndex = searchCount + enginesCount + recentCount + contentCount + notesCount + dailyCount + workspaceCount + i;
-                                const isActive = activeIndex === appStoreIndex;
-
-                                const href = entry.domain.startsWith('http') ? entry.domain : `https://${entry.domain}`;
-
-                                return (
-                                    <div
-                                        key={`appstore-${entry.domain}-${entry.category}-${i}`}
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => {
-                                            try {
-                                                if (chrome?.tabs?.create) {
-                                                    chrome.tabs.create({ url: href });
-                                                } else {
-                                                    window.open(href, '_blank');
-                                                }
-                                            } catch { }
-                                            onClose();
-                                        }}
-                                        style={{
-                                            padding: '12px',
-                                            cursor: 'pointer',
-                                            color: 'var(--text-secondary)',
-                                            borderRadius: '8px',
-                                            marginBottom: '4px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '12px',
-                                            transition: 'all 0.2s ease',
-                                            background: isActive ? 'var(--interactive-hover)' : 'transparent',
-                                            border: '1px solid var(--border-secondary)',
-                                            borderLeft: '3px solid var(--accent-blue)'
-                                        }}
-                                        title={`Open ${entry.domain}`}
-                                        onMouseEnter={(e) => {
-                                            e.target.style.background = 'var(--interactive-hover)';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.target.style.background = isActive ? 'var(--interactive-hover)' : 'transparent';
-                                        }}
-                                    >
-                                        <img
-                                            src={entry.favicon}
-                                            alt="favicon"
-                                            style={{
-                                                width: '20px',
-                                                height: '20px',
-                                                borderRadius: '4px',
-                                                objectFit: 'cover'
-                                            }}
-                                            onError={(ev) => {
-                                                ev.target.style.display = 'none';
-                                            }}
-                                        />
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                                whiteSpace: 'nowrap',
-                                                fontSize: '14px',
-                                                fontWeight: '500'
-                                            }}>
-                                                {entry.domain}
-                                            </div>
-                                            <div style={{
-                                                fontSize: '12px',
-                                                color: 'var(--text-muted)'
-                                            }}>
-                                                Category: {entry.category}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-
-                {/* Notes Side Panel */}
-                {(notesMatches.length > 0 || dailyNotesMatches.length > 0) && (
-                    <div className="ai-card" style={{
-                        width: '380px',
-                        flexShrink: 0,
-                        overflowY: 'auto',
-                        background: 'linear-gradient(180deg, var(--surface-2) 0%, var(--surface-3) 100%)',
-                        borderRadius: '0 16px 16px 0',
-                        borderLeft: '1px solid var(--border-primary)'
-                    }}>
-                        <div style={{
-                            padding: '20px 16px 12px 16px',
-                            borderBottom: '1px solid var(--border-primary)',
-                            position: 'sticky',
-                            top: 0,
-                            background: 'var(--surface-1)',
-                            backdropFilter: 'blur(10px)',
-                            zIndex: 1
-                        }}>
-                            <div style={{
-                                fontSize: '14px',
-                                fontWeight: '600',
-                                color: 'var(--text)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
-                                </svg>
-                                Notes & Daily Notes
-                                <span style={{
+                        {/* Recent Searches */}
+                        {filtered.length > 0 && (
+                            <div style={{ padding: '0 20px' }}>
+                                <div style={{
                                     fontSize: '12px',
-                                    padding: '2px 6px',
-                                    borderRadius: '4px',
-                                    background: 'var(--surface-3)',
-                                    color: 'var(--text-secondary)'
+                                    color: 'var(--text-muted)',
+                                    padding: '16px 0 12px 0',
+                                    fontWeight: '600',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1px'
                                 }}>
-                                    {notesMatches.length + dailyNotesMatches.length}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div style={{ padding: '8px' }}>
-                            {/* Notes Matches */}
-                            {notesMatches.length > 0 && (
-                                <div style={{ marginBottom: '16px' }}>
-                                    <div style={{
-                                        fontSize: '11px',
-                                        color: 'var(--text-muted)',
-                                        padding: '12px 12px 8px 12px',
-                                        fontWeight: '600',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '1px'
-                                    }}>
-                                        Notes ({notesMatches.length})
+                                    Recent Searches
+                                </div>
+                                {filtered.map((item, idx) => (
+                                    <div
+                                        key={item}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => runSearch(item)}
+                                        style={{
+                                            padding: '12px 0',
+                                            cursor: 'pointer',
+                                            background: idx === activeIndex ? 'var(--interactive-hover)' : 'transparent',
+                                            color: 'var(--text-secondary)',
+                                            borderRadius: '6px',
+                                            marginBottom: '4px',
+                                            paddingLeft: '12px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            transition: 'background 0.2s ease'
+                                        }}
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--text-muted)">
+                                            <path d="M13,3A9,9 0 0,0 4,12H1L4.89,15.89L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3Z" />
+                                        </svg>
+                                        <span>{item}</span>
                                     </div>
-                                    {notesMatches.map((note, i) => {
-                                        const enginesCount = search?.trim() ? engines.length : 0;
-                                        const searchCount = search?.trim() ? 1 : 0;
-                                        const recentCount = filtered.length;
-                                        const contentCount = contentMatches.length;
-                                        const noteIndex = searchCount + enginesCount + recentCount + contentCount + i;
-                                        const isActive = activeIndex === noteIndex;
+                                ))}
+                            </div>
+                        )}
 
+                        {/* Content Matches */}
+                        {contentMatches.length > 0 && (
+                            <div style={{
+                                borderTop: filtered.length > 0 ? '1px solid var(--border-primary)' : 'none',
+                                padding: '0 20px'
+                            }}>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: 'var(--text-muted)',
+                                    padding: '16px 0 12px 0',
+                                    fontWeight: '600',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1px'
+                                }}>
+                                    Tabs, Bookmarks & History
+                                </div>
+                                {contentMatches.map((m, i) => {
+                                    // Calculate this item's position in the active index
+                                    const enginesCount = search?.trim() ? engines.length : 0;
+                                    const searchCount = search?.trim() ? 1 : 0;
+                                    const recentCount = filtered.length;
+                                    const contentIndex = searchCount + enginesCount + recentCount + i;
+                                    const isActive = activeIndex === contentIndex;
+
+                                    if (m.type === 'action') {
                                         return (
                                             <div
-                                                key={`note-${note.id}-${i}`}
+                                                key={`action-${i}`}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                onClick={() => {
+                                                    if (m.action === 'new-note') {
+                                                        window.dispatchEvent(new CustomEvent('navigateToFace', { detail: 'notes' }));
+                                                    } else if (m.action === 'new-workspace') {
+                                                        window.dispatchEvent(new CustomEvent('openWorkspaceCreator'));
+                                                    }
+                                                    onClose();
+                                                }}
+                                                style={{
+                                                    padding: '12px',
+                                                    cursor: 'pointer',
+                                                    color: 'var(--text-primary)',
+                                                    borderRadius: '8px',
+                                                    marginBottom: '4px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    transition: 'all 0.2s ease',
+                                                    background: isActive ? 'var(--interactive-hover)' : 'var(--surface-3)',
+                                                    border: '1px solid var(--accent-primary)',
+                                                    borderLeft: '3px solid var(--accent-primary)'
+                                                }}
+                                                title={m.subtitle}
+                                            >
+                                                <div style={{
+                                                    width: '32px',
+                                                    height: '32px',
+                                                    borderRadius: '8px',
+                                                    background: 'var(--accent-primary)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    color: 'white',
+                                                    fontSize: '14px'
+                                                }}>
+                                                    {m.icon === 'faPen' ? '📝' : '➕'}
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ fontSize: '15px', fontWeight: '500' }}>{m.title}</div>
+                                                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{m.subtitle}</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    if (m.type === 'math') {
+                                        return (
+                                            <div
+                                                key={`math-${i}`}
                                                 onMouseDown={(e) => e.preventDefault()}
                                                 onClick={() => {
                                                     try {
-                                                        if (note.url && chrome?.tabs?.create) {
-                                                            chrome.tabs.create({ url: note.url });
-                                                        }
+                                                        navigator.clipboard.writeText(String(m.value));
                                                     } catch { }
                                                     onClose();
                                                 }}
                                                 style={{
-                                                    padding: '8px 12px',
-                                                    margin: '4px 8px',
+                                                    padding: '12px',
                                                     cursor: 'pointer',
-                                                    color: 'var(--text)',
-                                                    borderRadius: '6px',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    gap: '6px',
-                                                    transition: 'all 0.2s ease',
-                                                    background: isActive ? 'var(--interactive-hover)' : 'var(--surface-4)',
-                                                    border: '1px solid var(--border-secondary)',
-                                                    borderLeft: '3px solid var(--accent-warning)'
-                                                }}
-                                                title={`Open note: ${note.title}`}
-                                                onMouseEnter={(e) => {
-                                                    e.target.style.background = 'var(--interactive-hover)';
-                                                }}
-                                                onMouseLeave={(e) => {
-                                                    e.target.style.background = isActive ? 'var(--interactive-hover)' : 'var(--surface-4)';
-                                                }}
-                                            >
-                                                <div style={{
+                                                    color: 'var(--text-primary)',
+                                                    borderRadius: '8px',
+                                                    marginBottom: '4px',
                                                     display: 'flex',
                                                     alignItems: 'center',
-                                                    gap: '8px'
-                                                }}>
-                                                    <span style={{ fontSize: '14px' }}>
-                                                        {note.noteType === 'voice' || note.noteType === 'voice-text' ? '🎤' : '📝'}
-                                                    </span>
-                                                    <div style={{
-                                                        fontSize: '13px',
-                                                        fontWeight: '500',
-                                                        flex: 1,
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        whiteSpace: 'nowrap'
-                                                    }}>
-                                                        {note.title}
-                                                    </div>
-                                                </div>
+                                                    gap: '12px',
+                                                    transition: 'all 0.2s ease',
+                                                    background: isActive ? 'var(--interactive-hover)' : 'color-mix(in srgb, var(--accent-success, #34C759) 10%, transparent)',
+                                                    border: '1px solid var(--accent-success)',
+                                                    borderLeft: '3px solid var(--accent-success)'
+                                                }}
+                                                title="Click to copy result"
+                                            >
                                                 <div style={{
-                                                    fontSize: '11px',
-                                                    color: 'var(--text-secondary)',
-                                                    lineHeight: '1.4',
-                                                    display: '-webkit-box',
-                                                    WebkitLineClamp: 2,
-                                                    WebkitBoxOrient: 'vertical',
-                                                    overflow: 'hidden'
+                                                    width: '32px',
+                                                    height: '32px',
+                                                    borderRadius: '8px',
+                                                    background: 'var(--accent-success)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    color: 'white',
+                                                    fontSize: '16px',
+                                                    fontWeight: 'bold'
                                                 }}>
-                                                    {note.content}
+                                                    =
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ fontSize: '20px', fontWeight: '600', lineHeight: '1.2' }}>{m.value}</div>
+                                                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Calculation Result • Enter to Copy</div>
                                                 </div>
                                             </div>
                                         );
-                                    })}
-                                </div>
-                            )}
+                                    }
 
-                            {/* Daily Notes Matches */}
-                            {dailyNotesMatches.length > 0 && (
-                                <div>
-                                    <div style={{
-                                        fontSize: '11px',
-                                        color: 'var(--text-muted)',
-                                        padding: '12px 12px 8px 12px',
-                                        fontWeight: '600',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '1px'
-                                    }}>
-                                        Daily Notes ({dailyNotesMatches.length})
-                                    </div>
-                                    {dailyNotesMatches.map((dailyNote, i) => {
-                                        const enginesCount = search?.trim() ? engines.length : 0;
-                                        const searchCount = search?.trim() ? 1 : 0;
-                                        const recentCount = filtered.length;
-                                        const contentCount = contentMatches.length;
-                                        const notesCount = notesMatches.length;
-                                        const dailyNoteIndex = searchCount + enginesCount + recentCount + contentCount + notesCount + i;
-                                        const isActive = activeIndex === dailyNoteIndex;
-
-                                        return (
-                                            <div
-                                                key={`daily-note-${dailyNote.date}-${i}`}
-                                                onMouseDown={(e) => e.preventDefault()}
-                                                onClick={() => {
-                                                    console.log('Opening daily note for date:', dailyNote.date);
-                                                    onClose();
-                                                }}
+                                    return (
+                                        <div
+                                            key={`${m.url}-${i}`}
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                                try {
+                                                    if (m.type === 'tab' && m.tabId) {
+                                                        // Focus existing tab
+                                                        const hasTabsUpdate = typeof chrome !== 'undefined' && chrome?.tabs?.update;
+                                                        if (hasTabsUpdate) {
+                                                            chrome.tabs.update(m.tabId, { active: true });
+                                                            if (m.windowId != null && chrome?.windows?.update) {
+                                                                chrome.windows.update(m.windowId, { focused: true });
+                                                            }
+                                                        } else {
+                                                            // Fallback: open URL
+                                                            if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
+                                                        }
+                                                    } else {
+                                                        // Open bookmark/history item in new tab
+                                                        if (chrome?.tabs?.create) chrome.tabs.create({ url: m.url });
+                                                    }
+                                                } catch { }
+                                                onClose();
+                                            }}
+                                            style={{
+                                                padding: '12px',
+                                                cursor: 'pointer',
+                                                color: 'var(--text-secondary)',
+                                                borderRadius: '8px',
+                                                marginBottom: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                transition: 'all 0.2s ease',
+                                                background: isActive ? 'var(--interactive-hover)' : 'transparent',
+                                                // Visual styling based on type using theme colors
+                                                border: m.type === 'tab' ? '1px solid var(--accent-blue)' :
+                                                    m.type === 'bookmark' ? '1px solid var(--accent-warning)' :
+                                                        '1px solid var(--border-primary)',
+                                                borderLeft: m.type === 'tab' ? '3px solid var(--accent-blue)' :
+                                                    m.type === 'bookmark' ? '3px solid var(--accent-warning)' :
+                                                        '3px solid var(--text-muted)'
+                                            }}
+                                            title={`${m.type === 'tab' ? 'Switch to tab' : m.type === 'bookmark' ? 'Open bookmark' : 'Open from history'}: ${m.url}`}
+                                            onMouseEnter={(e) => {
+                                                e.target.style.background = 'var(--interactive-hover)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.target.style.background = isActive ? 'var(--interactive-hover)' : 'transparent';
+                                            }}
+                                        >
+                                            <img
+                                                src={m.favicon || getFaviconUrl(m.url)}
+                                                alt="favicon"
                                                 style={{
-                                                    padding: '8px 12px',
-                                                    margin: '4px 8px',
-                                                    cursor: 'pointer',
-                                                    color: 'var(--text)',
-                                                    borderRadius: '6px',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    gap: '6px',
-                                                    transition: 'all 0.2s ease',
-                                                    background: isActive ? 'var(--interactive-hover)' : 'var(--surface-4)',
-                                                    border: '1px solid var(--border-secondary)',
-                                                    borderLeft: '3px solid var(--accent-primary)'
+                                                    width: '24px',
+                                                    height: '24px',
+                                                    objectFit: 'contain',
+                                                    borderRadius: '4px',
+                                                    flexShrink: 0
                                                 }}
-                                                title={`Open daily note for ${dailyNote.date}`}
-                                                onMouseEnter={(e) => {
-                                                    e.target.style.background = 'var(--interactive-hover)';
+                                                onError={(ev) => {
+                                                    // Try fallback favicon from origin
+                                                    try {
+                                                        const u = new URL(m.url);
+                                                        const originFavicon = `${u.origin}/favicon.ico`;
+                                                        if (ev.target.src !== originFavicon) {
+                                                            ev.target.src = originFavicon;
+                                                            return;
+                                                        }
+                                                    } catch { }
+                                                    // If all favicon attempts fail, hide the image
+                                                    ev.target.style.opacity = '0.3';
                                                 }}
-                                                onMouseLeave={(e) => {
-                                                    e.target.style.background = isActive ? 'var(--interactive-hover)' : 'var(--surface-4)';
-                                                }}
-                                            >
+                                            />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                    fontSize: '14px',
+                                                    fontWeight: '500',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     gap: '8px'
                                                 }}>
-                                                    <span style={{ fontSize: '14px' }}>📅</span>
-                                                    <div style={{
-                                                        fontSize: '13px',
-                                                        fontWeight: '500',
-                                                        flex: 1
+                                                    {m.title || m.url}
+                                                    <span style={{
+                                                        fontSize: '10px',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px',
+                                                        fontWeight: '600',
+                                                        textTransform: 'uppercase',
+                                                        background: m.type === 'tab' ? 'color-mix(in srgb, var(--accent-blue, #60a5fa) 24%, transparent)' :
+                                                            m.type === 'bookmark' ? 'color-mix(in srgb, var(--accent-warning, #fbbf24) 24%, transparent)' :
+                                                                'color-mix(in srgb, var(--background-tertiary, #2e2e3c) 92%, transparent)',
+                                                        color: m.type === 'tab' ? 'var(--accent-blue)' :
+                                                            m.type === 'bookmark' ? 'var(--accent-warning)' :
+                                                                'var(--text-muted)'
                                                     }}>
-                                                        {dailyNote.date}
-                                                    </div>
+                                                        {m.type === 'tab' ? 'TAB' : m.type === 'bookmark' ? 'BOOKMARK' : 'HISTORY'}
+                                                    </span>
                                                 </div>
                                                 <div style={{
-                                                    fontSize: '11px',
-                                                    color: 'var(--text-secondary)',
-                                                    lineHeight: '1.4'
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                    fontSize: '12px',
+                                                    color: 'var(--text-muted)',
+                                                    marginTop: '2px'
                                                 }}>
-                                                    {dailyNote.selections?.length ? `${dailyNote.selections.length} selections` : 'No selections'}
-                                                    {dailyNote.content && ` • ${dailyNote.content.length > 40 ? dailyNote.content.substring(0, 40) + '...' : dailyNote.content}`}
+                                                    {m.url}
                                                 </div>
                                             </div>
-                                        );
-                                    })}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+
+                        {/* Workspace Matches */}
+                        {workspaceMatches.length > 0 && (
+                            <div style={{
+                                borderTop: (filtered.length > 0 || contentMatches.length > 0) ? '1px solid var(--border-primary)' : 'none',
+                                padding: '0 20px'
+                            }}>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: 'var(--text-muted)',
+                                    padding: '16px 0 12px 0',
+                                    fontWeight: '600',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1px'
+                                }}>
+                                    Workspaces
                                 </div>
-                            )}
-                        </div>
+                                {workspaceMatches.map((workspace, i) => {
+                                    const enginesCount = search?.trim() ? engines.length : 0;
+                                    const searchCount = search?.trim() ? 1 : 0;
+                                    const recentCount = filtered.length;
+                                    const contentCount = contentMatches.length;
+                                    const workspaceIndex = searchCount + enginesCount + recentCount + contentCount + i;
+                                    const isActive = activeIndex === workspaceIndex;
+
+                                    return (
+                                        <div
+                                            key={`workspace-${workspace.id || workspace.name}-${i}`}
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                                console.log('Selected workspace:', workspace.name);
+                                                if (openInSidePanel) {
+                                                    openInSidePanel(workspace.name);
+                                                }
+                                                onClose();
+                                            }}
+                                            style={{
+                                                padding: '12px',
+                                                cursor: 'pointer',
+                                                color: 'var(--text-secondary)',
+                                                borderRadius: '8px',
+                                                marginBottom: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                transition: 'all 0.2s ease',
+                                                background: isActive ? 'var(--interactive-hover)' : 'transparent',
+                                                border: '1px solid var(--border-secondary)',
+                                                borderLeft: '3px solid var(--accent-primary)'
+                                            }}
+                                            title={`Open workspace: ${workspace.name}`}
+                                            onMouseEnter={(e) => {
+                                                e.target.style.background = 'var(--interactive-hover)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.target.style.background = isActive ? 'var(--interactive-hover)' : 'transparent';
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: '24px',
+                                                height: '24px',
+                                                background: 'var(--accent-primary)',
+                                                borderRadius: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontSize: '12px',
+                                                color: 'white',
+                                                fontWeight: '600',
+                                                flexShrink: 0
+                                            }}>
+                                                {workspace.gridType === 'ProjectGrid' ? '📂' : '🔗'}
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                    fontSize: '14px',
+                                                    fontWeight: '500',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '8px'
+                                                }}>
+                                                    {workspace.name}
+                                                    <span style={{
+                                                        fontSize: '10px',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px',
+                                                        fontWeight: '600',
+                                                        textTransform: 'uppercase',
+                                                        background: 'color-mix(in srgb, var(--accent-primary, #34C759) 24%, transparent)',
+                                                        color: 'var(--accent-primary)'
+                                                    }}>
+                                                        {workspace.gridType === 'ProjectGrid' ? 'PROJECT' : 'WORKSPACE'}
+                                                    </span>
+                                                </div>
+                                                <div style={{
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                    fontSize: '12px',
+                                                    color: 'var(--text-muted)',
+                                                    marginTop: '2px'
+                                                }}>
+                                                    {workspace.matchedDomains && workspace.matchedDomains.length > 0
+                                                        ? `Contains: ${workspace.matchedDomains.slice(0, 2).join(', ')}${workspace.matchedDomains.length > 2 ? ` +${workspace.matchedDomains.length - 2} more` : ''}`
+                                                        : workspace.description || `${workspace.itemCount} items`}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* App Store Matches */}
+                        {appStoreMatches.length > 0 && (
+                            <div style={{
+                                borderTop: (filtered.length > 0 || contentMatches.length > 0 || workspaceMatches.length > 0) ? '1px solid var(--border-primary)' : 'none',
+                                padding: '0 20px'
+                            }}>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: 'var(--text-muted)',
+                                    padding: '16px 0 12px 0',
+                                    fontWeight: '600',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1px'
+                                }}>
+                                    App Store Domains
+                                </div>
+                                {appStoreMatches.map((entry, i) => {
+                                    const enginesCount = search?.trim() ? engines.length : 0;
+                                    const searchCount = search?.trim() ? 1 : 0;
+                                    const recentCount = filtered.length;
+                                    const contentCount = contentMatches.length;
+                                    const notesCount = notesMatches.length;
+                                    const dailyCount = dailyNotesMatches.length;
+                                    const workspaceCount = workspaceMatches.length;
+                                    const appStoreIndex = searchCount + enginesCount + recentCount + contentCount + notesCount + dailyCount + workspaceCount + i;
+                                    const isActive = activeIndex === appStoreIndex;
+
+                                    const href = entry.domain.startsWith('http') ? entry.domain : `https://${entry.domain}`;
+
+                                    return (
+                                        <div
+                                            key={`appstore-${entry.domain}-${entry.category}-${i}`}
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                                try {
+                                                    if (chrome?.tabs?.create) {
+                                                        chrome.tabs.create({ url: href });
+                                                    } else {
+                                                        window.open(href, '_blank');
+                                                    }
+                                                } catch { }
+                                                onClose();
+                                            }}
+                                            style={{
+                                                padding: '12px',
+                                                cursor: 'pointer',
+                                                color: 'var(--text-secondary)',
+                                                borderRadius: '8px',
+                                                marginBottom: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                transition: 'all 0.2s ease',
+                                                background: isActive ? 'var(--interactive-hover)' : 'transparent',
+                                                border: '1px solid var(--border-secondary)',
+                                                borderLeft: '3px solid var(--accent-blue)'
+                                            }}
+                                            title={`Open ${entry.domain}`}
+                                            onMouseEnter={(e) => {
+                                                e.target.style.background = 'var(--interactive-hover)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.target.style.background = isActive ? 'var(--interactive-hover)' : 'transparent';
+                                            }}
+                                        >
+                                            <img
+                                                src={entry.favicon}
+                                                alt="favicon"
+                                                style={{
+                                                    width: '20px',
+                                                    height: '20px',
+                                                    borderRadius: '4px',
+                                                    objectFit: 'cover'
+                                                }}
+                                                onError={(ev) => {
+                                                    ev.target.style.display = 'none';
+                                                }}
+                                            />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                    fontSize: '14px',
+                                                    fontWeight: '500'
+                                                }}>
+                                                    {entry.domain}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: '12px',
+                                                    color: 'var(--text-muted)'
+                                                }}>
+                                                    Category: {entry.category}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
-                )}
+
+                    {/* Notes Side Panel */}
+                    {(notesMatches.length > 0 || dailyNotesMatches.length > 0) && (
+                        <div className="ai-card" style={{
+                            width: '380px',
+                            flexShrink: 0,
+                            overflowY: 'auto',
+                            background: 'linear-gradient(180deg, var(--surface-2) 0%, var(--surface-3) 100%)',
+                            borderRadius: '0 16px 16px 0',
+                            borderLeft: '1px solid var(--border-primary)'
+                        }}>
+                            <div style={{
+                                padding: '20px 16px 12px 16px',
+                                borderBottom: '1px solid var(--border-primary)',
+                                position: 'sticky',
+                                top: 0,
+                                background: 'var(--surface-1)',
+                                backdropFilter: 'blur(10px)',
+                                zIndex: 1
+                            }}>
+                                <div style={{
+                                    fontSize: '14px',
+                                    fontWeight: '600',
+                                    color: 'var(--text)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                                    </svg>
+                                    Notes & Daily Notes
+                                    <span style={{
+                                        fontSize: '12px',
+                                        padding: '2px 6px',
+                                        borderRadius: '4px',
+                                        background: 'var(--surface-3)',
+                                        color: 'var(--text-secondary)'
+                                    }}>
+                                        {notesMatches.length + dailyNotesMatches.length}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div style={{ padding: '8px' }}>
+                                {/* Notes Matches */}
+                                {notesMatches.length > 0 && (
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <div style={{
+                                            fontSize: '11px',
+                                            color: 'var(--text-muted)',
+                                            padding: '12px 12px 8px 12px',
+                                            fontWeight: '600',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '1px'
+                                        }}>
+                                            Notes ({notesMatches.length})
+                                        </div>
+                                        {notesMatches.map((note, i) => {
+                                            const enginesCount = search?.trim() ? engines.length : 0;
+                                            const searchCount = search?.trim() ? 1 : 0;
+                                            const recentCount = filtered.length;
+                                            const contentCount = contentMatches.length;
+                                            const noteIndex = searchCount + enginesCount + recentCount + contentCount + i;
+                                            const isActive = activeIndex === noteIndex;
+
+                                            return (
+                                                <div
+                                                    key={`note-${note.id}-${i}`}
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={() => {
+                                                        try {
+                                                            if (note.url && chrome?.tabs?.create) {
+                                                                chrome.tabs.create({ url: note.url });
+                                                            }
+                                                        } catch { }
+                                                        onClose();
+                                                    }}
+                                                    style={{
+                                                        padding: '8px 12px',
+                                                        margin: '4px 8px',
+                                                        cursor: 'pointer',
+                                                        color: 'var(--text)',
+                                                        borderRadius: '6px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '6px',
+                                                        transition: 'all 0.2s ease',
+                                                        background: isActive ? 'var(--interactive-hover)' : 'var(--surface-4)',
+                                                        border: '1px solid var(--border-secondary)',
+                                                        borderLeft: '3px solid var(--accent-warning)'
+                                                    }}
+                                                    title={`Open note: ${note.title}`}
+                                                    onMouseEnter={(e) => {
+                                                        e.target.style.background = 'var(--interactive-hover)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.target.style.background = isActive ? 'var(--interactive-hover)' : 'var(--surface-4)';
+                                                    }}
+                                                >
+                                                    <div style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '8px'
+                                                    }}>
+                                                        <span style={{ fontSize: '14px' }}>
+                                                            {note.noteType === 'voice' || note.noteType === 'voice-text' ? '🎤' : '📝'}
+                                                        </span>
+                                                        <div style={{
+                                                            fontSize: '13px',
+                                                            fontWeight: '500',
+                                                            flex: 1,
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            whiteSpace: 'nowrap'
+                                                        }}>
+                                                            {note.title}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: '11px',
+                                                        color: 'var(--text-secondary)',
+                                                        lineHeight: '1.4',
+                                                        display: '-webkit-box',
+                                                        WebkitLineClamp: 2,
+                                                        WebkitBoxOrient: 'vertical',
+                                                        overflow: 'hidden'
+                                                    }}>
+                                                        {note.content}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {/* Daily Notes Matches */}
+                                {dailyNotesMatches.length > 0 && (
+                                    <div>
+                                        <div style={{
+                                            fontSize: '11px',
+                                            color: 'var(--text-muted)',
+                                            padding: '12px 12px 8px 12px',
+                                            fontWeight: '600',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '1px'
+                                        }}>
+                                            Daily Notes ({dailyNotesMatches.length})
+                                        </div>
+                                        {dailyNotesMatches.map((dailyNote, i) => {
+                                            const enginesCount = search?.trim() ? engines.length : 0;
+                                            const searchCount = search?.trim() ? 1 : 0;
+                                            const recentCount = filtered.length;
+                                            const contentCount = contentMatches.length;
+                                            const notesCount = notesMatches.length;
+                                            const dailyNoteIndex = searchCount + enginesCount + recentCount + contentCount + notesCount + i;
+                                            const isActive = activeIndex === dailyNoteIndex;
+
+                                            return (
+                                                <div
+                                                    key={`daily-note-${dailyNote.date}-${i}`}
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={() => {
+                                                        console.log('Opening daily note for date:', dailyNote.date);
+                                                        onClose();
+                                                    }}
+                                                    style={{
+                                                        padding: '8px 12px',
+                                                        margin: '4px 8px',
+                                                        cursor: 'pointer',
+                                                        color: 'var(--text)',
+                                                        borderRadius: '6px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '6px',
+                                                        transition: 'all 0.2s ease',
+                                                        background: isActive ? 'var(--interactive-hover)' : 'var(--surface-4)',
+                                                        border: '1px solid var(--border-secondary)',
+                                                        borderLeft: '3px solid var(--accent-primary)'
+                                                    }}
+                                                    title={`Open daily note for ${dailyNote.date}`}
+                                                    onMouseEnter={(e) => {
+                                                        e.target.style.background = 'var(--interactive-hover)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.target.style.background = isActive ? 'var(--interactive-hover)' : 'var(--surface-4)';
+                                                    }}
+                                                >
+                                                    <div style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '8px'
+                                                    }}>
+                                                        <span style={{ fontSize: '14px' }}>📅</span>
+                                                        <div style={{
+                                                            fontSize: '13px',
+                                                            fontWeight: '500',
+                                                            flex: 1
+                                                        }}>
+                                                            {dailyNote.date}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: '11px',
+                                                        color: 'var(--text-secondary)',
+                                                        lineHeight: '1.4'
+                                                    }}>
+                                                        {dailyNote.selections?.length ? `${dailyNote.selections.length} selections` : 'No selections'}
+                                                        {dailyNote.content && ` • ${dailyNote.content.length > 40 ? dailyNote.content.substring(0, 40) + '...' : dailyNote.content}`}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
-    </div>
-);
+    );
 
-return createPortal(modal, document.body);
+    return createPortal(modal, document.body);
 };
 
 // Memoize the component to prevent unnecessary re-renders

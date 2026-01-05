@@ -30,6 +30,8 @@ export function CoolDeskContainer({
   wallpaperEnabled = false,
   wallpaperUrl = '',
   wallpaperOpacity = 0.3,
+  pinnedWorkspaces = [],
+  onTogglePin,
 }) {
   const [expandedWorkspace, setExpandedWorkspace] = useState(null);
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
@@ -257,9 +259,11 @@ export function CoolDeskContainer({
         <Face index="workspace">
           <WorkspaceList
             savedWorkspaces={savedWorkspaces}
-            onWorkspaceClick={handleWorkspaceClick}
+            onWorkspaceClick={(ws) => setCurrentWorkspace(ws)}
             activeWorkspaceId={currentWorkspace?.id}
-            expandedWorkspaceId={expandedWorkspace?.id}
+            expandedWorkspaceId={expandedWorkspace}
+            pinnedWorkspaces={pinnedWorkspaces}
+            onTogglePin={onTogglePin}
           />
         </Face>
 
@@ -268,10 +272,14 @@ export function CoolDeskContainer({
         <Face index="overview">
           <OverviewDashboard
             savedWorkspaces={savedWorkspaces}
-            onWorkspaceClick={handleWorkspaceClick}
+            onWorkspaceClick={(ws) => {
+              setCurrentWorkspace(ws);
+              setActiveFace('workspace');
+            }}
             activeWorkspaceId={currentWorkspace?.id}
-            expandedWorkspaceId={expandedWorkspace?.id}
+            expandedWorkspaceId={expandedWorkspace}
             onAddNote={onAddNote}
+            pinnedWorkspaces={pinnedWorkspaces}
           />
         </Face>
 

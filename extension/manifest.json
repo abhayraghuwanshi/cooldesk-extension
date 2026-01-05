@@ -12,6 +12,21 @@
   "chrome_url_overrides": {
     "newtab": "index.html"
   },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      }
+    },
+    "open-spotlight": {
+      "suggested_key": {
+        "default": "Alt+Space",
+        "mac": "Alt+Space"
+      },
+      "description": "Open Spotlight Search"
+    }
+  },
   "background": {
     "service_worker": "src/background/background.js",
     "type": "module"
