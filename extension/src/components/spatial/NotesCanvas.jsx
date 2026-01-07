@@ -11,6 +11,7 @@ import {
   faMicrophone,
   faPlus,
   faStickyNote,
+  faSync,
   faTrash
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -318,35 +319,105 @@ export function NotesCanvas({ workspaceId }) {
 
   if (loading) {
     return (
-      <div className="notes-canvas-v2 loading">
-        <div className="notes-loading">
-          <div className="loading-spinner-v2"></div>
-          <p>Loading your notes...</p>
-        </div>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        gap: '16px',
+        color: 'var(--text-secondary)'
+      }}>
+        <FontAwesomeIcon icon={faSync} spin style={{ fontSize: '32px' }} />
+        <p style={{ margin: 0, fontSize: '14px' }}>Loading your notes...</p>
       </div>
     );
   }
 
   return (
-    <div className={`notes-canvas-v2 ${isFullScreen ? 'fullscreen' : ''}`}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      position: isFullScreen ? 'fixed' : 'relative',
+      top: isFullScreen ? 0 : 'auto',
+      left: isFullScreen ? 0 : 'auto',
+      right: isFullScreen ? 0 : 'auto',
+      bottom: isFullScreen ? 0 : 'auto',
+      zIndex: isFullScreen ? 9999 : 'auto',
+      background: isFullScreen ? 'var(--surface-0)' : 'transparent'
+    }}>
       {/* Header */}
-      <div className="notes-header-v2">
-        <div className="notes-header-left">
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '16px 20px',
+        background: 'var(--glass-bg)',
+        backdropFilter: 'blur(16px)',
+        borderRadius: '16px',
+        border: '1px solid var(--border-primary)',
+        marginBottom: '20px',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button
-            className="notes-menu-btn"
             onClick={() => setShowSidebar(!showSidebar)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              padding: '8px',
+              borderRadius: '8px',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--interactive-hover)';
+              e.currentTarget.style.color = 'var(--text)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--text-secondary)';
+            }}
             title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
           >
             <FontAwesomeIcon icon={faStickyNote} />
           </button>
-          <h1 className="notes-title-v2">Notes</h1>
-          <span className="notes-count-badge">{notes.length}</span>
+          <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--text)' }}>Notes</h1>
+          <span style={{
+            padding: '4px 10px',
+            borderRadius: '12px',
+            background: 'var(--accent-blue-soft)',
+            border: '1px solid var(--accent-blue-border)',
+            color: 'var(--accent-blue)',
+            fontSize: '12px',
+            fontWeight: 500
+          }}>
+            {notes.length}
+          </span>
         </div>
 
-        <div className="notes-header-right">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {autoSaveStatus !== 'idle' && (
-            <div className={`notes-save-indicator ${autoSaveStatus}`}>
-              <span className={`save-dot ${autoSaveStatus}`}></span>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '12px',
+              color: autoSaveStatus === 'saving' ? 'var(--accent-blue)' :
+                autoSaveStatus === 'saved' ? 'var(--accent-primary)' :
+                  'var(--accent-error)'
+            }}>
+              <span style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: 'currentColor',
+                animation: autoSaveStatus === 'saving' ? 'pulse 1.5s infinite' : 'none'
+              }} />
               <span>
                 {autoSaveStatus === 'saving' ? 'Saving...' :
                   autoSaveStatus === 'saved' ? 'Saved' : 'Unsaved'}
@@ -355,84 +426,299 @@ export function NotesCanvas({ workspaceId }) {
           )}
 
           <button
-            className="notes-icon-btn"
             onClick={() => setIsFullScreen(!isFullScreen)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              padding: '8px',
+              borderRadius: '8px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--interactive-hover)';
+              e.currentTarget.style.color = 'var(--text)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--text-secondary)';
+            }}
             title={isFullScreen ? 'Exit focus mode' : 'Focus mode'}
           >
             <FontAwesomeIcon icon={isFullScreen ? faCompress : faExpand} />
           </button>
 
           <button
-            className="notes-icon-btn primary"
             onClick={createNewNote}
+            style={{
+              background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '8px 16px',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 500,
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(96, 165, 250, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
             title="New note"
           >
             <FontAwesomeIcon icon={faPlus} />
+            <span>New</span>
           </button>
         </div>
       </div>
 
-      <div className="notes-content-v2">
+      <div style={{
+        display: 'flex',
+        gap: '20px',
+        flex: 1,
+        overflow: 'hidden',
+        minHeight: 0
+      }}>
         {/* Sidebar */}
         {showSidebar && !isFullScreen && (
-          <div className="notes-sidebar-v2">
-
+          <div style={{
+            width: '280px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            flexShrink: 0
+          }}>
             {/* Folder List */}
-            <div className="notes-folder-list">
+            <div style={{
+              background: 'var(--glass-bg)',
+              backdropFilter: 'blur(16px)',
+              borderRadius: '16px',
+              border: '1px solid var(--border-primary)',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px'
+            }}>
+              <div style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                padding: '8px 12px 4px',
+                marginBottom: '4px'
+              }}>
+                Folders
+              </div>
+
               <button
-                className={`folder-item ${activeFolder === 'All Notes' ? 'active' : ''}`}
                 onClick={() => setActiveFolder('All Notes')}
+                style={{
+                  background: activeFolder === 'All Notes' ? 'var(--accent-blue-soft)' : 'transparent',
+                  border: activeFolder === 'All Notes' ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
+                  borderRadius: '10px',
+                  padding: '12px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  textAlign: 'left',
+                  color: activeFolder === 'All Notes' ? 'var(--accent-blue)' : 'var(--text)'
+                }}
+                onMouseEnter={(e) => {
+                  if (activeFolder !== 'All Notes') {
+                    e.currentTarget.style.background = 'var(--interactive-hover)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (activeFolder !== 'All Notes') {
+                    e.currentTarget.style.background = 'transparent';
+                  }
+                }}
               >
-                <FontAwesomeIcon icon={activeFolder === 'All Notes' ? faFolderOpen : faFolder} className="folder-icon" />
-                <span className="folder-name">All Notes</span>
-                <span className="folder-count">{notes.length}</span>
+                <FontAwesomeIcon icon={activeFolder === 'All Notes' ? faFolderOpen : faFolder} style={{ fontSize: '16px' }} />
+                <span style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>All Notes</span>
+                <span style={{
+                  padding: '2px 8px',
+                  borderRadius: '8px',
+                  background: activeFolder === 'All Notes' ? 'var(--accent-blue)' : 'var(--surface-3)',
+                  color: activeFolder === 'All Notes' ? 'white' : 'var(--text-secondary)',
+                  fontSize: '11px',
+                  fontWeight: 600
+                }}>
+                  {notes.length}
+                </span>
               </button>
+
               {folders.filter(f => f !== 'All Notes').map(folder => (
                 <button
                   key={folder}
-                  className={`folder-item ${activeFolder === folder ? 'active' : ''}`}
                   onClick={() => setActiveFolder(folder)}
+                  style={{
+                    background: activeFolder === folder ? 'var(--accent-blue-soft)' : 'transparent',
+                    border: activeFolder === folder ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    textAlign: 'left',
+                    color: activeFolder === folder ? 'var(--accent-blue)' : 'var(--text)'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (activeFolder !== folder) {
+                      e.currentTarget.style.background = 'var(--interactive-hover)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (activeFolder !== folder) {
+                      e.currentTarget.style.background = 'transparent';
+                    }
+                  }}
                 >
-                  <FontAwesomeIcon icon={activeFolder === folder ? faFolderOpen : faFolder} className="folder-icon" />
-                  <span className="folder-name">{folder}</span>
-                  <span className="folder-count">{notes.filter(n => n.folder === folder).length}</span>
+                  <FontAwesomeIcon icon={activeFolder === folder ? faFolderOpen : faFolder} style={{ fontSize: '16px' }} />
+                  <span style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>{folder}</span>
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '8px',
+                    background: activeFolder === folder ? 'var(--accent-blue)' : 'var(--surface-3)',
+                    color: activeFolder === folder ? 'white' : 'var(--text-secondary)',
+                    fontSize: '11px',
+                    fontWeight: 600
+                  }}>
+                    {notes.filter(n => n.folder === folder).length}
+                  </span>
                 </button>
               ))}
             </div>
 
-            <div className="notes-list-v2">
+            {/* Notes List */}
+            <div style={{
+              background: 'var(--glass-bg)',
+              backdropFilter: 'blur(16px)',
+              borderRadius: '16px',
+              border: '1px solid var(--border-primary)',
+              padding: '12px',
+              flex: 1,
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              minHeight: 0
+            }}>
               {filteredNotes.length === 0 ? (
-                <div className="notes-empty-state">
-                  <p className="empty-text-v2">No notes here</p>
-                  <p className="empty-hint-v2">Click + to create one</p>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '40px 20px',
+                  textAlign: 'center',
+                  gap: '8px'
+                }}>
+                  <div style={{ fontSize: '32px', opacity: 0.3 }}>📝</div>
+                  <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>No notes here</p>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>Click + to create one</p>
                 </div>
               ) : (
                 filteredNotes.map((note) => (
                   <div
                     key={note.id}
-                    className={`note-card-v2 ${activeNote?.id === note.id ? 'active' : ''}`}
                     onClick={() => selectNote(note)}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '10px',
+                      background: activeNote?.id === note.id ? 'var(--accent-blue-soft)' : 'var(--surface-2)',
+                      border: activeNote?.id === note.id ? '1px solid var(--accent-blue-border)' : '1px solid var(--border-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (activeNote?.id !== note.id) {
+                        e.currentTarget.style.background = 'var(--interactive-hover)';
+                        e.currentTarget.style.transform = 'translateX(2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeNote?.id !== note.id) {
+                        e.currentTarget.style.background = 'var(--surface-2)';
+                        e.currentTarget.style.transform = 'translateX(0)';
+                      }
+                    }}
                   >
-                    <div className="note-card-content">
-                      <div className="note-card-preview"
-                        dangerouslySetInnerHTML={{
-                          __html: note.text ?
-                            (note.text.length > 200 ? note.text.substring(0, 200) + '...' : note.text)
-                            : '<i>Empty note</i>'
-                        }}
-                      />
-                    </div>
-                    <div className="note-card-footer">
-                      <span className="note-card-time">
+                    <div
+                      style={{
+                        fontSize: '13px',
+                        color: 'var(--text)',
+                        lineHeight: '1.4',
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 3,
+                        WebkitBoxOrient: 'vertical'
+                      }}
+                      dangerouslySetInnerHTML={{
+                        __html: note.text ?
+                          (note.text.length > 200 ? note.text.substring(0, 200) + '...' : note.text)
+                          : '<i style="color: var(--text-muted);">Empty note</i>'
+                      }}
+                    />
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)'
+                    }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <FontAwesomeIcon icon={faClock} />
                         {new Date(note.updatedAt || note.createdAt).toLocaleDateString()}
                       </span>
-                      {note.folder && <span className="note-card-folder">{note.folder}</span>}
+                      {note.folder && (
+                        <span style={{
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: 'var(--surface-3)',
+                          fontSize: '10px'
+                        }}>
+                          {note.folder}
+                        </span>
+                      )}
                       <button
-                        className="note-card-delete"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (confirm('Delete this note?')) handleDeleteNote(note.id);
+                        }}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = 'var(--accent-error)';
+                          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = 'var(--text-muted)';
+                          e.currentTarget.style.background = 'transparent';
                         }}
                       >
                         <FontAwesomeIcon icon={faTrash} />
@@ -446,138 +732,335 @@ export function NotesCanvas({ workspaceId }) {
         )}
 
         {/* Editor Area */}
-        <div className="notes-editor-v2">
+        <div style={{
+          flex: 1,
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(16px)',
+          borderRadius: '16px',
+          border: '1px solid var(--border-primary)',
+          padding: '20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          overflow: 'hidden',
+          minHeight: 0
+        }}>
           {isEditing ? (
             <>
               {/* Title Input */}
-              <div className="note-title-container">
-                <div className="note-meta-inputs">
-                  <div className="folder-input-wrapper">
-                    <FontAwesomeIcon icon={faFolder} className="folder-input-icon" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <div style={{ position: 'relative', flex: '0 0 200px' }}>
+                    <FontAwesomeIcon
+                      icon={faFolder}
+                      style={{
+                        position: 'absolute',
+                        left: '14px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: 'var(--text-muted)',
+                        fontSize: '14px',
+                        pointerEvents: 'none'
+                      }}
+                    />
                     <input
                       type="text"
                       placeholder="Folder..."
                       value={noteFolder}
                       onChange={handleFolderChange}
-                      className="note-folder-input"
                       list="existing-folders"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px 10px 40px',
+                        borderRadius: '10px',
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border-primary)',
+                        color: 'var(--text)',
+                        fontSize: '13px',
+                        outline: 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = 'var(--accent-blue)';
+                        e.target.style.background = 'var(--surface-3)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = 'var(--border-primary)';
+                        e.target.style.background = 'var(--surface-2)';
+                      }}
                     />
                     <datalist id="existing-folders">
                       {folders.filter(f => f !== 'All Notes').map(f => <option key={f} value={f} />)}
                     </datalist>
                   </div>
                 </div>
+
                 <input
                   type="text"
                   placeholder="Note Title"
                   value={noteTitle}
                   onChange={handleTitleChange}
-                  className="note-title-input"
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border-primary)',
+                    color: 'var(--text)',
+                    fontSize: '20px',
+                    fontWeight: 600,
+                    outline: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = 'var(--accent-blue)';
+                    e.target.style.background = 'var(--surface-3)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'var(--border-primary)';
+                    e.target.style.background = 'var(--surface-2)';
+                  }}
                 />
               </div>
 
               {/* Formatting Toolbar */}
-              <div className="editor-toolbar">
+              <div style={{
+                display: 'flex',
+                gap: '6px',
+                flexWrap: 'wrap',
+                padding: '12px',
+                background: 'var(--surface-2)',
+                borderRadius: '10px',
+                border: '1px solid var(--border-secondary)',
+                flexShrink: 0
+              }}>
                 <button
-                  className="toolbar-btn"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => execCommand('formatBlock', 'H1')}
                   title="Heading 1"
-                  style={{ fontWeight: 'bold', fontSize: '14px' }}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   H1
                 </button>
                 <button
-                  className="toolbar-btn"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => execCommand('formatBlock', 'H2')}
                   title="Heading 2"
-                  style={{ fontWeight: 'bold', fontSize: '12px' }}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   H2
                 </button>
-                <div className="toolbar-separator"></div>
+                <div style={{ width: '1px', height: '24px', background: 'var(--border-secondary)', margin: '0 4px' }} />
                 <button
-                  className="toolbar-btn"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => execCommand('bold')}
                   title="Bold (Ctrl+B)"
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   <FontAwesomeIcon icon={faBold} />
                 </button>
                 <button
-                  className="toolbar-btn"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => execCommand('italic')}
                   title="Italic (Ctrl+I)"
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   <FontAwesomeIcon icon={faItalic} />
                 </button>
-                <div className="toolbar-separator"></div>
+                <div style={{ width: '1px', height: '24px', background: 'var(--border-secondary)', margin: '0 4px' }} />
                 <button
-                  className="toolbar-btn"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => execCommand('insertUnorderedList')}
                   title="Bullet List"
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   <FontAwesomeIcon icon={faListUl} />
                 </button>
                 <button
-                  className="toolbar-btn"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={insertCheckbox}
                   title="Insert Checkbox"
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   <FontAwesomeIcon icon={faCheckSquare} />
                 </button>
-                <div className="toolbar-separator"></div>
+                <div style={{ width: '1px', height: '24px', background: 'var(--border-secondary)', margin: '0 4px' }} />
                 <button
-                  className={`toolbar-btn ${isRecording ? 'active' : ''}`}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={toggleRecording}
                   title={isRecording ? 'Stop Recording' : 'Start Recording'}
-                  style={{ color: isRecording ? '#ef4444' : undefined }}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: isRecording ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                    border: 'none',
+                    color: isRecording ? 'var(--accent-error)' : 'var(--text)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isRecording) e.currentTarget.style.background = 'var(--interactive-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isRecording) e.currentTarget.style.background = 'transparent';
+                  }}
                 >
-                  <FontAwesomeIcon icon={isRecording ? faMicrophone : faMicrophone} beat={isRecording} />
+                  <FontAwesomeIcon icon={faMicrophone} beat={isRecording} />
                 </button>
               </div>
 
               {/* Rich Text Editor */}
               <div
                 ref={editorRef}
-                className="notes-rich-editor"
                 contentEditable
                 onInput={handleContentChange}
                 suppressContentEditableWarning={true}
-                placeholder="Start typing..."
                 onKeyDown={(e) => {
                   if (e.key === 'Tab') {
                     e.preventDefault();
                     document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
                   }
                 }}
+                style={{
+                  flex: 1,
+                  padding: '16px',
+                  borderRadius: '10px',
+                  background: 'var(--surface-1)',
+                  border: '1px solid var(--border-secondary)',
+                  color: 'var(--text)',
+                  fontSize: '15px',
+                  lineHeight: '1.6',
+                  outline: 'none',
+                  overflowY: 'auto',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+                  minHeight: 0
+                }}
               />
 
-              <div className="notes-editor-footer">
-                <span className="word-count">
-                  {getWordCount(noteContent)} words
-                </span>
-                <span className="word-count">
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                padding: '8px 0',
+                flexShrink: 0
+              }}>
+                <span>{getWordCount(noteContent)} words</span>
+                <span>
                   {activeNote ? 'Last edited: ' + new Date(activeNote.updatedAt).toLocaleTimeString() : 'New Note'}
                 </span>
               </div>
             </>
           ) : (
-            <div className="notes-editor-empty">
-              <div className="editor-empty-icon">📝</div>
-              <h3 className="editor-empty-title">Select a Note</h3>
-              <button className="editor-empty-btn" onClick={createNewNote}>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: 1,
+              gap: '20px',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '64px', opacity: 0.3 }}>📝</div>
+              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: 'var(--text)' }}>Select a Note</h3>
+              <button
+                onClick={createNewNote}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(96, 165, 250, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
                 Create New Note
               </button>
             </div>
           )}
         </div>
       </div>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </div>
   );
 }
