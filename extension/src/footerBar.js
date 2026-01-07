@@ -1035,9 +1035,22 @@ export function injectFooterBar() {
                 mark.style.cursor = 'pointer';
                 // Remove border/padding to strictly preserve original line-height and layout
                 mark.style.padding = '0';
-                mark.style.margin = '0';
+                // Small negative horizontal margin to eliminate side gaps
+                mark.style.marginLeft = '-0.5px';
+                mark.style.marginRight = '-0.5px';
+                mark.style.marginTop = '0';  // No vertical margin - let box-decoration-break handle it
+                mark.style.marginBottom = '0';
                 mark.style.border = 'none';
                 mark.style.borderRadius = '0';
+
+                // Make each line fragment independent (like native text selection)
+                mark.style.display = 'inline';
+                mark.style.boxDecorationBreak = 'clone';  // Each line is independent
+                mark.style.webkitBoxDecorationBreak = 'clone';  // Safari support
+                mark.style.lineHeight = 'inherit';
+                mark.style.verticalAlign = 'baseline';
+                mark.style.letterSpacing = 'inherit';
+                mark.style.wordSpacing = 'inherit';
 
                 mark.style.transition = 'background-color 0.2s ease';
                 mark.onmouseenter = () => {

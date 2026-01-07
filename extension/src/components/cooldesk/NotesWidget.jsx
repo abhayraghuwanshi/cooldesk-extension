@@ -72,7 +72,6 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
 
   return (
     <div className="cooldesk-panel notes-widget" style={{
-      height: '100%',
       display: 'flex',
       flexDirection: 'column',
       boxSizing: 'border-box'
@@ -85,58 +84,31 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
       </div>
 
       <div style={{
-        flex: 1,
-        padding: '10px 0',
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
-        minHeight: 0, // Critical for nested flex scrolling
-        overflow: 'hidden'
+        minHeight: 0,
+        overflow: 'visible'
       }}>
         {/* Unified Input Card */}
         <div style={{
-          flex: 1,
+          minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          background: 'rgba(30, 41, 59, 0.4)',
           border: `1px solid ${isListening ? '#ef4444' : 'rgba(148, 163, 184, 0.2)'}`,
           borderRadius: '12px',
           overflow: 'hidden',
           transition: 'all 0.2s ease',
         }}>
 
-          {/* Text Area Area */}
-          <textarea
-            value={newNoteText}
-            onChange={(e) => setNewNoteText(e.target.value)}
-            placeholder={isListening ? "Listening..." : "Type or use voice to add a note..."}
-            style={{
-              flex: 1,
-              width: '100%',
-              background: 'transparent',
-              border: 'none',
-              padding: '16px',
-              color: '#E5E7EB',
-              fontSize: 'var(--font-md, 14px)',
-              fontFamily: 'inherit',
-              resize: 'none',
-              outline: 'none',
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                handleAddNote();
-              }
-            }}
-          />
-
-          {/* Action Bar (Bottom of card) */}
+          {/* Action Bar (Top of card) */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '8px 12px',
-            borderTop: '1px solid rgba(148, 163, 184, 0.1)',
-            background: 'rgba(30, 41, 59, 0.3)'
+            borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+            background: 'rgba(30, 41, 59, 0.3)',
+            flexShrink: 0
           }}>
             {/* Left: Character Count or Status */}
             <div style={{
@@ -207,6 +179,32 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
               </button>
             </div>
           </div>
+
+          {/* Text Area Area */}
+          <textarea
+            value={newNoteText}
+            onChange={(e) => setNewNoteText(e.target.value)}
+            placeholder={isListening ? "Listening..." : "Type or use voice to add a note..."}
+            style={{
+              flex: 1,
+              minHeight: 0,
+              width: '100%',
+              background: 'transparent',
+              border: 'none',
+              padding: '16px',
+              color: '#E5E7EB',
+              fontSize: 'var(--font-md, 14px)',
+              fontFamily: 'inherit',
+              resize: 'none',
+              outline: 'none',
+              boxShadow: 'none',
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                handleAddNote();
+              }
+            }}
+          />
         </div>
       </div>
     </div>

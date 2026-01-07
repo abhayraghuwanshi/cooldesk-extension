@@ -1,6 +1,7 @@
 import { faGear, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
+import logo from '../../../logo-2.png';
 import '../../styles/cooldesk.css';
 import '../../styles/global-add.css';
 import '../../styles/spatial.css';
@@ -237,7 +238,16 @@ export function CoolDeskContainer({
       {/* Header with Logo and Settings - Outside spatial shell */}
       <div className="cooldesk-header">
         <div className="cooldesk-logo">
-          <div className="cooldesk-logo-icon">🏢</div>
+          <img
+            src={logo}
+            alt="CoolDesk Logo"
+            className="cooldesk-logo-icon"
+            style={{
+              width: '32px',
+              height: '32px',
+              objectFit: 'contain'
+            }}
+          />
           <span>Cooldesk</span>
         </div>
         <button className="cooldesk-settings-btn" onClick={onOpenSettings} title="Settings">

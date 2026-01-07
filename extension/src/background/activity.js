@@ -2,7 +2,8 @@
 import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, putActivityTimeSeriesEvent } from '../db/index.js';
 import { setHostActivity } from '../services/extensionApi.js';
 import { getUrlParts } from '../utils.js';
-import { autoSavePredictor } from '../ml/inference/autoSavePredictor.js';
+// import { autoSavePredictor } from '../ml/inference/autoSavePredictor.js'; // DISABLED - ML modules removed
+
 
 // Helper function to clean URLs (returns base domain for app-like aggregation)
 function cleanUrl(url) {
@@ -249,25 +250,20 @@ async function flushActivityBatch() {
         try { await setHostActivity(top); } catch { /* ignore */ }
     }
 
-    // ML Auto-Save: Check URLs for auto-save predictions (non-blocking, fire-and-forget)
-    for (const url of urls) {
-        const data = activityData[url];
-        if (!data) continue;
-
-        // Only check URLs with significant engagement
-        if (hasMinimumEngagement(data)) {
-            // Run prediction asynchronously (don't block activity tracking)
-            (async () => {
-                try {
-                    // Use statically imported autoSavePredictor (imported at top of file)
-                    await autoSavePredictor.autoSaveIfNeeded(url, data, {});
-                } catch (err) {
-                    // Silently catch errors to not interfere with activity tracking
-                    console.debug('[ML] Auto-save check failed:', err.message);
-                }
-            })();
-        }
-    }
+    // ML Auto-Save DISABLED - ML modules have been removed
+    // for (const url of urls) {
+    //     const data = activityData[url];
+    //     if (!data) continue;
+    //     if (hasMinimumEngagement(data)) {
+    //         (async () => {
+    //             try {
+    //                 await autoSavePredictor.autoSaveIfNeeded(url, data, {});
+    //             } catch (err) {
+    //                 console.debug('[ML] Auto-save check failed:', err.message);
+    //             }
+    //         })();
+    //     }
+    // }
 }
 
 // Flush time series events to database
