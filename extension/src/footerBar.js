@@ -859,185 +859,233 @@ export function injectFooterBar() {
 
     // ... (existing resize/drag logic) ...
 
-    // --- Helper 1: Inline Highlighter (Robust Multi-Node) ---
+    // --- Helper 1: Inline Highlighter (Robust Multi-Node Global Mapping) ---
+    // Store active highlights to re-apply them on DOM changes
+    let activeHighlights = [];
+    let observer = null;
+    let observerTimeout = null;
+
     const renderInlineHighlight = (note) => {
       if (!note.text) return;
 
       try {
-        const searchStr = note.text.trim().replace(/\s+/g, ' '); // Normalize spaces
+        const searchStr = note.text.trim();
         if (!searchStr) return;
 
-        // Strategy: Brute force text search across all visible text nodes? 
-        // Better: Use TreeWalker to build a map of text content.
+        // Step 1: Build a global map of all text content
+        const nodeMapping = [];
+        let allText = '';
 
         const walker = document.createTreeWalker(
           document.body,
           NodeFilter.SHOW_TEXT,
           {
             acceptNode: (node) => {
-              // Skip hidden nodes or our own shadow host if possible (though shadow host is element)
-              if (node.parentElement && (node.parentElement.offsetParent === null || ['SCRIPT', 'STYLE', 'NOSCRIPT'].includes(node.parentElement.tagName))) {
-                return NodeFilter.FILTER_REJECT;
-              }
+              // Skip empty/whitespace-only (unless it has newlines which might be structural)
+              if (!node.nodeValue.trim() && !node.nodeValue.includes('\n')) return NodeFilter.FILTER_SKIP;
+
+              const parent = node.parentElement;
+              if (!parent) return NodeFilter.FILTER_REJECT;
+
+              // AGGRESSIVE FILTERING: Skip "noise" elements
+              // 1. Script/Style/Form inputs
+              if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+
+              // 2. Interactive elements that usually contain "UI text" not "Content"
+              // (e.g. "Copy Code", "Submit", "Menu")
+              if (['BUTTON', 'svg', 'nav', 'menu'].includes(parent.tagName.toLowerCase())) return NodeFilter.FILTER_REJECT;
+              if (parent.closest('button') || parent.closest('a[role="button"]')) return NodeFilter.FILTER_REJECT;
+
+              // 3. Accessibility hidden content
+              if (parent.getAttribute('aria-hidden') === 'true') return NodeFilter.FILTER_REJECT;
+
+              // 4. Our own elements
+              if (parent.closest('.cooldesk-sticky-note') || parent.closest('#cooldesk-footer-bar') || parent.classList.contains('cooldesk-text-highlight')) return NodeFilter.FILTER_REJECT;
+
+              // Check visibility (expensive but necessary for "visual" search?)
+              if (parent.offsetParent === null) return NodeFilter.FILTER_REJECT;
+
               return NodeFilter.FILTER_ACCEPT;
             }
           },
           false
         );
 
-        // We need to find the sequence of text nodes that matches searchStr.
-        // Since `window.find` modifies selection, we avoid it.
-        // We'll iterate all text nodes, build a parallel string, find the index, then map back to nodes.
-
-        let allText = '';
-        const textNodes = [];
-
         let currentNode;
         while (currentNode = walker.nextNode()) {
           const val = currentNode.nodeValue;
-          // We keep original text but will search in normalized text? 
-          // Searching in exact text is safer for replacement.
-          // But user selection might have crossed block boundaries which introduces newlines.
-
-          // Simplified approach: Search in current node first (fast path)
-          if (val.includes(searchStr)) {
-            // ... (Existing logic for single node match) ...
-          }
-
-          textNodes.push({
+          nodeMapping.push({
             node: currentNode,
             start: allText.length,
+            end: allText.length + val.length,
             length: val.length,
             text: val
           });
           allText += val;
         }
 
-        // Normalize for search: Collapsing spaces might be needed if HTML has extra spaces.
-        // We use Regex to match the search string tolerant of whitespace differences.
-
+        // Step 2: Create a robust regex
         const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-        // 1. Escape special regex chars
-        let pattern = escapeRegExp(searchStr);
+        // Normalize search string: condense multiple spaces to single space for the pattern base
+        const normalizedSearch = searchStr.replace(/\s+/g, ' ').trim();
 
-        // 2. Allow flexibility for spaces (replace escaped spaces with \s+)
-        pattern = pattern.replace(/\\s+/g, '\\s+');
+        let pattern = escapeRegExp(normalizedSearch);
 
-        // 3. Allow flexibility for quotes (smart vs straight)
-        pattern = pattern.replace(/'/g, "['’]"); // Handle single quotes/apostrophes
-        pattern = pattern.replace(/"/g, '["“”]'); // Handle double quotes
+        // Match zero or more whitespace/newlines between words
+        pattern = pattern.replace(/ /g, '[\\s\\n]*');
 
-        const regex = new RegExp(pattern, 'mi'); // multiline + case-insensitive for robustness? (maybe just 'm' is safer to avoid over-matching)
-        // Let's stick to case-sensitive for data integrity, but smart quotes are crucial.
+        // Handle smart quotes
+        pattern = pattern.replace(/'/g, "['’]");
+        pattern = pattern.replace(/"/g, '["“”]');
 
-        const match = regex.exec(allText);
-        const matchIndex = match ? match.index : -1;
+        const regex = new RegExp(pattern, 'gmi');
 
-        if (matchIndex === -1) {
-          console.warn('Could not find text match:', searchStr);
-          console.log('Search Pattern Used:', pattern);
-          return;
-        }
+        // Step 3: Find matches
+        let match;
+        let foundAny = false;
 
-        // Debug: Count total matches
-        const globalRegex = new RegExp(pattern, 'gmi');
-        const totalMatches = (allText.match(globalRegex) || []).length;
-        console.log(`[CoolDesk Search] Pattern found ${totalMatches} times.`);
-        console.log(`[CoolDesk Search] Highlighting first match at index ${matchIndex}.`);
+        while ((match = regex.exec(allText)) !== null) {
+          foundAny = true;
+          const globalStart = match.index;
+          const globalEnd = match.index + match[0].length;
 
-        // We have a match starting at matchIndex in allText.
-        // Find which text node this falls into.
+          // Step 4: Map back to nodes
+          const affectedNodes = nodeMapping.filter(m =>
+            (m.start < globalEnd) && (m.end > globalStart)
+          );
 
-        let currentIdx = matchIndex;
-        // IMPORTANT: Use the actual length of the matched string in DOM, not the search string length
-        // because DOM might have extra spaces "foo   bar" vs "foo bar"
-        let remainingLen = match[0].length;
+          if (affectedNodes.length === 0) continue;
 
-        // Optimization: Start binary search or just iterate? Iterate is fine.
-        let startNodeIdx = textNodes.findIndex(t => currentIdx >= t.start && currentIdx < t.start + t.length);
+          affectedNodes.forEach(m => {
+            const nodeStart = Math.max(0, globalStart - m.start);
+            const nodeEnd = Math.min(m.length, globalEnd - m.start);
 
-        if (startNodeIdx === -1) return;
+            if (nodeEnd > nodeStart) {
+              // Check if already highlighted
+              if (m.node.parentElement && m.node.parentElement.classList.contains('cooldesk-text-highlight') && m.node.parentElement.dataset.id === note.id) {
+                return;
+              }
 
-        // We found the start node.
-        // The match might span multiple nodes.
-
-        const rangesToHighlight = [];
-
-        for (let i = startNodeIdx; i < textNodes.length && remainingLen > 0; i++) {
-          const t = textNodes[i];
-          let nodeStartOffset = (i === startNodeIdx) ? (currentIdx - t.start) : 0;
-          let nodeEndOffset = Math.min(t.length, nodeStartOffset + remainingLen);
-
-          if (nodeEndOffset > nodeStartOffset) {
-            rangesToHighlight.push({
-              node: t.node,
-              start: nodeStartOffset,
-              end: nodeEndOffset
-            });
-            remainingLen -= (nodeEndOffset - nodeStartOffset);
-          }
-        }
-
-        // Apply highlights (in reverse order to not mess up offsets of earlier nodes?)
-        // Actually, replaceChild messes up the walker but we are done walking.
-        // Splitting text nodes validates other references? 
-        // Yes, splitting `node` invalidates `start / length` calculations for subsequent nodes 
-        // ONLY if they are the SAME node. But our loop moves to next node (or stays if same?).
-        // ACTUALLY if we have multiple ranges in SAME node (recursive?), we need to be careful.
-        // But we only support ONE instance highlight per call for now.
-
-        rangesToHighlight.reverse().forEach(({ node, start, end }) => {
-          const range = document.createRange();
-          range.setStart(node, start);
-          range.setEnd(node, end);
-
-          const mark = document.createElement('mark');
-          mark.className = 'cooldesk-text-highlight';
-          mark.dataset.id = note.id;
-          mark.title = 'CoolDesk Highlight (Click to Delete)';
-          mark.textContent = range.toString();
-
-          // Force inline styles to bypass CSP/Stylesheet blocking
-          mark.style.backgroundColor = '#fef08a';
-          mark.style.color = 'inherit';
-          mark.style.cursor = 'pointer';
-          mark.style.borderRadius = '2px';
-          mark.style.boxShadow = '0 0 0 2px rgba(254, 240, 138, 0.3)';
-
-          mark.onclick = async (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            if (confirm('Delete this highlight?')) {
               try {
-                await new Promise(resolve => {
-                  chrome.runtime.sendMessage({ action: 'deleteUrlNote', noteId: note.id }, resolve);
-                });
+                const range = document.createRange();
+                range.setStart(m.node, nodeStart);
+                range.setEnd(m.node, nodeEnd);
 
-                // Remove ALL marks with this ID
-                const relatedMarks = document.querySelectorAll(`mark.cooldesk-text-highlight[data-id="${note.id}"]`);
-                relatedMarks.forEach(m => {
-                  const parent = m.parentNode;
-                  const textNode = document.createTextNode(m.textContent);
-                  parent.replaceChild(textNode, m);
-                  parent.normalize();
-                });
+                const mark = document.createElement('mark');
+                mark.className = 'cooldesk-text-highlight';
+                mark.dataset.id = note.id;
+                mark.title = 'CoolDesk Highlight';
 
-                showNotification('Highlight removed', '#4b5563');
-              } catch (err) {
-                console.error('Failed to delete highlight:', err);
+                // Styles: Minimal "Highlighter" Look
+                // Strictly no layout impact: no padding, no border, no margin
+                // Styles: Minimal "Highlighter" Look
+                // Strictly no layout impact: no padding, no border, no margin
+                mark.style.backgroundColor = 'rgba(250, 204, 21, 0.3)'; // Default Yellow for dark text
+                mark.style.color = 'inherit';
+
+                // Dynamic Contrast: Switch highlight color if original text is light (e.g. white on dark mode)
+                // User prefers different highlight color over changing text color
+                try {
+                  const computedStyle = window.getComputedStyle(m.node.parentElement);
+                  const color = computedStyle.color;
+                  const rgb = color.match(/\d+/g);
+                  if (rgb) {
+                    const brightness = (parseInt(rgb[0]) * 299 + parseInt(rgb[1]) * 587 + parseInt(rgb[2]) * 114) / 1000;
+                    if (brightness > 128) { // Light text found (> 50% luminance)
+                      // Use a Purple/Blue highlight that looks good with white text
+                      mark.style.backgroundColor = 'rgba(139, 92, 246, 0.5)'; // Violet-500 @ 50%
+                    }
+                  }
+                } catch (e) {
+                  // Fallback to yellow
+                }
+
+                mark.style.cursor = 'pointer';
+                // Remove border/padding to strictly preserve original line-height and layout
+                mark.style.padding = '0';
+                mark.style.margin = '0';
+                mark.style.border = 'none';
+                mark.style.borderRadius = '0';
+
+                mark.style.transition = 'background-color 0.2s ease';
+                mark.onmouseenter = () => {
+                  if (mark.dataset.mode === 'light-text') {
+                    mark.style.backgroundColor = 'rgba(139, 92, 246, 0.8)'; // Darker violet on hover
+                  } else {
+                    mark.style.backgroundColor = 'rgba(250, 204, 21, 0.5)'; // Darker yellow on hover
+                  }
+                };
+                mark.onmouseleave = () => {
+                  if (mark.dataset.mode === 'light-text') {
+                    mark.style.backgroundColor = 'rgba(139, 92, 246, 0.6)';
+                  } else {
+                    mark.style.backgroundColor = 'rgba(250, 204, 21, 0.3)';
+                  }
+                };
+
+                mark.onclick = async (e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  if (confirm('Delete this highlight?')) {
+                    try {
+                      await new Promise(resolve => {
+                        chrome.runtime.sendMessage({ action: 'deleteUrlNote', noteId: note.id }, resolve);
+                      });
+
+                      document.querySelectorAll(`mark.cooldesk-text-highlight[data-id="${note.id}"]`).forEach(el => {
+                        const parent = el.parentNode;
+                        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                        parent.removeChild(el);
+                        parent.normalize();
+                      });
+
+                      activeHighlights = activeHighlights.filter(h => h.id !== note.id);
+                      showNotification('Highlight removed', '#4b5563');
+                    } catch (err) {
+                      console.error('Failed to delete highlight:', err);
+                    }
+                  }
+                };
+
+                range.surroundContents(mark);
+              } catch (e) {
+                console.warn('[CoolDesk Highlight] Failed to wrap node:', e);
               }
             }
-          };
+          });
+        }
 
-          // Extract contents and wrap
-          range.deleteContents();
-          range.insertNode(mark);
-        });
+        if (foundAny) {
+          console.log('[CoolDesk] Highlight applied for:', normalizedSearch.substring(0, 20) + '...');
+        }
 
       } catch (e) {
         console.error('Error rendering inline highlight:', e);
       }
+    };
+
+    // Mutation Observer to handle dynamic content (ChatGPT streaming)
+    const setupObserver = () => {
+      if (observer) return;
+
+      observer = new MutationObserver((mutations) => {
+        // Debounce: only run if no new mutations for 1s
+        if (observerTimeout) clearTimeout(observerTimeout);
+
+        observerTimeout = setTimeout(() => {
+          if (activeHighlights.length > 0) {
+            // console.log('[CoolDesk] DOM changed, re-applying highlights');
+            activeHighlights.forEach(renderInlineHighlight);
+          }
+        }, 1000);
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
     };
 
     // --- Helper 2: Sticky Card Renderer ---
@@ -1234,6 +1282,15 @@ export function injectFooterBar() {
 
           console.log('[CoolDesk] Sticky notes:', stickyNotes.length, stickyNotes);
           console.log('[CoolDesk] Highlights:', highlights.length, highlights);
+
+          // Store active highlights for observer
+          activeHighlights = highlights;
+          setupObserver();
+
+
+          // Store active highlights for observer
+          activeHighlights = highlights;
+          setupObserver();
 
           stickyNotes.forEach(renderSingleSticky);
           highlights.forEach(renderInlineHighlight);

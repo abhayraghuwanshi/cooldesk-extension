@@ -4,6 +4,7 @@
  * Provides consistent, validated, error-handled database operations
  */
 
+import { getUrlParts } from '../utils.js'
 import { ErrorSeverity, ErrorStrategy, handleDatabaseError, withErrorHandling } from './error-handler.js'
 import { cleanupLegacyDatabases, isMigrationNeeded, performMigration } from './migration-manager.js'
 import { closeUnifiedDB, DB_CONFIG, getUnifiedDB } from './unified-db.js'
@@ -1416,3 +1417,98 @@ export async function getTimeSeriesDataRange(startTime, endTime) {
         request.onerror = () => reject(request.error);
     });
 }
+
+/**
+ * Get detailed analytics for a specific URL
+ * Aggregates visits, time spent, and dates from activity series
+ */
+export const getUrlAnalytics = withErrorHandling(async (url) => {
+    if (!url) return null;
+
+    const db = await getUnifiedDB();
+    const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readonly');
+    const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES);
+    const index = store.index('by_url');
+
+    // Use centralized URL normalization to match how activity.js saves data
+    const targetUrls = [url];
+    try {
+        const parts = getUrlParts(url);
+        if (parts && parts.key && parts.key !== url) {
+            targetUrls.push(parts.key);
+        }
+    } catch (e) {
+        console.warn('Failed to parse URL for analytics:', e);
+    }
+
+    // Fetch data for all candidates
+    const results = await Promise.all(targetUrls.map(u =>
+        new Promise((resolve) => {
+            const req = index.getAll(u);
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        })
+    ));
+
+    const events = results.flat();
+
+    return new Promise((resolve) => {
+        if (events.length === 0) {
+            resolve({
+                totalVisits: 0,
+                totalTime: 0,
+                firstVisit: null,
+                lastVisit: null,
+                lastActive: null
+            });
+            return;
+        }
+
+        // Calculate stats
+        let totalTime = 0;
+        let firstVisit = events[0].timestamp;
+        let lastVisit = events[0].timestamp;
+        let visitCount = 0;
+
+        // Track unique session IDs to count visits accurately
+        const seenSessions = new Set();
+
+        events.forEach(event => {
+            // Visit Counting
+            if (event.sessionId && !seenSessions.has(event.sessionId)) {
+                visitCount++;
+                seenSessions.add(event.sessionId);
+            }
+
+            // Time aggregation
+            // Priority: metrics.timeSpent (from activity.js) > metrics.activeTime > legacy event.time
+            const duration =
+                event.metrics?.timeSpent ||
+                event.metrics?.activeTime ||
+                event.metrics?.duration ||
+                event.time ||
+                0;
+
+            totalTime += (typeof duration === 'number' ? duration : 0);
+
+            // Date ranges
+            if (event.timestamp < firstVisit) firstVisit = event.timestamp;
+            if (event.timestamp > lastVisit) lastVisit = event.timestamp;
+        });
+
+        // Fallback if no sessions found (legacy data)
+        if (visitCount === 0) visitCount = events.length;
+
+        resolve({
+            totalVisits: visitCount,
+            totalTime, // in milliseconds
+            firstVisit,
+            lastVisit,
+            lastActive: lastVisit
+        });
+    });
+}, {
+    operation: 'getUrlAnalytics',
+    severity: ErrorSeverity.LOW,
+    fallbackFunction: () => ({ totalVisits: 0, totalTime: 0 })
+});

@@ -527,7 +527,7 @@
   transition: all 0.2s ease;
   cursor: pointer;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   height: 260px;

@@ -40,8 +40,14 @@ const CATEGORY_ICONS = {
   utilities: faTools
 };
 
+import { useState } from 'react';
+import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
+
 export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin }) {
   if (!workspace) return null;
+
+  const [popoverState, setPopoverState] = useState({ index: null, rect: null });
+  const activePopover = popoverState.index;
 
   const { name, urls = [], description, icon = 'folder' } = workspace;
   const urlCount = urls.length;
@@ -63,7 +69,7 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
     <div
       className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''}`}
       onClick={handleCardClick}
-      style={{ position: 'relative' }} // ensure positioning for pin
+      style={{ position: 'relative' }}
     >
       <div className="workspace-card-header">
         <div className={`workspace-icon ${colorClass}`}>
@@ -116,17 +122,20 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
         <ul className="workspace-links">
           {displayLinks.map((urlObj, idx) => {
             const faviconUrl = getFaviconUrl(urlObj.url, 16);
+            const isPopoverOpen = activePopover === idx;
+
             return (
               <li
                 key={idx}
                 className="workspace-link-item"
+                onMouseLeave={() => setPopoverState({ index: null, rect: null })}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (urlObj.url) {
                     window.open(urlObj.url, '_blank');
                   }
                 }}
-                style={{ cursor: 'pointer' }}
+                style={{ cursor: 'pointer', position: 'relative' }}
               >
                 <span className="workspace-link-icon">
                   {faviconUrl ? (
@@ -153,10 +162,43 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
                 <span className="workspace-link-text" title={urlObj.title || urlObj.url}>
                   {urlObj.title || new URL(urlObj.url).hostname}
                 </span>
+
+                {/* Analytics Trigger */}
+                <span
+                  className="workspace-link-analytics"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setPopoverState(prev => prev.index === idx ? { index: null, rect: null } : { index: idx, rect });
+                  }}
+                  style={{
+                    padding: '4px 6px',
+                    fontSize: '11px',
+                    color: isPopoverOpen ? '#60A5FA' : 'rgba(148, 163, 184, 0.5)',
+                    opacity: 0.8,
+                    transition: 'all 0.2s',
+                    marginRight: '4px'
+                  }}
+                  title="View Analytics"
+                >
+                  <FontAwesomeIcon icon={faChartLine} />
+                </span>
+
                 <FontAwesomeIcon
                   icon={faExternalLinkAlt}
                   className="workspace-link-external"
                 />
+
+                {/* Analytics Popover */}
+                {isPopoverOpen && (
+                  <UrlAnalyticsPopover
+                    url={urlObj.url}
+                    title={urlObj.title}
+                    onClose={() => setPopoverState({ index: null, rect: null })}
+                    triggerRect={popoverState.rect}
+                  />
+                )}
               </li>
             );
           })}

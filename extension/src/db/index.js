@@ -26,7 +26,7 @@
  */
 
 // Import core functions directly for use in setup functions
-import { initializeDatabase, closeDatabaseConnection } from './unified-api.js'
+import { closeDatabaseConnection, initializeDatabase } from './unified-api.js'
 import { DB_CONFIG, getUnifiedDB as getIndexedDBInstance } from './unified-db.js'
 
 // Export all API functions
@@ -42,7 +42,7 @@ export {
     // UI State operations
     getUIState,
     // URL Notes operations
-    getUrlNotes, getUrlRecord, getWorkspace,
+    getUrlAnalytics, getUrlNotes, getUrlRecord, getWorkspace,
     // Initialization
     initializeDatabase,
     // Legacy compatibility functions
