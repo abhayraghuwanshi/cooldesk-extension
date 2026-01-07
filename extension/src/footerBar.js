@@ -985,20 +985,51 @@ export function injectFooterBar() {
                 mark.style.color = 'inherit';
 
                 // Dynamic Contrast: Switch highlight color if original text is light (e.g. white on dark mode)
-                // User prefers different highlight color over changing text color
+                // Robust detection: traverse UP the DOM to find the effective color
                 try {
-                  const computedStyle = window.getComputedStyle(m.node.parentElement);
-                  const color = computedStyle.color;
-                  const rgb = color.match(/\d+/g);
-                  if (rgb) {
-                    const brightness = (parseInt(rgb[0]) * 299 + parseInt(rgb[1]) * 587 + parseInt(rgb[2]) * 114) / 1000;
-                    if (brightness > 128) { // Light text found (> 50% luminance)
-                      // Use a Purple/Blue highlight that looks good with white text
-                      mark.style.backgroundColor = 'rgba(139, 92, 246, 0.5)'; // Violet-500 @ 50%
+                  // Helper function to find effective text color
+                  const getEffectiveTextColor = (node) => {
+                    let element = node.parentElement;
+                    while (element) {
+                      const style = window.getComputedStyle(element);
+                      const color = style.color;
+                      // Skip transparent/default colors
+                      if (color && color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') {
+                        return color;
+                      }
+                      element = element.parentElement;
+                      if (!element || element === document.body) break;
+                    }
+                    // Fallback: check body
+                    const bodyStyle = window.getComputedStyle(document.body);
+                    return bodyStyle.color || 'rgb(0, 0, 0)';
+                  };
+
+                  const effectiveColor = getEffectiveTextColor(m.node);
+                  const rgb = effectiveColor.match(/\d+/g);
+
+                  console.log('[CoolDesk] Detected color:', effectiveColor, 'RGB:', rgb);
+
+                  if (rgb && rgb.length >= 3) {
+                    const r = parseInt(rgb[0]);
+                    const g = parseInt(rgb[1]);
+                    const b = parseInt(rgb[2]);
+                    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+                    console.log('[CoolDesk] Brightness:', brightness, '(threshold: 128)');
+
+                    if (brightness > 128) { // Light text detected
+                      // Use VIOLET background for light text (high contrast!)
+                      // Use setProperty with !important to force this color
+                      mark.style.setProperty('background-color', 'rgba(139, 92, 246, 0.6)', 'important');
+                      mark.dataset.mode = 'light-text'; // Set mode for hover handlers
+                      console.log('[CoolDesk] ✓ Applied VIOLET background for light text');
+                    } else {
+                      console.log('[CoolDesk] ✓ Keeping YELLOW background for dark text');
                     }
                   }
                 } catch (e) {
-                  // Fallback to yellow
+                  console.warn('[CoolDesk] Color detection failed:', e);
                 }
 
                 mark.style.cursor = 'pointer';
