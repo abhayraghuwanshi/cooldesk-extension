@@ -895,8 +895,8 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
           left: 0,
           right: 0,
           marginTop: '8px',
-          background: 'rgba(30, 41, 59, 0.98)',
-          border: '1px solid rgba(148, 163, 184, 0.2)',
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border-primary)',
           borderRadius: '12px',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
           overflow: 'hidden',
@@ -911,10 +911,10 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
                 cursor: 'pointer',
                 transition: 'background 0.1s ease',
                 background: selectedSuggestionIndex === idx
-                  ? 'rgba(59, 130, 246, 0.2)'
+                  ? 'var(--accent-blue-soft)'
                   : 'transparent',
                 borderBottom: idx < commandSuggestions.length - 1
-                  ? '1px solid rgba(148, 163, 184, 0.1)'
+                  ? '1px solid var(--border-secondary)'
                   : 'none'
               }}
               onMouseEnter={() => setSelectedSuggestionIndex(idx)}
@@ -1020,7 +1020,7 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
                 <div style={{
                   fontSize: '13px',
                   fontWeight: 500,
-                  color: '#F1F5F9',
+                  color: 'var(--text)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -1033,15 +1033,15 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
                   padding: '2px 6px',
                   borderRadius: '4px',
                   background: suggestion.type === 'workspace'
-                    ? 'rgba(139, 92, 246, 0.2)'
+                    ? 'var(--accent-purple-soft)'
                     : suggestion.type === 'bookmark'
                       ? 'rgba(251, 191, 36, 0.2)'
-                      : 'rgba(59, 130, 246, 0.2)',
+                      : 'var(--accent-blue-soft)',
                   color: suggestion.type === 'workspace'
-                    ? '#A78BFA'
+                    ? 'var(--accent-purple)'
                     : suggestion.type === 'bookmark'
                       ? '#FDE047'
-                      : '#60A5FA',
+                      : 'var(--accent-blue)',
                   fontWeight: 500,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
@@ -1052,7 +1052,7 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
               </div>
               <div style={{
                 fontSize: '11px',
-                color: '#94A3B8',
+                color: 'var(--text-secondary)',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap'

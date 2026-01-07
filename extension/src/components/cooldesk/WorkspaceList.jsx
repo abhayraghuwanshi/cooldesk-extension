@@ -264,7 +264,7 @@ export function WorkspaceList({
                                         alignItems: 'center',
                                         gap: '6px'
                                     }}>
-                                        <FontAwesomeIcon icon={faBookmark} style={{ color: '#ec4899' }} />
+                                        <FontAwesomeIcon icon={faBookmark} style={{ color: 'var(--accent-blue, #60a5fa)' }} />
                                         Browser Bookmarks ({filteredBookmarks.length})
                                     </h3>
                                     <button
@@ -280,12 +280,12 @@ export function WorkspaceList({
                                             transition: 'all 0.2s ease'
                                         }}
                                         onMouseEnter={(e) => {
-                                            e.currentTarget.style.background = 'rgba(148, 163, 184, 0.1)';
-                                            e.currentTarget.style.color = '#f1f5f9';
+                                            e.currentTarget.style.background = 'var(--interactive-hover)';
+                                            e.currentTarget.style.color = 'var(--text)';
                                         }}
                                         onMouseLeave={(e) => {
                                             e.currentTarget.style.background = 'none';
-                                            e.currentTarget.style.color = '#94A3B8';
+                                            e.currentTarget.style.color = 'var(--text-secondary)';
                                         }}
                                     >
                                         {showBookmarks ? 'Hide' : 'Show'}
@@ -306,7 +306,7 @@ export function WorkspaceList({
                                                     left: '12px',
                                                     top: '50%',
                                                     transform: 'translateY(-50%)',
-                                                    color: '#64748b',
+                                                    color: 'var(--text-muted)',
                                                     fontSize: '12px',
                                                     pointerEvents: 'none'
                                                 }}
@@ -320,21 +320,21 @@ export function WorkspaceList({
                                                     width: '100%',
                                                     padding: '10px 12px 10px 36px',
                                                     borderRadius: '10px',
-                                                    background: 'rgba(30, 41, 59, 0.5)',
-                                                    border: '1px solid rgba(148, 163, 184, 0.2)',
-                                                    color: '#f1f5f9',
+                                                    background: 'var(--glass-bg)',
+                                                    border: '1px solid var(--border-primary)',
+                                                    color: 'var(--text)',
                                                     fontSize: '13px',
                                                     outline: 'none',
                                                     transition: 'all 0.2s ease',
                                                     fontFamily: 'inherit'
                                                 }}
                                                 onFocus={(e) => {
-                                                    e.target.style.borderColor = '#ec4899';
-                                                    e.target.style.background = 'rgba(30, 41, 59, 0.8)';
+                                                    e.target.style.borderColor = 'var(--accent-blue)';
+                                                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
                                                 }}
                                                 onBlur={(e) => {
-                                                    e.target.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-                                                    e.target.style.background = 'rgba(30, 41, 59, 0.5)';
+                                                    e.target.style.borderColor = 'var(--border-primary)';
+                                                    e.target.style.background = 'var(--glass-bg)';
                                                 }}
                                             />
                                         </div>
@@ -362,9 +362,9 @@ export function WorkspaceList({
                                                         style={{
                                                             padding: '12px',
                                                             borderRadius: '10px',
-                                                            background: 'rgba(30, 41, 59, 0.5)',
-                                                            border: '1px solid rgba(148, 163, 184, 0.2)',
-                                                            color: '#cbd5e1',
+                                                            background: 'var(--glass-bg)',
+                                                            border: '1px solid var(--border-primary)',
+                                                            color: 'var(--text)',
                                                             cursor: 'pointer',
                                                             display: 'flex',
                                                             alignItems: 'center',
@@ -374,13 +374,13 @@ export function WorkspaceList({
                                                             width: '100%'
                                                         }}
                                                         onMouseEnter={(e) => {
-                                                            e.currentTarget.style.background = 'rgba(236, 72, 153, 0.1)';
-                                                            e.currentTarget.style.borderColor = 'rgba(236, 72, 153, 0.4)';
+                                                            e.currentTarget.style.background = 'var(--hover-bg-accent, rgba(59, 130, 246, 0.1))';
+                                                            e.currentTarget.style.borderColor = 'var(--accent-color, rgba(59, 130, 246, 0.4))';
                                                             e.currentTarget.style.transform = 'translateX(4px)';
                                                         }}
                                                         onMouseLeave={(e) => {
-                                                            e.currentTarget.style.background = 'rgba(30, 41, 59, 0.5)';
-                                                            e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+                                                            e.currentTarget.style.background = 'var(--card-bg, rgba(30, 41, 59, 0.5))';
+                                                            e.currentTarget.style.borderColor = 'var(--border-color, rgba(148, 163, 184, 0.2))';
                                                             e.currentTarget.style.transform = 'translateX(0)';
                                                         }}
                                                     >
@@ -388,7 +388,7 @@ export function WorkspaceList({
                                                             width: '32px',
                                                             height: '32px',
                                                             borderRadius: '8px',
-                                                            background: 'rgba(236, 72, 153, 0.1)',
+                                                            background: 'var(--accent-blue-soft)',
                                                             display: 'flex',
                                                             alignItems: 'center',
                                                             justifyContent: 'center',
@@ -397,7 +397,7 @@ export function WorkspaceList({
                                                             <FontAwesomeIcon
                                                                 icon={faBookmark}
                                                                 style={{
-                                                                    color: '#ec4899',
+                                                                    color: 'var(--accent-blue)',
                                                                     fontSize: '14px'
                                                                 }}
                                                             />
@@ -406,7 +406,7 @@ export function WorkspaceList({
                                                             <div style={{
                                                                 fontSize: '13px',
                                                                 fontWeight: 500,
-                                                                color: '#f1f5f9',
+                                                                color: 'var(--text)',
                                                                 whiteSpace: 'nowrap',
                                                                 overflow: 'hidden',
                                                                 textOverflow: 'ellipsis',
@@ -416,7 +416,7 @@ export function WorkspaceList({
                                                             </div>
                                                             <div style={{
                                                                 fontSize: '11px',
-                                                                color: '#64748b',
+                                                                color: 'var(--text-muted)',
                                                                 whiteSpace: 'nowrap',
                                                                 overflow: 'hidden',
                                                                 textOverflow: 'ellipsis'
@@ -431,7 +431,7 @@ export function WorkspaceList({
                                                 <div style={{
                                                     padding: '24px',
                                                     textAlign: 'center',
-                                                    color: '#64748b',
+                                                    color: 'var(--text-tertiary, #64748b)',
                                                     fontSize: '13px'
                                                 }}>
                                                     No bookmarks found
@@ -441,7 +441,7 @@ export function WorkspaceList({
                                                 <div style={{
                                                     padding: '8px',
                                                     textAlign: 'center',
-                                                    color: '#64748b',
+                                                    color: 'var(--text-tertiary, #64748b)',
                                                     fontSize: '12px'
                                                 }}>
                                                     Showing top 20 of {filteredBookmarks.length} bookmarks
