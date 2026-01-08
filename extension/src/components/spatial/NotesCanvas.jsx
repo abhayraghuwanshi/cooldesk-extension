@@ -1,4 +1,4 @@
-import {
+﻿import {
   faBold,
   faCheckSquare,
   faClock,
@@ -7,6 +7,7 @@ import {
   faFolder,
   faFolderOpen,
   faItalic,
+  faLink,
   faListUl,
   faMicrophone,
   faPlus,
@@ -16,10 +17,18 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { deleteNote as dbDeleteNote, listNotes as dbListNotes, upsertNote as dbUpsertNote } from '../../db/index.js';
+import {
+  deleteNote as dbDeleteNote,
+  listNotes as dbListNotes,
+  upsertNote as dbUpsertNote,
+  deleteUrlNote,
+  listAllUrlNotes,
+  saveUrlNote
+} from '../../db/index.js';
 
 export function NotesCanvas({ workspaceId }) {
   const [notes, setNotes] = useState([]);
+  const [urlNotes, setUrlNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeNote, setActiveNote] = useState(null);
   const [noteContent, setNoteContent] = useState('');
@@ -31,16 +40,24 @@ export function NotesCanvas({ workspaceId }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [noteUrl, setNoteUrl] = useState('');
   const editorRef = useRef(null);
   const autoSaveTimeout = useRef(null);
 
-  // Load notes
+  // Load workspace notes
   const loadNotes = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
       const result = await dbListNotes();
       const allNotes = result?.data || result || [];
-      setNotes(Array.isArray(allNotes) ? allNotes : []);
+      const notesArray = Array.isArray(allNotes) ? allNotes : [];
+
+      // Exclude URL notes from regular notes - they appear in URL Notes folder
+      const regularNotes = notesArray.filter(note =>
+        !(note.url && typeof note.url === 'string' && note.url.length > 0)
+      );
+
+      setNotes(regularNotes);
     } catch (error) {
       console.error('[NotesCanvas] Error loading notes:', error);
       if (showLoading) setNotes([]);
@@ -49,19 +66,50 @@ export function NotesCanvas({ workspaceId }) {
     }
   }, []);
 
+  // Load all URL notes from the url_notes store
+  const loadUrlNotes = useCallback(async () => {
+    try {
+      console.log('[NotesCanvas] Loading URL notes from url_notes store...');
+
+      // URL notes are stored in a separate url_notes store in IndexedDB
+      const result = await listAllUrlNotes();
+      const urlNotesArray = result?.data || result || [];
+
+      console.log('[NotesCanvas] Found', urlNotesArray.length, 'URL notes in url_notes store');
+      setUrlNotes(Array.isArray(urlNotesArray) ? urlNotesArray : []);
+    } catch (error) {
+      console.error('[NotesCanvas] Error loading URL notes:', error);
+      setUrlNotes([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadNotes();
-  }, [loadNotes]);
+    loadUrlNotes();
+  }, [loadNotes, loadUrlNotes]);
 
-  // Derived folders list
-  const folders = ['All Notes', ...new Set(notes.map(n => n.folder).filter(Boolean).filter(f => f.trim() !== ''))].sort();
+  // Derived folders list with URL Notes special folder
+  const folders = [
+    'All Notes',
+    ...new Set(notes.map(n => n.folder).filter(Boolean).filter(f => f.trim() !== '')),
+    'URL Notes'
+  ].sort((a, b) => {
+    // Keep "All Notes" first, "URL Notes" last, others alphabetically
+    if (a === 'All Notes') return -1;
+    if (b === 'All Notes') return 1;
+    if (a === 'URL Notes') return 1;
+    if (b === 'URL Notes') return -1;
+    return a.localeCompare(b);
+  });
 
-  // Filtered notes
-  const filteredNotes = notes
-    .filter(note => activeFolder === 'All Notes' || note.folder === activeFolder)
-    .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  // Filtered notes - show URL notes when URL Notes folder is selected
+  const filteredNotes = activeFolder === 'URL Notes'
+    ? urlNotes.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    : notes
+      .filter(note => activeFolder === 'All Notes' || note.folder === activeFolder)
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
 
-  // Auto-save note
+  // Auto-save note (workspace or URL note)
   const saveNote = useCallback(async (content, noteId = null) => {
     // Avoid saving empty new notes
     if (!content.trim() && !noteId) return;
@@ -69,28 +117,47 @@ export function NotesCanvas({ workspaceId }) {
     try {
       setAutoSaveStatus('saving');
 
-      // Use refs to get latest state inside callback/timeout
+      // Check if this is a URL note
+      const isUrlNote = activeFolder === 'URL Notes' || activeNote?.url;
       const currentTitle = titleRef.current || extractTitle(content);
       const currentFolder = folderRef.current;
+      const currentUrl = urlRef.current;
 
-      const note = {
-        id: noteId || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        text: content,
-        title: currentTitle,
-        folder: currentFolder,
-        type: 'richtext',
-        createdAt: noteId ? (notes.find(n => n.id === noteId)?.createdAt || Date.now()) : Date.now(),
-        updatedAt: Date.now()
-      };
+      if (isUrlNote) {
+        // Save as URL note
+        const urlNote = {
+          id: noteId || `url_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          url: currentUrl || activeNote?.url || '',
+          text: content,
+          title: currentTitle,
+          createdAt: noteId ? (urlNotes.find(n => n.id === noteId)?.createdAt || Date.now()) : Date.now(),
+          updatedAt: Date.now()
+        };
 
-      await dbUpsertNote(note);
+        await saveUrlNote(urlNote);
+        await loadUrlNotes();
 
-      // Update local state without full reload if possible, but loadNotes ensures sync
-      await loadNotes(false);
+        if (!noteId && activeNote?.id !== urlNote.id) {
+          setActiveNote(urlNote);
+        }
+      } else {
+        // Save as regular workspace note
+        const note = {
+          id: noteId || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          text: content,
+          title: currentTitle,
+          folder: currentFolder,
+          type: 'richtext',
+          createdAt: noteId ? (notes.find(n => n.id === noteId)?.createdAt || Date.now()) : Date.now(),
+          updatedAt: Date.now()
+        };
 
-      // If it was a new note, update activeNote to having the ID
-      if (!noteId && activeNote?.id !== note.id) {
-        setActiveNote(note);
+        await dbUpsertNote(note);
+        await loadNotes(false);
+
+        if (!noteId && activeNote?.id !== note.id) {
+          setActiveNote(note);
+        }
       }
 
       setAutoSaveStatus('saved');
@@ -99,13 +166,15 @@ export function NotesCanvas({ workspaceId }) {
       console.error('[NotesCanvas] Error saving note:', error);
       setAutoSaveStatus('error');
     }
-  }, [notes, loadNotes, activeNote]);
+  }, [notes, urlNotes, loadNotes, loadUrlNotes, activeNote, activeFolder]);
 
   const titleRef = useRef('');
   const folderRef = useRef('');
+  const urlRef = useRef('');
 
   useEffect(() => { titleRef.current = noteTitle; }, [noteTitle]);
   useEffect(() => { folderRef.current = noteFolder; }, [noteFolder]);
+  useEffect(() => { urlRef.current = noteUrl; }, [noteUrl]);
 
   const handleTitleChange = (e) => {
     const newTitle = e.target.value;
@@ -270,36 +339,53 @@ export function NotesCanvas({ workspaceId }) {
     editorRef.current?.focus();
   };
 
-  // Delete note
+  // Delete note (workspace or URL note)
   const handleDeleteNote = async (noteId) => {
     try {
-      await dbDeleteNote(noteId);
+      const isUrlNote = activeFolder === 'URL Notes' || activeNote?.url;
+
+      if (isUrlNote) {
+        await deleteUrlNote(noteId);
+        await loadUrlNotes();
+      } else {
+        await dbDeleteNote(noteId);
+        await loadNotes();
+      }
+
       if (activeNote?.id === noteId) {
         setActiveNote(null);
         setNoteContent('');
+        setNoteUrl('');
         setIsEditing(false);
       }
-      loadNotes();
     } catch (error) {
       console.error('[NotesCanvas] Error deleting note:', error);
     }
   };
 
-  // Select note
+  // Select note (workspace or URL note)
   const selectNote = (note) => {
     setActiveNote(note);
     setNoteContent(note.text || '');
     setNoteTitle(note.title || '');
     setNoteFolder(note.folder || '');
+    setNoteUrl(note.url || '');
     setAutoSaveStatus('idle');
     setIsEditing(true);
   };
 
   // Create new note
   const createNewNote = () => {
+    // Cannot create new notes in URL Notes folder - they come from web pages
+    if (activeFolder === 'URL Notes') {
+      alert('URL notes are created automatically when you add notes to web pages. Switch to a different folder to create a workspace note.');
+      return;
+    }
+
     setActiveNote(null);
     setNoteContent('');
     setNoteTitle('');
+    setNoteUrl('');
     // If we are in a specific folder, default to that folder
     setNoteFolder(activeFolder === 'All Notes' ? '' : activeFolder);
     setAutoSaveStatus('idle');
@@ -588,7 +674,7 @@ export function NotesCanvas({ workspaceId }) {
                     }
                   }}
                 >
-                  <FontAwesomeIcon icon={activeFolder === folder ? faFolderOpen : faFolder} style={{ fontSize: '16px' }} />
+                  <FontAwesomeIcon icon={folder === 'URL Notes' ? faLink : (activeFolder === folder ? faFolderOpen : faFolder)} style={{ fontSize: '16px' }} />
                   <span style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>{folder}</span>
                   <span style={{
                     padding: '2px 8px',
@@ -598,7 +684,7 @@ export function NotesCanvas({ workspaceId }) {
                     fontSize: '11px',
                     fontWeight: 600
                   }}>
-                    {notes.filter(n => n.folder === folder).length}
+                    {folder === 'URL Notes' ? urlNotes.length : notes.filter(n => n.folder === folder).length}
                   </span>
                 </button>
               ))}
@@ -747,6 +833,64 @@ export function NotesCanvas({ workspaceId }) {
         }}>
           {isEditing ? (
             <>
+              {/* URL Context Banner for URL Notes */}
+              {activeNote?.url && (
+                <div style={{
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, var(--accent-blue-soft), var(--surface-2))',
+                  border: '1px solid var(--accent-blue-border)',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  flexShrink: 0,
+                  marginBottom: '12px'
+                }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    color: 'var(--accent-blue)'
+                  }}>
+                    <FontAwesomeIcon icon={faLink} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '10px',
+                      color: 'var(--text-secondary)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      fontWeight: 600,
+                      marginBottom: '4px'
+                    }}>
+                      Note for URL
+                    </div>
+                    <a
+                      href={activeNote.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: '13px',
+                        color: 'var(--accent-blue)',
+                        textDecoration: 'none',
+                        fontWeight: 500,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        display: 'block'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                      onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                    >
+                      {activeNote.url}
+                    </a>
+                  </div>
+                </div>
+              )}
+
               {/* Title Input */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>

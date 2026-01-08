@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Unified Database System - Main Entry Point
  * 
  * This is the new production-ready database system that replaces all existing database files.
@@ -42,7 +42,7 @@ export {
     // UI State operations
     getUIState,
     // URL Notes operations
-    getUrlAnalytics, getUrlNotes, getUrlRecord, getWorkspace,
+    getUrlAnalytics, getUrlNotes, getUrlRecord, getWorkspace, listAllUrlNotes,
     // Initialization
     initializeDatabase,
     // Legacy compatibility functions

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Unified Database API Layer
  * Production-ready interface that replaces all existing database files
  * Provides consistent, validated, error-handled database operations
@@ -613,6 +613,28 @@ export const saveUrlNote = withErrorHandling(async (noteData) => {
     severity: ErrorSeverity.MEDIUM
 })
 
+
+/**
+ * List all URL notes
+ */
+export const listAllUrlNotes = withErrorHandling(async () => {
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.URL_NOTES, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.URL_NOTES)
+
+    const request = store.getAll()
+    const results = await new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result || [])
+        request.onerror = () => reject(request.error)
+    })
+
+    return results.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+}, {
+    operation: 'listAllUrlNotes',
+    severity: ErrorSeverity.LOW,
+    strategy: ErrorStrategy.FALLBACK,
+    fallbackFunction: () => []
+})
 // ===== SETTINGS & UI STATE =====
 
 /**
