@@ -42,15 +42,8 @@ library.add(
   faUndo
 );
 
-import { AIChatsSection } from './components/default/AIChats';
-import { CurrentTabsSection } from './components/default/CurrentTabsSection';
-import { SearchPanel } from './components/default/SearchPanel';
-import { SimpleNotes } from './components/default/SimpleNotes';
-import { WorkspaceSection } from './components/default/WorkspaceSection';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import { AddLinkFlow } from './components/popups/AddLinkFlow';
-import { getDisplaySettings } from './components/settings/DisplayData';
-import VoiceNavigationChatGPT from './components/toolbar/VoiceNavigationChatGPT';
 import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
@@ -187,8 +180,6 @@ export default function App() {
     }
   })
 
-  // Display settings state
-  const [displaySettings, setDisplaySettings] = useState(() => getDisplaySettings())
 
 
   // Auto-reset active section after 5 seconds of inactivity
@@ -272,17 +263,6 @@ export default function App() {
     }
   }, []);
 
-  // Listen for display settings changes
-  useEffect(() => {
-    const handleDisplaySettingsChange = (event) => {
-      setDisplaySettings(event.detail || getDisplaySettings());
-    };
-
-    window.addEventListener('displaySettingsChanged', handleDisplaySettingsChange);
-    return () => {
-      window.removeEventListener('displaySettingsChanged', handleDisplaySettingsChange);
-    };
-  }, []);
 
 
   // Helper function to create/append category-based workspaces with incremental support
@@ -1634,87 +1614,6 @@ export default function App() {
 
   // Determine if we should show vertical header (responsive or user preference)
   const shouldShowVertical = windowWidth < 700;
-
-  // Define all draggable sections with bento sizes - Pinterest-style aesthetic
-  const allSections = useMemo(() => [
-    {
-      id: 'search-panel',
-      size: 'featured', // Hero search - full width
-      component: (
-        <ErrorBoundary key="search-panel">
-          <SearchPanel />
-        </ErrorBoundary>
-      )
-    },
-    {
-      id: 'workspace-section',
-      size: 'large', // Main workspace - 8 columns
-      component: (
-        <ErrorBoundary key="workspace-section">
-          <WorkspaceSection
-            displaySettings={displaySettings}
-            workspace={workspace}
-            setWorkspace={setWorkspace}
-            filterItems={filterItems}
-            createWorkspace={createWorkspace}
-            togglePinWorkspace={togglePinWorkspace}
-            handleOpenAddLinkModal={handleOpenAddLinkModal}
-            pinnedWorkspaces={pinnedWorkspaces}
-            handleShareWorkspaceUrl={handleShareWorkspaceUrl}
-            savedWorkspaces={savedWorkspaces}
-            mergedWorkspaceItems={mergedWorkspaceItems}
-            renderWorkspaceGrid={renderWorkspaceGrid}
-          />
-        </ErrorBoundary>
-      )
-    },
-    {
-      id: 'notes',
-      size: 'small', // Compact notes - 4 columns
-      component: displaySettings.notesSection !== false && (
-        <ErrorBoundary key="notes">
-          <SimpleNotes />
-        </ErrorBoundary>
-      )
-    },
-    {
-      id: 'ai-chats',
-      size: 'medium', // AI chats - 6 columns
-      component: displaySettings.aiChatsSection !== false && (
-        <ErrorBoundary key="ai-chats">
-          <AIChatsSection />
-        </ErrorBoundary>
-      )
-    },
-    {
-      id: 'active-tabs',
-      size: 'medium', // Active tabs - 6 columns
-      component: displaySettings.currentTabsSection !== false && (
-        <ErrorBoundary key="active-tabs">
-          <CurrentTabsSection />
-        </ErrorBoundary>
-      )
-    },
-    {
-      id: 'voice-navigation',
-      size: 'compact', // Small voice nav - 3 columns
-      component: displaySettings.voiceNavigationSection !== false && (
-        <ErrorBoundary key="voice-navigation">
-          <VoiceNavigationChatGPT />
-        </ErrorBoundary>
-      )
-    },
-  ].filter(section => section.component !== false), [
-    displaySettings,
-    showPingsSection,
-    showFeedSection,
-    pinnedWorkspaces,
-    activePinnedWorkspace,
-    savedWorkspaces,
-    workspace,
-    filterItems,
-    mergedWorkspaceItems,
-  ]);
 
   return (
     <div className={`popup-wrap ${themeClass} ${wallpaperEnabled ? 'wallpaper-enabled' : ''}`} style={{

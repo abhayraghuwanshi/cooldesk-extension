@@ -1143,41 +1143,40 @@ export function injectFooterBar() {
 
       stickyNote.style.cssText = `
         position: fixed;
-        top: ${initialTop} px;
-        right: ${initialRight} px;
+        top: ${initialTop}px;
+        right: ${initialRight}px;
         width: 240px;
-        min - height: ${note.isCollapsed ? '40px' : '180px'};
+        min-height: ${note.isCollapsed ? '40px' : '180px'};
         height: ${note.isCollapsed ? 'auto' : ''};
-        background: linear - gradient(135deg, #fef9c3 0 %, #fef08a 100 %);
+        background: linear-gradient(135deg, #fef9c3 0%, #fef08a 100%);
         color: #1f2937;
-        border - radius: 8px;
-        box - shadow: 0 4px 6px - 1px rgba(0, 0, 0, 0.1), 0 2px 4px - 1px rgba(0, 0, 0, 0.06);
-        font - family: -apple - system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans - serif;
-        font - size: 14px;
-        z - index: ${2147483645 + index};
-        transition: min - height 0.2s ease, box - shadow 0.2s ease;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        z-index: ${2147483645 + index};
+        transition: min-height 0.2s ease, box-shadow 0.2s ease;
         display: flex;
-        flex - direction: column;
+        flex-direction: column;
         overflow: hidden;
-        `;
+      `;
 
       let isCollapsed = !!note.isCollapsed;
 
       // Note Header
-      // Note Header
       const header = document.createElement('div');
       header.style.cssText = `
         padding: 8px 12px;
-        border - bottom: 1px solid rgba(0, 0, 0, 0.05);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         display: flex;
-        justify - content: space - between;
-        align - items: center;
-        font - size: 11px;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11px;
         color: #6b7280;
         background: rgba(255, 255, 255, 0.4);
         cursor: grab;
-        user - select: none;
-        `;
+        user-select: none;
+      `;
 
       // Title Area
       const titleArea = document.createElement('div');
@@ -1185,7 +1184,7 @@ export function injectFooterBar() {
 
       const toggleIcon = document.createElement('span');
       toggleIcon.innerHTML = '▼';
-      toggleIcon.style.cssText = `cursor: pointer; font - size: 10px; transition: transform 0.2s; padding: 2px; transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'}; `;
+      toggleIcon.style.cssText = `cursor: pointer; font-size: 10px; transition: transform 0.2s; padding: 2px; transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};`;
 
       const titleText = document.createElement('span');
       titleText.textContent = new Date(note.updatedAt || note.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -1195,9 +1194,9 @@ export function injectFooterBar() {
       titleArea.appendChild(titleText);
 
       const deleteBtn = document.createElement('div');
-      deleteBtn.innerHTML = 'Ã—';
+      deleteBtn.innerHTML = '×';
       deleteBtn.title = 'Delete Note';
-      deleteBtn.style.cssText = `cursor: pointer; font - size: 18px; line - height: 1; color: #9ca3af; font - weight: bold; padding: 0 4px; margin - left: 8px; `;
+      deleteBtn.style.cssText = `cursor: pointer; font-size: 18px; line-height: 1; color: #9ca3af; font-weight: bold; padding: 0 4px; margin-left: 8px;`;
       deleteBtn.onmouseenter = () => deleteBtn.style.color = '#ef4444';
       deleteBtn.onmouseleave = () => deleteBtn.style.color = '#9ca3af';
       deleteBtn.onclick = async (e) => {
@@ -1224,9 +1223,9 @@ export function injectFooterBar() {
       textarea.value = note.text || note.description || '';
       textarea.placeholder = 'Empty note...';
       textarea.style.cssText = `
-        flex: 1; width: 100 %; border: none; background: transparent; resize: none; padding: 12px; font - family: inherit; font - size: 14px; line - height: 1.5; color: #374151; outline: none;
-        display: ${isCollapsed ? 'none' : 'block'}; min - height: 140px;
-        `;
+        flex: 1; width: 100%; border: none; background: transparent; resize: none; padding: 12px; font-family: inherit; font-size: 14px; line-height: 1.5; color: #374151; outline: none;
+        display: ${isCollapsed ? 'none' : 'block'}; min-height: 140px;
+      `;
 
       // Logic
       const toggleCollapse = (e) => {
@@ -1263,7 +1262,7 @@ export function injectFooterBar() {
       const onMouseMove = (e) => {
         if (!isDragging) return;
         const dx = e.clientX - startX; const dy = e.clientY - startY;
-        stickyNote.style.right = 'auto'; stickyNote.style.left = `${initialLeft + dx} px`; stickyNote.style.top = `${initialTopDrag + dy} px`;
+        stickyNote.style.right = 'auto'; stickyNote.style.left = `${initialLeft + dx}px`; stickyNote.style.top = `${initialTopDrag + dy}px`;
       };
       const onMouseUp = () => { if (isDragging) { isDragging = false; header.style.cursor = 'grab'; } };
       document.addEventListener('mousemove', onMouseMove);
@@ -1291,7 +1290,7 @@ export function injectFooterBar() {
       stickyNote.appendChild(header);
       stickyNote.appendChild(textarea);
       stickyNote.onmouseenter = () => { if (!isDragging) { stickyNote.style.zIndex = '2147483650'; stickyNote.style.boxShadow = '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)'; } };
-      stickyNote.onmouseleave = () => { if (!isDragging && document.activeElement !== textarea) { stickyNote.style.zIndex = `${2147483645 + index} `; stickyNote.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)'; } };
+      stickyNote.onmouseleave = () => { if (!isDragging && document.activeElement !== textarea) { stickyNote.style.zIndex = `${2147483645 + index}`; stickyNote.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)'; } };
 
       shadow.appendChild(stickyNote);
     };

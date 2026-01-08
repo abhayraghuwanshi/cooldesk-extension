@@ -1,17 +1,15 @@
-import { faComments, faEnvelope, faEye, faFileExport, faFolder, faGraduationCap, faLightbulb, faMicrophone, faPalette, faRocket, faTableCellsLarge, faThumbtack, faCog } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faDatabase, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useEffect, useMemo, useState } from 'react';
-import { listWorkspaces, saveWorkspace, getSettings as getSettingsDB, saveSettings as saveSettingsDB } from '../../db/index.js';
+import { useEffect, useState } from 'react';
+import { listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace } from '../../db/index.js';
 import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
-import { loadSyncConfig, saveSyncConfig, toggleHostSync } from '../../services/syncConfig';
+import { loadSyncConfig } from '../../services/syncConfig';
 import { setAndSaveFontSize } from '../../utils/fontUtils';
-import DisplayData from '../settings/DisplayData';
-import ExportData from '../settings/ExportData';
-import { TabItem, Tabs } from '../settings/TabComponents';
-import ThemesTab from '../settings/ThemesTab';
-import SetupTab from '../settings/SetupTab';
 
+import ExportData from '../settings/ExportData';
+import SetupTab from '../settings/SetupTab';
+import ThemesTab from '../settings/ThemesTab';
 
 export function SettingsModal({
   show,
@@ -28,103 +26,37 @@ export function SettingsModal({
   onWallpaperUrlChange,
   onWallpaperOpacityChange
 }) {
-  const [localSettings, setLocalSettings] = useState(settings)
-  const [suggesting, setSuggesting] = useState(false)
-  const [error, setError] = useState('')
-  const [workspaces, setWorkspaces] = useState([])
-  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
-  const [activeTab, setActiveTab] = useState(0)
-  const [basicSaved, setBasicSaved] = useState(Boolean((settings?.geminiApiKey || '').trim()))
-  // Auth is paused in this build; Firebase state removed
-  const [selectedTheme, setSelectedTheme] = useState('ai-midnight-nebula')
-  const [fontFamily, setFontFamily] = useState('system')
-  const [syncConfig, setSyncConfig] = useState(null)
-  const [syncStatus, setSyncStatus] = useState(null)
-  const [syncConfigLoading, setSyncConfigLoading] = useState(false)
-  const [authUser, setAuthUser] = useState(null)
-  const [sessionTrackingEnabled, setSessionTrackingEnabled] = useState(true)
+  const [localSettings, setLocalSettings] = useState(settings || {});
+  const [activeTabId, setActiveTabId] = useState('general'); // general, themes, data, display, about
+  const [suggesting, setSuggesting] = useState(false);
+  const [error, setError] = useState('');
+  const [workspaces, setWorkspaces] = useState([]);
+  const [basicSaved, setBasicSaved] = useState(false);
 
-  // Load any stored auth info from chrome.storage
-  useEffect(() => {
-    try {
-      chrome.storage?.local.get('cooldeskAuth', (data) => {
-        if (chrome.runtime?.lastError) {
-          console.warn('Failed to load stored auth:', chrome.runtime.lastError.message);
-          return;
-        }
-        if (data && data.cooldeskAuth) {
-          setAuthUser(data.cooldeskAuth);
-        }
-      });
-    } catch { }
-  }, [])
+  // Settings State
+  const [selectedTheme, setSelectedTheme] = useState('ai-midnight-nebula');
+  const [fontFamily, setFontFamily] = useState('system');
+  const [syncConfig, setSyncConfig] = useState(null);
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [syncConfigLoading, setSyncConfigLoading] = useState(false);
+  const [sessionTrackingEnabled, setSessionTrackingEnabled] = useState(true);
 
-  const handleLogin = async () => {
-    try {
-      console.log("Sending login to background")
-      setError('');
-      const res = await chrome.runtime.sendMessage({ action: 'LOGIN_WITH_GOOGLE' });
-      if (!res?.ok) {
-        setError(res?.error || 'Login failed. Please try again.');
-        return;
-      }
-
-      const user = res.user || {};
-
-      try {
-        await chrome.storage.local.set({
-          cooldeskAuth: {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            idToken: res.idToken || null,
-            provider: 'google-oauth',
-            lastLogin: Date.now()
-          }
-        });
-      } catch (storageError) {
-        console.warn('Failed to persist auth to chrome.storage.local:', storageError);
-      }
-
-      setAuthUser(user);
-    } catch (e) {
-      console.warn('Login error:', e);
-      setError(e?.message || 'Login failed. Please try again.');
-    }
-  }
-
-  const handleLogout = async () => {
-    try {
-      try {
-        await chrome.storage.local.remove('cooldeskAuth');
-      } catch (storageError) {
-        console.warn('Failed to clear auth from chrome.storage.local:', storageError);
-      }
-      setAuthUser(null);
-    } catch (e) {
-      console.warn('Logout error:', e);
-    }
-  }
-
-  // Font size options
-  const fontSizes = [
-    { id: 'small', name: 'Small', size: '13px', description: 'Compact text for more content' },
-    { id: 'medium', name: 'Medium', size: '14px', description: 'Default comfortable reading' },
-    { id: 'large', name: 'Large', size: '16px', description: 'Easier reading, larger text' },
-    { id: 'extra-large', name: 'Extra Large', size: '18px', description: 'Maximum readability' }
+  // --- Constants & Config ---
+  const TABS = [
+    { id: 'general', label: 'AI & Setup', icon: faCog, component: SetupTab },
+    { id: 'themes', label: 'Aesthetics', icon: faPalette, component: ThemesTab },
+    { id: 'data', label: 'Data & Sync', icon: faDatabase, component: ExportData },
+    { id: 'about', label: 'Getting Started', icon: faRocket, component: null }
   ];
 
-  // Font family options
   const fontFamilies = [
-    { id: 'system', name: 'System Default', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif', description: 'Native system fonts' },
-    { id: 'inter', name: 'Inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Modern geometric sans-serif' },
-    { id: 'roboto', name: 'Roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Google\'s friendly sans-serif' },
-    { id: 'poppins', name: 'Poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Rounded geometric typeface' },
-    { id: 'jetbrains', name: 'JetBrains Mono', family: 'JetBrains Mono, Consolas, Monaco, monospace', description: 'Developer-focused monospace' }
+    { id: 'system', name: 'System Default', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' },
+    { id: 'inter', name: 'Inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' },
+    { id: 'roboto', name: 'Roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif' },
+    { id: 'poppins', name: 'Poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif' },
+    { id: 'jetbrains', name: 'JetBrains Mono', family: 'JetBrains Mono, Consolas, Monaco, monospace' }
   ];
 
-
-  // Theme definitions with font family mappings
   const themes = [
     { id: 'ai-midnight-nebula', fontFamily: 'inter' },
     { id: 'cosmic-aurora', fontFamily: 'poppins' },
@@ -145,620 +77,372 @@ export function SettingsModal({
     { id: 'crimson-fire', fontFamily: 'roboto' }
   ];
 
-  const handleThemeChange = (themeId) => {
-    setSelectedTheme(themeId);
-
-    // Keep the current font family selection when changing themes
-    applyTheme(themeId, fontSize, fontFamily);
-  };
-
-  const handleFontSizeChange = (sizeId) => {
-    onFontSizeChange(sizeId);
-    applyTheme(selectedTheme, sizeId, fontFamily);
-  };
-
-  const handleFontFamilyChange = (familyId) => {
-    setFontFamily(familyId);
-
-    // Save font family preference to localStorage
-    try {
-      localStorage.setItem('cooldesk-font-family', familyId);
-    } catch (e) {
-      console.warn('Failed to save font family preference:', e);
-    }
-
-    applyTheme(selectedTheme, fontSize, familyId);
-  };
-
-  const applyTheme = (themeId, fontSizeId, fontFamilyId) => {
-    // Apply theme to body - remove all existing theme classes first
-    const body = document.body;
-    const themeClasses = [
-      'bg-ai-midnight-nebula',
-      'bg-cosmic-aurora',
-      'bg-sunset-horizon',
-      'bg-forest-depths',
-      'bg-minimal-dark',
-      'bg-ocean-depths',
-      'bg-cherry-blossom',
-      'bg-arctic-frost',
-      'bg-volcanic-ember',
-      'bg-neon-cyberpunk',
-      'bg-white-cred',
-      'bg-orange-warm',
-      'bg-brown-earth',
-      'bg-royal-purple',
-      'bg-golden-honey',
-      'bg-mint-sage',
-      'bg-crimson-fire'
-    ];
-
-    // Remove all theme classes
-    themeClasses.forEach(cls => body.classList.remove(cls));
-
-    // Add the new theme class
-    const newThemeClass = `bg-${themeId}`;
-    body.classList.add(newThemeClass);
-
-    // Apply typography settings
-    const selectedFontFamily = fontFamilies.find(f => f.id === fontFamilyId);
-
-    // Use font utility for font size (handles CSS variables properly)
-    if (fontSizeId) {
-      setAndSaveFontSize(fontSizeId);
-    }
-
-    if (selectedFontFamily) {
-      body.style.fontFamily = selectedFontFamily.family;
-    }
-
-    // Save preferences (font size handled by font utility)
-    try {
-      localStorage.setItem('cooldesk-theme', themeId);
-      localStorage.setItem('cooldesk-font-family', fontFamilyId);
-    } catch (e) {
-      console.warn('Failed to save theme preferences:', e);
-    }
-  };
-
-  // Session tracking handler
-  const handleToggleSessionTracking = async (enabled) => {
-    try {
-      await chrome.runtime.sendMessage({
-        action: 'toggleSessionTracking',
-        enabled
-      });
-      setSessionTrackingEnabled(enabled);
-    } catch (error) {
-      console.warn('Failed to toggle session tracking:', error);
-      setError('Failed to toggle session tracking. Please try again.');
-    }
-  };
-
-  // Sync configuration handlers
-  const handleSyncConfigChange = async (key, value) => {
-    try {
-      setSyncConfigLoading(true);
-      const updatedConfig = { ...syncConfig, [key]: value };
-      await saveSyncConfig(updatedConfig);
-      setSyncConfig(updatedConfig);
-
-      // Update sync status
-      const status = getSyncStatus();
-      setSyncStatus(status);
-    } catch (error) {
-      console.warn('Failed to save sync config:', error);
-      setError('Failed to save sync configuration. Please try again.');
-    } finally {
-      setSyncConfigLoading(false);
-    }
-  };
-
-  const handleToggleHostSync = async (enabled) => {
-    try {
-      setSyncConfigLoading(true);
-      await toggleHostSync(enabled);
-      const config = await loadSyncConfig();
-      const status = getSyncStatus();
-      setSyncConfig(config);
-      setSyncStatus(status);
-
-      if (enabled) {
-        console.log('Host sync enabled. Extension will now sync with localhost:4000');
-      } else {
-        console.log('Host sync disabled. Extension running in standalone mode');
-      }
-    } catch (error) {
-      console.warn('Failed to toggle host sync:', error);
-      setError('Failed to toggle sync configuration. Please try again.');
-    } finally {
-      setSyncConfigLoading(false);
-    }
-  };
-
+  // --- Effects ---
 
   useEffect(() => {
-    setLocalSettings(settings)
-    setBasicSaved(Boolean((settings?.geminiApiKey || '').trim()))
-  }, [settings])
+    if (show && settings) {
+      setLocalSettings(settings); // Deep copy?
+      setBasicSaved(Boolean((settings?.geminiApiKey || '').trim()));
+    }
+  }, [show, settings]);
 
-  // Load saved theme preferences on component mount (READ ONLY - don't re-apply)
+  // Load preferences
   useEffect(() => {
+    if (!show) return;
     try {
       const savedTheme = localStorage.getItem('cooldesk-theme') || 'crimson-fire';
       const savedFontFamily = localStorage.getItem('cooldesk-font-family');
 
       setSelectedTheme(savedTheme);
 
-      // Determine which font family to use
-      let fontFamilyToUse = 'system';
       if (savedFontFamily) {
-        fontFamilyToUse = savedFontFamily;
         setFontFamily(savedFontFamily);
       } else {
         const selectedThemeData = themes.find(t => t.id === savedTheme);
-        const themeFontFamily = selectedThemeData?.fontFamily || 'system';
-        fontFamilyToUse = themeFontFamily;
-        setFontFamily(themeFontFamily);
+        setFontFamily(selectedThemeData?.fontFamily || 'system');
       }
 
-      // DON'T re-apply themes/fonts here - App.jsx already did it on mount
-      // This modal should only READ current settings and display them
-      // Actual application happens only when user actively changes theme/font
-      console.log('[SettingsModal] Loaded current theme:', savedTheme, 'font:', fontFamilyToUse);
+      // Load Session Tracking
+      chrome.storage.local.get(['sessionTracking'], (result) => {
+        setSessionTrackingEnabled(result?.sessionTracking?.enabled !== false);
+      });
+
+      // Load Sync
+      loadSettingsSync();
+
+      // Load Workspaces
+      loadLocalWorkspaces();
 
     } catch (e) {
-      console.warn('Failed to load theme preferences:', e);
+      console.warn('Error specific settings:', e);
     }
-  }, []) // Only run once on mount
-
-  // Load sync configuration when modal shows
-  useEffect(() => {
-    if (!show) return;
-
-    const loadSync = async () => {
-      try {
-        setSyncConfigLoading(true);
-        const config = await loadSyncConfig();
-        const status = getSyncStatus();
-        setSyncConfig(config);
-        setSyncStatus(status);
-      } catch (error) {
-        console.warn('Failed to load sync config:', error);
-      } finally {
-        setSyncConfigLoading(false);
-      }
-    };
-
-    loadSync();
   }, [show]);
 
-  // Load session tracking state
-  useEffect(() => {
-    if (!show) return;
-
-    const loadSessionTracking = async () => {
-      try {
-        const { sessionTracking } = await chrome.storage.local.get(['sessionTracking']);
-        setSessionTrackingEnabled(sessionTracking?.enabled !== false);
-      } catch (error) {
-        console.warn('Failed to load session tracking state:', error);
-      }
-    };
-
-    loadSessionTracking();
-  }, [show]);
-
-  // Auth initialization removed for this build
-
-  // Load workspaces from Firebase and subscribe to changes
-  // Load local workspaces when modal opens
-  useEffect(() => {
-    if (!show) return;
-    (async () => {
-      try {
-        console.log('[SettingsModal] Loading local workspaces...');
-        const list = await listWorkspaces();
-        console.log('[SettingsModal] Local workspaces result:', list);
-        const workspaceData = list?.data || list || [];
-        console.log('[SettingsModal] Extracted workspace data:', workspaceData);
-        setWorkspaces(Array.isArray(workspaceData) ? workspaceData : []);
-      } catch (error) {
-        console.error('[SettingsModal] Error loading local workspaces:', error);
-        setWorkspaces([]);
-      }
-    })();
-  }, [show]);
-
-  // Firebase workspace subscription removed for this build
-
-  const handleSave = () => {
-    // Do not mirror workspaces into settings; workspaces are the source of truth
-    const { categories, ...rest } = (localSettings || {});
-    // Require Gemini API key
-    if (!String(rest.geminiApiKey || '').trim()) {
-      setError('Gemini API Key is required');
-      return;
+  const loadSettingsSync = async () => {
+    try {
+      setSyncConfigLoading(true);
+      const config = await loadSyncConfig();
+      const status = getSyncStatus();
+      setSyncConfig(config);
+      setSyncStatus(status);
+    } finally {
+      setSyncConfigLoading(false);
     }
-    onSave(rest);
-  }
+  };
 
-  // Derived rows for inline editing of workspaces
-  const editableWorkspaces = useMemo(() => {
-    console.log('[SettingsModal] Creating editableWorkspaces from:', workspaces);
-    const result = (Array.isArray(workspaces) ? workspaces : []).map(w => ({
-      id: w.id,
-      name: w.name || '',
-      description: w.description || '',
-    }));
-    console.log('[SettingsModal] editableWorkspaces result:', result);
-    return result;
-  }, [workspaces]);
+  const loadLocalWorkspaces = async () => {
+    try {
+      const list = await listWorkspaces();
+      const workspaceData = list?.data || list || [];
+      setWorkspaces(Array.isArray(workspaceData) ? workspaceData : []);
+    } catch (err) {
+      console.error('Error loading workspaces', err);
+    }
+  };
 
-  if (!show) return null
+  // --- Handlers ---
 
-  const handleTabChange = async (nextIndex) => {
-    // Allow free navigation between all tabs for better onboarding
-    setActiveTab(nextIndex)
-  }
+  const handleApplyTheme = (themeId, fontSizeId, fontFamilyId) => {
+    const body = document.body;
+    // Remove old classes
+    themes.forEach(t => body.classList.remove(`bg-${t.id}`));
+    body.classList.add(`bg-${themeId}`);
 
-  // Track edits in Basic and mark unsaved
-  const markEdited = () => setBasicSaved(false)
+    if (fontSizeId) setAndSaveFontSize(fontSizeId);
+
+    const family = fontFamilies.find(f => f.id === fontFamilyId);
+    if (family) body.style.fontFamily = family.family;
+
+    try {
+      localStorage.setItem('cooldesk-theme', themeId);
+      localStorage.setItem('cooldesk-font-family', fontFamilyId);
+    } catch (e) { }
+  };
+
+  const handleThemeChange = (themeId) => {
+    setSelectedTheme(themeId);
+    handleApplyTheme(themeId, fontSize, fontFamily);
+  };
+
+  const handleFontFamilyChange = (familyId) => {
+    setFontFamily(familyId);
+    handleApplyTheme(selectedTheme, fontSize, familyId);
+  };
+
+  const handleFontSizeChange = (sizeId) => {
+    onFontSizeChange(sizeId);
+    handleApplyTheme(selectedTheme, sizeId, fontFamily);
+  };
+
+  const handleToggleSessionTracking = async (enabled) => {
+    try {
+      await chrome.runtime.sendMessage({ action: 'toggleSessionTracking', enabled });
+      setSessionTrackingEnabled(enabled);
+    } catch (err) {
+      setError('Failed to toggle session tracking');
+    }
+  };
+
+  const markEdited = () => setBasicSaved(false);
 
   const handleSuggestCategories = async () => {
-    setSuggesting(true)
-    setError('')
+    // Copied logic from original
+    setSuggesting(true);
+    setError('');
     try {
-      // Ensure settings were explicitly saved before AI actions
-      if (!basicSaved) {
-        setError('Please Save & Continue in Basic before using AI Suggest')
-        return
-      }
-      // Pull URLs from dashboard data (history + bookmarks)
-      const { dashboardData } = await storageGet(['dashboardData'])
-      const hist = Array.isArray(dashboardData?.history) ? dashboardData.history : []
-      const bms = Array.isArray(dashboardData?.bookmarks) ? dashboardData.bookmarks : []
-      const urls = [...hist, ...bms].map((it) => it?.url).filter(Boolean).slice(0, 150)
-      if (!urls.length) {
-        setError('No URLs available. Try Refresh Data first.')
-        return
-      }
-      const resp = await sendMessage({ action: 'suggestCategories', urls }, { timeoutMs: 20000 })
-      if (!resp?.ok) {
-        setError(resp?.error || 'Failed to get suggestions')
-        return
-      }
-      const cats = Array.isArray(resp.categories) ? resp.categories : []
-      const rows = cats
-        .map((c) => {
-          if (typeof c === 'string') return { name: c.trim(), description: '' }
-          const name = typeof c?.name === 'string' ? c.name.trim() : ''
-          const description = typeof c?.description === 'string' ? c.description.trim() : ''
-          return name ? { name, description } : null
-        })
-        .filter(Boolean)
-      // Instead of storing in settings, create/update workspaces directly
-      const existing = Array.isArray(workspaces) ? workspaces : []
-      const norm = (s) => (s || '').trim().toLowerCase()
+      if (!basicSaved) { setError('Please Save & Continue in Basic before using AI Suggest'); return; }
+
+      const { dashboardData } = await storageGet(['dashboardData']);
+      const hist = Array.isArray(dashboardData?.history) ? dashboardData.history : [];
+      const bms = Array.isArray(dashboardData?.bookmarks) ? dashboardData.bookmarks : [];
+      const urls = [...hist, ...bms].map((it) => it?.url).filter(Boolean).slice(0, 150);
+
+      if (!urls.length) { setError('No URLs available. Try Refresh Data first.'); return; }
+
+      const resp = await sendMessage({ action: 'suggestCategories', urls }, { timeoutMs: 20000 });
+      if (!resp?.ok) { setError(resp?.error || 'Failed to get suggestions'); return; }
+
+      const cats = Array.isArray(resp.categories) ? resp.categories : [];
+      const rows = cats.map(c => {
+        if (typeof c === 'string') return { name: c.trim(), description: '' };
+        return { name: c?.name?.trim() || '', description: c?.description?.trim() || '' };
+      }).filter(r => r.name);
+
+      const existing = Array.isArray(workspaces) ? workspaces : [];
+      const norm = s => (s || '').trim().toLowerCase();
+
       for (const row of rows) {
-        const found = existing.find(w => norm(w.name) === norm(row.name))
-        const ws = found ? { ...found, description: row.description || found.description || '' } : {
-          id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 8),
+        const found = existing.find(w => norm(w.name) === norm(row.name));
+        const ws = found ? { ...found, description: row.description || found.description } : {
+          id: 'ws_' + Date.now() + Math.random().toString(36).slice(2),
           name: row.name,
           description: row.description || '',
           createdAt: Date.now(),
-          urls: [],
-        }
-        try { await saveWorkspace(ws) } catch { }
+          urls: []
+        };
+        await saveWorkspace(ws);
       }
+      await loadLocalWorkspaces();
     } catch (e) {
-      setError(String(e?.message || e))
+      setError(String(e?.message || e));
     } finally {
-      setSuggesting(false)
+      setSuggesting(false);
     }
-  }
+  };
 
-  const handleUpdateWorkspaceField = (id, field, value) => {
-    setWorkspaces(ws => ws.map(w => w.id === id ? { ...w, [field]: value } : w))
-  }
 
-  const handleSaveWorkspaceRow = async (id) => {
-    try {
-      const w = workspaces.find(x => x.id === id)
-      if (!w) return
-      const payload = {
-        id: w.id,
-        name: (w.name || '').trim() || 'Workspace',
-        description: (w.description || '').trim(),
-        createdAt: w.createdAt || Date.now(),
-        urls: Array.isArray(w.urls) ? w.urls : [],
-      }
-      console.log('[SettingsModal] Saving workspace row:', payload);
-      await saveWorkspace(payload)
-      console.log('[SettingsModal] Workspace row saved successfully');
-    } catch (e) {
-      console.error('[SettingsModal] Error saving workspace row:', e);
-    }
-  }
+  // --- Render Helpers ---
 
-  const handleDeleteWorkspace = async (id) => {
-    try {
-      console.log('[SettingsModal] Deleting workspace:', id);
-      await deleteWorkspaceById(id)
-      console.log('[SettingsModal] Workspace deleted, refreshing list...');
-
-      // Refresh workspaces list
-      try {
-        const list = await listWorkspaces();
-        console.log('[SettingsModal] Refreshed workspaces after deletion:', list);
-        const workspaceData = list?.data || list || [];
-        setWorkspaces(Array.isArray(workspaceData) ? workspaceData : []);
-      } catch (error) {
-        console.error('[SettingsModal] Error refreshing workspaces after deletion:', error);
-      }
-    } catch (error) {
-      console.error('[SettingsModal] Error deleting workspace:', error);
-    }
-  }
-
-  const handleOpenCreateWorkspace = () => setShowCreateWorkspace(true)
-  const handleCloseCreateWorkspace = () => setShowCreateWorkspace(false)
-  const handleCreateWorkspace = async (name, description) => {
-    const ws = {
-      id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 8),
-      name,
-      description,
-      createdAt: Date.now(),
-      urls: [],
-    }
-    console.log('[SettingsModal] Creating workspace:', ws);
-    await saveWorkspace(ws)
-    console.log('[SettingsModal] Workspace saved, refreshing list...');
-
-    // Refresh workspaces list
-    try {
-      const list = await listWorkspaces();
-      console.log('[SettingsModal] Refreshed workspaces after creation:', list);
-      const workspaceData = list?.data || list || [];
-      setWorkspaces(Array.isArray(workspaceData) ? workspaceData : []);
-    } catch (error) {
-      console.error('[SettingsModal] Error refreshing workspaces after creation:', error);
-    }
-
-    setShowCreateWorkspace(false)
-  }
-
-  // Authentication handlers removed for this build
-
+  if (!show) return null;
 
   return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }} style={{
-      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
-      padding: '20px'
-    }}>
-      <div className="modal" style={{
-        background: 'rgba(255, 255, 255, 0.05)',
-        backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        borderRadius: '16px',
-        boxShadow: '0 12px 48px rgba(0, 0, 0, 0.4)',
-        maxWidth: '1200px',
-        width: '95vw',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        margin: '0 auto'
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px', animation: 'fadeIn 0.2s ease'
       }}>
-        <div
-          className="modal-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 16,
-            paddingBottom: 20,
-            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-            marginBottom: 24,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+
+      <div className="modal-content" style={{
+        width: '100%', maxWidth: '1100px', height: '85vh',
+        background: 'rgba(20, 20, 30, 0.85)',
+        backdropFilter: 'blur(24px)',
+        borderRadius: '24px',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 24px 72px -12px rgba(0,0,0,0.5)',
+        display: 'flex', overflow: 'hidden',
+        color: '#fff', fontFamily: 'inherit'
+      }}>
+
+        {/* Sidebar */}
+        <div style={{
+          width: '280px',
+          background: 'rgba(255,255,255,0.02)',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', flexDirection: 'column',
+          padding: '24px 16px'
+        }}>
+          <div style={{ padding: '0 12px 24px 12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
-              background: 'linear-gradient(135deg, #34C759, #30D158)',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20px'
-            }}><FontAwesomeIcon icon={faRocket} /></div>
+              width: 36, height: 36, borderRadius: 10,
+              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18, boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+              color: 'white'
+            }}>
+              <FontAwesomeIcon icon={faRocket} />
+            </div>
             <div>
-              <h3 style={{
-                margin: 0,
-                fontSize: '24px',
-                fontWeight: '700',
-                color: '#e5e7eb',
-                lineHeight: '1.2'
-              }}>Welcome to Cool-Desk</h3>
-              <p style={{
-                margin: '4px 0 0 0',
-                fontSize: '14px',
-                color: '#9ca3af',
-                fontWeight: '400'
-              }}>Let's set up your personalized workspace</p>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', color: '#fff' }}>CoolDesk</h3>
+              <div style={{ fontSize: 11, opacity: 0.5, color: '#fff' }}>Settings & Prefs</div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="cancel-btn"
-            aria-label="Close"
-            title="Close"
-            style={{
-              padding: '10px',
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: 'none',
-              color: '#e5e7eb',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '18px',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.2)';
-              e.target.style.transform = 'translateY(-1px)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-              e.target.style.transform = 'translateY(0)';
-            }}
-          >
-            ×
-          </button>
-        </div>
-        {error && (
-          <div style={{
-            marginBottom: 24,
-            color: '#ff6b6b',
-            fontSize: '14px',
-            border: '1px solid rgba(255, 107, 107, 0.2)',
-            padding: '16px 20px',
-            borderRadius: '12px',
-            backdropFilter: 'blur(10px)'
-          }}>
-            {error}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTabId(tab.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: activeTabId === tab.id ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                  color: activeTabId === tab.id ? '#60a5fa' : '#9ca3af',
+                  fontSize: '14px', fontWeight: activeTabId === tab.id ? 600 : 500,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s ease',
+                  position: 'relative'
+                }}
+                onMouseEnter={e => {
+                  if (activeTabId !== tab.id) {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                    e.currentTarget.style.color = '#e5e7eb';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (activeTabId !== tab.id) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = '#9ca3af';
+                  }
+                }}
+              >
+                <div style={{ width: 20, display: 'flex', justifyContent: 'center' }}>
+                  <FontAwesomeIcon icon={tab.icon} />
+                </div>
+                {tab.label}
+                {activeTabId === tab.id && (
+                  <div style={{
+                    position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)',
+                    width: 3, height: '60%', background: '#60a5fa', borderRadius: '4px 0 0 4px'
+                  }} />
+                )}
+              </button>
+            ))}
           </div>
-        )}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '260px minmax(0, 1fr)',
-          gap: '20px',
-          alignItems: 'flex-start'
-        }}>
-          <div style={{
-            borderRadius: '16px',
-            padding: '12px 8px'
-          }}>
-            <Tabs
-              activeTab={activeTab}
-              onTabChange={handleTabChange}
-              disabledTitles={[]} // Remove restrictions for better onboarding flow
-              orientation="vertical"
+
+          <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 16 }}>
+            <button
+              onClick={onClose}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '12px',
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(0,0,0,0.2)',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 500,
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                e.currentTarget.style.color = '#fff';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(0,0,0,0.2)';
+                e.currentTarget.style.color = '#9ca3af';
+              }}
             >
-              <TabItem title={<><FontAwesomeIcon icon={faCog} style={{ marginRight: '8px' }} />AI Setup</>}>
-                {/* Content rendered in the right pane below */}
-              </TabItem>
-              <TabItem title={<><FontAwesomeIcon icon={faPalette} style={{ marginRight: '8px' }} />Themes</>}>
-                {/* Content rendered in the right pane below */}
-              </TabItem>
-              <TabItem title={<><FontAwesomeIcon icon={faFileExport} style={{ marginRight: '8px' }} />Export Data</>}>
-                {/* Content rendered in the right pane below */}
-              </TabItem>
-              <TabItem title={<><FontAwesomeIcon icon={faEye} style={{ marginRight: '8px' }} />Display</>}>
-                {/* Content rendered in the right pane below */}
-              </TabItem>
-              <TabItem title={<><FontAwesomeIcon icon={faGraduationCap} style={{ marginRight: '8px' }} />Help</>}>
-                {/* Content rendered in the right pane below */}
-              </TabItem>
-            </Tabs>
+              Close Settings
+            </button>
           </div>
+        </div>
+
+        {/* Content Area */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+
+          {/* Header Bar */}
           <div style={{
-            borderRadius: '16px',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            background: 'rgba(15, 23, 42, 0.8)',
-            padding: '20px',
-            maxHeight: '600px',
-            overflowY: 'auto'
+            height: 64, borderBottom: '1px solid rgba(255,255,255,0.06)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px'
           }}>
-            {activeTab === 0 && (
-              <div>
-                <h2 style={{ marginTop: 0, marginBottom: '20px', fontSize: '20px', fontWeight: 600 }}>
-                  AI & Project Settings
-                </h2>
-
-                <SetupTab
-                  localSettings={localSettings}
-                  setLocalSettings={setLocalSettings}
-                  markEdited={markEdited}
-                  basicSaved={basicSaved}
-                  setBasicSaved={setBasicSaved}
-                  suggesting={suggesting}
-                  error={error}
-                  setError={setError}
-                  handleSuggestCategories={handleSuggestCategories}
-                  saveSettingsDB={saveSettingsDB}
-                  storageSet={storageSet}
-                />
-
-                {/* Session Tracking Toggle */}
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#fff' }}>
+              {TABS.find(t => t.id === activeTabId)?.label}
+            </h2>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {/* Quick Actions if needed */}
+              {activeTabId === 'general' && (
                 <div style={{
-                  marginTop: '32px',
-                  padding: '20px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '12px'
+                  fontSize: 12, padding: '4px 10px', borderRadius: 99,
+                  background: basicSaved ? 'rgba(34, 197, 94, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                  color: basicSaved ? '#4ade80' : '#facc15', border: '1px solid currentColor'
                 }}>
-                  <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600 }}>
-                    Smart Project Detection
-                  </h3>
-                  <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6, fontSize: '14px' }}>
-                    Monitor your browser tabs to automatically detect projects and intelligently categorize URLs based on context.
-                  </p>
+                  {basicSaved ? 'All Saved' : 'Unsaved Changes'}
+                </div>
+              )}
+            </div>
+          </div>
 
+          <div style={{ flex: 1, overflowY: 'auto', padding: '32px' }}>
+            {error && (
+              <div style={{
+                marginBottom: 24, padding: '12px 16px', borderRadius: 12,
+                background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                color: '#f87171', fontSize: 13
+              }}>
+                {error}
+              </div>
+            )}
+
+            {activeTabId === 'general' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                <section>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Core Configuration</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Configure AI models and core behavior.</p>
+                  </div>
+                  <SetupTab
+                    localSettings={localSettings}
+                    setLocalSettings={setLocalSettings}
+                    markEdited={markEdited}
+                    basicSaved={basicSaved}
+                    setBasicSaved={setBasicSaved}
+                    suggesting={suggesting}
+                    error={error}
+                    setError={setError}
+                    handleSuggestCategories={handleSuggestCategories}
+                    saveSettingsDB={saveSettingsDB}
+                    storageSet={storageSet}
+                  />
+                </section>
+
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
+                <section>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Smart Detection</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Automatically detect projects from your browser activity.</p>
+                  </div>
                   <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    cursor: 'pointer',
-                    padding: '12px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: '8px',
-                    transition: 'all 0.2s'
+                    display: 'flex', alignItems: 'center', gap: 16,
+                    padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 12,
+                    cursor: 'pointer', border: '1px solid rgba(255,255,255,0.04)', transition: 'all 0.2s',
+                    color: '#fff'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'}
                   >
                     <input
                       type="checkbox"
                       checked={sessionTrackingEnabled}
                       onChange={(e) => handleToggleSessionTracking(e.target.checked)}
-                      style={{
-                        width: '20px',
-                        height: '20px',
-                        cursor: 'pointer',
-                        accentColor: '#34C759'
-                      }}
+                      style={{ width: 18, height: 18, accentColor: '#3b82f6' }}
                     />
                     <div>
-                      <div style={{ fontSize: '16px', fontWeight: 500, color: '#e5e7eb' }}>
-                        Enable Session Tracking
-                      </div>
-                      <div style={{ fontSize: '13px', color: '#9ca3af', marginTop: '2px' }}>
-                        Track tabs, detect projects, and auto-categorize URLs
-                      </div>
+                      <div style={{ fontWeight: 500 }}>Enable Session Tracking</div>
+                      <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>Track tabs to auto-categorize URLs into workspaces</div>
                     </div>
                   </label>
-
-                  {sessionTrackingEnabled && (
-                    <div style={{
-                      marginTop: '12px',
-                      padding: '12px',
-                      background: 'rgba(52, 199, 89, 0.1)',
-                      border: '1px solid rgba(52, 199, 89, 0.2)',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      color: '#34C759'
-                    }}>
-                      ✓ Session tracking is active. The system will detect projects and categorize URLs automatically.
-                    </div>
-                  )}
-                </div>
+                </section>
               </div>
             )}
-            {activeTab === 1 && (
+
+            {activeTabId === 'themes' && (
               <ThemesTab
                 selectedTheme={selectedTheme}
                 fontSize={fontSize}
@@ -774,200 +458,50 @@ export function SettingsModal({
                 onWallpaperOpacityChange={onWallpaperOpacityChange}
               />
             )}
-            {activeTab === 2 && (
-              <ExportData />
-            )}
-            {activeTab === 3 && (
-              <DisplayData />
-            )}
-            {activeTab === 4 && (
-              <div style={{ padding: '0', maxHeight: '560px', overflowY: 'auto' }}>
-                {/* Account Tab Content (duplicated features hidden in Account tab) */}
-                {/* Getting Started Section */}
-                <div style={{ marginBottom: '32px' }}>
-                  <h2 style={{ marginTop: 0, marginBottom: '12px', fontSize: '20px', fontWeight: 600 }}>
-                    Getting Started
-                  </h2>
-                  <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6 }}>
-                    Need help getting started with CoolDesk? Take a quick tour to learn about all the features.
-                  </p>
 
-                  <button
-                    onClick={() => {
-                      if (onStartOnboarding) {
-                        onStartOnboarding();
-                        onClose();
-                      }
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '14px 20px',
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      color: 'white',
-                      fontSize: '15px',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      fontFamily: 'inherit',
-                      boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.4)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faGraduationCap} style={{ fontSize: '18px' }} />
-                    Start Onboarding Tour
-                  </button>
-                </div>
-
-                {/* Features Guide */}
-                <div style={{ marginBottom: '32px' }}>
-                  <h2 style={{ marginTop: 0, marginBottom: '16px', fontSize: '20px', fontWeight: 600 }}>
-                    Features Guide
-                  </h2>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {[
-                      {
-                        icon: faThumbtack,
-                        title: 'Pins',
-                        desc: 'Quick access to your most important links',
-                        howTo: 'Right-click any link → Pin. Pinned items appear at the top of your dashboard.',
-                      },
-                      {
-                        icon: faRocket,
-                        title: 'Pinned Workspaces',
-                        desc: 'Keep important workspaces at the top',
-                        howTo: 'Right-click any workspace → Pin to Pinned Workspaces.',
-                      },
-                      {
-                        icon: faFolder,
-                        title: 'Workspace List',
-                        desc: 'Organize tabs and links by project',
-                        howTo: 'Click + button to create workspace. Add current tab or paste URLs.',
-                      },
-                      {
-                        icon: faTableCellsLarge,
-                        title: 'Tabs',
-                        desc: 'Manage all open browser tabs',
-                        howTo: 'View all tabs in one place. Click to switch, close, or organize.',
-                      },
-                      {
-                        icon: faMicrophone,
-                        title: 'Voice Navigation',
-                        desc: 'Control browser with voice commands',
-                        howTo: 'Click microphone icon. Say "show numbers" to see clickable elements.',
-                      },
-                      {
-                        icon: faComments,
-                        title: 'AI Chats',
-                        desc: 'Auto-save ChatGPT, Claude, Gemini & Grok',
-                        howTo: 'Automatically scrapes chats when you visit AI platforms.',
-                      },
-                      {
-                        icon: faLightbulb,
-                        title: 'Notes & Daily Journal',
-                        desc: 'Daily notes and task management',
-                        howTo: 'Click date to add notes. Keep track of your daily thoughts and tasks.',
-                      },
-                    ].map((feature, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
-                          border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))',
-                          borderRadius: '8px',
-                          padding: '16px',
-                          transition: 'all 0.2s',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                          <FontAwesomeIcon
-                            icon={feature.icon}
-                            style={{
-                              fontSize: '20px',
-                              color: '#667eea',
-                              marginTop: '2px',
-                            }}
-                          />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
-                              {feature.title}
-                            </div>
-                            <div style={{ fontSize: '14px', color: 'var(--text-secondary, #999)', marginBottom: '8px', lineHeight: 1.5 }}>
-                              {feature.desc}
-                            </div>
-                            <div style={{ fontSize: '13px', color: 'var(--text-secondary, #999)', lineHeight: 1.6 }}>
-                              <span style={{ fontWeight: 600, color: '#667eea' }}>How to use:</span> {feature.howTo}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+            {activeTabId === 'data' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                <section>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Data Export</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Export your notes, history, and settings.</p>
                   </div>
-                </div>
+                  <ExportData />
+                </section>
+              </div>
+            )}
 
-                {/* Support Section */}
+
+
+            {activeTabId === 'about' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', paddingTop: 40, color: '#fff' }}>
                 <div style={{
-                  padding: '20px',
-                  background: 'var(--bg-secondary, rgba(255, 255, 255, 0.05))',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.1))'
+                  width: 80, height: 80, borderRadius: 24,
+                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 40, marginBottom: 24, boxShadow: '0 10px 30px rgba(59, 130, 246, 0.4)',
+                  color: 'white'
                 }}>
-                  <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600 }}>
-                    Need More Help?
-                  </h3>
-                  <p style={{ color: 'var(--text-secondary, #999)', marginBottom: '16px', lineHeight: 1.6, fontSize: '14px' }}>
-                    Found a bug or have a feature request? We'd love to hear from you!
-                  </p>
-                  <button
-                    onClick={() => {
-                      const subject = encodeURIComponent('CoolDesk Feedback');
-                      const body = encodeURIComponent('Please describe your issue or suggestion:\n\n');
-                      window.open(`mailto:support@cooldesk.com?subject=${subject}&body=${body}`, '_blank');
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '10px 16px',
-                      background: 'transparent',
-                      border: '1px solid var(--border-primary, rgba(255, 255, 255, 0.2))',
-                      borderRadius: '6px',
-                      color: 'var(--text, #e5e7eb)',
-                      fontSize: '14px',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      fontFamily: 'inherit',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                      e.currentTarget.style.borderColor = '#667eea';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.borderColor = 'var(--border-primary, rgba(255, 255, 255, 0.2))';
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faEnvelope} />
-                    Report Bug or Request Feature
-                  </button>
+                  <FontAwesomeIcon icon={faRocket} />
                 </div>
+                <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>CoolDesk 2.0</h2>
+                <p style={{ maxWidth: 400, lineHeight: 1.6, opacity: 0.6, marginBottom: 32 }}>
+                  Your intelligent workspace organizer. Use AI to auto-sort your tabs, manage tasks with contextual notes, and boost your productivity.
+                </p>
+                <button onClick={() => { if (onStartOnboarding) { onStartOnboarding(); onClose(); } }}
+                  style={{
+                    padding: '12px 32px', borderRadius: 99, border: 'none',
+                    background: '#fff', color: '#000', fontWeight: 600, cursor: 'pointer',
+                    fontSize: 15, boxShadow: '0 10px 20px rgba(255,255,255,0.1)'
+                  }}
+                >
+                  Start Onboarding Tour
+                </button>
               </div>
             )}
           </div>
         </div>
-
       </div>
     </div>
-  )
+  );
 }

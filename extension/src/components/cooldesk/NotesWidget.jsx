@@ -106,8 +106,8 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
-            background: 'rgba(30, 41, 59, 0.3)',
+            borderBottom: 'none',
+            background: 'transparent',
             flexShrink: 0
           }}>
             {/* Left: Character Count or Status */}
@@ -186,8 +186,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
             onChange={(e) => setNewNoteText(e.target.value)}
             placeholder={isListening ? "Listening..." : "Type or use voice to add a note..."}
             style={{
-              flex: 1,
-              minHeight: 0,
+              height: '180px',
               width: '100%',
               background: 'transparent',
               border: 'none',

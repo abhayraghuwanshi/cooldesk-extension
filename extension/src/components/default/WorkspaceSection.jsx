@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
+import '../../styles/default/PinnedWorkspace.css';
+import '../../styles/default/WorkspaceSection.css';
+import '../../styles/WorkspacePillList.css';
 import { WorkspaceFilters } from '../WorkspaceFilters';
 import { WorkspacePillList } from '../WorkspacePillList';
-import '../../styles/default/WorkspaceSection.css';
-import '../../styles/default/PinnedWorkspace.css';
-import '../../styles/WorkspacePillList.css';
 
 export function WorkspaceSection({
-    displaySettings = {},
     workspace,
     setWorkspace,
     filterItems,
@@ -36,11 +35,6 @@ export function WorkspaceSection({
             console.warn('[WorkspaceSection] Failed to save collapsed state', e);
         }
     }, [isCollapsed]);
-
-    // If display settings hide workspace filters, return null
-    if (displaySettings.workspaceFilters === false) {
-        return null;
-    }
 
     // If collapsed, show only title
     if (isCollapsed) {
