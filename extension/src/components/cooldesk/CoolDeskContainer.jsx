@@ -8,6 +8,7 @@ import '../../styles/spatial.css';
 import '../../styles/tabCard.css';
 import { ChatContext } from '../spatial/ChatContext';
 import { NotesCanvas } from '../spatial/NotesCanvas';
+import TeamView from '../spatial/TeamView';
 import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
@@ -484,7 +485,12 @@ export function CoolDeskContainer({
           </div>
         </Face>
 
-        {/* Face 5: Notes (Far Right) */}
+        {/* Face 5: Team (Further Right) */}
+        <Face index="team">
+          <TeamView />
+        </Face>
+
+        {/* Face 6: Notes (Far Right) */}
         <Face index="notes">
           <NotesCanvas workspaceId={currentWorkspace?.id} />
         </Face>

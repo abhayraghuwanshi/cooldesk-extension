@@ -1,7 +1,8 @@
-import { faBookmark, faChartLine, faList, faSearch, faThLarge } from '@fortawesome/free-solid-svg-icons';
+import { faBookmark, faChartLine, faList, faSearch, faShare, faThLarge } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import '../../styles/cooldesk.css';
+import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import { WorkspaceCard } from './WorkspaceCard';
 
 export function WorkspaceList({
@@ -20,6 +21,7 @@ export function WorkspaceList({
     const [popoverState, setPopoverState] = useState({ id: null, rect: null });
     const [hoveredBookmark, setHoveredBookmark] = useState(null);
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false); // New state
 
     // Separate pinned and unpinned workspaces
     const pinned = savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name));
@@ -96,7 +98,16 @@ export function WorkspaceList({
                     </span>
                 </h2>
 
-                <div className="view-toggle">
+                <div className="view-toggle" style={{ display: 'flex', gap: 8 }}>
+                    <button
+                        className="view-toggle-btn"
+                        onClick={() => setIsShareModalOpen(true)}
+                        title="Share to Team"
+                        style={{ color: '#60a5fa' }}
+                    >
+                        <FontAwesomeIcon icon={faShare} />
+                    </button>
+                    <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
                     <button
                         className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
                         onClick={() => setViewMode('grid')}
@@ -564,6 +575,12 @@ export function WorkspaceList({
                     </div>
                 )}
             </div>
+            {/* Share Modal */}
+            <ShareToTeamModal
+                isOpen={isShareModalOpen}
+                onClose={() => setIsShareModalOpen(false)}
+                contextWorkspace={savedWorkspaces.find(w => w.id === activeWorkspaceId)}
+            />
         </div>
     );
 }

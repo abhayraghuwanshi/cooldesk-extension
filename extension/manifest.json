@@ -49,7 +49,7 @@
     "https://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' wss://signaling-server.raghuwanshi-abhay405.workers.dev"
   },
   "web_accessible_resources": [
     {

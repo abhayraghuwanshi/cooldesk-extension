@@ -45,5 +45,16 @@ export default defineConfig(({ mode }) => {
       }
     },
     // esbuild: { drop: ['console', 'debugger'] },
+    define: {
+      'process.env': process.env,
+      'global': 'window',
+    },
+    optimizeDeps: {
+      esbuildOptions: {
+        define: {
+          global: 'globalThis',
+        }
+      }
+    }
   }
 })

@@ -49,6 +49,7 @@ import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorksp
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
 import { getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
+import { p2pSyncService } from './services/p2p/syncService';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
 import { getFaviconUrl, getUrlParts } from './utils';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
@@ -802,19 +803,23 @@ export default function App() {
         const h = () => pushTabs();
         chrome.tabs.onActivated.addListener(h); handlers.push(['onActivated', h]);
       }
-    } catch { /* ignore */ }
+    } catch { }
 
     return () => {
       disposed = true;
       clearInterval(interval);
-      try {
-        for (const [evt, h] of handlers) {
-          const obj = chrome.tabs?.[evt];
-          if (obj?.removeListener) obj.removeListener(h);
-        }
-      } catch { /* ignore */ }
+      handlers.forEach(([evt, h]) => {
+        try { chrome.tabs?.[evt]?.removeListener(h); } catch { }
+      });
     };
-  }, [])
+  }, []);
+
+  // Initialize P2P Sync Service
+  useEffect(() => {
+    p2pSyncService.init().catch(err => {
+      console.warn('Failed to initialize P2P Sync:', err);
+    });
+  }, []);
 
   // Prefill search from URL (?q=...) when opened in side panel or new tab
   useEffect(() => {

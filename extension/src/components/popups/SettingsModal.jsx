@@ -1,14 +1,14 @@
-import { faCog, faDatabase, faPalette, faRocket } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
-import { listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace } from '../../db/index.js';
+import { listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace } from '../../db';
 import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
 import { loadSyncConfig } from '../../services/syncConfig';
 import { setAndSaveFontSize } from '../../utils/fontUtils';
-
 import ExportData from '../settings/ExportData';
 import SetupTab from '../settings/SetupTab';
+import TeamsTab from '../settings/TeamsTab';
 import ThemesTab from '../settings/ThemesTab';
 
 export function SettingsModal({
@@ -44,6 +44,7 @@ export function SettingsModal({
   // --- Constants & Config ---
   const TABS = [
     { id: 'general', label: 'AI & Setup', icon: faCog, component: SetupTab },
+    { id: 'teams', label: 'Teams (P2P)', icon: faUsers, component: TeamsTab },
     { id: 'themes', label: 'Aesthetics', icon: faPalette, component: ThemesTab },
     { id: 'data', label: 'Data & Sync', icon: faDatabase, component: ExportData },
     { id: 'about', label: 'Getting Started', icon: faRocket, component: null }
@@ -440,6 +441,10 @@ export function SettingsModal({
                   </label>
                 </section>
               </div>
+            )}
+
+            {activeTabId === 'teams' && (
+              <TeamsTab />
             )}
 
             {activeTabId === 'themes' && (

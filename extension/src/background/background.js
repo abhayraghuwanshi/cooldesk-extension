@@ -285,7 +285,7 @@ async function main() {
 
   // Initialize Project Context module (session tracking + project detection)
   try {
-    initializeProjectContext();
+    // initializeProjectContext();
     console.log('[Background] ✅ Project context initialized');
   } catch (e) {
     console.error('[Background] Error initializing Project Context module:', e);
