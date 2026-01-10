@@ -1,4 +1,4 @@
-import { faCode, faLayerGroup, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faLayerGroup, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -161,93 +161,126 @@ export function TabManagement({ maxTabs = 8 }) {
           </div>
         ) : (
           <div className="tabs-container" style={{ padding: '0 12px 12px' }}>
-            {/* Local Development Section */}
+            {/* Grouped Tabs Section */}
             {(() => {
-              const localTabs = tabs.filter(t => {
+              // 1. Group tabs by hostname
+              const groups = {};
+              tabs.forEach(tab => {
                 try {
-                  const url = new URL(t.url);
-                  return url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-                } catch { return false; }
+                  const url = new URL(tab.url);
+                  let hostname = url.hostname;
+                  // Handle local development specially if needed, or treat as normal domain
+                  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                    hostname = `${hostname}${url.port ? ':' + url.port : ''}`;
+                  }
+                  if (!groups[hostname]) groups[hostname] = [];
+                  groups[hostname].push(tab);
+                } catch {
+                  if (!groups['Other']) groups['Other'] = [];
+                  groups['Other'].push(tab);
+                }
               });
 
-              const otherTabs = tabs.filter(t => {
-                try {
-                  const url = new URL(t.url);
-                  return url.hostname !== 'localhost' && url.hostname !== '127.0.0.1';
-                } catch { return true; }
-              });
+              // 2. Define Color Palette & Helper
+              const PALETTE = [
+                '#3B82F6', // Blue
+                '#8B5CF6', // Purple
+                '#10B981', // Emerald
+                '#F59E0B', // Amber
+                '#EC4899', // Pink
+                '#06B6D4', // Cyan
+                '#6366F1', // Indigo
+                '#F43F5E', // Rose
+              ];
 
-              const localGroups = {};
-              localTabs.forEach(t => {
-                try {
-                  const url = new URL(t.url);
-                  const key = `${url.hostname}${url.port ? ':' + url.port : ''}`;
-                  if (!localGroups[key]) localGroups[key] = [];
-                  localGroups[key].push(t);
-                } catch { }
+              const getDomainColor = (hostname) => {
+                if (hostname === 'Other') return '#94A3B8';
+                let hash = 0;
+                for (let i = 0; i < hostname.length; i++) {
+                  hash = hostname.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                return PALETTE[Math.abs(hash) % PALETTE.length];
+              };
+
+              // 3. Sort groups
+              // Priority: Group containing active tab > Localhost > Others sorted by count
+              const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
+                const aHasActive = groups[a].some(t => t.active);
+                const bHasActive = groups[b].some(t => t.active);
+                if (aHasActive && !bHasActive) return -1;
+                if (!aHasActive && bHasActive) return 1;
+
+                // Keep localhost at top if no active tab preference
+                const aIsLocal = a.includes('localhost') || a.includes('127.0.0.1');
+                const bIsLocal = b.includes('localhost') || b.includes('127.0.0.1');
+                if (aIsLocal && !bIsLocal) return -1;
+                if (!aIsLocal && bIsLocal) return 1;
+
+                return groups[b].length - groups[a].length; // Descending by count
               });
 
               return (
                 <>
-                  {Object.keys(localGroups).length > 0 && (
-                    <div style={{ marginBottom: '20px' }}>
-                      <div style={{
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        color: '#60A5FA', // Blue accent
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        marginBottom: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        paddingTop: '12px'
-                      }}>
-                        <FontAwesomeIcon icon={faCode} /> Local Development
-                      </div>
+                  {sortedGroupKeys.map(hostname => {
+                    const groupTabs = groups[hostname];
+                    const color = getDomainColor(hostname);
 
-                      {Object.entries(localGroups).map(([groupKey, groupTabs]) => (
-                        <div key={groupKey} style={{ marginBottom: '12px' }}>
+                    return (
+                      <div key={hostname} style={{ marginBottom: '20px' }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginBottom: '10px',
+                          paddingLeft: '4px'
+                        }}>
                           <div style={{
-                            fontSize: '10px',
-                            color: '#94A3B8',
-                            marginBottom: '6px',
+                            width: '4px',
+                            height: '14px',
+                            borderRadius: '2px',
+                            backgroundColor: color,
+                            boxShadow: `0 0 8px ${color}66`
+                          }} />
+                          <div style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: '#E2E8F0',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
                             fontFamily: 'monospace',
-                            paddingLeft: '4px'
+                            display: 'flex',
+                            alignItems: 'baseline',
+                            gap: '6px'
                           }}>
-                            {groupKey}
-                          </div>
-                          <div className="tabs-grid">
-                            {groupTabs.map(tab => (
-                              <TabItem
-                                key={tab.id}
-                                tab={tab}
-                                handleTabClick={handleTabClick}
-                                handlePinTab={handlePinTab}
-                                handleCloseTab={handleCloseTab}
-                              />
-                            ))}
+                            {hostname}
+                            <span style={{
+                              fontSize: '10px',
+                              color: color,
+                              opacity: 0.8,
+                              background: `${color}1A`,
+                              padding: '1px 6px',
+                              borderRadius: '4px'
+                            }}>
+                              {groupTabs.length}
+                            </span>
                           </div>
                         </div>
-                      ))}
-                      <div style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.1)', margin: '16px 0 8px' }}></div>
-                    </div>
-                  )}
 
-                  {/* Other Tabs */}
-                  {otherTabs.length > 0 && (
-                    <div className="tabs-grid">
-                      {otherTabs.map(tab => (
-                        <TabItem
-                          key={tab.id}
-                          tab={tab}
-                          handleTabClick={handleTabClick}
-                          handlePinTab={handlePinTab}
-                          handleCloseTab={handleCloseTab}
-                        />
-                      ))}
-                    </div>
-                  )}
+                        <div className="tabs-grid">
+                          {groupTabs.map(tab => (
+                            <TabItem
+                              key={tab.id}
+                              tab={tab}
+                              color={color}
+                              handleTabClick={handleTabClick}
+                              handlePinTab={handlePinTab}
+                              handleCloseTab={handleCloseTab}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </>
               );
             })()}
@@ -258,6 +291,9 @@ export function TabManagement({ maxTabs = 8 }) {
       <style jsx>{`
         .tab-card:hover .tab-pin-btn,
         .tab-card:hover .tab-close-btn {
+          opacity: 1 !important;
+        }
+        .tab-card:hover .tab-hover-bg {
           opacity: 1 !important;
         }
         .tab-pin-btn:hover {
@@ -271,16 +307,29 @@ export function TabManagement({ maxTabs = 8 }) {
   );
 }
 
-function TabItem({ tab, handleTabClick, handlePinTab, handleCloseTab }) {
+function TabItem({ tab, color, handleTabClick, handlePinTab, handleCloseTab }) {
+  const accentColor = color || '#3B82F6';
   return (
     <div
       className="tab-card"
       onClick={() => handleTabClick(tab)}
       style={{
-        border: tab.active ? '1px solid rgba(59, 130, 246, 0.5)' : undefined,
-        background: tab.active ? 'rgba(59, 130, 246, 0.1)' : undefined,
+        border: tab.active ? `1px solid ${accentColor}80` : `1px solid ${accentColor}20`,
+        background: tab.active ? `${accentColor}1A` : 'transparent',
+        borderLeft: tab.active ? `3px solid ${accentColor}` : `1px solid ${accentColor}20`,
+        position: 'relative',
+        overflow: 'hidden'
       }}
     >
+      {/* Dynamic hover gradient effect */}
+      <div className="tab-hover-bg" style={{
+        position: 'absolute',
+        inset: 0,
+        background: `linear-gradient(90deg, ${accentColor}0D 0%, transparent 100%)`,
+        opacity: 0,
+        transition: 'opacity 0.2s',
+        pointerEvents: 'none'
+      }} />
       <img
         src={getFaviconUrl(tab.url)}
         alt=""

@@ -47,6 +47,8 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
+  const [hoveredLink, setHoveredLink] = useState(null);
+  const [showAll, setShowAll] = useState(false);
   const activePopover = popoverState.index;
 
   const { name, urls = [], description, icon = 'folder' } = workspace;
@@ -61,8 +63,8 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
     onClick?.(workspace);
   };
 
-  // Show fewer links in compact mode
-  const linkLimit = compact ? 3 : 5;
+  // Show fewer links in compact mode, unless expanded
+  const linkLimit = showAll ? urls.length : (compact ? 3 : 5);
   const displayLinks = urls.slice(0, linkLimit);
 
   return (
@@ -122,13 +124,18 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
         <ul className="workspace-links">
           {displayLinks.map((urlObj, idx) => {
             const faviconUrl = getFaviconUrl(urlObj.url, 16);
+            const isHovered = hoveredLink === idx;
             const isPopoverOpen = activePopover === idx;
 
             return (
               <li
                 key={idx}
                 className="workspace-link-item"
-                onMouseLeave={() => setPopoverState({ index: null, rect: null })}
+                onMouseEnter={() => setHoveredLink(idx)}
+                onMouseLeave={() => {
+                  setHoveredLink(null);
+                  setPopoverState({ index: null, rect: null });
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (urlObj.url) {
@@ -168,7 +175,7 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
                   className="workspace-link-analytics"
                   onClick={(e) => {
                     e.stopPropagation();
-                    e.stopPropagation();
+                    e.stopPropagation(); // Double stop just in case
                     const rect = e.currentTarget.getBoundingClientRect();
                     setPopoverState(prev => prev.index === idx ? { index: null, rect: null } : { index: idx, rect });
                   }}
@@ -176,9 +183,10 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
                     padding: '4px 6px',
                     fontSize: '11px',
                     color: isPopoverOpen ? '#60A5FA' : 'rgba(148, 163, 184, 0.5)',
-                    opacity: 0.8,
+                    opacity: (isHovered || isPopoverOpen) ? 1 : 0,
                     transition: 'all 0.2s',
-                    marginRight: '4px'
+                    marginRight: '4px',
+                    pointerEvents: (isHovered || isPopoverOpen) ? 'auto' : 'none'
                   }}
                   title="View Analytics"
                 >
@@ -202,10 +210,31 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
               </li>
             );
           })}
-          {urls.length > linkLimit && (
-            <li className="workspace-link-item" style={{ opacity: 0.6, fontStyle: 'italic' }}>
+          {urls.length > (compact ? 3 : 5) && !showAll && (
+            <li
+              className="workspace-link-item"
+              style={{ opacity: 0.6, fontStyle: 'italic', cursor: 'pointer' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAll(true);
+              }}
+            >
               <span className="workspace-link-text">
-                +{urls.length - linkLimit} more...
+                +{urls.length - (compact ? 3 : 5)} more...
+              </span>
+            </li>
+          )}
+          {showAll && urls.length > (compact ? 3 : 5) && (
+            <li
+              className="workspace-link-item"
+              style={{ opacity: 0.6, fontStyle: 'italic', cursor: 'pointer', justifyContent: 'center' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAll(false);
+              }}
+            >
+              <span className="workspace-link-text">
+                Show less
               </span>
             </li>
           )}

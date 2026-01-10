@@ -1,5 +1,5 @@
 // Activity tracking, time series, and session management
-import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, putActivityTimeSeriesEvent } from '../db/index.js';
+import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, getUrlAnalytics, putActivityTimeSeriesEvent } from '../db/index.js';
 import { setHostActivity } from '../services/extensionApi.js';
 import { getUrlParts } from '../utils.js';
 // import { autoSavePredictor } from '../ml/inference/autoSavePredictor.js'; // DISABLED - ML modules removed
@@ -9,9 +9,9 @@ import { getUrlParts } from '../utils.js';
 function cleanUrl(url) {
     try {
         const parts = getUrlParts(url);
-        return parts?.key || null; // scheme + eTLD+1 (e.g., https://github.com)
+        return parts?.key || new URL(url).hostname; // scheme + eTLD+1 (e.g., https://github.com) or fallback
     } catch {
-        return null;
+        try { return new URL(url).hostname; } catch { return null; }
     }
 }
 
@@ -356,6 +356,11 @@ async function accumulateTime(url, now = Date.now()) {
     if (!cleaned) return;
 
     const delta = Math.max(0, now - currentActive.since);
+
+    // Debug logging for tracking
+    if (delta > 1000) {
+        console.log(`[Activity Debug] Tracking ${delta}ms for ${cleaned} (Active: ${currentActive.url === url})`);
+    }
 
     // Initialize activity data if needed
     if (!activityData[cleaned]) {
@@ -808,9 +813,63 @@ export async function handleGetActivityData(msg, sender, sendResponse) {
     console.log('[Activity Debug] HANDLER ENTRY - handleGetActivityData called');
 
     try {
+        // Method 1: Filter by specific URL (Primary Use Case for Popover)
+        if (msg.url) {
+            const requestedCleaned = cleanUrl(msg.url);
+            console.log('[Activity Debug] Fetching persistent analytics for:', msg.url, '->', requestedCleaned);
+
+            // fetch from DB (Persistent)
+            // fetch from DB (Persistent) with 3s timeout
+            const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ success: false, timeout: true }), 3000));
+            const dbPromise = getUrlAnalytics(msg.url).catch(err => ({ success: false, error: err }));
+
+            const dbStats = await Promise.race([dbPromise, timeoutPromise]);
+
+            if (dbStats.timeout) {
+                console.warn('[Activity Debug] DB fetch timed out for:', msg.url);
+            }
+
+            console.log('[Activity Debug] DB Stats result:', JSON.stringify(dbStats));
+
+            // Fetch from Memory (Current Session - not yet flushed)
+            const memoryData = activityData[requestedCleaned];
+            console.log('[Activity Debug] Memory data check complete');
+
+            // Merge Memory into DB Stats for most up-to-date view
+            // Note: DB stats are from 'activity_series', which are flushed events.
+            // 'activityData' is the current aggregation buffer.
+
+            // Unwrap data from error handler wrapper
+            const responseStats = { ...(dbStats?.data || dbStats || {}) };
+            console.log('[Activity Debug] Unwrapped stats:', responseStats);
+
+            if (memoryData) {
+                console.log('[Activity Debug] Merging memory data');
+                // If we have current session data, we might want to display it.
+                // However, simple summing might double-count if the session was partially flushed.
+                // For now, let's trust the DB stats as the "committed" truth, 
+                // but if DB is empty (0 visits), use memory.
+                if (responseStats.totalVisits === 0 && memoryData.visitCount > 0) {
+                    responseStats.totalVisits = memoryData.visitCount;
+                    responseStats.totalTime = memoryData.time;
+                    responseStats.lastVisit = memoryData.lastVisit;
+                }
+            }
+
+            console.log('[Activity Debug] Returning combined stats:', responseStats);
+
+            sendResponse({
+                ok: true,
+                rows: [responseStats], // Return as array to match expected format
+                fromDb: true
+            });
+            return;
+        }
+
+        // Method 2: Get All Activity (Legacy/Dashboard Use Case)
         // Use in-memory activity data (background scripts can't access IndexedDB easily)
-        console.log('[Activity Debug] Using in-memory activity data');
-        console.log('[Activity Debug] Current activityData keys:', Object.keys(activityData));
+        console.log('[Activity Debug] Using in-memory activity data for bulk request');
+        // ... (rest of legacy logic remains if needed, but primary use is msg.url)
 
         const memoryRows = Object.entries(activityData).map(([url, data]) => ({
             url,
@@ -831,69 +890,15 @@ export async function handleGetActivityData(msg, sender, sendResponse) {
             visitDays: Array.from(data.visitDays || [])
         }));
 
-        // Also include session data if available
-        const sessionRows = Array.from(urlSessions.entries()).map(([url, session]) => ({
-            url,
-            time: session.timeSpent || 0,
-            clicks: session.clicks || 0,
-            scroll: session.scrollDepth || 0,
-            forms: session.forms || 0,
-            visitCount: 0, // Session data doesn't track this
-            returnVisits: 0,
-            lastVisit: session.lastSeen || 0,
-            visitTimes: [],
-            sessionDurations: [],
-            bounced: 0,
-            title: '',
-            domain: '',
-            pageType: 'general',
-            firstVisit: session.firstSeen || 0,
-            visitDays: []
-        }));
-
-        // Merge and deduplicate data
-        const allData = new Map();
-
-        // Add memory data first
-        memoryRows.forEach(row => {
-            allData.set(row.url, row);
-        });
-
-        // Add/merge session data
-        sessionRows.forEach(row => {
-            const existing = allData.get(row.url);
-            if (!existing) {
-                allData.set(row.url, row);
-            } else {
-                // Merge session data with existing data, keeping the higher values
-                allData.set(row.url, {
-                    ...existing,
-                    time: Math.max(existing.time, row.time),
-                    clicks: Math.max(existing.clicks, row.clicks),
-                    scroll: Math.max(existing.scroll, row.scroll),
-                    forms: Math.max(existing.forms, row.forms),
-                    lastVisit: Math.max(existing.lastVisit, row.lastVisit)
-                });
-            }
-        });
-
-        const finalRows = Array.from(allData.values())
+        const finalRows = memoryRows
             .filter(row => row.time > 0 || row.clicks > 0 || row.scroll > 0 || row.forms > 0)
             .sort((a, b) => b.time - a.time);
 
-        console.log('[Activity Debug] Sending merged data response with', finalRows.length, 'items');
-        console.log('[Activity Debug] Sample data:', finalRows.slice(0, 3));
         sendResponse({ ok: true, rows: finalRows, fromMemory: true });
 
     } catch (error) {
         console.error('[Activity Debug] HANDLER ERROR:', error);
-        try {
-            // Last resort: send empty data rather than failing
-            console.log('[Activity Debug] Error occurred, sending empty response');
-            sendResponse({ ok: true, rows: [], error: String(error), fallback: true });
-        } catch (sendError) {
-            console.error('[Activity Debug] Handler sendResponse also failed:', sendError);
-        }
+        sendResponse({ ok: false, error: String(error) });
     }
 }
 

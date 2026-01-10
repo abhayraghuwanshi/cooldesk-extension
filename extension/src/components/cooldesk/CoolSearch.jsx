@@ -516,6 +516,49 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
     };
   }, [onSearch]);
 
+  // Handle external voice triggers (from Footer Bar / Background)
+  useEffect(() => {
+    // 1. Check for pending voice start on mount (from background/footer)
+    const checkPendingVoice = async () => {
+      try {
+        const { pendingVoiceStart } = await chrome.storage.local.get('pendingVoiceStart');
+        if (pendingVoiceStart) {
+          console.log('[CoolSearch] Found pending voice start, activating...');
+          await chrome.storage.local.remove('pendingVoiceStart');
+          // Short delay to ensure components are ready
+          setTimeout(() => toggleVoice(true), 500);
+        }
+      } catch (e) {
+        console.warn('Error checking pending voice:', e);
+      }
+    };
+    checkPendingVoice();
+
+    // 2. Listen for runtime messages
+    const messageListener = (msg, sender, sendResponse) => {
+      if (msg.action === 'toggleVoice') {
+        console.log('[CoolSearch] Check voice toggle command:', msg);
+        if (msg.forceStart) {
+          if (!isListening) toggleVoice(true);
+        } else {
+          toggleVoice();
+        }
+      } else if (msg.action === 'checkVoiceState') {
+        // Broadcast current state to new listeners
+        chrome.runtime.sendMessage({
+          type: 'voiceStateChange',
+          isListening: isListening
+        }).catch(() => { });
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(messageListener);
+    return () => chrome.runtime.onMessage.removeListener(messageListener);
+  }, [isListening]); // Re-bind listener when isListening changes to capture correct state closure? 
+  // Actually simpler: stick to a ref or functional update if needed, but isListening dependency is fine here for the check.
+  // BUT: if we recreate listener on every state change, we might miss messages? No, it's fast.
+  // Better: Use a ref for current listening state in the listener, OR rely on the toggleVoice function handling it correctly.
+
   const handleChange = (e) => {
     setSearchValue(e.target.value);
     // Clear command feedback when user starts typing again
@@ -657,25 +700,33 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
     setSearchValue('');
   };
 
-  const toggleVoice = async () => {
+  const toggleVoice = async (forceStart = false) => {
     if (!annyang) {
       alert('Speech recognition is not supported in your browser.');
       return;
     }
 
-    if (isListening) {
+    // Determine target state
+    const shouldListen = forceStart ? true : !isListening;
+
+    if (!shouldListen) {
       annyang.abort();
       setIsListening(false);
       stopAudioAnalysis();
+      // Broadcast state
+      chrome.runtime.sendMessage({ type: 'voiceStateChange', isListening: false }).catch(() => { });
     } else {
       try {
         await startAudioAnalysis();
         annyang.start({ autoRestart: false, continuous: true });
         setIsListening(true);
+        // Broadcast state
+        chrome.runtime.sendMessage({ type: 'voiceStateChange', isListening: true }).catch(() => { });
       } catch (e) {
         console.warn('Speech recognition error:', e);
         setIsListening(false);
         stopAudioAnalysis();
+        chrome.runtime.sendMessage({ type: 'voiceStateChange', isListening: false }).catch(() => { });
       }
     }
   };

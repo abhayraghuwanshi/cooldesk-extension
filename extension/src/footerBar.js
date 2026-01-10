@@ -469,6 +469,80 @@ export function injectFooterBar() {
     container.appendChild(highlightBtn);
 
 
+    // 3. AI Voice Button
+    const voiceBtn = document.createElement('div');
+    voiceBtn.className = 'action-btn voice-btn';
+    voiceBtn.id = 'cooldesk-voice-btn'; // For easier selection
+
+    // Create Microphone Icon
+    const micSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    micSvg.setAttribute('width', '20');
+    micSvg.setAttribute('height', '20');
+    micSvg.setAttribute('viewBox', '0 0 24 24');
+    micSvg.setAttribute('fill', 'none');
+    micSvg.setAttribute('stroke', '#4b5563'); // Default gray
+    micSvg.setAttribute('stroke-width', '2');
+    micSvg.setAttribute('stroke-linecap', 'round');
+    micSvg.setAttribute('stroke-linejoin', 'round');
+    micSvg.innerHTML = `
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    `;
+    voiceBtn.appendChild(micSvg);
+
+    // Voice active animation styles
+    const micStyle = document.createElement('style');
+    micStyle.textContent = `
+      @keyframes mic-pulse {
+        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); transform: scale(1); }
+        70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); transform: scale(1.1); }
+        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); transform: scale(1); }
+      }
+      .voice-active {
+        animation: mic-pulse 1.5s infinite;
+        border-color: #ef4444 !important; /* Red border */
+      }
+      .voice-active svg {
+        stroke: #ef4444 !important; /* Red icon */
+      }
+    `;
+    shadow.appendChild(micStyle);
+
+    voiceBtn.onclick = async (e) => {
+      e.stopPropagation();
+      // Visual feedback
+      voiceBtn.style.transform = 'scale(0.95)';
+      setTimeout(() => voiceBtn.style.transform = '', 150);
+
+      // Determine if we are turning ON or OFF based on current class
+      // But actually the toggle logic handles it.
+      // Ideally we want to know state locally.
+      const isCurrentlyActive = voiceBtn.classList.contains('voice-active');
+      const action = isCurrentlyActive ? 'Stopping' : 'Activating';
+
+      showNotification(`${action} Voice Control...`, isCurrentlyActive ? '#ef4444' : '#ec4899', 2000);
+
+      // Send headless toggle request
+      chrome.runtime.sendMessage({
+        action: 'toggleVoice',
+        fromFooter: true,
+        forceStart: !isCurrentlyActive // optional hint
+      });
+    };
+    voiceBtn.onmousedown = (e) => e.stopPropagation();
+
+    // Tooltip for Voice
+    const voiceTooltip = document.createElement('div');
+    voiceTooltip.className = 'action-tooltip';
+    voiceTooltip.textContent = 'Voice Command';
+    voiceBtn.appendChild(voiceTooltip);
+
+    container.appendChild(voiceBtn);
+
+
+
     // Main Button Tooltip (Adjusted position to avoid overlap)
     const tooltip = document.createElement('div');
     tooltip.className = 'tooltip';
@@ -658,8 +732,8 @@ export function injectFooterBar() {
     };
 
     // Helper: open extension side panel
-    const openSidePanel = async () => {
-      console.log('[CoolDesk Button] Attempting to open side panel...');
+    const openSidePanel = async (startVoice = false) => {
+      console.log('[CoolDesk Button] Attempting to open side panel...', startVoice ? '(Voice Mode)' : '');
 
       // Check if extension context is still valid
       if (!chrome?.runtime?.id) {
@@ -678,7 +752,8 @@ export function injectFooterBar() {
           chrome.runtime.sendMessage({
             type: 'openSidePanel',
             timestamp: Date.now(),
-            fromUserGesture: true
+            fromUserGesture: true,
+            startVoice: startVoice // Flag to auto-start voice
           }, resolve);
         });
 
@@ -864,6 +939,24 @@ export function injectFooterBar() {
     let activeHighlights = [];
     let observer = null;
     let observerTimeout = null;
+
+    // Listen for voice state changes and notifications
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.type === 'voiceStateChange') {
+        const voiceBtn = shadow.getElementById('cooldesk-voice-btn');
+        if (voiceBtn) {
+          if (msg.isListening) {
+            voiceBtn.classList.add('voice-active');
+            showNotification('Listening...', '#10b981', 2000); // Green for active listening
+          } else {
+            voiceBtn.classList.remove('voice-active');
+            // showNotification('Voice Paused', '#6b7280', 2000);
+          }
+        }
+      } else if (msg.type === 'SHOW_NOTIFICATION') {
+        showNotification(msg.message, msg.color || '#4A90E2');
+      }
+    });
 
     const renderInlineHighlight = (note) => {
       if (!note.text) return;

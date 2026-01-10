@@ -1,4 +1,4 @@
-import { faBookmark, faList, faSearch, faThLarge } from '@fortawesome/free-solid-svg-icons';
+import { faBookmark, faChartLine, faList, faSearch, faThLarge } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import '../../styles/cooldesk.css';
@@ -17,6 +17,9 @@ export function WorkspaceList({
     const [bookmarkSearch, setBookmarkSearch] = useState('');
     const [showBookmarks, setShowBookmarks] = useState(true);
     const [workspaceLimit, setWorkspaceLimit] = useState(6); // Show 6 workspaces initially
+    const [popoverState, setPopoverState] = useState({ id: null, rect: null });
+    const [hoveredBookmark, setHoveredBookmark] = useState(null);
+    const [bookmarkLimit, setBookmarkLimit] = useState(20);
 
     // Separate pinned and unpinned workspaces
     const pinned = savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name));
@@ -347,7 +350,7 @@ export function WorkspaceList({
                                             maxHeight: '400px',
                                             overflowY: 'auto'
                                         }}>
-                                            {filteredBookmarks.slice(0, 20).map((bookmark) => {
+                                            {filteredBookmarks.slice(0, bookmarkLimit).map((bookmark) => {
                                                 let hostname = '';
                                                 try {
                                                     hostname = new URL(bookmark.url).hostname;
@@ -355,76 +358,132 @@ export function WorkspaceList({
                                                     hostname = bookmark.url;
                                                 }
 
+                                                const isHovered = hoveredBookmark === bookmark.id;
+                                                const isPopoverOpen = popoverState.id === bookmark.id;
+
                                                 return (
-                                                    <button
+                                                    <div
                                                         key={bookmark.id}
-                                                        onClick={() => handleBookmarkClick(bookmark.url)}
-                                                        style={{
-                                                            padding: '12px',
-                                                            borderRadius: '10px',
-                                                            background: 'var(--glass-bg)',
-                                                            border: '1px solid var(--border-primary)',
-                                                            color: 'var(--text)',
-                                                            cursor: 'pointer',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '12px',
-                                                            textAlign: 'left',
-                                                            transition: 'all 0.2s ease',
-                                                            width: '100%'
-                                                        }}
-                                                        onMouseEnter={(e) => {
-                                                            e.currentTarget.style.background = 'var(--hover-bg-accent, rgba(59, 130, 246, 0.1))';
-                                                            e.currentTarget.style.borderColor = 'var(--accent-color, rgba(59, 130, 246, 0.4))';
-                                                            e.currentTarget.style.transform = 'translateX(4px)';
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.style.background = 'var(--card-bg, rgba(30, 41, 59, 0.5))';
-                                                            e.currentTarget.style.borderColor = 'var(--border-color, rgba(148, 163, 184, 0.2))';
-                                                            e.currentTarget.style.transform = 'translateX(0)';
+                                                        style={{ position: 'relative' }}
+                                                        onMouseEnter={() => setHoveredBookmark(bookmark.id)}
+                                                        onMouseLeave={() => {
+                                                            setHoveredBookmark(null);
+                                                            if (isPopoverOpen) {
+                                                                // Optional: Keep open logic
+                                                            }
                                                         }}
                                                     >
-                                                        <div style={{
-                                                            width: '32px',
-                                                            height: '32px',
-                                                            borderRadius: '8px',
-                                                            background: 'var(--accent-blue-soft)',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            flexShrink: 0
-                                                        }}>
-                                                            <FontAwesomeIcon
-                                                                icon={faBookmark}
-                                                                style={{
-                                                                    color: 'var(--accent-blue)',
-                                                                    fontSize: '14px'
-                                                                }}
-                                                            />
-                                                        </div>
-                                                        <div style={{ flex: 1, overflow: 'hidden' }}>
-                                                            <div style={{
-                                                                fontSize: '13px',
-                                                                fontWeight: 500,
+                                                        <div
+                                                            onClick={() => handleBookmarkClick(bookmark.url)}
+                                                            role="button"
+                                                            tabIndex={0}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                                    handleBookmarkClick(bookmark.url);
+                                                                }
+                                                            }}
+                                                            style={{
+                                                                padding: '12px',
+                                                                borderRadius: '10px',
+                                                                background: 'var(--glass-bg)',
+                                                                border: '1px solid var(--border-primary)',
                                                                 color: 'var(--text)',
-                                                                whiteSpace: 'nowrap',
-                                                                overflow: 'hidden',
-                                                                textOverflow: 'ellipsis',
-                                                                marginBottom: '2px'
-                                                            }}>
-                                                                {bookmark.title}
-                                                            </div>
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '12px',
+                                                                textAlign: 'left',
+                                                                transition: 'all 0.2s ease',
+                                                                width: '100%',
+                                                                position: 'relative'
+                                                            }}
+                                                            onMouseEnter={(e) => {
+                                                                e.currentTarget.style.background = 'var(--hover-bg-accent, rgba(59, 130, 246, 0.1))';
+                                                                e.currentTarget.style.borderColor = 'var(--accent-color, rgba(59, 130, 246, 0.4))';
+                                                                e.currentTarget.style.transform = 'translateX(4px)';
+                                                            }}
+                                                            onMouseLeave={(e) => {
+                                                                e.currentTarget.style.background = 'var(--glass-bg)';
+                                                                e.currentTarget.style.borderColor = 'var(--border-primary)';
+                                                                e.currentTarget.style.transform = 'translateX(0)';
+                                                            }}
+                                                        >
                                                             <div style={{
-                                                                fontSize: '11px',
-                                                                color: 'var(--text-muted)',
-                                                                whiteSpace: 'nowrap',
-                                                                overflow: 'hidden',
-                                                                textOverflow: 'ellipsis'
+                                                                width: '32px',
+                                                                height: '32px',
+                                                                borderRadius: '8px',
+                                                                background: 'var(--accent-blue-soft)',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                flexShrink: 0
                                                             }}>
-                                                                {hostname}
+                                                                <FontAwesomeIcon
+                                                                    icon={faBookmark}
+                                                                    style={{
+                                                                        color: 'var(--accent-blue)',
+                                                                        fontSize: '14px'
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                            <div style={{ flex: 1, overflow: 'hidden' }}>
+                                                                <div style={{
+                                                                    fontSize: '13px',
+                                                                    fontWeight: 500,
+                                                                    color: 'var(--text)',
+                                                                    whiteSpace: 'nowrap',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis',
+                                                                    marginBottom: '2px'
+                                                                }}>
+                                                                    {bookmark.title}
+                                                                </div>
+                                                                <div style={{
+                                                                    fontSize: '11px',
+                                                                    color: 'var(--text-muted)',
+                                                                    whiteSpace: 'nowrap',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis'
+                                                                }}>
+                                                                    {hostname}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Analytics Button - Visible on Hover or when Popover is Open */}
+                                                            <div
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                                    setPopoverState(prev => prev.id === bookmark.id ? { id: null, rect: null } : { id: bookmark.id, rect });
+                                                                }}
+                                                                style={{
+                                                                    padding: '6px',
+                                                                    borderRadius: '6px',
+                                                                    color: isPopoverOpen ? '#60A5FA' : 'var(--text-muted)',
+                                                                    background: isPopoverOpen ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                                                    opacity: (isHovered || isPopoverOpen) ? 1 : 0,
+                                                                    pointerEvents: (isHovered || isPopoverOpen) ? 'auto' : 'none',
+                                                                    transition: 'all 0.2s',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center'
+                                                                }}
+                                                                title="View Analytics"
+                                                            >
+                                                                <FontAwesomeIcon icon={faChartLine} style={{ fontSize: '12px' }} />
                                                             </div>
                                                         </div>
-                                                    </button>
+
+                                                        {/* Popover */}
+                                                        {isPopoverOpen && (
+                                                            <UrlAnalyticsPopover
+                                                                url={bookmark.url}
+                                                                title={bookmark.title}
+                                                                onClose={() => setPopoverState({ id: null, rect: null })}
+                                                                triggerRect={popoverState.rect}
+                                                            />
+                                                        )}
+                                                    </div>
                                                 );
                                             })}
                                             {filteredBookmarks.length === 0 && (
@@ -437,15 +496,39 @@ export function WorkspaceList({
                                                     No bookmarks found
                                                 </div>
                                             )}
-                                            {filteredBookmarks.length > 20 && (
-                                                <div style={{
-                                                    padding: '8px',
-                                                    textAlign: 'center',
-                                                    color: 'var(--text-tertiary, #64748b)',
-                                                    fontSize: '12px'
-                                                }}>
-                                                    Showing top 20 of {filteredBookmarks.length} bookmarks
-                                                </div>
+                                            {filteredBookmarks.length > bookmarkLimit && (
+                                                <button
+                                                    onClick={() => setBookmarkLimit(prev => prev + 20)}
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '12px',
+                                                        borderRadius: '10px',
+                                                        background: 'rgba(59, 130, 246, 0.1)',
+                                                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                                                        color: '#60a5fa',
+                                                        fontSize: '13px',
+                                                        fontWeight: 500,
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s ease',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '8px',
+                                                        marginBottom: '10px'
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                                                        e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+                                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                                                        e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                                                        e.currentTarget.style.transform = 'translateY(0)';
+                                                    }}
+                                                >
+                                                    Show More Bookmarks ({filteredBookmarks.length - bookmarkLimit} remaining)
+                                                </button>
                                             )}
                                         </div>
                                     </>

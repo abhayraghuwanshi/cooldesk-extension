@@ -1464,15 +1464,23 @@ export const getUrlAnalytics = withErrorHandling(async (url) => {
     }
 
     // Fetch data for all candidates
+    console.log('[Unified API Debug] getUrlAnalytics searching for:', targetUrls);
     const results = await Promise.all(targetUrls.map(u =>
         new Promise((resolve) => {
             const req = index.getAll(u);
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => resolve([]);
+            req.onsuccess = () => {
+                console.log(`[Unified API Debug] Found ${req.result?.length || 0} events for ${u}`);
+                resolve(req.result || []);
+            };
+            req.onerror = () => {
+                console.warn(`[Unified API Debug] Error fetching for ${u}:`, req.error);
+                resolve([]);
+            }
         })
     ));
 
     const events = results.flat();
+    console.log('[Unified API Debug] Total events found:', events.length);
 
     return new Promise((resolve) => {
         if (events.length === 0) {
@@ -1495,6 +1503,9 @@ export const getUrlAnalytics = withErrorHandling(async (url) => {
         // Track unique session IDs to count visits accurately
         const seenSessions = new Set();
 
+        // Initialize daily stats map
+        const dailyMap = new Map();
+
         events.forEach(event => {
             // Visit Counting
             if (event.sessionId && !seenSessions.has(event.sessionId)) {
@@ -1511,22 +1522,48 @@ export const getUrlAnalytics = withErrorHandling(async (url) => {
                 event.time ||
                 0;
 
-            totalTime += (typeof duration === 'number' ? duration : 0);
+            const timeValue = (typeof duration === 'number' ? duration : 0);
+            totalTime += timeValue;
 
             // Date ranges
             if (event.timestamp < firstVisit) firstVisit = event.timestamp;
             if (event.timestamp > lastVisit) lastVisit = event.timestamp;
+
+            // Daily aggregation
+            if (timeValue > 0) {
+                const dateKey = new Date(event.timestamp).toISOString().split('T')[0];
+                if (!dailyMap.has(dateKey)) {
+                    dailyMap.set(dateKey, 0);
+                }
+                dailyMap.set(dateKey, dailyMap.get(dateKey) + timeValue);
+            }
         });
 
         // Fallback if no sessions found (legacy data)
         if (visitCount === 0) visitCount = events.length;
+
+        // Convert map to sorted array for chart
+        // Fill in last 14 days even if empty for continuity
+        const dailyStats = [];
+        const today = new Date();
+        for (let i = 13; i >= 0; i--) {
+            const d = new Date(today);
+            d.setDate(today.getDate() - i);
+            const dateKey = d.toISOString().split('T')[0];
+            dailyStats.push({
+                date: dateKey,
+                time: dailyMap.get(dateKey) || 0,
+                label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+            });
+        }
 
         resolve({
             totalVisits: visitCount,
             totalTime, // in milliseconds
             firstVisit,
             lastVisit,
-            lastActive: lastVisit
+            lastActive: lastVisit,
+            dailyStats // New field
         });
     });
 }, {
