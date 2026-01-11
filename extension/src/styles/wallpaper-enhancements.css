@@ -1,0 +1,426 @@
+/* ============================================
+   PREMIUM TINTED GLASS MORPHISM
+   Warm, aesthetic colors with perfect harmony
+   ============================================ */
+
+/* === SOPHISTICATED COLOR PALETTE === */
+.wallpaper-enabled * {
+    /* Warm tinted glass - subtle blue-purple gradient */
+    --glass-tint-primary: rgba(147, 197, 253, 0.12);
+    /* Soft blue */
+    --glass-tint-secondary: rgba(196, 181, 253, 0.08);
+    /* Soft purple */
+    --glass-border: rgba(226, 232, 240, 0.35);
+    /* Cool white border */
+    --glass-shadow: rgba(15, 23, 42, 0.25);
+    /* Deep blue-black shadow */
+    --glass-highlight: rgba(255, 255, 255, 0.4);
+    /* Pure white highlight */
+}
+
+/* === HEADER === */
+.wallpaper-enabled .cooldesk-header {
+    background: linear-gradient(180deg,
+            rgba(30, 41, 59, 0.75) 0%,
+            /* Slate-900 with transparency */
+            rgba(15, 23, 42, 0.70) 100%) !important;
+    /* Slate-950 */
+    backdrop-filter: blur(120px) saturate(180%) brightness(1.15);
+    -webkit-backdrop-filter: blur(120px) saturate(180%) brightness(1.15);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    /* Slate-400 */
+    box-shadow:
+        0 8px 32px rgba(15, 23, 42, 0.3),
+        0 1px 0 rgba(255, 255, 255, 0.15) inset,
+        0 0 60px rgba(96, 165, 250, 0.03) inset;
+    /* Subtle blue glow */
+}
+
+/* === SEARCH BOX === */
+.wallpaper-enabled .cooldesk-search-box {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.80) 0%,
+            rgba(15, 23, 42, 0.75) 100%) !important;
+    backdrop-filter: blur(140px) saturate(200%) brightness(1.2);
+    -webkit-backdrop-filter: blur(140px) saturate(200%) brightness(1.2);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    box-shadow:
+        0 12px 48px rgba(15, 23, 42, 0.35),
+        0 2px 0 rgba(255, 255, 255, 0.12) inset,
+        0 -1px 0 rgba(15, 23, 42, 0.2) inset,
+        0 0 80px rgba(96, 165, 250, 0.05) inset;
+}
+
+.wallpaper-enabled .cooldesk-search-box:hover,
+.wallpaper-enabled .cooldesk-search-box:focus-within {
+    background: linear-gradient(135deg,
+            rgba(51, 65, 85, 0.85) 0%,
+            /* Slate-700 */
+            rgba(30, 41, 59, 0.80) 100%) !important;
+    backdrop-filter: blur(160px) saturate(220%) brightness(1.25);
+    -webkit-backdrop-filter: blur(160px) saturate(220%) brightness(1.25);
+    border-color: rgba(96, 165, 250, 0.4);
+    /* Blue-400 on focus */
+    box-shadow:
+        0 16px 64px rgba(15, 23, 42, 0.4),
+        0 0 0 3px rgba(96, 165, 250, 0.12),
+        0 3px 0 rgba(255, 255, 255, 0.15) inset,
+        0 0 100px rgba(96, 165, 250, 0.08) inset;
+    transform: translateY(-1px);
+}
+
+/* === WORKSPACE CARDS === */
+.wallpaper-enabled .cooldesk-workspace-card {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.78) 0%,
+            rgba(15, 23, 42, 0.72) 100%) !important;
+    backdrop-filter: blur(130px) saturate(190%) brightness(1.18);
+    -webkit-backdrop-filter: blur(130px) saturate(190%) brightness(1.18);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow:
+        0 16px 64px rgba(15, 23, 42, 0.32),
+        0 2px 0 rgba(255, 255, 255, 0.1) inset,
+        0 -1px 0 rgba(15, 23, 42, 0.18) inset,
+        0 0 60px rgba(139, 92, 246, 0.04) inset;
+    /* Subtle purple glow */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.wallpaper-enabled .cooldesk-workspace-card:hover {
+    background: linear-gradient(135deg,
+            rgba(51, 65, 85, 0.85) 0%,
+            rgba(30, 41, 59, 0.80) 100%) !important;
+    backdrop-filter: blur(150px) saturate(210%) brightness(1.22);
+    -webkit-backdrop-filter: blur(150px) saturate(210%) brightness(1.22);
+    border-color: rgba(96, 165, 250, 0.35);
+    box-shadow:
+        0 24px 96px rgba(15, 23, 42, 0.38),
+        0 3px 0 rgba(255, 255, 255, 0.12) inset,
+        0 -2px 0 rgba(15, 23, 42, 0.2) inset,
+        0 0 80px rgba(96, 165, 250, 0.08) inset;
+    transform: translateY(-6px) scale(1.02);
+}
+
+/* === PANELS & SECTIONS === */
+.wallpaper-enabled .activity-feed,
+.wallpaper-enabled .cooldesk-panel,
+.wallpaper-enabled .workspace-list,
+.wallpaper-enabled .notes-canvas,
+.wallpaper-enabled .team-view,
+.wallpaper-enabled .workspace-shell-face {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.76) 0%,
+            rgba(15, 23, 42, 0.70) 100%) !important;
+    backdrop-filter: blur(120px) saturate(185%) brightness(1.16);
+    -webkit-backdrop-filter: blur(120px) saturate(185%) brightness(1.16);
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    box-shadow:
+        0 16px 64px rgba(15, 23, 42, 0.3),
+        0 2px 0 rgba(255, 255, 255, 0.08) inset,
+        0 0 50px rgba(96, 165, 250, 0.03) inset;
+}
+
+/* === TAB CARDS === */
+.wallpaper-enabled .tab-card,
+.wallpaper-enabled .tab-group-card {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.74) 0%,
+            rgba(15, 23, 42, 0.68) 100%) !important;
+    backdrop-filter: blur(110px) saturate(180%) brightness(1.14);
+    -webkit-backdrop-filter: blur(110px) saturate(180%) brightness(1.14);
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    box-shadow:
+        0 12px 48px rgba(15, 23, 42, 0.28),
+        0 2px 0 rgba(255, 255, 255, 0.08) inset,
+        0 0 40px rgba(139, 92, 246, 0.03) inset;
+}
+
+.wallpaper-enabled .tab-card:hover,
+.wallpaper-enabled .tab-group-card:hover {
+    background: linear-gradient(135deg,
+            rgba(51, 65, 85, 0.82) 0%,
+            rgba(30, 41, 59, 0.76) 100%) !important;
+    backdrop-filter: blur(130px) saturate(195%) brightness(1.18);
+    -webkit-backdrop-filter: blur(130px) saturate(195%) brightness(1.18);
+    border-color: rgba(96, 165, 250, 0.32);
+    box-shadow:
+        0 16px 64px rgba(15, 23, 42, 0.32),
+        0 2px 0 rgba(255, 255, 255, 0.1) inset,
+        0 0 55px rgba(96, 165, 250, 0.06) inset;
+    transform: translateY(-2px);
+}
+
+/* === BUTTONS === */
+.wallpaper-enabled .cooldesk-settings-btn,
+.wallpaper-enabled .cooldesk-voice-btn,
+.wallpaper-enabled .workspace-add-url-btn,
+.wallpaper-enabled button {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.76) 0%,
+            rgba(15, 23, 42, 0.70) 100%) !important;
+    backdrop-filter: blur(100px) saturate(175%) brightness(1.12);
+    -webkit-backdrop-filter: blur(100px) saturate(175%) brightness(1.12);
+    border: 1px solid rgba(148, 163, 184, 0.28) !important;
+    box-shadow:
+        0 8px 32px rgba(15, 23, 42, 0.26),
+        0 2px 0 rgba(255, 255, 255, 0.08) inset !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.wallpaper-enabled .cooldesk-settings-btn:hover,
+.wallpaper-enabled .cooldesk-voice-btn:hover,
+.wallpaper-enabled .workspace-add-url-btn:hover,
+.wallpaper-enabled button:hover {
+    background: linear-gradient(135deg,
+            rgba(51, 65, 85, 0.84) 0%,
+            rgba(30, 41, 59, 0.78) 100%) !important;
+    backdrop-filter: blur(120px) saturate(190%) brightness(1.16);
+    -webkit-backdrop-filter: blur(120px) saturate(190%) brightness(1.16);
+    border-color: rgba(96, 165, 250, 0.35) !important;
+    box-shadow:
+        0 12px 48px rgba(15, 23, 42, 0.3),
+        0 2px 0 rgba(255, 255, 255, 0.1) inset !important;
+    transform: translateY(-2px);
+}
+
+/* === TEXT ENHANCEMENTS === */
+.wallpaper-enabled .workspace-name,
+.wallpaper-enabled .cooldesk-logo,
+.wallpaper-enabled h1,
+.wallpaper-enabled h2,
+.wallpaper-enabled h3,
+.wallpaper-enabled h4 {
+    text-shadow:
+        0 2px 12px rgba(15, 23, 42, 0.6),
+        0 1px 4px rgba(15, 23, 42, 0.8),
+        0 0 1px rgba(226, 232, 240, 0.3);
+    color: #F1F5F9 !important;
+    /* Slate-100 */
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.wallpaper-enabled .workspace-link-text,
+.wallpaper-enabled .workspace-count,
+.wallpaper-enabled p,
+.wallpaper-enabled span,
+.wallpaper-enabled label {
+    text-shadow:
+        0 1px 8px rgba(15, 23, 42, 0.5),
+        0 0 1px rgba(226, 232, 240, 0.25);
+    color: #E2E8F0 !important;
+    /* Slate-200 */
+}
+
+/* === INPUT FIELDS === */
+.wallpaper-enabled input,
+.wallpaper-enabled textarea,
+.wallpaper-enabled select {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.74) 0%,
+            rgba(15, 23, 42, 0.68) 100%) !important;
+    backdrop-filter: blur(100px) saturate(180%) brightness(1.14);
+    -webkit-backdrop-filter: blur(100px) saturate(180%) brightness(1.14);
+    border: 1px solid rgba(148, 163, 184, 0.26) !important;
+    color: #F1F5F9 !important;
+    text-shadow: 0 1px 3px rgba(15, 23, 42, 0.4);
+}
+
+.wallpaper-enabled input:focus,
+.wallpaper-enabled textarea:focus,
+.wallpaper-enabled select:focus {
+    background: linear-gradient(135deg,
+            rgba(51, 65, 85, 0.82) 0%,
+            rgba(30, 41, 59, 0.76) 100%) !important;
+    backdrop-filter: blur(120px) saturate(195%) brightness(1.18);
+    -webkit-backdrop-filter: blur(120px) saturate(195%) brightness(1.18);
+    border-color: rgba(96, 165, 250, 0.4) !important;
+    box-shadow:
+        0 0 0 3px rgba(96, 165, 250, 0.15),
+        0 8px 32px rgba(15, 23, 42, 0.3);
+}
+
+/* === MODALS & DROPDOWNS === */
+.wallpaper-enabled .workspace-dropdown,
+.wallpaper-enabled .modal-content,
+.wallpaper-enabled .settings-modal {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.88) 0%,
+            rgba(15, 23, 42, 0.85) 100%) !important;
+    backdrop-filter: blur(180px) saturate(210%) brightness(1.22);
+    -webkit-backdrop-filter: blur(180px) saturate(210%) brightness(1.22);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    box-shadow:
+        0 32px 128px rgba(15, 23, 42, 0.45),
+        0 3px 0 rgba(255, 255, 255, 0.1) inset,
+        0 -3px 0 rgba(15, 23, 42, 0.25) inset,
+        0 0 120px rgba(96, 165, 250, 0.06) inset;
+}
+
+/* === SCROLLBARS === */
+.wallpaper-enabled ::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.wallpaper-enabled ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg,
+            rgba(148, 163, 184, 0.45) 0%,
+            rgba(100, 116, 139, 0.35) 100%);
+    border: 3px solid rgba(15, 23, 42, 0.3);
+    border-radius: 12px;
+    box-shadow:
+        0 2px 8px rgba(15, 23, 42, 0.3) inset,
+        0 1px 0 rgba(226, 232, 240, 0.15);
+}
+
+.wallpaper-enabled ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg,
+            rgba(148, 163, 184, 0.6) 0%,
+            rgba(100, 116, 139, 0.5) 100%);
+}
+
+/* === WORKSPACE ICONS === */
+.wallpaper-enabled .workspace-icon {
+    box-shadow:
+        0 8px 32px rgba(15, 23, 42, 0.4),
+        0 0 0 2px rgba(148, 163, 184, 0.2),
+        0 2px 0 rgba(255, 255, 255, 0.12) inset;
+    filter: brightness(1.08) saturate(1.15);
+}
+
+/* === GLOBAL ADD BUTTON === */
+.wallpaper-enabled .global-add-button {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.82) 0%,
+            rgba(15, 23, 42, 0.76) 100%) !important;
+    backdrop-filter: blur(130px) saturate(195%) brightness(1.18);
+    -webkit-backdrop-filter: blur(130px) saturate(195%) brightness(1.18);
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    box-shadow:
+        0 16px 64px rgba(15, 23, 42, 0.35),
+        0 2px 0 rgba(255, 255, 255, 0.1) inset;
+}
+
+.wallpaper-enabled .global-add-button:hover {
+    background: linear-gradient(135deg,
+            rgba(51, 65, 85, 0.88) 0%,
+            rgba(30, 41, 59, 0.84) 100%) !important;
+    backdrop-filter: blur(150px) saturate(210%) brightness(1.22);
+    -webkit-backdrop-filter: blur(150px) saturate(210%) brightness(1.22);
+    border-color: rgba(96, 165, 250, 0.4);
+    box-shadow:
+        0 20px 80px rgba(15, 23, 42, 0.4),
+        0 3px 0 rgba(255, 255, 255, 0.12) inset;
+}
+
+/* === NAVIGATION DOTS === */
+.wallpaper-enabled .workspace-shell-nav {
+    background: rgba(30, 41, 59, 0.78) !important;
+    backdrop-filter: blur(120px) saturate(185%) brightness(1.16);
+    -webkit-backdrop-filter: blur(120px) saturate(185%) brightness(1.16);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow:
+        0 12px 48px rgba(15, 23, 42, 0.32),
+        0 2px 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+/* === GLASS ELEMENTS === */
+.wallpaper-enabled [style*="glass-bg"],
+.wallpaper-enabled .glass-bg {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.76) 0%,
+            rgba(15, 23, 42, 0.70) 100%) !important;
+    backdrop-filter: blur(120px) saturate(185%) brightness(1.16);
+    -webkit-backdrop-filter: blur(120px) saturate(185%) brightness(1.16);
+    border: 1px solid rgba(148, 163, 184, 0.26);
+}
+
+/* === TEAMVIEW SPECIFIC ENHANCEMENTS === */
+/* Override inline styles for TeamView components */
+.wallpaper-enabled .team-view,
+.wallpaper-enabled [style*="background: rgba(0,0,0,0.2)"],
+.wallpaper-enabled [style*="background: rgba(255,255,255,0.03)"],
+.wallpaper-enabled [style*="background: 'rgba(0,0,0,0.2')"],
+.wallpaper-enabled [style*="background: 'rgba(255,255,255,0.03')"] {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.76) 0%,
+            rgba(15, 23, 42, 0.70) 100%) !important;
+    backdrop-filter: blur(120px) saturate(185%) brightness(1.16);
+    -webkit-backdrop-filter: blur(120px) saturate(185%) brightness(1.16);
+}
+
+/* TeamView sidebar */
+.wallpaper-enabled div[style*="width: 200"] {
+    background: linear-gradient(180deg,
+            rgba(30, 41, 59, 0.78) 0%,
+            rgba(15, 23, 42, 0.72) 100%) !important;
+    backdrop-filter: blur(110px) saturate(180%) brightness(1.14);
+    -webkit-backdrop-filter: blur(110px) saturate(180%) brightness(1.14);
+    border-right: 1px solid rgba(148, 163, 184, 0.24) !important;
+}
+
+/* TeamView cards and items */
+.wallpaper-enabled a[style*="background: rgba(255,255,255,0.03)"],
+.wallpaper-enabled a[style*="background: 'rgba(255,255,255,0.03')"] {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.74) 0%,
+            rgba(15, 23, 42, 0.68) 100%) !important;
+    backdrop-filter: blur(100px) saturate(175%) brightness(1.12);
+    -webkit-backdrop-filter: blur(100px) saturate(175%) brightness(1.12);
+    border: 1px solid rgba(148, 163, 184, 0.22) !important;
+}
+
+.wallpaper-enabled a[style*="background: rgba(255,255,255,0.03)"]:hover,
+.wallpaper-enabled a[style*="background: 'rgba(255,255,255,0.03')"]:hover {
+    background: linear-gradient(135deg,
+            rgba(51, 65, 85, 0.82) 0%,
+            rgba(30, 41, 59, 0.76) 100%) !important;
+    backdrop-filter: blur(120px) saturate(190%) brightness(1.16);
+    -webkit-backdrop-filter: blur(120px) saturate(190%) brightness(1.16);
+    border-color: rgba(96, 165, 250, 0.32) !important;
+}
+
+/* TeamView workspace reference cards */
+.wallpaper-enabled div[style*="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1)"] {
+    background: linear-gradient(135deg,
+            rgba(139, 92, 246, 0.15) 0%,
+            rgba(139, 92, 246, 0.08) 100%) !important;
+    backdrop-filter: blur(110px) saturate(180%) brightness(1.14);
+    -webkit-backdrop-filter: blur(110px) saturate(180%) brightness(1.14);
+    border: 1px solid rgba(139, 92, 246, 0.28) !important;
+}
+
+/* TeamView buttons */
+.wallpaper-enabled button[style*="background: #3b82f6"] {
+    background: linear-gradient(135deg,
+            rgba(59, 130, 246, 0.85) 0%,
+            rgba(37, 99, 235, 0.80) 100%) !important;
+    backdrop-filter: blur(80px) saturate(160%) brightness(1.1);
+    -webkit-backdrop-filter: blur(80px) saturate(160%) brightness(1.1);
+    border: 1px solid rgba(96, 165, 250, 0.4) !important;
+    box-shadow:
+        0 8px 32px rgba(59, 130, 246, 0.35),
+        0 2px 0 rgba(255, 255, 255, 0.15) inset !important;
+}
+
+.wallpaper-enabled button[style*="background: #3b82f6"]:hover {
+    background: linear-gradient(135deg,
+            rgba(59, 130, 246, 0.95) 0%,
+            rgba(37, 99, 235, 0.90) 100%) !important;
+    box-shadow:
+        0 12px 48px rgba(59, 130, 246, 0.4),
+        0 2px 0 rgba(255, 255, 255, 0.2) inset !important;
+}
+
+/* TeamView empty state */
+.wallpaper-enabled div[style*="border: '2px dashed rgba(255,255,255,0.05')"] {
+    background: linear-gradient(135deg,
+            rgba(30, 41, 59, 0.5) 0%,
+            rgba(15, 23, 42, 0.45) 100%) !important;
+    backdrop-filter: blur(80px) saturate(160%) brightness(1.08);
+    -webkit-backdrop-filter: blur(80px) saturate(160%) brightness(1.08);
+    border: 2px dashed rgba(148, 163, 184, 0.2) !important;
+}

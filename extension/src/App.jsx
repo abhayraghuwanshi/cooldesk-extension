@@ -26,6 +26,7 @@ import './styles/bento-layout.css';
 import './styles/components.css';
 import './styles/theme.css';
 import './styles/themes/components-vars.css';
+import './styles/wallpaper-enhancements.css';
 
 // Add icons to the library
 library.add(
