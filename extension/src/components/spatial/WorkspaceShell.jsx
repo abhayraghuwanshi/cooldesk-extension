@@ -3,7 +3,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { teamManager } from '../../services/p2p/teamManager';
 import '../../styles/spatial.css';
-import { CoolSearch } from '../cooldesk/CoolSearch';
 
 /**
  * WorkspaceShell - Spatial container for workspace faces (cube metaphor)
@@ -193,9 +192,10 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   return (
     <div className="workspace-shell">
       {/* Global Search Bar */}
-      <div style={{ padding: '0 24px 16px 24px', flexShrink: 0, zIndex: 101 }}>
+      {/* Global Search Bar - REPLACED by merged header in CoolDeskContainer */}
+      {/* <div style={{ padding: '0 24px 16px 24px', flexShrink: 0, zIndex: 101 }}>
         <CoolSearch onSearch={onSearch} />
-      </div>
+      </div> */}
 
       {/* Face indicator dots */}
       <div className="face-indicator">

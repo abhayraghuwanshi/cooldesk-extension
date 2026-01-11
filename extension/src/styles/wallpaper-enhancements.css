@@ -27,11 +27,65 @@
     /* Deep Charcoal Base */
     backdrop-filter: blur(120px) saturate(120%) brightness(1.1);
     -webkit-backdrop-filter: blur(120px) saturate(120%) brightness(1.1);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.4),
-        0 1px 0 rgba(255, 255, 255, 0.08) inset,
-        0 0 60px rgba(0, 0, 0, 0.2) inset;
+        0 4px 24px rgba(0, 0, 0, 0.2),
+        /* Softer drop shadow */
+        0 1px 0 rgba(255, 255, 255, 0.1) inset;
+    /* Crisp top highlight */
+    border-radius: 16px !important;
+    margin: 16px 24px 0 24px !important;
+    width: auto !important;
+}
+
+/* === SEARCH DROPDOWN === */
+.wallpaper-enabled .cool-search-dropdown {
+    background: rgba(18, 18, 23, 0.95) !important;
+    /* Deep Charcoal, almost black */
+    backdrop-filter: blur(24px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(120%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.2) !important;
+}
+
+.wallpaper-enabled .cool-search-dropdown-item {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+    transition: all 0.15s ease !important;
+}
+
+.wallpaper-enabled .cool-search-dropdown-item:last-child {
+    border-bottom: none !important;
+}
+
+.wallpaper-enabled .cool-search-dropdown-item:hover,
+.wallpaper-enabled .cool-search-dropdown-item[data-selected="true"] {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%) !important;
+    border-left: 2px solid rgba(255, 255, 255, 0.4) !important;
+}
+
+.wallpaper-enabled .cool-search-badge {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    padding: 2px 8px !important;
+    border-radius: 4px !important;
+    font-size: 10px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.5px !important;
+    text-transform: uppercase !important;
+}
+
+.wallpaper-enabled .cool-search-badge[data-type="workspace"] {
+    background: rgba(255, 255, 255, 0.15) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+
+
+.wallpaper-enabled .cool-search-code {
+    font-family: 'JetBrains Mono', monospace !important;
+    color: rgba(255, 255, 255, 0.95) !important;
+    font-weight: 600 !important;
 }
 
 /* === SEARCH BOX === */

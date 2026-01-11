@@ -10,14 +10,13 @@ import { ChatContext } from '../spatial/ChatContext';
 import { NotesCanvas } from '../spatial/NotesCanvas';
 import TeamView from '../spatial/TeamView';
 import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
+import { CoolSearch } from './CoolSearch';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
 import { TabCard, TabGroupCard } from './TabCard';
 import { WorkspaceList } from './WorkspaceList';
 
-
 console.log('[CoolDesk] Module loaded. OverviewDashboard:', OverviewDashboard);
-
 
 export function CoolDeskContainer({
   savedWorkspaces = [],
@@ -236,24 +235,33 @@ export function CoolDeskContainer({
         </>
       )}
 
-      {/* Header with Logo and Settings - Outside spatial shell */}
+      {/* Header with Logo and Settings - Unified Top Bar */}
       <div className="cooldesk-header">
-        <div className="cooldesk-logo">
-          <img
-            src={logo}
-            alt="CoolDesk Logo"
-            className="cooldesk-logo-icon"
-            style={{
-              width: '32px',
-              height: '32px',
-              objectFit: 'contain'
-            }}
-          />
-          <span>Cooldesk</span>
+        <div className="header-left">
+          <div className="cooldesk-logo">
+            <img
+              src={logo}
+              alt="CoolDesk Logo"
+              className="cooldesk-logo-icon"
+              style={{
+                width: '32px',
+                height: '32px',
+                objectFit: 'contain'
+              }}
+            />
+            {/* <span>Cooldesk</span> */}
+          </div>
         </div>
-        <button className="cooldesk-settings-btn" onClick={onOpenSettings} title="Settings">
-          <FontAwesomeIcon icon={faGear} />
-        </button>
+
+        <div className="header-center">
+          <CoolSearch onSearch={handleSearch} />
+        </div>
+
+        <div className="header-right">
+          <button className="cooldesk-settings-btn" onClick={onOpenSettings} title="Settings">
+            <FontAwesomeIcon icon={faGear} />
+          </button>
+        </div>
       </div>
 
       {/* Spatial Workspace Shell - Takes remaining height */}
@@ -279,7 +287,6 @@ export function CoolDeskContainer({
         </Face>
 
         {/* Face 3: Overview (Center) */}
-        {/* Face 3: Overview (Center) - Custom 2-Column Dashboard */}
         <Face index="overview">
           <OverviewDashboard
             savedWorkspaces={savedWorkspaces}

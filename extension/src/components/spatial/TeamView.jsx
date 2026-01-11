@@ -122,7 +122,12 @@ export default function TeamView({ team: propTeam }) {
     const activeTeam = teams.find(t => t.id === activeTeamId);
 
     return (
-        <div style={{ display: 'flex', height: '100%', color: '#fff' }}>
+        <div style={{
+            display: 'flex', height: '100%', color: '#fff',
+            borderRadius: 16, overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'rgba(0,0,0,0.2)' // consistent background
+        }}>
             {/* Sidebar */}
             <div style={{
                 width: 200, flexShrink: 0,

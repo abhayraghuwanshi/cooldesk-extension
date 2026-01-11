@@ -940,33 +940,27 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
 
       {/* Command Suggestions Dropdown */}
       {commandSuggestions.length > 0 && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          right: 0,
-          marginTop: '8px',
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border-primary)',
-          borderRadius: '12px',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-          overflow: 'hidden',
-          zIndex: 1000,
-          backdropFilter: 'blur(16px)'
-        }}>
+        <div
+          className="cool-search-dropdown"
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: '8px',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            zIndex: 1000
+          }}
+        >
           {commandSuggestions.map((cmd, idx) => (
             <div
               key={idx}
+              className="cool-search-dropdown-item"
+              data-selected={selectedSuggestionIndex === idx}
               style={{
                 padding: '12px 16px',
-                cursor: 'pointer',
-                transition: 'background 0.1s ease',
-                background: selectedSuggestionIndex === idx
-                  ? 'var(--accent-blue-soft)'
-                  : 'transparent',
-                borderBottom: idx < commandSuggestions.length - 1
-                  ? '1px solid var(--border-secondary)'
-                  : 'none'
+                cursor: 'pointer'
               }}
               onMouseEnter={() => setSelectedSuggestionIndex(idx)}
               onMouseLeave={() => setSelectedSuggestionIndex(-1)}
@@ -982,24 +976,10 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
                 gap: '10px',
                 marginBottom: '4px'
               }}>
-                <code style={{
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  color: '#60A5FA',
-                  fontFamily: 'monospace'
-                }}>
+                <code className="cool-search-code" style={{ fontSize: '13px' }}>
                   {cmd.command}
                 </code>
-                <span style={{
-                  fontSize: '9px',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  background: 'rgba(148, 163, 184, 0.15)',
-                  color: '#94A3B8',
-                  fontWeight: 500,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
+                <span className="cool-search-badge">
                   {cmd.category}
                 </span>
               </div>
@@ -1023,27 +1003,25 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
           left: 0,
           right: 0,
           marginTop: '8px',
-          background: 'rgba(30, 41, 59, 0.98)',
-          border: '1px solid rgba(148, 163, 184, 0.2)',
+          // background: 'rgba(30, 41, 59, 0.98)', // REMOVED: Managed by CSS
+          // border: '1px solid rgba(148, 163, 184, 0.2)', // REMOVED: Managed by CSS
           borderRadius: '12px',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+          // boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)', // REMOVED: Managed by CSS
           overflow: 'hidden',
           zIndex: 1000,
-          backdropFilter: 'blur(16px)'
-        }}>
+          // backdropFilter: 'blur(16px)' // REMOVED: Managed by CSS
+        }} className="cool-search-dropdown">
           {searchSuggestions.map((suggestion, idx) => (
             <div
               key={idx}
+              className="cool-search-dropdown-item"
+              data-selected={selectedSuggestionIndex === idx}
               style={{
                 padding: '12px 16px',
                 cursor: 'pointer',
-                transition: 'background 0.1s ease',
-                background: selectedSuggestionIndex === idx
-                  ? 'rgba(59, 130, 246, 0.2)'
-                  : 'transparent',
-                borderBottom: idx < searchSuggestions.length - 1
-                  ? '1px solid rgba(148, 163, 184, 0.1)'
-                  : 'none'
+                // transition: 'background 0.1s ease', // Handled by CSS
+                // background: selectedSuggestionIndex === idx ... // Handled by CSS
+                // borderBottom: ... // Handled by CSS
               }}
               onMouseEnter={() => setSelectedSuggestionIndex(idx)}
               onMouseLeave={() => setSelectedSuggestionIndex(-1)}
@@ -1079,25 +1057,13 @@ export function CoolSearch({ onSearch, placeholder = "Search or type ! for comma
                 }}>
                   {suggestion.title}
                 </div>
-                <span style={{
-                  fontSize: '9px',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  background: suggestion.type === 'workspace'
-                    ? 'var(--accent-purple-soft)'
-                    : suggestion.type === 'bookmark'
-                      ? 'rgba(251, 191, 36, 0.2)'
-                      : 'var(--accent-blue-soft)',
-                  color: suggestion.type === 'workspace'
-                    ? 'var(--accent-purple)'
-                    : suggestion.type === 'bookmark'
-                      ? '#FDE047'
-                      : 'var(--accent-blue)',
-                  fontWeight: 500,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  flexShrink: 0
-                }}>
+                <span
+                  className="cool-search-badge"
+                  data-type={suggestion.type}
+                  style={{
+                    flexShrink: 0
+                  }}
+                >
                   {suggestion.type === 'workspace' ? '💼 Workspace' : suggestion.type === 'bookmark' ? '⭐ Bookmark' : '🕐 History'}
                 </span>
               </div>
