@@ -172,7 +172,7 @@ export default function TeamView({ team: propTeam }) {
             </div>
 
             {/* Main Content */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="team-view-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {!activeTeam ? (
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5, flexDirection: 'column', gap: 16 }}>
                         <FontAwesomeIcon icon={faUsers} size="3x" />
