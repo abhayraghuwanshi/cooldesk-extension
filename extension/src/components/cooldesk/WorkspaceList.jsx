@@ -39,7 +39,12 @@ export function WorkspaceList({
 
     // Calculate activity score for a workspace
     const calculateWorkspaceScore = async (workspace) => {
-        if (!workspace.urls || workspace.urls.length === 0) return 0;
+        if (!workspace.urls || workspace.urls.length === 0) {
+            console.log(`[WorkspaceList] Workspace "${workspace.name}" has no URLs`);
+            return 0;
+        }
+
+        console.log(`[WorkspaceList] Calculating score for "${workspace.name}" with ${workspace.urls.length} URLs:`, workspace.urls.map(u => u.url));
 
         try {
             // Import getUrlAnalytics dynamically to avoid circular deps
@@ -49,8 +54,10 @@ export function WorkspaceList({
             const analyticsPromises = workspace.urls.map(async (urlObj) => {
                 try {
                     const stats = await getUrlAnalytics(urlObj.url);
+                    console.log(`[WorkspaceList]   URL "${urlObj.url}" stats:`, stats);
                     return stats || { totalVisits: 0, totalTime: 0, lastVisit: 0 };
-                } catch {
+                } catch (error) {
+                    console.error(`[WorkspaceList]   Error getting stats for "${urlObj.url}":`, error);
                     return { totalVisits: 0, totalTime: 0, lastVisit: 0 };
                 }
             });
@@ -71,16 +78,20 @@ export function WorkspaceList({
 
             const score = (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
 
+            console.log(`[WorkspaceList]   "${workspace.name}" totals: visits=${totalVisits}, time=${timeInHours.toFixed(2)}h, recency=${recencyBonus.toFixed(2)}, SCORE=${score.toFixed(2)}`);
+
             return score;
         } catch (error) {
-            console.error('Error calculating workspace score:', error);
+            console.error(`[WorkspaceList] Error calculating workspace score for "${workspace.name}":`, error);
             return 0;
         }
     };
 
+
     // Load activity scores on mount and when workspaces change
     useEffect(() => {
         const loadActivityScores = async () => {
+            console.log('[WorkspaceList] Calculating activity scores for', unpinned.length, 'workspaces');
             const scores = new Map();
 
             // Calculate scores for all unpinned workspaces
@@ -88,25 +99,30 @@ export function WorkspaceList({
                 unpinned.map(async (workspace) => {
                     const score = await calculateWorkspaceScore(workspace);
                     scores.set(workspace.id, score);
+                    console.log(`[WorkspaceList] Workspace "${workspace.name}" score:`, score);
                 })
             );
 
             setWorkspaceScores(scores);
+            console.log('[WorkspaceList] All scores calculated:', scores);
         };
 
         if (unpinned.length > 0) {
             loadActivityScores();
         }
-    }, [savedWorkspaces.length]); // Re-calculate when workspace count changes
+    }, [savedWorkspaces, pinnedWorkspaces]); // Re-calculate when workspaces or pins change
 
     // Sort unpinned workspaces by activity score
     const sortedUnpinned = isSortingByActivity
         ? [...unpinned].sort((a, b) => {
             const scoreA = workspaceScores.get(a.id) || 0;
             const scoreB = workspaceScores.get(b.id) || 0;
+            console.log(`[WorkspaceList] Comparing "${a.name}" (${scoreA}) vs "${b.name}" (${scoreB})`);
             return scoreB - scoreA; // Descending order (highest activity first)
         })
         : unpinned;
+
+    console.log('[WorkspaceList] isSortingByActivity:', isSortingByActivity, 'sortedUnpinned:', sortedUnpinned.map(w => w.name));
 
     // Save view mode to localStorage whenever it changes
     useEffect(() => {

@@ -79,7 +79,7 @@ export const getFaviconUrl = (url, size = 32, favIconUrl = null) => {
       'chatgpt.com': 'https://cdn.oaistatic.com/_next/static/media/apple-touch-icon.59f2e898.png',
       'claude.ai': 'https://claude.ai/images/claude_app_icon.png',
       'gemini.google.com': 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
-      'perplexity.ai': 'https://www.perplexity.ai/favicon.svg',
+      'perplexity.ai': 'https://www.google.com/s2/favicons?domain=perplexity.ai&sz=128', // Use Google's service to avoid CORS
       'x.com': 'https://abs.twimg.com/favicons/twitter.3.ico',
       'twitter.com': 'https://abs.twimg.com/favicons/twitter.3.ico'
     };

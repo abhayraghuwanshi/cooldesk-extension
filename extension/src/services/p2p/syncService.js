@@ -108,84 +108,113 @@ class P2PSyncService {
      * @param {string} encryptionKey 
      */
     async connectTeam(teamId, encryptionKey) {
+        // Check if already connected or connecting
         if (this.providers.has(teamId)) {
             console.log(`[P2P Sync] Already connected to team ${teamId}`);
-            return;
+            return this.providers.get(teamId);
         }
 
         console.log(`[P2P Sync] Connecting to team ${teamId}...`);
 
-        // ensure storage is ready
-        const ydoc = await p2pStorage.initializeTeamStorage(teamId);
+        try {
+            // ensure storage is ready
+            const ydoc = await p2pStorage.initializeTeamStorage(teamId);
 
-        // Initialize WebRTC Provider
-        // Room Name = Team ID (Discovery Key)
-        // Note: Using room-specific path as per user's server requirement
-        const signalingUrl = `${SIGNALING_SERVERS[0]}/${teamId}`;
-        const provider = new WebrtcProvider(teamId, ydoc, {
-            signaling: [signalingUrl],
-            password: encryptionKey, // Enforces E2EE
-            awareness: new (await import('y-protocols/awareness')).Awareness(ydoc)
-        });
+            // Double-check after async operation
+            if (this.providers.has(teamId)) {
+                console.log(`[P2P Sync] Team ${teamId} was connected while waiting for storage`);
+                return this.providers.get(teamId);
+            }
 
-        // Monitor connection status
-        provider.on('status', (event) => {
-            console.log(`[P2P Sync] Team ${teamId} status:`, event.status);
-        });
-
-        provider.on('peers', (event) => {
-            const count = event.webrtcPeers ? event.webrtcPeers.length : 0;
-            console.log(`[P2P Sync] Team ${teamId} peers:`, count);
-            this.peerCounts.set(teamId, count);
-            this.notify();
-        });
-
-        // Listen to awareness changes for peer details
-        const awareness = provider.awareness;
-        awareness.on('change', () => {
-            this.peerDetails.set(teamId, this.getPeers(teamId));
-
-            // Persist members to shared storage
-            const states = awareness.getStates();
-            states.forEach((state, clientId) => {
-                if (clientId !== awareness.clientID && state.user) {
-                    p2pStorage.addMemberToTeam(teamId, {
-                        id: clientId,
-                        name: state.user.name,
-                        color: state.user.color,
-                        isAdmin: state.user.isAdmin || false
-                    });
-                }
+            // Initialize WebRTC Provider
+            // Room Name = Team ID (Discovery Key)
+            // Note: Using room-specific path as per user's server requirement
+            const signalingUrl = `${SIGNALING_SERVERS[0]}/${teamId}`;
+            const provider = new WebrtcProvider(teamId, ydoc, {
+                signaling: [signalingUrl],
+                password: encryptionKey, // Enforces E2EE
+                awareness: new (await import('y-protocols/awareness')).Awareness(ydoc)
             });
 
+            // Monitor connection status
+            provider.on('status', (event) => {
+                console.log(`[P2P Sync] Team ${teamId} status:`, event.status);
+            });
+
+            provider.on('peers', (event) => {
+                const count = event.webrtcPeers ? event.webrtcPeers.length : 0;
+                console.log(`[P2P Sync] Team ${teamId} peers:`, count);
+                this.peerCounts.set(teamId, count);
+                this.notify();
+            });
+
+            // Listen to awareness changes for peer details
+            const awareness = provider.awareness;
+            const processedMembers = new Set(); // Track members we've already added
+
+            awareness.on('change', ({ added, updated, removed }) => {
+                this.peerDetails.set(teamId, this.getPeers(teamId));
+
+                // Only process added or updated peers
+                const peersToProcess = [...added, ...updated];
+
+                peersToProcess.forEach(clientId => {
+                    if (clientId === awareness.clientID) return; // Skip self
+
+                    const state = awareness.getStates().get(clientId);
+                    if (!state || !state.user) return;
+
+                    const memberKey = `${teamId}-${clientId.toString()}`;
+
+                    // Only add if we haven't processed this member yet
+                    if (!processedMembers.has(memberKey)) {
+                        p2pStorage.addMemberToTeam(teamId, {
+                            id: clientId.toString(),
+                            name: state.user.name,
+                            color: state.user.color,
+                            isAdmin: state.user.isAdmin || false
+                        });
+                        processedMembers.add(memberKey);
+                    }
+                });
+
+                this.notify();
+            });
+
+            // Set local user info
+            const username = await userProfileService.getUsername();
+            const localUserColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+            const team = teamManager.getTeam(teamId);
+            const isAdmin = team?.createdByMe || false;
+
+            awareness.setLocalStateField('user', {
+                name: username,
+                color: localUserColor,
+                isAdmin: isAdmin,
+                lastSeen: Date.now()
+            });
+
+            // Add self to members list
+            p2pStorage.addMemberToTeam(teamId, {
+                id: awareness.clientID.toString(), // Ensure ID is always a string
+                name: username,
+                color: localUserColor,
+                isAdmin: isAdmin
+            });
+
+            this.providers.set(teamId, provider);
+            // Initialize count
+            this.peerCounts.set(teamId, 0);
             this.notify();
-        });
 
-        // Set local user info
-        const username = await userProfileService.getUsername();
-        const localUserColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
-        const team = teamManager.getTeam(teamId);
-        const isAdmin = team?.createdByMe || false;
-
-        awareness.setLocalStateField('user', {
-            name: username,
-            color: localUserColor,
-            isAdmin: isAdmin,
-            lastSeen: Date.now()
-        });
-
-        // Add self to members list
-        p2pStorage.addMemberToTeam(teamId, {
-            id: awareness.clientID,
-            name: username,
-            color: localUserColor,
-            isAdmin: isAdmin
-        });
-
-        this.providers.set(teamId, provider);
-        // Initialize count
-        this.peerCounts.set(teamId, 0);
-        this.notify();
+            return provider;
+        } catch (error) {
+            console.error(`[P2P Sync] Error connecting to team ${teamId}:`, error);
+            // Clean up on error
+            this.providers.delete(teamId);
+            this.peerCounts.delete(teamId);
+            throw error;
+        }
     }
 
     /**
@@ -242,7 +271,7 @@ class P2PSyncService {
             for (const id of currentIds) {
                 if (!newIds.has(id)) {
                     this.disconnectTeam(id);
-                    await p2pStorage.closeTeamStorage(id);
+                    await p2pStorage.deleteTeamDatabase(id); // Delete the database completely
                 }
             }
         });

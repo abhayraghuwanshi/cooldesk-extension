@@ -1,4 +1,4 @@
-import { faChevronDown, faChevronRight, faPlus, faTrash, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faChevronRight, faCrown, faPlus, faTrash, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { p2pSyncService } from '../../services/p2p/syncService';
@@ -83,7 +83,31 @@ export default function TeamsTab() {
     };
 
     const handleDelete = async (teamId) => {
-        if (confirm('Are you sure you want to leave this team? Local data will be lost.')) {
+        const team = teams.find(t => t.id === teamId);
+        if (!team) return;
+
+        const isAdmin = team.createdByMe;
+
+        let confirmMessage;
+        if (isAdmin) {
+            confirmMessage =
+                '⚠️ You are the ADMIN of this team.\n\n' +
+                'Leaving will:\n' +
+                '• Remove this team from your device\n' +
+                '• Delete all local team data\n' +
+                '• Other members can still access the team if they have the secret\n\n' +
+                'Are you sure you want to leave as admin?';
+        } else {
+            confirmMessage =
+                'Leave this team?\n\n' +
+                'This will:\n' +
+                '• Remove the team from your device\n' +
+                '• Delete all local team data\n' +
+                '• You can rejoin anytime with the team secret\n\n' +
+                'Continue?';
+        }
+
+        if (confirm(confirmMessage)) {
             await teamManager.removeTeam(teamId);
         }
     };
