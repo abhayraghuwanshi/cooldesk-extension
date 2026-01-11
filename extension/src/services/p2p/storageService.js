@@ -59,6 +59,67 @@ class P2PStorageService {
     }
 
     /**
+     * Get the shared map of team members
+     * @param {string} teamId 
+     * @returns {Y.Map}
+     */
+    getSharedMembers(teamId) {
+        const doc = this.getDoc(teamId);
+        if (!doc) {
+            throw new Error(`Storage not initialized for team ${teamId}`);
+        }
+        return doc.getMap('team-members');
+    }
+
+    /**
+     * Add or update a member in the team
+     * @param {string} teamId 
+     * @param {object} member - {id, name, color, joinedAt, lastSeen, isAdmin}
+     */
+    addMemberToTeam(teamId, member) {
+        const membersMap = this.getSharedMembers(teamId);
+        const existingMember = membersMap.get(member.id.toString());
+
+        if (existingMember) {
+            // Update last seen time, preserve admin status
+            membersMap.set(member.id.toString(), {
+                ...existingMember,
+                name: member.name || existingMember.name, // Allow name updates
+                lastSeen: Date.now()
+            });
+        } else {
+            // Add new member
+            membersMap.set(member.id.toString(), {
+                id: member.id,
+                name: member.name,
+                color: member.color,
+                joinedAt: Date.now(),
+                lastSeen: Date.now(),
+                isAdmin: member.isAdmin || false
+            });
+            console.log(`[P2P Storage] Added new member to team ${teamId}:`, member.name, member.isAdmin ? '(Admin)' : '');
+        }
+    }
+
+    /**
+     * Get the admin of a team
+     * @param {string} teamId 
+     * @returns {object|null} Admin member object or null
+     */
+    getTeamAdmin(teamId) {
+        const membersMap = this.getSharedMembers(teamId);
+        let admin = null;
+
+        membersMap.forEach((member) => {
+            if (member.isAdmin) {
+                admin = member;
+            }
+        });
+
+        return admin;
+    }
+
+    /**
      * Close storage connections (e.g. on team switch or logout)
      * @param {string} teamId 
      */

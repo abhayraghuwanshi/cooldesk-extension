@@ -1,6 +1,7 @@
 import { WebrtcProvider } from 'y-webrtc';
 import { p2pStorage } from './storageService';
 import { teamManager } from './teamManager';
+import { userProfileService } from './userProfileService';
 
 // Public signaling servers for P2P discovery
 // These are just for "handshaking" (SDP exchange), actual data goes P2P or via TURN if behind NAT
@@ -12,6 +13,7 @@ class P2PSyncService {
     constructor() {
         this.providers = new Map(); // teamId -> WebrtcProvider
         this.peerCounts = new Map(); // teamId -> number
+        this.peerDetails = new Map(); // teamId -> Array of peer objects
         this.listeners = new Set();
     }
 
@@ -26,6 +28,78 @@ class P2PSyncService {
 
     getPeerCount(teamId) {
         return this.peerCounts.get(teamId) || 0;
+    }
+
+    /**
+     * Get detailed peer information for a team
+     * @param {string} teamId 
+     * @returns {Array} Array of peer objects with {id, name, color, lastSeen}
+     */
+    getPeers(teamId) {
+        const awareness = this.getAwareness(teamId);
+        if (!awareness) return [];
+
+        const peers = [];
+        const states = awareness.getStates();
+
+        states.forEach((state, clientId) => {
+            // Skip local client
+            if (clientId === awareness.clientID) return;
+
+            peers.push({
+                id: clientId,
+                name: state.user?.name || `User ${clientId.toString().substring(0, 6)}`,
+                color: state.user?.color || '#3b82f6',
+                lastSeen: state.lastSeen || Date.now()
+            });
+        });
+
+        return peers;
+    }
+
+    /**
+     * Get all team members (both online and offline)
+     * @param {string} teamId 
+     * @returns {Array} Array of all members with online status
+     */
+    getAllMembers(teamId) {
+        try {
+            const membersMap = p2pStorage.getSharedMembers(teamId);
+            const awareness = this.getAwareness(teamId);
+            const onlinePeerIds = new Set();
+
+            // Get currently online peer IDs
+            if (awareness) {
+                const states = awareness.getStates();
+                states.forEach((state, clientId) => {
+                    if (clientId !== awareness.clientID) {
+                        onlinePeerIds.add(clientId.toString());
+                    }
+                });
+            }
+
+            // Convert members map to array with online status
+            const members = [];
+            membersMap.forEach((member, memberId) => {
+                members.push({
+                    ...member,
+                    isOnline: onlinePeerIds.has(memberId)
+                });
+            });
+
+            // Sort: online first, then by join date
+            members.sort((a, b) => {
+                if (a.isOnline !== b.isOnline) {
+                    return b.isOnline ? 1 : -1;
+                }
+                return a.joinedAt - b.joinedAt;
+            });
+
+            return members;
+        } catch (error) {
+            console.error(`[P2P Sync] Error getting members for team ${teamId}:`, error);
+            return [];
+        }
     }
 
     /**
@@ -64,6 +138,48 @@ class P2PSyncService {
             console.log(`[P2P Sync] Team ${teamId} peers:`, count);
             this.peerCounts.set(teamId, count);
             this.notify();
+        });
+
+        // Listen to awareness changes for peer details
+        const awareness = provider.awareness;
+        awareness.on('change', () => {
+            this.peerDetails.set(teamId, this.getPeers(teamId));
+
+            // Persist members to shared storage
+            const states = awareness.getStates();
+            states.forEach((state, clientId) => {
+                if (clientId !== awareness.clientID && state.user) {
+                    p2pStorage.addMemberToTeam(teamId, {
+                        id: clientId,
+                        name: state.user.name,
+                        color: state.user.color,
+                        isAdmin: state.user.isAdmin || false
+                    });
+                }
+            });
+
+            this.notify();
+        });
+
+        // Set local user info
+        const username = await userProfileService.getUsername();
+        const localUserColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+        const team = teamManager.getTeam(teamId);
+        const isAdmin = team?.createdByMe || false;
+
+        awareness.setLocalStateField('user', {
+            name: username,
+            color: localUserColor,
+            isAdmin: isAdmin,
+            lastSeen: Date.now()
+        });
+
+        // Add self to members list
+        p2pStorage.addMemberToTeam(teamId, {
+            id: awareness.clientID,
+            name: username,
+            color: localUserColor,
+            isAdmin: isAdmin
         });
 
         this.providers.set(teamId, provider);

@@ -13,7 +13,14 @@ export function WorkspaceList({
     pinnedWorkspaces = [], // New prop
     onTogglePin            // New prop
 }) {
-    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    // Load view mode from localStorage, default to 'grid'
+    const [viewMode, setViewMode] = useState(() => {
+        try {
+            return localStorage.getItem('cooldesk_view_mode') || 'grid';
+        } catch {
+            return 'grid';
+        }
+    });
     const [bookmarks, setBookmarks] = useState([]);
     const [bookmarkSearch, setBookmarkSearch] = useState('');
     const [showBookmarks, setShowBookmarks] = useState(true);
@@ -23,9 +30,92 @@ export function WorkspaceList({
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false); // New state
 
-    // Separate pinned and unpinned workspaces
     const pinned = savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name));
     const unpinned = savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name));
+
+    // State for workspace activity scores
+    const [workspaceScores, setWorkspaceScores] = useState(new Map());
+    const [isSortingByActivity, setIsSortingByActivity] = useState(false);
+
+    // Calculate activity score for a workspace
+    const calculateWorkspaceScore = async (workspace) => {
+        if (!workspace.urls || workspace.urls.length === 0) return 0;
+
+        try {
+            // Import getUrlAnalytics dynamically to avoid circular deps
+            const { getUrlAnalytics } = await import('../../db/index');
+
+            // Fetch analytics for all URLs in parallel
+            const analyticsPromises = workspace.urls.map(async (urlObj) => {
+                try {
+                    const stats = await getUrlAnalytics(urlObj.url);
+                    return stats || { totalVisits: 0, totalTime: 0, lastVisit: 0 };
+                } catch {
+                    return { totalVisits: 0, totalTime: 0, lastVisit: 0 };
+                }
+            });
+
+            const allStats = await Promise.all(analyticsPromises);
+
+            // Aggregate metrics
+            const totalVisits = allStats.reduce((sum, s) => sum + (s.totalVisits || 0), 0);
+            const totalTime = allStats.reduce((sum, s) => sum + (s.totalTime || 0), 0);
+            const mostRecentVisit = Math.max(...allStats.map(s => s.lastVisit || 0), 0);
+
+            // Calculate composite score
+            // Formula: (visits * 10) + (time_in_hours * 50) + (recency_bonus)
+            const timeInHours = totalTime / (1000 * 60 * 60);
+            const recencyBonus = mostRecentVisit > 0
+                ? Math.max(0, 100 - (Date.now() - mostRecentVisit) / (1000 * 60 * 60 * 24)) // Decay over days
+                : 0;
+
+            const score = (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
+
+            return score;
+        } catch (error) {
+            console.error('Error calculating workspace score:', error);
+            return 0;
+        }
+    };
+
+    // Load activity scores on mount and when workspaces change
+    useEffect(() => {
+        const loadActivityScores = async () => {
+            const scores = new Map();
+
+            // Calculate scores for all unpinned workspaces
+            await Promise.all(
+                unpinned.map(async (workspace) => {
+                    const score = await calculateWorkspaceScore(workspace);
+                    scores.set(workspace.id, score);
+                })
+            );
+
+            setWorkspaceScores(scores);
+        };
+
+        if (unpinned.length > 0) {
+            loadActivityScores();
+        }
+    }, [savedWorkspaces.length]); // Re-calculate when workspace count changes
+
+    // Sort unpinned workspaces by activity score
+    const sortedUnpinned = isSortingByActivity
+        ? [...unpinned].sort((a, b) => {
+            const scoreA = workspaceScores.get(a.id) || 0;
+            const scoreB = workspaceScores.get(b.id) || 0;
+            return scoreB - scoreA; // Descending order (highest activity first)
+        })
+        : unpinned;
+
+    // Save view mode to localStorage whenever it changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('cooldesk_view_mode', viewMode);
+        } catch (e) {
+            console.error('Failed to save view mode:', e);
+        }
+    }, [viewMode]);
 
     // Fetch bookmarks on mount
     useEffect(() => {
@@ -106,6 +196,15 @@ export function WorkspaceList({
                         style={{ color: '#60a5fa' }}
                     >
                         <FontAwesomeIcon icon={faShare} />
+                    </button>
+                    <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
+                    <button
+                        className={`view-toggle-btn ${isSortingByActivity ? 'active' : ''}`}
+                        onClick={() => setIsSortingByActivity(!isSortingByActivity)}
+                        title={isSortingByActivity ? "Sort Alphabetically" : "Sort by Activity"}
+                        style={{ color: isSortingByActivity ? '#34d399' : undefined }}
+                    >
+                        <FontAwesomeIcon icon={faChartLine} />
                     </button>
                     <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
                     <button
@@ -206,7 +305,7 @@ export function WorkspaceList({
                                         gap: '8px'
                                     }}
                                 >
-                                    {unpinned.slice(0, workspaceLimit).map((workspace) => (
+                                    {sortedUnpinned.slice(0, workspaceLimit).map((workspace) => (
                                         <WorkspaceCard
                                             key={workspace.id}
                                             workspace={workspace}

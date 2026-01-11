@@ -41,8 +41,11 @@ class TeamManager {
         const { roomId, encryptionKey } = cryptoUtils.deriveKeys(secretPhrase);
 
         // Check duplicates
-        if (this.teams.find(t => t.id === roomId)) {
-            throw new Error('Team already exists');
+        const existingTeam = this.teams.find(t => t.id === roomId);
+        if (existingTeam) {
+            // If team exists but wasn't created by this user, just return it
+            // This happens when joining an existing team
+            return existingTeam;
         }
 
         const newTeam = {
@@ -51,6 +54,7 @@ class TeamManager {
             secretPhrase, // We store this locally for convenience (could be optional for higher security)
             encryptionKey, // Derived and cached
             createdAt: Date.now(),
+            createdByMe: true, // Mark that this user created the team (makes them admin)
             lastSync: null
         };
 

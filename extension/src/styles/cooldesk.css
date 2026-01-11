@@ -542,6 +542,22 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
+/* Compact/List View Styles */
+.cooldesk-workspace-card.compact {
+  height: auto;
+  max-height: none;
+  padding: 0;
+}
+
+.cooldesk-workspace-card.compact:hover {
+  transform: translateY(0);
+}
+
+/* Show pin button on hover in list view */
+.cooldesk-workspace-card.compact:hover .workspace-pin-btn {
+  opacity: 1 !important;
+}
+
 .workspace-card-header {
   display: flex;
   align-items: flex-start;
@@ -646,7 +662,7 @@
 .workspace-link-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   font-size: var(--font-md, 13px);
   color: #CBD5E1;
   padding: 6px 8px;
