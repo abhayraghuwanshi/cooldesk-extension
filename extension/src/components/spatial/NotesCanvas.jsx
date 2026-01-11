@@ -473,7 +473,7 @@ export function NotesCanvas({ workspaceId }) {
             <FontAwesomeIcon icon={faStickyNote} />
           </button>
           <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--text)' }}>Notes</h1>
-          <span style={{
+          <span className="notes-badge" style={{
             padding: '4px 10px',
             borderRadius: '12px',
             background: 'var(--accent-blue-soft)',
@@ -537,6 +537,7 @@ export function NotesCanvas({ workspaceId }) {
 
           <button
             onClick={createNewNote}
+            className="notes-new-btn"
             style={{
               background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
               border: 'none',
@@ -608,6 +609,7 @@ export function NotesCanvas({ workspaceId }) {
 
               <button
                 onClick={() => setActiveFolder('All Notes')}
+                className={`notes-sidebar-btn ${activeFolder === 'All Notes' ? 'active' : ''}`}
                 style={{
                   background: activeFolder === 'All Notes' ? 'var(--accent-blue-soft)' : 'transparent',
                   border: activeFolder === 'All Notes' ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
@@ -634,7 +636,7 @@ export function NotesCanvas({ workspaceId }) {
               >
                 <FontAwesomeIcon icon={activeFolder === 'All Notes' ? faFolderOpen : faFolder} style={{ fontSize: '16px' }} />
                 <span style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>All Notes</span>
-                <span style={{
+                <span className="notes-badge" style={{
                   padding: '2px 8px',
                   borderRadius: '8px',
                   background: activeFolder === 'All Notes' ? 'var(--accent-blue)' : 'var(--surface-3)',
@@ -650,6 +652,7 @@ export function NotesCanvas({ workspaceId }) {
                 <button
                   key={folder}
                   onClick={() => setActiveFolder(folder)}
+                  className={`notes-sidebar-btn ${activeFolder === folder ? 'active' : ''}`}
                   style={{
                     background: activeFolder === folder ? 'var(--accent-blue-soft)' : 'transparent',
                     border: activeFolder === folder ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
@@ -676,7 +679,7 @@ export function NotesCanvas({ workspaceId }) {
                 >
                   <FontAwesomeIcon icon={folder === 'URL Notes' ? faLink : (activeFolder === folder ? faFolderOpen : faFolder)} style={{ fontSize: '16px' }} />
                   <span style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>{folder}</span>
-                  <span style={{
+                  <span className="notes-badge" style={{
                     padding: '2px 8px',
                     borderRadius: '8px',
                     background: activeFolder === folder ? 'var(--accent-blue)' : 'var(--surface-3)',
@@ -723,6 +726,7 @@ export function NotesCanvas({ workspaceId }) {
                   <div
                     key={note.id}
                     onClick={() => selectNote(note)}
+                    className={`notes-list-item ${activeNote?.id === note.id ? 'active' : ''}`}
                     style={{
                       padding: '12px',
                       borderRadius: '10px',
@@ -835,7 +839,7 @@ export function NotesCanvas({ workspaceId }) {
             <>
               {/* URL Context Banner for URL Notes */}
               {activeNote?.url && (
-                <div style={{
+                <div className="notes-url-banner" style={{
                   padding: '12px 16px',
                   background: 'linear-gradient(135deg, var(--accent-blue-soft), var(--surface-2))',
                   border: '1px solid var(--accent-blue-border)',
@@ -967,7 +971,7 @@ export function NotesCanvas({ workspaceId }) {
               </div>
 
               {/* Formatting Toolbar */}
-              <div style={{
+              <div className="notes-editor-toolbar" style={{
                 display: 'flex',
                 gap: '6px',
                 flexWrap: 'wrap',
@@ -1119,6 +1123,7 @@ export function NotesCanvas({ workspaceId }) {
               {/* Rich Text Editor */}
               <div
                 ref={editorRef}
+                className="notes-editor-content"
                 contentEditable
                 onInput={handleContentChange}
                 suppressContentEditableWarning={true}
@@ -1172,6 +1177,7 @@ export function NotesCanvas({ workspaceId }) {
               <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: 'var(--text)' }}>Select a Note</h3>
               <button
                 onClick={createNewNote}
+                className="notes-new-btn"
                 style={{
                   padding: '12px 24px',
                   borderRadius: '10px',

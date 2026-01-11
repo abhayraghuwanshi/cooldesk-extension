@@ -311,24 +311,24 @@ function TabItem({ tab, color, handleTabClick, handlePinTab, handleCloseTab }) {
   const accentColor = color || '#3B82F6';
   return (
     <div
-      className="tab-card"
+      className="browser-tab-card tab-card"
       onClick={() => handleTabClick(tab)}
+      data-active={tab.active}
       style={{
-        border: tab.active ? `1px solid ${accentColor}80` : `1px solid ${accentColor}20`,
-        background: tab.active ? `${accentColor}1A` : 'transparent',
-        borderLeft: tab.active ? `3px solid ${accentColor}` : `1px solid ${accentColor}20`,
         position: 'relative',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        '--domain-color': accentColor // Keep this available for subtle accents if needed via CSS
       }}
     >
       {/* Dynamic hover gradient effect */}
       <div className="tab-hover-bg" style={{
         position: 'absolute',
         inset: 0,
-        background: `linear-gradient(90deg, ${accentColor}0D 0%, transparent 100%)`,
         opacity: 0,
         transition: 'opacity 0.2s',
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        // Moving gradient to CSS using the variable or generic
+        background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, transparent 100%)'
       }} />
       <img
         src={getFaviconUrl(tab.url)}

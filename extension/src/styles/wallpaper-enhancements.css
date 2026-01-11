@@ -1,231 +1,167 @@
 /* ============================================
-   PREMIUM DEEP EMERALD THEME (2026 TREND)
-   Forest Black & Soft Mint - Organic, High-end Vibe
+   PREMIUM OBSIDIAN THEME (UNIVERSAL & PRO)
+   Deep Charcoal & Thin White - Polished Volcanic Glass
    ============================================ */
 
 /* === SOPHISTICATED COLOR PALETTE === */
 .wallpaper-enabled * {
-    /* Deep Emerald Tinted Glass */
-    --glass-tint-primary: rgba(16, 185, 129, 0.12);
-    /* Emerald */
-    --glass-tint-secondary: rgba(20, 184, 166, 0.08);
-    /* Teal */
-    --glass-border: rgba(167, 243, 208, 0.25);
-    /* Soft Mint - slightly stronger for visibility */
-    --glass-shadow: rgba(6, 10, 8, 0.35);
-    /* Deep Forest Shadow */
-    --glass-highlight: rgba(209, 250, 229, 0.3);
-    /* Mint Highlight */
+    /* Neural Tinted Glass */
+    --glass-tint-primary: rgba(255, 255, 255, 0.05);
+    /* Subtle White */
+    --glass-tint-secondary: rgba(255, 255, 255, 0.03);
+    /* Faintest White */
+    --glass-border: rgba(255, 255, 255, 0.1);
+    /* Thin White */
+    --glass-shadow: rgba(0, 0, 0, 0.4);
+    /* Deep Shadow */
+    --glass-highlight: rgba(255, 255, 255, 0.2);
+    /* Glass Highlight */
 }
 
 /* === HEADER === */
 .wallpaper-enabled .cooldesk-header {
     background: linear-gradient(180deg,
-            rgba(10, 20, 18, 0.75) 0%,
-            /* Forest Black */
-            rgba(5, 12, 10, 0.80) 100%) !important;
-    backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
-    -webkit-backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
-    border-bottom: 1px solid rgba(167, 243, 208, 0.15);
-    /* Soft Mint */
+            rgba(15, 15, 20, 0.75) 0%,
+            /* Deep Charcoal Lighter */
+            rgba(10, 10, 15, 0.7) 100%) !important;
+    /* Deep Charcoal Base */
+    backdrop-filter: blur(120px) saturate(120%) brightness(1.1);
+    -webkit-backdrop-filter: blur(120px) saturate(120%) brightness(1.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow:
-        0 8px 32px rgba(6, 15, 10, 0.3),
-        0 1px 0 rgba(255, 255, 255, 0.1) inset,
-        0 0 60px rgba(52, 211, 153, 0.03) inset;
-    /* Emerald glow */
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        0 1px 0 rgba(255, 255, 255, 0.08) inset,
+        0 0 60px rgba(0, 0, 0, 0.2) inset;
 }
 
 /* === SEARCH BOX === */
 .wallpaper-enabled .cooldesk-search-box {
     background: linear-gradient(135deg,
-            rgba(15, 30, 25, 0.80) 0%,
-            rgba(10, 20, 18, 0.75) 100%) !important;
-    backdrop-filter: blur(140px) saturate(180%) brightness(1.15);
-    -webkit-backdrop-filter: blur(140px) saturate(180%) brightness(1.15);
-    border: 1px solid rgba(167, 243, 208, 0.2);
+            rgba(20, 20, 25, 0.8) 0%,
+            rgba(10, 10, 15, 0.75) 100%) !important;
+    backdrop-filter: blur(140px) saturate(140%) brightness(1.15);
+    -webkit-backdrop-filter: blur(140px) saturate(140%) brightness(1.15);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow:
-        0 12px 48px rgba(0, 0, 0, 0.25),
-        0 2px 0 rgba(167, 243, 208, 0.1) inset,
-        0 -1px 0 rgba(0, 0, 0, 0.3) inset,
-        0 0 80px rgba(16, 185, 129, 0.05) inset;
+        0 12px 48px rgba(0, 0, 0, 0.3),
+        0 2px 0 rgba(255, 255, 255, 0.05) inset,
+        0 -1px 0 rgba(0, 0, 0, 0.4) inset;
+}
+
+/* NotesCanvas overrides - Obsidian Theme */
+.wallpaper-enabled .notes-list-item {
+    background: linear-gradient(135deg,
+            rgba(20, 20, 25, 0.6) 0%,
+            rgba(15, 15, 20, 0.5) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.wallpaper-enabled .notes-list-item.active {
+    background: linear-gradient(135deg,
+            rgba(30, 30, 35, 0.8) 0%,
+            rgba(25, 25, 30, 0.7) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.wallpaper-enabled .notes-sidebar-btn {
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    color: #ccc !important;
+}
+
+.wallpaper-enabled .notes-sidebar-btn.active {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #fff !important;
+}
+
+/* Override icons in active state to be white instead of blue */
+.wallpaper-enabled .notes-sidebar-btn.active svg,
+.wallpaper-enabled .notes-sidebar-btn.active span:not(.notes-badge) {
+    color: #fff !important;
+}
+
+.wallpaper-enabled .notes-sidebar-btn:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Editor Toolbar */
+.wallpaper-enabled .notes-editor-toolbar {
+    background: rgba(20, 20, 25, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Editor Content */
+.wallpaper-enabled .notes-editor-content {
+    background: rgba(10, 10, 15, 0.5) !important;
+    /* Deep Charcoal transparent */
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #fff !important;
+}
+
+/* URL Banner (Obsidian style) */
+.wallpaper-enabled .notes-url-banner {
+    background: linear-gradient(135deg,
+            rgba(30, 30, 35, 0.8) 0%,
+            rgba(20, 20, 25, 0.7) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.wallpaper-enabled .notes-url-banner a {
+    color: #fff !important;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+.wallpaper-enabled .notes-url-banner svg {
+    color: #fff !important;
+    /* Make icon white */
+}
+
+
+/* Badges */
+.wallpaper-enabled .notes-badge {
+    background: rgba(255, 255, 255, 0.15) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #fff !important;
+}
+
+/* Button overrides inside toolbar */
+.wallpaper-enabled .notes-editor-toolbar button {
+    color: #ccc !important;
+}
+
+.wallpaper-enabled .notes-editor-toolbar button:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #fff !important;
+}
+
+/* New Note Button overrides */
+.wallpaper-enabled .notes-new-btn {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05)) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #fff !important;
+}
+
+.wallpaper-enabled .notes-new-btn:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
 .wallpaper-enabled .cooldesk-search-box:hover,
 .wallpaper-enabled .cooldesk-search-box:focus-within {
     background: linear-gradient(135deg,
-            rgba(20, 40, 35, 0.85) 0%,
-            rgba(15, 30, 25, 0.80) 100%) !important;
-    backdrop-filter: blur(160px) saturate(200%) brightness(1.2);
-    -webkit-backdrop-filter: blur(160px) saturate(200%) brightness(1.2);
-    border-color: rgba(52, 211, 153, 0.4);
-    /* Emerald-400 */
+            rgba(25, 25, 30, 0.85) 0%,
+            rgba(15, 15, 20, 0.8) 100%) !important;
+    backdrop-filter: blur(160px) saturate(150%) brightness(1.2);
+    -webkit-backdrop-filter: blur(160px) saturate(150%) brightness(1.2);
+    border-color: rgba(255, 255, 255, 0.2);
     box-shadow:
-        0 16px 64px rgba(0, 0, 0, 0.3),
-        0 0 0 3px rgba(52, 211, 153, 0.12),
-        0 3px 0 rgba(167, 243, 208, 0.15) inset,
-        0 0 100px rgba(52, 211, 153, 0.08) inset;
+        0 16px 64px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        0 3px 0 rgba(255, 255, 255, 0.08) inset;
     transform: translateY(-1px);
-}
-
-/* === WORKSPACE CARDS === */
-.wallpaper-enabled .cooldesk-workspace-card {
-    background: linear-gradient(135deg,
-            rgba(10, 20, 18, 0.78) 0%,
-            rgba(5, 12, 10, 0.85) 100%) !important;
-    backdrop-filter: blur(130px) saturate(170%) brightness(1.12);
-    -webkit-backdrop-filter: blur(130px) saturate(170%) brightness(1.12);
-    border: 1px solid rgba(167, 243, 208, 0.18);
-    box-shadow:
-        0 16px 64px rgba(0, 0, 0, 0.25),
-        0 2px 0 rgba(167, 243, 208, 0.08) inset,
-        0 -1px 0 rgba(0, 0, 0, 0.2) inset,
-        0 0 60px rgba(20, 184, 166, 0.03) inset;
-    /* Teal glow */
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.wallpaper-enabled .cooldesk-workspace-card:hover {
-    background: linear-gradient(135deg,
-            rgba(20, 40, 35, 0.85) 0%,
-            rgba(10, 20, 18, 0.80) 100%) !important;
-    backdrop-filter: blur(150px) saturate(190%) brightness(1.18);
-    -webkit-backdrop-filter: blur(150px) saturate(190%) brightness(1.18);
-    border-color: rgba(52, 211, 153, 0.35);
-    box-shadow:
-        0 24px 96px rgba(0, 0, 0, 0.35),
-        0 3px 0 rgba(167, 243, 208, 0.12) inset,
-        0 -2px 0 rgba(0, 0, 0, 0.25) inset,
-        0 0 80px rgba(52, 211, 153, 0.08) inset;
-    transform: translateY(-6px) scale(1.02);
-}
-
-/* === PANELS & SECTIONS === */
-.wallpaper-enabled .activity-feed,
-.wallpaper-enabled .cooldesk-panel,
-.wallpaper-enabled .workspace-list,
-.wallpaper-enabled .notes-canvas,
-.wallpaper-enabled .team-view,
-.wallpaper-enabled .workspace-shell-face {
-    background: linear-gradient(135deg,
-            rgba(10, 20, 18, 0.76) 0%,
-            rgba(5, 12, 10, 0.8) 100%) !important;
-    backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
-    -webkit-backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
-    border: 1px solid rgba(167, 243, 208, 0.15);
-    box-shadow:
-        0 16px 64px rgba(0, 0, 0, 0.2),
-        0 2px 0 rgba(167, 243, 208, 0.05) inset,
-        0 0 50px rgba(52, 211, 153, 0.02) inset;
-}
-
-/* === TAB CARDS === */
-.wallpaper-enabled .tab-card,
-.wallpaper-enabled .tab-group-card {
-    background: linear-gradient(135deg,
-            rgba(10, 20, 18, 0.74) 0%,
-            rgba(5, 12, 10, 0.78) 100%) !important;
-    backdrop-filter: blur(110px) saturate(160%) brightness(1.1);
-    -webkit-backdrop-filter: blur(110px) saturate(160%) brightness(1.1);
-    border: 1px solid rgba(167, 243, 208, 0.15);
-    box-shadow:
-        0 12px 48px rgba(0, 0, 0, 0.2),
-        0 2px 0 rgba(167, 243, 208, 0.05) inset,
-        0 0 40px rgba(20, 184, 166, 0.02) inset;
-}
-
-.wallpaper-enabled .tab-card:hover,
-.wallpaper-enabled .tab-group-card:hover {
-    background: linear-gradient(135deg,
-            rgba(20, 40, 35, 0.82) 0%,
-            rgba(10, 20, 18, 0.76) 100%) !important;
-    backdrop-filter: blur(130px) saturate(180%) brightness(1.15);
-    -webkit-backdrop-filter: blur(130px) saturate(180%) brightness(1.15);
-    border-color: rgba(52, 211, 153, 0.3);
-    box-shadow:
-        0 16px 64px rgba(0, 0, 0, 0.25),
-        0 2px 0 rgba(167, 243, 208, 0.1) inset,
-        0 0 55px rgba(52, 211, 153, 0.05) inset;
-    transform: translateY(-2px);
-}
-
-/* === BUTTONS === */
-.wallpaper-enabled .cooldesk-settings-btn,
-.wallpaper-enabled .cooldesk-voice-btn,
-.wallpaper-enabled .workspace-add-url-btn,
-.wallpaper-enabled button {
-    background: linear-gradient(135deg,
-            rgba(15, 30, 25, 0.76) 0%,
-            rgba(10, 20, 18, 0.70) 100%) !important;
-    backdrop-filter: blur(100px) saturate(150%) brightness(1.08);
-    -webkit-backdrop-filter: blur(100px) saturate(150%) brightness(1.08);
-    border: 1px solid rgba(167, 243, 208, 0.2) !important;
-    box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.2),
-        0 2px 0 rgba(167, 243, 208, 0.08) inset !important;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.wallpaper-enabled .cooldesk-settings-btn:hover,
-.wallpaper-enabled .cooldesk-voice-btn:hover,
-.wallpaper-enabled .workspace-add-url-btn:hover,
-.wallpaper-enabled button:hover {
-    background: linear-gradient(135deg,
-            rgba(25, 50, 40, 0.84) 0%,
-            rgba(15, 30, 25, 0.78) 100%) !important;
-    backdrop-filter: blur(120px) saturate(180%) brightness(1.12);
-    -webkit-backdrop-filter: blur(120px) saturate(180%) brightness(1.12);
-    border-color: rgba(52, 211, 153, 0.35) !important;
-    box-shadow:
-        0 12px 48px rgba(0, 0, 0, 0.25),
-        0 2px 0 rgba(167, 243, 208, 0.12) inset !important;
-    transform: translateY(-2px);
-}
-
-/* === TEXT ENHANCEMENTS === */
-.wallpaper-enabled .workspace-name,
-.wallpaper-enabled .cooldesk-logo,
-.wallpaper-enabled h1,
-.wallpaper-enabled h2,
-.wallpaper-enabled h3,
-.wallpaper-enabled h4 {
-    text-shadow:
-        0 2px 12px rgba(6, 15, 10, 0.6),
-        0 1px 4px rgba(6, 15, 10, 0.8),
-        0 0 1px rgba(167, 243, 208, 0.3);
-    color: #F0FDF4 !important;
-    /* Green-50, near white but warm */
-    font-weight: 600;
-    letter-spacing: -0.01em;
-}
-
-.wallpaper-enabled .workspace-link-text,
-.wallpaper-enabled .workspace-count,
-.wallpaper-enabled p,
-.wallpaper-enabled span,
-.wallpaper-enabled label {
-    text-shadow:
-        0 1px 8px rgba(6, 15, 10, 0.5),
-        0 0 1px rgba(167, 243, 208, 0.25);
-    color: #ECFDF5 !important;
-    /* Emerald-50 */
-}
-
-/* === INPUT FIELDS === */
-.wallpaper-enabled input,
-.wallpaper-enabled textarea,
-.wallpaper-enabled select {
-    background: transparent !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    border: none !important;
-    box-shadow: none !important;
-    color: #F0FDF4 !important;
-    text-shadow: 0 1px 2px rgba(6, 15, 10, 0.4);
-}
-
-.wallpaper-enabled input::placeholder,
-.wallpaper-enabled textarea::placeholder {
-    color: rgba(167, 243, 208, 0.5) !important;
 }
 
 .wallpaper-enabled .cooldesk-search-box input {
@@ -238,18 +174,168 @@
     width: 100%;
 }
 
+/* === WORKSPACE CARDS === */
+.wallpaper-enabled .cooldesk-workspace-card {
+    background: linear-gradient(135deg,
+            rgba(15, 15, 20, 0.78) 0%,
+            rgba(10, 10, 15, 0.72) 100%) !important;
+    backdrop-filter: blur(130px) saturate(120%) brightness(1.1);
+    -webkit-backdrop-filter: blur(130px) saturate(120%) brightness(1.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 16px 64px rgba(0, 0, 0, 0.35),
+        0 2px 0 rgba(255, 255, 255, 0.05) inset,
+        0 -1px 0 rgba(0, 0, 0, 0.3) inset;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.wallpaper-enabled .cooldesk-workspace-card:hover {
+    background: linear-gradient(135deg,
+            rgba(25, 25, 30, 0.85) 0%,
+            rgba(15, 15, 20, 0.8) 100%) !important;
+    backdrop-filter: blur(150px) saturate(140%) brightness(1.15);
+    -webkit-backdrop-filter: blur(150px) saturate(140%) brightness(1.15);
+    border-color: rgba(255, 255, 255, 0.25);
+    box-shadow:
+        0 24px 96px rgba(0, 0, 0, 0.45),
+        0 3px 0 rgba(255, 255, 255, 0.08) inset,
+        0 -2px 0 rgba(0, 0, 0, 0.3) inset;
+    transform: translateY(-6px) scale(1.02);
+}
+
+/* === PANELS & SECTIONS === */
+.wallpaper-enabled .activity-feed,
+.wallpaper-enabled .cooldesk-panel,
+.wallpaper-enabled .workspace-list,
+.wallpaper-enabled .notes-canvas,
+.wallpaper-enabled .team-view,
+.wallpaper-enabled .workspace-shell-face {
+    background: linear-gradient(135deg,
+            rgba(15, 15, 20, 0.76) 0%,
+            rgba(10, 10, 15, 0.7) 100%) !important;
+    backdrop-filter: blur(120px) saturate(120%) brightness(1.08);
+    -webkit-backdrop-filter: blur(120px) saturate(120%) brightness(1.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 16px 64px rgba(0, 0, 0, 0.3),
+        0 2px 0 rgba(255, 255, 255, 0.05) inset;
+}
+
+/* === TAB CARDS === */
+.wallpaper-enabled .tab-card,
+.wallpaper-enabled .tab-group-card {
+    background: linear-gradient(135deg,
+            rgba(15, 15, 20, 0.74) 0%,
+            rgba(10, 10, 15, 0.7) 100%) !important;
+    backdrop-filter: blur(110px) saturate(120%) brightness(1.08);
+    -webkit-backdrop-filter: blur(110px) saturate(120%) brightness(1.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 12px 48px rgba(0, 0, 0, 0.3),
+        0 2px 0 rgba(255, 255, 255, 0.05) inset;
+}
+
+.wallpaper-enabled .tab-card:hover,
+.wallpaper-enabled .tab-group-card:hover {
+    background: linear-gradient(135deg,
+            rgba(25, 25, 30, 0.82) 0%,
+            rgba(15, 15, 20, 0.76) 100%) !important;
+    backdrop-filter: blur(130px) saturate(130%) brightness(1.12);
+    -webkit-backdrop-filter: blur(130px) saturate(130%) brightness(1.12);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow:
+        0 16px 64px rgba(0, 0, 0, 0.35),
+        0 2px 0 rgba(255, 255, 255, 0.08) inset;
+    transform: translateY(-2px);
+}
+
+/* === BUTTONS === */
+.wallpaper-enabled .cooldesk-settings-btn,
+.wallpaper-enabled .cooldesk-voice-btn,
+.wallpaper-enabled .workspace-add-url-btn,
+.wallpaper-enabled button {
+    background: linear-gradient(135deg,
+            rgba(25, 25, 30, 0.76) 0%,
+            rgba(20, 20, 25, 0.7) 100%) !important;
+    backdrop-filter: blur(100px) saturate(110%) brightness(1.1);
+    -webkit-backdrop-filter: blur(100px) saturate(110%) brightness(1.1);
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        0 2px 0 rgba(255, 255, 255, 0.05) inset !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.wallpaper-enabled .cooldesk-settings-btn:hover,
+.wallpaper-enabled .cooldesk-voice-btn:hover,
+.wallpaper-enabled .workspace-add-url-btn:hover,
+.wallpaper-enabled button:hover {
+    background: linear-gradient(135deg,
+            rgba(40, 40, 45, 0.84) 0%,
+            rgba(30, 30, 35, 0.78) 100%) !important;
+    backdrop-filter: blur(120px) saturate(130%) brightness(1.15);
+    -webkit-backdrop-filter: blur(120px) saturate(130%) brightness(1.15);
+    border-color: rgba(255, 255, 255, 0.25) !important;
+    box-shadow:
+        0 12px 48px rgba(0, 0, 0, 0.35),
+        0 2px 0 rgba(255, 255, 255, 0.08) inset !important;
+    transform: translateY(-2px);
+}
+
+/* === TEXT ENHANCEMENTS === */
+.wallpaper-enabled .workspace-name,
+.wallpaper-enabled .cooldesk-logo,
+.wallpaper-enabled h1,
+.wallpaper-enabled h2,
+.wallpaper-enabled h3,
+.wallpaper-enabled h4 {
+    text-shadow:
+        0 2px 12px rgba(0, 0, 0, 0.8),
+        0 1px 4px rgba(0, 0, 0, 0.9),
+        0 0 1px rgba(255, 255, 255, 0.2);
+    color: #FFFFFF !important;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.wallpaper-enabled .workspace-link-text,
+.wallpaper-enabled .workspace-count,
+.wallpaper-enabled p,
+.wallpaper-enabled span,
+.wallpaper-enabled label {
+    text-shadow:
+        0 1px 8px rgba(0, 0, 0, 0.7),
+        0 0 1px rgba(255, 255, 255, 0.15);
+    color: #E5E5E5 !important;
+    /* Neutral Grey */
+}
+
+/* === INPUT FIELDS === */
+.wallpaper-enabled input,
+.wallpaper-enabled textarea,
+.wallpaper-enabled select {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #FFFFFF !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.wallpaper-enabled input::placeholder,
+.wallpaper-enabled textarea::placeholder {
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+
 .wallpaper-enabled input:focus,
 .wallpaper-enabled textarea:focus,
 .wallpaper-enabled select:focus {
-    background: linear-gradient(135deg,
-            rgba(20, 40, 35, 0.82) 0%,
-            rgba(10, 20, 18, 0.76) 100%) !important;
-    backdrop-filter: blur(120px) saturate(180%) brightness(1.15);
-    -webkit-backdrop-filter: blur(120px) saturate(180%) brightness(1.15);
-    border-color: rgba(52, 211, 153, 0.4) !important;
-    box-shadow:
-        0 0 0 3px rgba(52, 211, 153, 0.15),
-        0 8px 32px rgba(6, 15, 10, 0.3);
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 /* === MODALS & DROPDOWNS === */
@@ -257,97 +343,96 @@
 .wallpaper-enabled .modal-content,
 .wallpaper-enabled .settings-modal {
     background: linear-gradient(135deg,
-            rgba(10, 20, 18, 0.88) 0%,
-            rgba(5, 12, 10, 0.9) 100%) !important;
-    backdrop-filter: blur(180px) saturate(180%) brightness(1.15);
-    -webkit-backdrop-filter: blur(180px) saturate(180%) brightness(1.15);
-    border: 1px solid rgba(167, 243, 208, 0.25);
+            rgba(15, 15, 20, 0.9) 0%,
+            rgba(10, 10, 15, 0.95) 100%) !important;
+    backdrop-filter: blur(180px) saturate(150%) brightness(1.1);
+    -webkit-backdrop-filter: blur(180px) saturate(150%) brightness(1.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow:
-        0 32px 128px rgba(0, 0, 0, 0.5),
-        0 3px 0 rgba(167, 243, 208, 0.08) inset,
-        0 -3px 0 rgba(0, 0, 0, 0.3) inset,
-        0 0 120px rgba(16, 185, 129, 0.04) inset;
+        0 32px 128px rgba(0, 0, 0, 0.6),
+        0 3px 0 rgba(255, 255, 255, 0.05) inset,
+        0 -3px 0 rgba(0, 0, 0, 0.4) inset;
 }
 
 /* === SCROLLBARS === */
 .wallpaper-enabled ::-webkit-scrollbar-track {
-    background: rgba(6, 15, 10, 0.4);
+    background: rgba(10, 10, 15, 0.4);
     backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
-    border: 1px solid rgba(167, 243, 208, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .wallpaper-enabled ::-webkit-scrollbar-thumb {
     background: linear-gradient(180deg,
-            rgba(52, 211, 153, 0.3) 0%,
-            rgba(16, 185, 129, 0.2) 100%);
-    border: 3px solid rgba(10, 20, 18, 0.3);
+            rgba(120, 120, 120, 0.3) 0%,
+            rgba(80, 80, 80, 0.2) 100%);
+    border: 3px solid rgba(15, 15, 20, 0.3);
     border-radius: 12px;
     box-shadow:
-        0 2px 8px rgba(6, 15, 10, 0.3) inset,
-        0 1px 0 rgba(167, 243, 208, 0.1);
+        0 2px 8px rgba(0, 0, 0, 0.3) inset,
+        0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .wallpaper-enabled ::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(180deg,
-            rgba(52, 211, 153, 0.45) 0%,
-            rgba(16, 185, 129, 0.35) 100%);
+            rgba(150, 150, 150, 0.45) 0%,
+            rgba(100, 100, 100, 0.35) 100%);
 }
 
 /* === WORKSPACE ICONS === */
 .wallpaper-enabled .workspace-icon {
     box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.4),
-        0 0 0 2px rgba(167, 243, 208, 0.15),
+        0 8px 32px rgba(0, 0, 0, 0.5),
+        0 0 0 2px rgba(255, 255, 255, 0.1),
         0 2px 0 rgba(255, 255, 255, 0.1) inset;
-    filter: brightness(1.1) saturate(1.2);
+    filter: grayscale(1) brightness(1.2);
 }
 
 /* === GLOBAL ADD BUTTON === */
 .wallpaper-enabled .global-add-button {
     background: linear-gradient(135deg,
-            rgba(15, 30, 25, 0.82) 0%,
-            rgba(10, 20, 18, 0.76) 100%) !important;
-    backdrop-filter: blur(130px) saturate(170%) brightness(1.12);
-    -webkit-backdrop-filter: blur(130px) saturate(170%) brightness(1.12);
-    border: 1px solid rgba(167, 243, 208, 0.25);
+            rgba(25, 25, 30, 0.82) 0%,
+            rgba(15, 15, 20, 0.76) 100%) !important;
+    backdrop-filter: blur(130px) saturate(130%) brightness(1.1);
+    -webkit-backdrop-filter: blur(130px) saturate(130%) brightness(1.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow:
-        0 16px 64px rgba(0, 0, 0, 0.3),
-        0 2px 0 rgba(167, 243, 208, 0.1) inset;
+        0 16px 64px rgba(0, 0, 0, 0.4),
+        0 2px 0 rgba(255, 255, 255, 0.08) inset;
 }
 
 .wallpaper-enabled .global-add-button:hover {
     background: linear-gradient(135deg,
-            rgba(25, 50, 40, 0.88) 0%,
-            rgba(15, 30, 25, 0.84) 100%) !important;
-    backdrop-filter: blur(150px) saturate(190%) brightness(1.18);
-    -webkit-backdrop-filter: blur(150px) saturate(190%) brightness(1.18);
-    border-color: rgba(52, 211, 153, 0.4);
+            rgba(40, 40, 45, 0.88) 0%,
+            rgba(30, 30, 35, 0.84) 100%) !important;
+    backdrop-filter: blur(150px) saturate(150%) brightness(1.15);
+    -webkit-backdrop-filter: blur(150px) saturate(150%) brightness(1.15);
+    border-color: rgba(255, 255, 255, 0.25);
     box-shadow:
-        0 20px 80px rgba(0, 0, 0, 0.35),
-        0 3px 0 rgba(167, 243, 208, 0.15) inset;
+        0 20px 80px rgba(0, 0, 0, 0.45),
+        0 3px 0 rgba(255, 255, 255, 0.1) inset;
 }
 
 /* === NAVIGATION DOTS === */
 .wallpaper-enabled .workspace-shell-nav {
-    background: rgba(10, 20, 18, 0.78) !important;
-    backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
-    -webkit-backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
-    border: 1px solid rgba(167, 243, 208, 0.2);
+    background: rgba(15, 15, 20, 0.78) !important;
+    backdrop-filter: blur(120px) saturate(120%) brightness(1.1);
+    -webkit-backdrop-filter: blur(120px) saturate(120%) brightness(1.1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow:
-        0 12px 48px rgba(0, 0, 0, 0.3),
-        0 2px 0 rgba(167, 243, 208, 0.08) inset;
+        0 12px 48px rgba(0, 0, 0, 0.4),
+        0 2px 0 rgba(255, 255, 255, 0.05) inset;
 }
 
 /* === GLASS ELEMENTS === */
 .wallpaper-enabled [style*="glass-bg"],
 .wallpaper-enabled .glass-bg {
     background: linear-gradient(135deg,
-            rgba(10, 20, 18, 0.76) 0%,
-            rgba(5, 12, 10, 0.7) 100%) !important;
-    backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
-    -webkit-backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
-    border: 1px solid rgba(167, 243, 208, 0.15);
+            rgba(15, 15, 20, 0.76) 0%,
+            rgba(10, 10, 15, 0.7) 100%) !important;
+    backdrop-filter: blur(120px) saturate(120%) brightness(1.08);
+    -webkit-backdrop-filter: blur(120px) saturate(120%) brightness(1.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* === TEAMVIEW SPECIFIC ENHANCEMENTS === */
@@ -358,94 +443,132 @@
 .wallpaper-enabled [style*="background: 'rgba(0,0,0,0.2')"],
 .wallpaper-enabled [style*="background: 'rgba(255,255,255,0.03')"] {
     background: linear-gradient(135deg,
-            rgba(10, 20, 18, 0.76) 0%,
-            rgba(5, 12, 10, 0.7) 100%) !important;
-    backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
-    -webkit-backdrop-filter: blur(120px) saturate(160%) brightness(1.1);
+            rgba(15, 15, 20, 0.76) 0%,
+            rgba(10, 10, 15, 0.7) 100%) !important;
+    backdrop-filter: blur(120px) saturate(120%) brightness(1.08);
+    -webkit-backdrop-filter: blur(120px) saturate(120%) brightness(1.08);
 }
 
 /* TeamView sidebar */
 .wallpaper-enabled div[style*="width: 200"] {
     background: linear-gradient(180deg,
-            rgba(10, 20, 18, 0.78) 0%,
-            rgba(5, 12, 10, 0.75) 100%) !important;
-    backdrop-filter: blur(110px) saturate(160%) brightness(1.1);
-    -webkit-backdrop-filter: blur(110px) saturate(160%) brightness(1.1);
-    border-right: 1px solid rgba(167, 243, 208, 0.15) !important;
+            rgba(15, 15, 20, 0.78) 0%,
+            rgba(10, 10, 15, 0.75) 100%) !important;
+    backdrop-filter: blur(110px) saturate(120%) brightness(1.1);
+    -webkit-backdrop-filter: blur(110px) saturate(120%) brightness(1.1);
+    border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 /* TeamView cards and items */
 .wallpaper-enabled a[style*="background: rgba(255,255,255,0.03)"],
 .wallpaper-enabled a[style*="background: 'rgba(255,255,255,0.03')"] {
     background: linear-gradient(135deg,
-            rgba(15, 30, 25, 0.74) 0%,
-            rgba(10, 20, 18, 0.68) 100%) !important;
-    backdrop-filter: blur(100px) saturate(150%) brightness(1.08);
-    -webkit-backdrop-filter: blur(100px) saturate(150%) brightness(1.08);
-    border: 1px solid rgba(167, 243, 208, 0.15) !important;
+            rgba(20, 20, 25, 0.74) 0%,
+            rgba(15, 15, 20, 0.68) 100%) !important;
+    backdrop-filter: blur(100px) saturate(110%) brightness(1.05);
+    -webkit-backdrop-filter: blur(100px) saturate(110%) brightness(1.05);
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 .wallpaper-enabled a[style*="background: rgba(255,255,255,0.03)"]:hover,
 .wallpaper-enabled a[style*="background: 'rgba(255,255,255,0.03')"]:hover {
     background: linear-gradient(135deg,
-            rgba(25, 50, 40, 0.82) 0%,
-            rgba(15, 30, 25, 0.76) 100%) !important;
-    backdrop-filter: blur(120px) saturate(170%) brightness(1.12);
-    -webkit-backdrop-filter: blur(120px) saturate(170%) brightness(1.12);
-    border-color: rgba(52, 211, 153, 0.3) !important;
-}
-
-/* TeamView workspace reference cards - Purple -> Teal/Emerald */
-.wallpaper-enabled div[style*="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1)"] {
-    background: linear-gradient(135deg,
-            rgba(20, 184, 166, 0.15) 0%,
-            /* Teal */
-            rgba(16, 185, 129, 0.08) 100%) !important;
-    /* Emerald */
-    backdrop-filter: blur(110px) saturate(160%) brightness(1.1);
-    -webkit-backdrop-filter: blur(110px) saturate(160%) brightness(1.1);
-    border: 1px solid rgba(20, 184, 166, 0.25) !important;
-}
-
-/* TeamView buttons - Blue -> Emerald */
-.wallpaper-enabled button[style*="background: #3b82f6"] {
-    background: linear-gradient(135deg,
-            rgba(16, 185, 129, 0.85) 0%,
-            /* Emerald-500 */
-            rgba(5, 150, 105, 0.80) 100%) !important;
-    /* Emerald-600 */
-    backdrop-filter: blur(80px) saturate(140%) brightness(1.05);
-    -webkit-backdrop-filter: blur(80px) saturate(140%) brightness(1.05);
-    border: 1px solid rgba(52, 211, 153, 0.4) !important;
-    box-shadow:
-        0 8px 32px rgba(16, 185, 129, 0.3),
-        0 2px 0 rgba(255, 255, 255, 0.15) inset !important;
-}
-
-.wallpaper-enabled button[style*="background: #3b82f6"]:hover {
-    background: linear-gradient(135deg,
-            rgba(16, 185, 129, 0.95) 0%,
-            rgba(5, 150, 105, 0.90) 100%) !important;
-    box-shadow:
-        0 12px 48px rgba(16, 185, 129, 0.35),
-        0 2px 0 rgba(255, 255, 255, 0.2) inset !important;
+            rgba(30, 30, 35, 0.82) 0%,
+            rgba(20, 20, 25, 0.76) 100%) !important;
+    backdrop-filter: blur(120px) saturate(130%) brightness(1.1);
+    -webkit-backdrop-filter: blur(120px) saturate(130%) brightness(1.1);
+    border-color: rgba(255, 255, 255, 0.15) !important;
 }
 
 /* TeamView right section content */
 .wallpaper-enabled .team-view-content {
     background: linear-gradient(135deg,
-            rgba(10, 20, 18, 0.4) 0%,
-            rgba(5, 12, 10, 0.3) 100%) !important;
-    backdrop-filter: blur(60px) saturate(120%) brightness(1.05);
-    -webkit-backdrop-filter: blur(60px) saturate(120%) brightness(1.05);
+            rgba(15, 15, 20, 0.4) 0%,
+            rgba(10, 10, 15, 0.3) 100%) !important;
+    backdrop-filter: blur(60px) saturate(100%) brightness(1.05);
+    -webkit-backdrop-filter: blur(60px) saturate(100%) brightness(1.05);
+}
+
+.wallpaper-enabled .team-view-content>div:first-child {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* TeamView item hover */
+.wallpaper-enabled div[style*="background: linear-gradient(135deg, rgba(139, 92, 246, 0.1)"] {
+    background: linear-gradient(135deg,
+            rgba(50, 50, 60, 0.3) 0%,
+            rgba(30, 30, 40, 0.2) 100%) !important;
+    backdrop-filter: blur(110px) saturate(110%) brightness(1.1);
+    -webkit-backdrop-filter: blur(110px) saturate(110%) brightness(1.1);
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
 }
 
 /* TeamView empty state */
 .wallpaper-enabled div[style*="border: '2px dashed rgba(255,255,255,0.05')"] {
     background: linear-gradient(135deg,
-            rgba(10, 20, 18, 0.5) 0%,
-            rgba(5, 12, 10, 0.45) 100%) !important;
-    backdrop-filter: blur(80px) saturate(140%) brightness(1.05);
-    -webkit-backdrop-filter: blur(80px) saturate(140%) brightness(1.05);
-    border: 2px dashed rgba(167, 243, 208, 0.15) !important;
+            rgba(15, 15, 20, 0.5) 0%,
+            rgba(10, 10, 15, 0.45) 100%) !important;
+    backdrop-filter: blur(80px) saturate(100%) brightness(1.05);
+    -webkit-backdrop-filter: blur(80px) saturate(100%) brightness(1.05);
+    border: 2px dashed rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ==========================================================================
+   TabManagement Widget Enhancements (Obsidian Theme)
+   ========================================================================== */
+.wallpaper-enabled .browser-tab-card {
+    background: linear-gradient(135deg, rgba(20, 20, 25, 0.6) 0%, rgba(15, 15, 20, 0.5) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+    /* Override colorful left border */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+    backdrop-filter: blur(12px) !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.wallpaper-enabled .browser-tab-card[data-active="true"] {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-left: 3px solid rgba(255, 255, 255, 0.6) !important;
+    /* Active indicator */
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Fallback for when wallpaper allows default styles but we want them cleaner */
+.browser-tab-card {
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-left: 1px solid rgba(128, 128, 128, 0.2);
+    /* Use the variable if we want accent, but default to neutral */
+}
+
+.browser-tab-card[data-active="true"] {
+    /* This matches the variable we passed */
+    border-left: 3px solid var(--domain-color, #3B82F6);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.wallpaper-enabled .browser-tab-card:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
+    transform: translateY(-1px);
+}
+
+.wallpaper-enabled .browser-tab-refresh-btn {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+    border-radius: 6px;
+    padding: 6px 12px;
+    transition: all 0.2s ease;
+}
+
+.wallpaper-enabled .browser-tab-refresh-btn:hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: #fff !important;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.wallpaper-enabled .browser-tab-group-header {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
