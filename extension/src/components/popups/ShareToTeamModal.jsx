@@ -2,16 +2,18 @@ import { faCheckCircle, faChevronDown, faFolder, faGlobe, faShare, faTimes } fro
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { listWorkspaces } from '../../db/index.js';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { teamManager } from '../../services/p2p/teamManager';
 
 export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
     const [teams, setTeams] = useState([]);
     const [selectedTeamId, setSelectedTeamId] = useState(null);
-    const [activeTab, setActiveTab] = useState(null);
-    const [mode, setMode] = useState('tab'); // 'tab' | 'workspace'
-    const [workspaceShareType, setWorkspaceShareType] = useState('link'); // 'link' | 'copy'
     const [windowTabs, setWindowTabs] = useState([]);
+    const [selectedTabIds, setSelectedTabIds] = useState(new Set());
+    const [workspaces, setWorkspaces] = useState([]);
+    const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
+    const [mode, setMode] = useState('tabs'); // 'tabs' | 'workspace'
     const [loading, setLoading] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
 
@@ -31,73 +33,90 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                 }
             });
 
-            // Load Active Tab & All Window Tabs
+            // Load All Window Tabs
             if (typeof chrome !== 'undefined' && chrome.tabs) {
                 chrome.tabs.query({ currentWindow: true }).then((tabs) => {
                     setWindowTabs(tabs);
 
-                    const active = tabs.find(t => t.active);
-                    if (active) {
-                        try {
-                            const url = new URL(active.url);
-                            setActiveTab({
-                                ...active,
-                                domain: url.hostname,
-                                favicon: active.favIconUrl || `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`
-                            });
-                        } catch (e) {
-                            setActiveTab({ ...active, domain: 'local', favicon: '' });
-                        }
+                    // Pre-select active tab
+                    const activeTab = tabs.find(t => t.active);
+                    if (activeTab) {
+                        setSelectedTabIds(new Set([activeTab.id]));
                     }
                 });
             }
+
+            // Load All Workspaces from IndexedDB
+            listWorkspaces().then((allWorkspaces) => {
+                const workspaceArray = Array.isArray(allWorkspaces) ? allWorkspaces : [];
+                setWorkspaces(workspaceArray);
+                // Pre-select context workspace if available
+                if (contextWorkspace) {
+                    setSelectedWorkspaceId(contextWorkspace.id);
+                } else if (workspaceArray.length > 0) {
+                    setSelectedWorkspaceId(workspaceArray[0].id);
+                }
+            }).catch(err => {
+                console.error('[ShareModal] Failed to load workspaces:', err);
+                setWorkspaces([]);
+            });
         }
-    }, [isOpen]);
+    }, [isOpen, contextWorkspace]);
+
+    const handleTabToggle = (tabId) => {
+        const newSelection = new Set(selectedTabIds);
+        if (newSelection.has(tabId)) {
+            newSelection.delete(tabId);
+        } else {
+            newSelection.add(tabId);
+        }
+        setSelectedTabIds(newSelection);
+    };
+
+    const handleSelectAll = () => {
+        setSelectedTabIds(new Set(windowTabs.map(t => t.id)));
+    };
+
+    const handleDeselectAll = () => {
+        setSelectedTabIds(new Set());
+    };
 
     const handleShare = async () => {
         if (!selectedTeamId) return;
         setLoading(true);
 
         try {
-            if (mode === 'tab' && activeTab) {
-                await p2pStorage.addItemToTeam(selectedTeamId, {
-                    id: Date.now().toString(),
-                    url: activeTab.url,
-                    title: activeTab.title,
-                    addedBy: 'Me',
-                    addedAt: Date.now(),
-                    type: 'link'
-                });
-            } else if (mode === 'workspace' && contextWorkspace) {
-                if (workspaceShareType === 'link') {
+            if (mode === 'tabs') {
+                // Share selected tabs
+                const tabsToShare = windowTabs.filter(t => selectedTabIds.has(t.id));
+                const promises = tabsToShare.map((tab, idx) =>
+                    p2pStorage.addItemToTeam(selectedTeamId, {
+                        id: Date.now().toString() + idx,
+                        url: tab.url,
+                        title: tab.title,
+                        addedBy: 'Me',
+                        addedAt: Date.now(),
+                        type: 'link'
+                    })
+                );
+                await Promise.all(promises);
+            } else if (mode === 'workspace' && selectedWorkspaceId) {
+                // Share workspace reference
+                const workspace = workspaces.find(w => w.id === selectedWorkspaceId);
+                if (workspace) {
                     await p2pStorage.addItemToTeam(selectedTeamId, {
                         id: Date.now().toString(),
-                        url: `workspace://${contextWorkspace.id}`,
-                        title: `Workspace: ${contextWorkspace.name}`,
+                        url: `workspace://${workspace.id}`,
+                        title: `Workspace: ${workspace.name}`,
                         addedBy: 'Me',
                         addedAt: Date.now(),
                         type: 'workspace_ref',
                         meta: {
-                            workspaceId: contextWorkspace.id,
-                            workspaceName: contextWorkspace.name,
-                            icon: contextWorkspace.icon || '📁'
+                            workspaceId: workspace.id,
+                            workspaceName: workspace.name,
+                            icon: workspace.icon || '📁'
                         }
                     });
-                } else {
-                    // Share contents - Use live window tabs if available, fallback to stored tabs
-                    const tabsToShare = windowTabs.length > 0 ? windowTabs : (contextWorkspace.tabs || []);
-
-                    const promises = tabsToShare.map((tab, idx) =>
-                        p2pStorage.addItemToTeam(selectedTeamId, {
-                            id: Date.now().toString() + idx,
-                            url: tab.url,
-                            title: tab.title,
-                            addedBy: 'Me',
-                            addedAt: Date.now(),
-                            type: 'link'
-                        })
-                    );
-                    await Promise.all(promises);
                 }
             }
 
@@ -115,6 +134,9 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
 
     if (!isOpen) return null;
 
+    const selectedCount = selectedTabIds.size;
+    const totalTabs = windowTabs.length;
+
     const modalContent = (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -123,7 +145,7 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
             fontFamily: "'Inter', sans-serif"
         }} onClick={onClose}>
             <div style={{
-                width: 500, background: '#0f172a', borderRadius: 24,
+                width: 600, maxHeight: '80vh', background: '#0f172a', borderRadius: 24,
                 border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
                 boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
                 display: 'flex', flexDirection: 'column'
@@ -133,77 +155,76 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                 <div style={{
                     padding: '20px 24px',
                     borderBottom: '1px solid rgba(255,255,255,0.05)',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     background: 'linear-gradient(to right, rgba(255,255,255,0.02), transparent)'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{
-                            width: 36, height: 36, borderRadius: 10,
-                            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)'
-                        }}>
-                            <FontAwesomeIcon icon={faShare} style={{ color: '#fff', fontSize: 16 }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{
+                                width: 36, height: 36, borderRadius: 10,
+                                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)'
+                            }}>
+                                <FontAwesomeIcon icon={faShare} style={{ color: '#fff', fontSize: 16 }} />
+                            </div>
+                            <div>
+                                <h3 style={{ margin: 0, color: '#fff', fontSize: 16, fontWeight: 600 }}>Share to Team</h3>
+                                <div style={{ color: '#94a3b8', fontSize: 12 }}>Share content with your peers</div>
+                            </div>
                         </div>
-                        <div>
-                            <h3 style={{ margin: 0, color: '#fff', fontSize: 16, fontWeight: 600 }}>Share to Team</h3>
-                            <div style={{ color: '#94a3b8', fontSize: 12 }}>Share content with your peers</div>
+                        <button onClick={onClose} style={{
+                            background: 'rgba(255,255,255,0.05)', border: 'none',
+                            width: 32, height: 32, borderRadius: 16,
+                            color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            transition: 'all 0.2s'
+                        }}>
+                            <FontAwesomeIcon icon={faTimes} />
+                        </button>
+                    </div>
+
+                    {/* Team Selector */}
+                    <div style={{ marginBottom: 16 }}>
+                        <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 700, letterSpacing: '0.05em' }}>
+                            DESTINATION TEAM
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                            <select
+                                value={selectedTeamId || ''}
+                                onChange={e => setSelectedTeamId(e.target.value)}
+                                style={{
+                                    width: '100%', padding: '12px 16px', borderRadius: 12,
+                                    background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#fff', fontSize: 14, fontWeight: 500, outline: 'none',
+                                    appearance: 'none', cursor: 'pointer'
+                                }}
+                            >
+                                {teams.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
+                            <FontAwesomeIcon icon={faChevronDown} style={{
+                                position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
+                                color: '#94a3b8', pointerEvents: 'none'
+                            }} />
                         </div>
                     </div>
-                    <button onClick={onClose} style={{
-                        background: 'rgba(255,255,255,0.05)', border: 'none',
-                        width: 32, height: 32, borderRadius: 16,
-                        color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all 0.2s'
-                    }}>
-                        <FontAwesomeIcon icon={faTimes} />
-                    </button>
-                </div>
 
-                {/* Team Selector - Prominent */}
-                <div style={{ padding: '24px 24px 0' }}>
-                    <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 700, letterSpacing: '0.05em' }}>
-                        DESTINATION TEAM
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                        <select
-                            value={selectedTeamId || ''}
-                            onChange={e => setSelectedTeamId(e.target.value)}
+                    {/* Mode Toggle */}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                            onClick={() => setMode('tabs')}
                             style={{
-                                width: '100%', padding: '14px 16px', borderRadius: 12,
-                                background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)',
-                                color: '#fff', fontSize: 15, fontWeight: 500, outline: 'none',
-                                appearance: 'none', cursor: 'pointer'
+                                flex: 1, padding: '10px', borderRadius: 10,
+                                background: mode === 'tabs' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                                color: mode === 'tabs' ? '#60a5fa' : '#94a3b8',
+                                border: mode === 'tabs' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
+                                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                transition: 'all 0.2s'
                             }}
                         >
-                            {teams.map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
-                        <FontAwesomeIcon icon={faChevronDown} style={{
-                            position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
-                            color: '#94a3b8', pointerEvents: 'none'
-                        }} />
-                    </div>
-                </div>
-
-                {/* Tabbed Navigation */}
-                <div style={{ padding: '24px 24px 0', display: 'flex', gap: 8 }}>
-                    <button
-                        onClick={() => setMode('tab')}
-                        style={{
-                            flex: 1, padding: '10px', borderRadius: 10,
-                            background: mode === 'tab' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                            color: mode === 'tab' ? '#60a5fa' : '#94a3b8',
-                            border: mode === 'tab' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
-                            fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <FontAwesomeIcon icon={faGlobe} /> Current Page
-                    </button>
-                    {contextWorkspace && (
+                            <FontAwesomeIcon icon={faGlobe} /> Share Tabs
+                        </button>
                         <button
                             onClick={() => setMode('workspace')}
                             style={{
@@ -216,128 +237,184 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                                 transition: 'all 0.2s'
                             }}
                         >
-                            <FontAwesomeIcon icon={faFolder} /> Workspace
+                            <FontAwesomeIcon icon={faFolder} /> Share Workspace
                         </button>
-                    )}
+                    </div>
                 </div>
 
-                {/* Content Preview Area */}
-                <div style={{ padding: 24, minHeight: 160 }}>
-                    {mode === 'tab' && activeTab && (
-                        <div style={{
-                            background: '#1e293b', borderRadius: 16, padding: 16,
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            display: 'flex', gap: 16, alignItems: 'flex-start'
-                        }}>
-                            {activeTab.favicon ? (
-                                <img src={activeTab.favicon} alt="" style={{ width: 48, height: 48, borderRadius: 8 }} />
+                {/* Content Area */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                    {mode === 'tabs' ? (
+                        <>
+                            {/* Tab Selection Controls */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                                    {selectedCount} of {totalTabs} tabs selected
+                                </div>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button
+                                        onClick={handleSelectAll}
+                                        style={{
+                                            padding: '6px 12px', borderRadius: 8,
+                                            background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)',
+                                            color: '#60a5fa', fontSize: 12, fontWeight: 500, cursor: 'pointer'
+                                        }}
+                                    >
+                                        Select All
+                                    </button>
+                                    <button
+                                        onClick={handleDeselectAll}
+                                        style={{
+                                            padding: '6px 12px', borderRadius: 8,
+                                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#94a3b8', fontSize: 12, fontWeight: 500, cursor: 'pointer'
+                                        }}
+                                    >
+                                        Deselect All
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Tab List */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {windowTabs.map(tab => {
+                                    const isSelected = selectedTabIds.has(tab.id);
+                                    let hostname = 'unknown';
+                                    try {
+                                        if (tab.url) hostname = new URL(tab.url).hostname;
+                                    } catch (e) { }
+
+                                    return (
+                                        <div
+                                            key={tab.id}
+                                            onClick={() => handleTabToggle(tab.id)}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: 12, padding: 12,
+                                                background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)',
+                                                border: `1px solid ${isSelected ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
+                                                borderRadius: 12, cursor: 'pointer', transition: 'all 0.2s'
+                                            }}
+                                            onMouseEnter={e => {
+                                                if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                                            }}
+                                            onMouseLeave={e => {
+                                                if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                                            }}
+                                        >
+                                            {/* Checkbox */}
+                                            <div style={{
+                                                width: 18, height: 18, borderRadius: 4,
+                                                border: `2px solid ${isSelected ? '#60a5fa' : '#475569'}`,
+                                                background: isSelected ? '#60a5fa' : 'transparent',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                transition: 'all 0.2s'
+                                            }}>
+                                                {isSelected && (
+                                                    <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#fff', fontSize: 10 }} />
+                                                )}
+                                            </div>
+
+                                            {/* Favicon */}
+                                            <div style={{
+                                                width: 24, height: 24, borderRadius: 6, overflow: 'hidden',
+                                                background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>
+                                                <img
+                                                    src={tab.favIconUrl || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`}
+                                                    alt=""
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                                />
+                                            </div>
+
+                                            {/* Tab Info */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: 13, fontWeight: 500, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {tab.title || 'Untitled'}
+                                                </div>
+                                                <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {hostname}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    ) : (
+                        /* Workspace Mode - Show all workspaces */
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {workspaces.length === 0 ? (
+                                <div style={{
+                                    textAlign: 'center', padding: '40px 20px',
+                                    color: '#64748b', fontSize: 13
+                                }}>
+                                    No workspaces found. Create a workspace first.
+                                </div>
                             ) : (
-                                <div style={{ width: 48, height: 48, borderRadius: 8, background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <FontAwesomeIcon icon={faGlobe} style={{ color: '#94a3b8', fontSize: 20 }} />
-                                </div>
+                                workspaces.map(workspace => {
+                                    const isSelected = selectedWorkspaceId === workspace.id;
+                                    const tabCount = workspace.tabs?.length || 0;
+
+                                    return (
+                                        <div
+                                            key={workspace.id}
+                                            onClick={() => setSelectedWorkspaceId(workspace.id)}
+                                            style={{
+                                                background: isSelected
+                                                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%)'
+                                                    : 'rgba(255,255,255,0.03)',
+                                                borderRadius: 16, padding: 16,
+                                                border: `1px solid ${isSelected ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
+                                                cursor: 'pointer', transition: 'all 0.2s',
+                                                position: 'relative', overflow: 'hidden'
+                                            }}
+                                            onMouseEnter={e => {
+                                                if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                                            }}
+                                            onMouseLeave={e => {
+                                                if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                                            }}
+                                        >
+                                            {isSelected && (
+                                                <div style={{
+                                                    position: 'absolute', top: -10, right: -10,
+                                                    fontSize: 60, opacity: 0.05, transform: 'rotate(15deg)'
+                                                }}>
+                                                    {workspace.icon || '📁'}
+                                                </div>
+                                            )}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                {/* Selection indicator */}
+                                                <div style={{
+                                                    width: 18, height: 18, borderRadius: 4,
+                                                    border: `2px solid ${isSelected ? '#a78bfa' : '#475569'}`,
+                                                    background: isSelected ? '#a78bfa' : 'transparent',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    transition: 'all 0.2s'
+                                                }}>
+                                                    {isSelected && (
+                                                        <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#fff', fontSize: 10 }} />
+                                                    )}
+                                                </div>
+
+                                                {/* Workspace icon */}
+                                                <div style={{ fontSize: 24 }}>{workspace.icon || '📁'}</div>
+
+                                                {/* Workspace info */}
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
+                                                        {workspace.name}
+                                                    </div>
+                                                    <div style={{ color: '#64748b', fontSize: 12 }}>
+                                                        {tabCount} tab{tabCount !== 1 ? 's' : ''} • Workspace Reference
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
                             )}
-                            <div style={{ flex: 1, overflow: 'hidden' }}>
-                                <div style={{ fontSize: 13, color: '#60a5fa', marginBottom: 4, fontWeight: 500 }}>SHARING PAGE</div>
-                                <div style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {activeTab.title}
-                                </div>
-                                <div style={{ color: '#94a3b8', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {activeTab.url}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {mode === 'workspace' && contextWorkspace && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                            {/* Workspace Preview Card with LIVE data */}
-                            <div style={{
-                                background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-                                borderRadius: 16, padding: 20,
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                position: 'relative', overflow: 'hidden'
-                            }}>
-                                <div style={{
-                                    position: 'absolute', top: -10, right: -10,
-                                    fontSize: 80, opacity: 0.05, transform: 'rotate(15deg)'
-                                }}>
-                                    {contextWorkspace.icon || '📁'}
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                                    <div style={{ fontSize: 24 }}>{contextWorkspace.icon || '📁'}</div>
-                                    <div>
-                                        <div style={{ color: '#fff', fontSize: 18, fontWeight: 600 }}>{contextWorkspace.name}</div>
-                                        <div style={{ color: '#94a3b8', fontSize: 12 }}>
-                                            {windowTabs.length > 0 ? windowTabs.length : (contextWorkspace.tabs?.length || 0)} tabs • Last active today
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Tabs Preview List (Mini) */}
-                                <div style={{
-                                    display: 'flex', gap: 6, flexWrap: 'wrap',
-                                    marginTop: 12, opacity: 0.8
-                                }}>
-                                    {(windowTabs.length > 0 ? windowTabs : (contextWorkspace.tabs || [])).slice(0, 5).map((t, i) => (
-                                        <div key={i} style={{
-                                            background: 'rgba(255,255,255,0.1)',
-                                            width: 24, height: 24, borderRadius: 6,
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                        }} title={t.title}>
-                                            <img src={t.favIconUrl || `https://www.google.com/s2/favicons?domain=${new URL(t.url).hostname}&sz=16`}
-                                                alt="" style={{ width: 14, height: 14, borderRadius: 2 }} onError={(e) => e.target.style.display = 'none'} />
-                                        </div>
-                                    ))}
-                                    {(windowTabs.length > 0 ? windowTabs.length : (contextWorkspace.tabs?.length || 0)) > 5 && (
-                                        <div style={{ fontSize: 11, color: '#94a3b8', alignSelf: 'center', marginLeft: 4 }}>
-                                            +{(windowTabs.length > 0 ? windowTabs.length : contextWorkspace.tabs?.length) - 5} more
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Options */}
-                            <div style={{ display: 'flex', gap: 12 }}>
-                                <div
-                                    onClick={() => setWorkspaceShareType('link')}
-                                    style={{
-                                        flex: 1, padding: 12, borderRadius: 12,
-                                        border: workspaceShareType === 'link' ? '1px solid #a78bfa' : '1px solid rgba(255,255,255,0.1)',
-                                        background: workspaceShareType === 'link' ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
-                                        cursor: 'pointer', transition: 'all 0.2s'
-                                    }}
-                                >
-                                    <div style={{ color: '#fff', fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <div style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {workspaceShareType === 'link' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#a78bfa' }} />}
-                                        </div>
-                                        Share Checkpoint
-                                    </div>
-                                    <div style={{ color: '#94a3b8', fontSize: 11, paddingLeft: 24 }}>
-                                        Share a live link to this workspace
-                                    </div>
-                                </div>
-
-                                <div
-                                    onClick={() => setWorkspaceShareType('copy')}
-                                    style={{
-                                        flex: 1, padding: 12, borderRadius: 12,
-                                        border: workspaceShareType === 'copy' ? '1px solid #a78bfa' : '1px solid rgba(255,255,255,0.1)',
-                                        background: workspaceShareType === 'copy' ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
-                                        cursor: 'pointer', transition: 'all 0.2s'
-                                    }}
-                                >
-                                    <div style={{ color: '#fff', fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <div style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid #94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {workspaceShareType === 'copy' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#a78bfa' }} />}
-                                        </div>
-                                        Share Contents
-                                    </div>
-                                    <div style={{ color: '#94a3b8', fontSize: 11, paddingLeft: 24 }}>
-                                        Send all {windowTabs.length > 0 ? windowTabs.length : (contextWorkspace.tabs?.length || 0)} tabs as items
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     )}
                 </div>
@@ -360,14 +437,14 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                     </button>
                     <button
                         onClick={handleShare}
-                        disabled={loading || !selectedTeamId || (mode === 'tab' && !activeTab)}
+                        disabled={loading || !selectedTeamId || (mode === 'tabs' && selectedCount === 0) || (mode === 'workspace' && !selectedWorkspaceId)}
                         style={{
                             padding: '12px 24px', borderRadius: 10,
                             background: successMsg ? '#10b981' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
                             border: 'none',
                             color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
                             boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)',
-                            opacity: (loading || !selectedTeamId) ? 0.7 : 1,
+                            opacity: (loading || !selectedTeamId || (mode === 'tabs' && selectedCount === 0) || (mode === 'workspace' && !selectedWorkspaceId)) ? 0.5 : 1,
                             minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
                         }}
                     >
