@@ -27,7 +27,7 @@
   gap: 20px;
   flex-shrink: 0;
   width: 100%;
-  max-width: 1400px;
+  max-width: 100%;
   margin: 0 auto;
   padding: 16px 32px;
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.5) 0%, rgba(30, 41, 59, 0.3) 100%);
@@ -275,7 +275,7 @@
   flex-shrink: 0;
   position: relative;
   width: 100%;
-  max-width: 1400px;
+  max-width: 100%;
   margin: 0 auto;
   padding: 0 32px;
   box-sizing: border-box;

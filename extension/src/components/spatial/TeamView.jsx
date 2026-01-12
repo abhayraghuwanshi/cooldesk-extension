@@ -5,6 +5,8 @@ import { p2pStorage } from '../../services/p2p/storageService';
 import { p2pSyncService } from '../../services/p2p/syncService';
 import { teamManager } from '../../services/p2p/teamManager';
 import { getFaviconUrl } from '../../utils';
+import NoticeBoard from './NoticeBoard';
+import TeamContextPanel from './TeamContextPanel';
 
 export default function TeamView({ team: propTeam }) {
     const [activeTeamId, setActiveTeamId] = useState(propTeam?.id || null);
@@ -211,59 +213,154 @@ export default function TeamView({ team: propTeam }) {
                             </button>
                         </div>
 
-                        {/* Items Grid */}
-                        <div style={{ flex: 1, overflowY: 'auto', padding: '32px' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                                {items.map((item, index) => {
-                                    if (!item) return null;
+                        {/* Scrollable Content Area */}
+                        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 32 }}>
 
-                                    // Handle Workspace Reference
-                                    if (item.type === 'workspace_ref') {
+                            {/* Context Panel */}
+                            <div style={{ padding: '0 0 24px 0' }}>
+                                <TeamContextPanel teamId={activeTeam.id} />
+                            </div>
+
+                            {/* Notice Board */}
+                            <div style={{ paddingBottom: 0 }}>
+                                <NoticeBoard teamId={activeTeam.id} />
+                            </div>
+
+                            {/* Items Grid */}
+                            <div style={{ padding: '0 32px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                                    <FontAwesomeIcon icon={faLink} style={{ color: '#60a5fa', opacity: 0.8 }} />
+                                    <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: '#e5e7eb' }}>
+                                        Shared Links
+                                    </h2>
+                                    <div style={{ height: 1, flex: 1, background: 'rgba(255,255,255,0.06)' }} />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                                    {items.map((item, index) => {
+                                        if (!item) return null;
+
+                                        // Handle Workspace Reference
+                                        if (item.type === 'workspace_ref') {
+                                            return (
+                                                <div
+                                                    key={item.id || index}
+                                                    style={{
+                                                        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%)',
+                                                        borderRadius: 16, padding: 16,
+                                                        border: '1px solid rgba(139, 92, 246, 0.2)',
+                                                        position: 'relative', overflow: 'hidden',
+                                                        cursor: 'pointer', transition: 'all 0.2s'
+                                                    }}
+                                                    onClick={() => {
+                                                        console.log('Opening workspace:', item.meta);
+                                                        if (typeof chrome !== 'undefined' && chrome.runtime) {
+                                                            chrome.runtime.sendMessage({
+                                                                action: 'OPEN_WORKSPACE',
+                                                                workspaceId: item.meta?.workspaceId
+                                                            });
+                                                        }
+                                                    }}
+                                                    onMouseEnter={e => {
+                                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                                        e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+                                                    }}
+                                                    onMouseLeave={e => {
+                                                        e.currentTarget.style.transform = 'none';
+                                                        e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.2)';
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                                                        <div style={{
+                                                            fontSize: 24, width: 40, height: 40, borderRadius: 10,
+                                                            background: 'rgba(139, 92, 246, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                        }}>
+                                                            {item.meta?.icon || '📁'}
+                                                        </div>
+                                                        <div style={{ flex: 1 }}>
+                                                            <div style={{ color: '#a78bfa', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
+                                                                SHARED WORKSPACE
+                                                            </div>
+                                                            <div style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>
+                                                                {item.meta?.workspaceName || item.title || 'Untitled'}
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                deleteItem(index);
+                                                            }}
+                                                            style={{
+                                                                width: 24, height: 24, borderRadius: 12, border: 'none',
+                                                                background: 'rgba(255,255,255,0.1)', color: '#fff',
+                                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                opacity: 0.6
+                                                            }}
+                                                        >
+                                                            <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
+                                                        </button>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+                                                        <div style={{ fontSize: 12, color: '#a78bfa', background: 'rgba(139, 92, 246, 0.1)', padding: '4px 8px', borderRadius: 6 }}>
+                                                            Click to Open
+                                                        </div>
+                                                        <div style={{ fontSize: 11, opacity: 0.4 }}>
+                                                            Shared by {item.addedBy || 'Unknown'} • {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+
+                                        // Handle Regular Link
+                                        let hostname = 'unknown';
+                                        try {
+                                            if (item.url) hostname = new URL(item.url).hostname;
+                                        } catch (e) { console.warn('Invalid URL:', item.url); }
+
                                         return (
-                                            <div
+                                            <a
                                                 key={item.id || index}
+                                                href={item.url || '#'}
+                                                target="_blank"
+                                                rel="noreferrer"
                                                 style={{
-                                                    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%)',
-                                                    borderRadius: 16, padding: 16,
-                                                    border: '1px solid rgba(139, 92, 246, 0.2)',
-                                                    position: 'relative', overflow: 'hidden',
-                                                    cursor: 'pointer', transition: 'all 0.2s'
-                                                }}
-                                                onClick={() => {
-                                                    console.log('Opening workspace:', item.meta);
-                                                    if (typeof chrome !== 'undefined' && chrome.runtime) {
-                                                        chrome.runtime.sendMessage({
-                                                            action: 'OPEN_WORKSPACE',
-                                                            workspaceId: item.meta?.workspaceId
-                                                        });
-                                                    }
+                                                    display: 'block', textDecoration: 'none', color: 'inherit',
+                                                    background: 'rgba(255,255,255,0.03)', borderRadius: 16,
+                                                    padding: 16, border: '1px solid rgba(255,255,255,0.05)',
+                                                    transition: 'all 0.2s', position: 'relative'
                                                 }}
                                                 onMouseEnter={e => {
+                                                    e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
                                                     e.currentTarget.style.transform = 'translateY(-2px)';
-                                                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
                                                 }}
                                                 onMouseLeave={e => {
+                                                    e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
                                                     e.currentTarget.style.transform = 'none';
-                                                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.2)';
                                                 }}
                                             >
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                                                     <div style={{
-                                                        fontSize: 24, width: 40, height: 40, borderRadius: 10,
-                                                        background: 'rgba(139, 92, 246, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                        width: 32, height: 32, borderRadius: 8, overflow: 'hidden',
+                                                        background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center'
                                                     }}>
-                                                        {item.meta?.icon || '📁'}
+                                                        <img
+                                                            src={getFaviconUrl(item.url)}
+                                                            alt=""
+                                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                            onError={(e) => { e.target.style.display = 'none'; }}
+                                                        />
                                                     </div>
-                                                    <div style={{ flex: 1 }}>
-                                                        <div style={{ color: '#a78bfa', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
-                                                            SHARED WORKSPACE
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontSize: 12, opacity: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                            {hostname}
                                                         </div>
-                                                        <div style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>
-                                                            {item.meta?.workspaceName || item.title || 'Untitled'}
+                                                        <div style={{ fontSize: 11, opacity: 0.3 }}>
+                                                            {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
                                                         </div>
                                                     </div>
                                                     <button
                                                         onClick={(e) => {
+                                                            e.preventDefault();
                                                             e.stopPropagation();
                                                             deleteItem(index);
                                                         }}
@@ -277,105 +374,31 @@ export default function TeamView({ team: propTeam }) {
                                                         <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
                                                     </button>
                                                 </div>
-                                                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                                                    <div style={{ fontSize: 12, color: '#a78bfa', background: 'rgba(139, 92, 246, 0.1)', padding: '4px 8px', borderRadius: 6 }}>
-                                                        Click to Open
-                                                    </div>
-                                                    <div style={{ fontSize: 11, opacity: 0.4 }}>
-                                                        Shared by {item.addedBy || 'Unknown'} • {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
-                                                    </div>
+                                                <div style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.4, height: 40, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                                    {item.title || item.url || 'Untitled Link'}
                                                 </div>
-                                            </div>
+                                            </a>
                                         );
-                                    }
-
-                                    // Handle Regular Link
-                                    let hostname = 'unknown';
-                                    try {
-                                        if (item.url) hostname = new URL(item.url).hostname;
-                                    } catch (e) { console.warn('Invalid URL:', item.url); }
-
-                                    return (
-                                        <a
-                                            key={item.id || index}
-                                            href={item.url || '#'}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            style={{
-                                                display: 'block', textDecoration: 'none', color: 'inherit',
-                                                background: 'rgba(255,255,255,0.03)', borderRadius: 16,
-                                                padding: 16, border: '1px solid rgba(255,255,255,0.05)',
-                                                transition: 'all 0.2s', position: 'relative'
-                                            }}
-                                            onMouseEnter={e => {
-                                                e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                                                e.currentTarget.style.transform = 'translateY(-2px)';
-                                            }}
-                                            onMouseLeave={e => {
-                                                e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                                                e.currentTarget.style.transform = 'none';
-                                            }}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                                                <div style={{
-                                                    width: 32, height: 32, borderRadius: 8, overflow: 'hidden',
-                                                    background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                                }}>
-                                                    <img
-                                                        src={getFaviconUrl(item.url)}
-                                                        alt=""
-                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                                        onError={(e) => { e.target.style.display = 'none'; }}
-                                                    />
-                                                </div>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{ fontSize: 12, opacity: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                        {hostname}
-                                                    </div>
-                                                    <div style={{ fontSize: 11, opacity: 0.3 }}>
-                                                        {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        deleteItem(index);
-                                                    }}
-                                                    style={{
-                                                        width: 24, height: 24, borderRadius: 12, border: 'none',
-                                                        background: 'rgba(255,255,255,0.1)', color: '#fff',
-                                                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        opacity: 0.6
-                                                    }}
-                                                >
-                                                    <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
-                                                </button>
-                                            </div>
-                                            <div style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.4, height: 40, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                                {item.title || item.url || 'Untitled Link'}
-                                            </div>
-                                        </a>
-                                    );
-                                })}
-                            </div>
-
-                            {items.length === 0 && (
-                                <div style={{
-                                    textAlign: 'center', padding: '60px 20px',
-                                    color: 'rgba(255,255,255,0.3)', border: '2px dashed rgba(255,255,255,0.05)',
-                                    borderRadius: 16, background: 'rgba(0,0,0,0.1)'
-                                }}>
-                                    <div style={{
-                                        width: 64, height: 64, borderRadius: 32, background: 'rgba(255,255,255,0.05)',
-                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16
-                                    }}>
-                                        <FontAwesomeIcon icon={faLink} size="lg" style={{ opacity: 0.5 }} />
-                                    </div>
-                                    <div style={{ fontWeight: 500 }}>No shared items yet</div>
-                                    <div style={{ fontSize: 13, marginTop: 6, opacity: 0.7 }}>Share a tab to start collaborating with your team.</div>
+                                    })}
                                 </div>
-                            )}
+
+                                {items.length === 0 && (
+                                    <div style={{
+                                        textAlign: 'center', padding: '60px 20px',
+                                        color: 'rgba(255,255,255,0.3)', border: '2px dashed rgba(255,255,255,0.05)',
+                                        borderRadius: 16, background: 'rgba(0,0,0,0.1)'
+                                    }}>
+                                        <div style={{
+                                            width: 64, height: 64, borderRadius: 32, background: 'rgba(255,255,255,0.05)',
+                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16
+                                        }}>
+                                            <FontAwesomeIcon icon={faLink} size="lg" style={{ opacity: 0.5 }} />
+                                        </div>
+                                        <div style={{ fontWeight: 500 }}>No shared items yet</div>
+                                        <div style={{ fontSize: 13, marginTop: 6, opacity: 0.7 }}>Share a tab to start collaborating with your team.</div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </>
                 )}

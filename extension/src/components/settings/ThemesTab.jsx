@@ -1,5 +1,6 @@
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { fontFamilies } from '../../utils/fontUtils';
 
 const ThemesTab = ({
   selectedTheme,
@@ -11,10 +12,12 @@ const ThemesTab = ({
   wallpaperEnabled = false,
   wallpaperUrl = 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&q=80',
   wallpaperOpacity = 0.3,
-  onWallpaperEnabledChange = () => {},
-  onWallpaperUrlChange = () => {},
-  onWallpaperOpacityChange = () => {}
+  onWallpaperEnabledChange = () => { },
+  onWallpaperUrlChange = () => { },
+  onWallpaperOpacityChange = () => { }
 }) => {
+
+
   // Auto wallpaper state
   const [autoWallpaperEnabled, setAutoWallpaperEnabled] = useState(false);
   const [autoWallpaperInterval, setAutoWallpaperInterval] = useState(30); // minutes
@@ -170,14 +173,8 @@ const ThemesTab = ({
     { id: 'extra-large', name: 'Extra Large', size: '18px', description: 'Maximum readability' }
   ];
 
-  // Font family options
-  const fontFamilies = [
-    { id: 'system', name: 'System Default', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif', description: 'Native system fonts' },
-    { id: 'inter', name: 'Inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Modern geometric sans-serif' },
-    { id: 'roboto', name: 'Roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Google\'s friendly sans-serif' },
-    { id: 'poppins', name: 'Poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Rounded geometric typeface' },
-    { id: 'jetbrains', name: 'JetBrains Mono', family: 'JetBrains Mono, Consolas, Monaco, monospace', description: 'Developer-focused monospace' }
-  ];
+  // Font families are now imported from utils
+
 
   // Wallpaper topics for Unsplash
   const wallpaperTopics = [
@@ -209,23 +206,23 @@ const ThemesTab = ({
       setIsChangingWallpaper(true);
       const topicQuery = topic ? `&query=${topic}` : '';
       const response = await fetch(`https://api.unsplash.com/photos/random?client_id=YOUR_UNSPLASH_ACCESS_KEY&w=1920&h=1080&fit=crop${topicQuery}`);
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch wallpaper');
       }
-      
+
       const data = await response.json();
       const newWallpaperUrl = `${data.urls.regular}?w=1920&q=80`;
-      
+
       onWallpaperUrlChange(newWallpaperUrl);
       setLastWallpaperChange(new Date());
-      
+
       // Save to localStorage for persistence
       localStorage.setItem('cooldesk_auto_wallpaper_enabled', autoWallpaperEnabled);
       localStorage.setItem('cooldesk_auto_wallpaper_interval', autoWallpaperInterval);
       localStorage.setItem('cooldesk_wallpaper_topic', wallpaperTopic);
       localStorage.setItem('cooldesk_last_wallpaper_change', new Date().toISOString());
-      
+
     } catch (error) {
       console.error('Error fetching wallpaper:', error);
       // Fallback to a default URL if API fails
@@ -250,12 +247,12 @@ const ThemesTab = ({
       if (autoWallpaperTimerRef.current) {
         clearInterval(autoWallpaperTimerRef.current);
       }
-      
+
       // Set new timer
       autoWallpaperTimerRef.current = setInterval(() => {
         fetchRandomWallpaper(wallpaperTopic);
       }, autoWallpaperInterval * 60 * 1000); // Convert minutes to milliseconds
-      
+
       // Fetch initial wallpaper if none exists
       if (!wallpaperUrl || wallpaperUrl.includes('photo-1579546929518-9e396f3cc809')) {
         fetchRandomWallpaper(wallpaperTopic);
@@ -267,7 +264,7 @@ const ThemesTab = ({
         autoWallpaperTimerRef.current = null;
       }
     }
-    
+
     return () => {
       if (autoWallpaperTimerRef.current) {
         clearInterval(autoWallpaperTimerRef.current);
@@ -281,11 +278,11 @@ const ThemesTab = ({
     const savedInterval = parseInt(localStorage.getItem('cooldesk_auto_wallpaper_interval')) || 30;
     const savedTopic = localStorage.getItem('cooldesk_wallpaper_topic') || 'nature';
     const savedLastChange = localStorage.getItem('cooldesk_last_wallpaper_change');
-    
+
     setAutoWallpaperEnabled(savedEnabled);
     setAutoWallpaperInterval(savedInterval);
     setWallpaperTopic(savedTopic);
-    
+
     if (savedLastChange) {
       setLastWallpaperChange(new Date(savedLastChange));
     }
@@ -919,11 +916,11 @@ const ThemesTab = ({
                       style={{
                         flex: 1,
                         padding: '8px 12px',
-                        background: isChangingWallpaper 
-                          ? 'rgba(255, 255, 255, 0.05)' 
+                        background: isChangingWallpaper
+                          ? 'rgba(255, 255, 255, 0.05)'
                           : 'rgba(52, 199, 89, 0.2)',
-                        border: isChangingWallpaper 
-                          ? '1px solid rgba(255, 255, 255, 0.1)' 
+                        border: isChangingWallpaper
+                          ? '1px solid rgba(255, 255, 255, 0.1)'
                           : '1px solid rgba(52, 199, 89, 0.3)',
                         borderRadius: '6px',
                         color: isChangingWallpaper ? '#6b7280' : '#34C759',
@@ -935,7 +932,7 @@ const ThemesTab = ({
                     >
                       {isChangingWallpaper ? 'Changing...' : 'Change Now'}
                     </button>
-                    
+
                     <div style={{
                       fontSize: '11px',
                       color: 'rgba(255, 255, 255, 0.5)',

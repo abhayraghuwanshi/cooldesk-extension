@@ -59,6 +59,32 @@ class P2PStorageService {
     }
 
     /**
+     * Get the shared array of notices for a team
+     * @param {string} teamId
+     * @returns {Y.Array}
+     */
+    getSharedNotices(teamId) {
+        const doc = this.getDoc(teamId);
+        if (!doc) {
+            throw new Error(`Storage not initialized for team ${teamId}`);
+        }
+        return doc.getArray('shared-notices');
+    }
+
+    /**
+     * Get the shared context map for a team (goals, status, etc.)
+     * @param {string} teamId
+     * @returns {Y.Map}
+     */
+    getSharedContext(teamId) {
+        const doc = this.getDoc(teamId);
+        if (!doc) {
+            throw new Error(`Storage not initialized for team ${teamId}`);
+        }
+        return doc.getMap('team-context');
+    }
+
+    /**
      * Get the shared map of team members
      * @param {string} teamId 
      * @returns {Y.Map}

@@ -25,6 +25,7 @@ import {
   listAllUrlNotes,
   saveUrlNote
 } from '../../db/index.js';
+import { defaultFontFamily } from '../../utils/fontUtils.js';
 
 export function NotesCanvas({ workspaceId }) {
   const [notes, setNotes] = useState([]);
@@ -1144,7 +1145,7 @@ export function NotesCanvas({ workspaceId }) {
                   lineHeight: '1.6',
                   outline: 'none',
                   overflowY: 'auto',
-                  fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif',
+                  fontFamily: defaultFontFamily,
                   minHeight: 0
                 }}
               />

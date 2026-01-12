@@ -5,7 +5,7 @@ import { listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace } from '.
 import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
 import { loadSyncConfig } from '../../services/syncConfig';
-import { setAndSaveFontSize } from '../../utils/fontUtils';
+import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
 import ExportData from '../settings/ExportData';
 import SetupTab from '../settings/SetupTab';
 import TeamsTab from '../settings/TeamsTab';
@@ -50,13 +50,7 @@ export function SettingsModal({
     { id: 'about', label: 'Getting Started', icon: faRocket, component: null }
   ];
 
-  const fontFamilies = [
-    { id: 'system', name: 'System Default', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' },
-    { id: 'inter', name: 'Inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' },
-    { id: 'roboto', name: 'Roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif' },
-    { id: 'poppins', name: 'Poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif' },
-    { id: 'jetbrains', name: 'JetBrains Mono', family: 'JetBrains Mono, Consolas, Monaco, monospace' }
-  ];
+
 
   const themes = [
     { id: 'ai-midnight-nebula', fontFamily: 'inter' },
@@ -150,13 +144,10 @@ export function SettingsModal({
     body.classList.add(`bg-${themeId}`);
 
     if (fontSizeId) setAndSaveFontSize(fontSizeId);
-
-    const family = fontFamilies.find(f => f.id === fontFamilyId);
-    if (family) body.style.fontFamily = family.family;
+    if (fontFamilyId) setAndSaveFontFamily(fontFamilyId);
 
     try {
       localStorage.setItem('cooldesk-theme', themeId);
-      localStorage.setItem('cooldesk-font-family', fontFamilyId);
     } catch (e) { }
   };
 
