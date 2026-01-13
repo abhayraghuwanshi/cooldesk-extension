@@ -1,4 +1,4 @@
-import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace } from '../../db';
@@ -43,7 +43,7 @@ export function SettingsModal({
 
   // --- Constants & Config ---
   const TABS = [
-    { id: 'general', label: 'AI & Setup', icon: faCog, component: SetupTab },
+    // { id: 'general', label: 'AI & Setup', icon: faCog, component: SetupTab },
     { id: 'teams', label: 'Teams (P2P)', icon: faUsers, component: TeamsTab },
     { id: 'themes', label: 'Aesthetics', icon: faPalette, component: ThemesTab },
     { id: 'data', label: 'Data & Sync', icon: faDatabase, component: ExportData },

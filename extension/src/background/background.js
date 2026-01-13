@@ -347,44 +347,6 @@ async function main() {
       }
 
       if (chrome?.sidePanel?.setPanelBehavior) {
-        // Offscreen Manager
-        let creatingOffscreenDoc = null;
-        const OFFSCREEN_PATH = 'src/offscreen/offscreen.html';
-
-        async function hasOffscreenDocument() {
-          const matchedClients = await clients.matchAll();
-          return matchedClients.some(c => c.url.includes('offscreen.html'));
-        }
-
-        async function setupOffscreenDocument(path) {
-          // If we have an offscreen document, return headers
-          if (await hasOffscreenDocument()) {
-            return;
-          }
-
-          // create offscreen document
-          if (creatingOffscreenDoc) {
-            await creatingOffscreenDoc;
-          } else {
-            creatingOffscreenDoc = chrome.offscreen.createDocument({
-              url: path,
-              reasons: ['AUDIO_CAPTURE', 'AUDIO_PLAYBACK'],
-              justification: 'To recognize voice commands and provide audio feedback'
-            });
-            await creatingOffscreenDoc;
-            creatingOffscreenDoc = null;
-          }
-        }
-
-        async function closeOffscreenDocument() {
-          if (!(await hasOffscreenDocument())) {
-            return;
-          }
-          await chrome.offscreen.closeDocument();
-        }
-
-        // Global state for voice
-        let isVoiceActive = false;
         try {
           await chrome.sidePanel.setPanelBehavior({
             openPanelOnActionClick: true
@@ -1180,139 +1142,9 @@ async function main() {
       return true;
     }
 
-    if (msg?.action === 'toggleVoice') {
-      console.log('[Background] Toggle voice requested. Source:', msg.fromFooter ? 'Footer' : 'Other');
 
-      const setVoiceState = (active) => {
-        isVoiceActive = active;
-        // Broadcast state to all views (footer bars, side panels)
-        chrome.runtime.sendMessage({
-          type: 'voiceStateChange',
-          isListening: active
-        }).catch(() => { });
 
-        // Broadcast to all tabs (content scripts/footer bars)
-        chrome.tabs.query({}, (tabs) => {
-          tabs.forEach(tab => {
-            chrome.tabs.sendMessage(tab.id, {
-              type: 'voiceStateChange',
-              isListening: active
-            }).catch(() => { });
-          });
-        });
-      };
 
-      // 1. Try to toggle via Side Panel if it's open
-      try {
-        // We can't easily check if side panel is "open" and "active" without sending a message.
-        // We'll race: Send message to side panel. If response success, good. 
-        // If error/timeout, assume closed and use offscreen.
-
-        (async () => {
-          let sidePanelResponded = false;
-
-          try {
-            const response = await new Promise((resolve, reject) => {
-              // Timeout after 500ms if no response (side panel closed)
-              const timeout = setTimeout(() => reject('timeout'), 200);
-
-              chrome.runtime.sendMessage({ action: 'toggleVoice', forceStart: true })
-                .then(res => {
-                  clearTimeout(timeout);
-                  resolve(res);
-                })
-                .catch(err => {
-                  clearTimeout(timeout);
-                  reject(err);
-                });
-            });
-
-            console.log('[Background] Side Panel handled voice toggle');
-            sidePanelResponded = true;
-          } catch (e) {
-            console.log('[Background] Side Panel not reachable:', e);
-          }
-
-          if (!sidePanelResponded) {
-            console.log('[Background] Using Offscreen Document for Voice');
-
-            // Toggle offscreen voice
-            if (isVoiceActive && !msg.forceStart) {
-              console.log('[Background] Stopping Offscreen Voice');
-              try {
-                await closeOffscreenDocument();
-              } catch (err) {
-                console.warn('[Background] Error stopping offscreen voice:', err);
-              }
-              setVoiceState(false);
-            } else {
-              console.log('[Background] Starting Offscreen Voice');
-              await setupOffscreenDocument(OFFSCREEN_PATH);
-
-              // Send start command
-              const response = await chrome.runtime.sendMessage({ type: 'START_VOICE' }).catch(err => {
-                console.error('Failed to command offscreen:', err);
-                return { error: err.message };
-              });
-
-              // Check if permission denied/offscreen failed
-              if (response && response.error) {
-                console.error('[Background] Offscreen voice start error:', response.error);
-                // Notify active tab about permission issue
-                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-                  if (tabs[0]) {
-                    chrome.tabs.sendMessage(tabs[0].id, {
-                      type: 'SHOW_NOTIFICATION',
-                      message: 'Microphone permission needed. Please open CoolDesk sidebar once to allow.',
-                      color: '#ef4444'
-                    }).catch(() => { });
-                  }
-                });
-              }
-            }
-          }
-        })();
-      } catch (err) {
-        console.error('Error in voice toggle flow:', err);
-      }
-      return true; // async response
-    }
-
-    if (msg?.type === 'VOICE_FEEDBACK') {
-      // Relay feedback from Offscreen to UI
-      console.log('[Background] Relaying voice feedback:', msg);
-
-      // Broadcast to all tabs so the active one shows it
-      chrome.tabs.query({}, (tabs) => {
-        tabs.forEach(tab => {
-          chrome.tabs.sendMessage(tab.id, {
-            type: 'SHOW_NOTIFICATION',
-            message: msg.message,
-            color: msg.feedbackType === 'error' ? '#ef4444' : '#10b981'
-          }).catch(() => { });
-        });
-      });
-      return;
-    }
-
-    if (msg?.type === 'VOICE_STATE_CHANGE') {
-      isVoiceActive = msg.isListening;
-      // Re-broadcast to valid receivers (runtime + tabs)
-      chrome.runtime.sendMessage({
-        type: 'voiceStateChange',
-        isListening: isVoiceActive
-      }).catch(() => { });
-
-      chrome.tabs.query({}, (tabs) => {
-        tabs.forEach(tab => {
-          chrome.tabs.sendMessage(tab.id, {
-            type: 'voiceStateChange',
-            isListening: isVoiceActive
-          }).catch(() => { });
-        });
-      });
-      return;
-    }
 
     // Handle clear scraped chats for platform
     if (msg?.type === 'CLEAR_SCRAPED_CHATS') {
@@ -1522,21 +1354,18 @@ async function main() {
 
       (async () => {
         try {
-          // If startVoice is requested, set a flag so CoolSearch can pick it up
-          if (msg.startVoice) {
-            console.log('[Background] startVoice requested, setting flag...');
-            await chrome.storage.local.set({ pendingVoiceStart: true });
-
-            // Also try to send immediate message in case panel is ALREADY open
-            // (The storage flag handles the case where panel triggers a fresh load)
-            setTimeout(() => {
-              chrome.runtime.sendMessage({ action: 'toggleVoice', forceStart: true })
-                .catch(() => console.log('[Background] Could not send immediate toggleVoice (panel likely loading)'));
-            }, 500);
-          }
+          console.log('[Background] === START openSidePanel handler ===');
+          console.log('[Background] Initial sender:', {
+            hasTab: !!sender?.tab,
+            tabId: sender?.tab?.id,
+            windowId: sender?.tab?.windowId,
+            startVoice: msg.startVoice
+          });
 
           const senderTab = sender?.tab;
           let windowId = senderTab?.windowId;
+
+          console.log('[Background] Extracted windowId:', windowId);
 
           // First attempt: Try to open side panel directly (same as working sample.js)
           // 🚨 WORKING CODE - DO NOT ADD setOptions() calls here - they break functionality
@@ -1546,15 +1375,25 @@ async function main() {
               console.log('[Background] Side panel path:', chrome.runtime.getURL('index.html'));
               // ✅ This simple direct call works - DO NOT MODIFY
               await chrome.sidePanel.open({ windowId });
-              console.log('[Background] Side panel opened successfully!');
+              console.log('[Background] ✅ Side panel opened successfully!');
+
+              // Set voice flag AFTER successful open (non-blocking)
+              if (msg.startVoice) {
+                console.log('[Background] Setting pendingVoiceStart flag after successful open...');
+                chrome.storage.local.set({ pendingVoiceStart: true }).catch(err =>
+                  console.warn('[Background] Failed to set voice flag:', err)
+                );
+              }
+
               sendResponse({ ok: true, method: 'sidePanel' });
               cleanup();
               return;
             } catch (sidePanelError) {
-              console.error('[Background] Side panel open failed:', sidePanelError);
+              console.error('[Background] ❌ Side panel open failed:', sidePanelError);
               console.log('[Background] Error details:', {
                 message: sidePanelError.message,
-                stack: sidePanelError.stack
+                stack: sidePanelError.stack,
+                name: sidePanelError.name
               });
               // Continue to fallback methods below
             }

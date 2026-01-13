@@ -15,12 +15,7 @@ import {
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css'; // MUST BE LAST to override theme backgrounds
 import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
-import { ItemGrid } from './components/ItemGrid';
-import { AddToWorkspaceModal } from './components/popups/AddToWorkspaceModal';
-import { CreateWorkspaceModal } from './components/popups/CreateWorkspaceModal';
 import { SettingsModal } from './components/popups/SettingsModal';
-import { ProjectGrid } from './components/ProjectGrid';
-import WorkspacePillList from './components/WorkspacePillList.jsx';
 import './search.css';
 import './styles/bento-layout.css';
 import './styles/components.css';
@@ -44,15 +39,14 @@ library.add(
 );
 
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
-import { AddLinkFlow } from './components/popups/AddLinkFlow';
 import categoryManager from './data/categories';
-import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges, updateItemWorkspace } from './db/index.js';
+import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
-import { getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, openOptionsPage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
+import { getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
 import { p2pSyncService } from './services/p2p/syncService';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
-import { getFaviconUrl, getUrlParts } from './utils';
+import { getFaviconUrl } from './utils';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
@@ -96,15 +90,11 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
-  const SHARED_TEAM_ID = 'demo-team';
-  const SHARED_USER_ID = 'demo-user';
-  const SHARED_WS_URL = 'wss://YOUR_WORKER_URL';
   const { data, loading, refreshing, populate } = useDashboardData()
   const [workspace, setWorkspace] = useState('')
   const [themeClass, setThemeClass] = useState('bg-crimson-fire') // Default theme
   const [search, setSearch] = useState('')
   const [focusSearchTick, setFocusSearchTick] = useState(0)
-  const [showDeskMetaReminder, setShowDeskMetaReminder] = useState(false);
   const [settings, setSettings] = useState({ geminiApiKey: '', modelName: '', visitCountThreshold: '', historyDays: '' })
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false)
   const [addingToWorkspace, setAddingToWorkspace] = useState(null);
@@ -113,13 +103,7 @@ export default function App() {
   // Onboarding hook
   const { shouldShowOnboarding, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
 
-  const [showAddLinkModal, setShowAddLinkModal] = useState(false)
-  const [workspaceForLinkAdd, setWorkspaceForLinkAdd] = useState(null)
-
-
-  const [currentTab, setCurrentTab] = useState(null)
   const [savedWorkspaces, setSavedWorkspaces] = useState([])
-  const [showCurrentWorkspace, setShowCurrentWorkspace] = useState(true)
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
   const activeSectionTimeoutRef = useRef(null)
@@ -1053,18 +1037,7 @@ export default function App() {
     })();
   }, [workspace])
 
-  // When opening the Create Workspace modal, fetch current tab for auto-suggest
-  useEffect(() => {
-    if (showCreateWorkspace) {
-      getCurrentTabInfo()
-    }
-  }, [showCreateWorkspace])
 
-
-  // Items to build the workspace filter options from saved workspaces
-  const filterItems = useMemo(() => {
-    return savedWorkspaces.map(ws => ({ workspaceGroup: ws.name }));
-  }, [savedWorkspaces])
 
   // Reset workspace if the current one doesn't exist
   useEffect(() => {
@@ -1199,411 +1172,6 @@ export default function App() {
     }
   };
 
-  // Delete URL(s) from the current workspace
-  const handleDeleteFromWorkspace = async (baseUrl, values) => {
-    try {
-      if (!workspace || workspace === 'All') return;
-      const norm = (s) => (s || '').trim().toLowerCase();
-      const workspacesResult = await listWorkspaces();
-      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
-      const ws = workspaces.find(w => norm(w.name) === norm(workspace));
-      if (!ws) return;
-
-      // Remove any saved URL that either:
-      // - exactly matches one of the group's value URLs, or
-      // - has the same normalized base (scheme + eTLD+1) as the group base
-      const urlsToRemove = new Set(values && values.length ? values.map(v => v.url) : [baseUrl]);
-      const baseKey = getUrlParts(baseUrl).key;
-      const updated = {
-        ...ws,
-        urls: (ws.urls || []).filter(u => {
-          const uKey = getUrlParts(u.url).key;
-          const matchByBase = uKey === baseKey;
-          const matchByExact = urlsToRemove.has(u.url);
-          return !(matchByBase || matchByExact);
-        }),
-      };
-      await saveWorkspace(updated);
-      // Also re-categorize underlying items to 'Unknown' so they no longer belong to this workspace
-      try {
-        const syntheticPrefix = `${ws.id}-`;
-        const toUpdate = Array.isArray(values) ? values.filter(v => typeof v?.id === 'string' ? !v.id.startsWith(syntheticPrefix) : !!v?.id) : [];
-        await Promise.all(toUpdate.map(v => updateItemWorkspace(v.id, 'Unknown')));
-      } catch { }
-      const refreshedResult = await listWorkspaces();
-      const refreshed = refreshedResult?.success ? refreshedResult.data : [];
-      setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
-
-      // Trigger data refresh to update UI
-      try {
-        await sendMessage({ action: 'updateData' });
-        populate(); // Refresh the dashboard data
-      } catch (e) {
-        console.warn('Failed to refresh data after deletion:', e);
-      }
-    } catch (e) {
-      console.error('Failed to delete from workspace:', e);
-    }
-  };
-
-
-
-  const handleAddItemToWorkspace = async (item, workspaceName) => {
-    try {
-      try { console.log('[App] handleAddItemToWorkspace: start', { itemId: item?.id, url: item?.url, workspaceName }); } catch { }
-      // 1) Tag the history/bookmark item
-      await updateItemWorkspace(item.id, workspaceName);
-      // Optimistically patch storage.dashboardData so UI updates immediately
-      try {
-        const { dashboardData } = await storageGet(['dashboardData']);
-        if (dashboardData && Array.isArray(dashboardData.history)) {
-          const patch = (arr) => arr.map((it) => it.url === item.url ? { ...it, workspaceGroup: workspaceName } : it);
-          const updated = {
-            ...dashboardData,
-            history: patch(dashboardData.history || []),
-            bookmarks: patch(dashboardData.bookmarks || []),
-          };
-          await storageSet({ dashboardData: updated });
-          // Notify listeners to reload data
-          await sendMessage({ action: 'updateData' });
-        }
-      } catch (e) { try { console.warn('[App] handleAddItemToWorkspace: storage patch failed', e); } catch { } }
-
-      // 2) Also persist URL into saved Workspaces (so workspace view shows it)
-      const workspacesResult = await listWorkspaces();
-      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
-      const norm = (s) => (s || '').trim().toLowerCase();
-      let ws = workspaces.find(w => norm(w.name) === norm(workspaceName));
-      if (!ws) {
-        ws = {
-          id: Date.now().toString(),
-          name: workspaceName,
-          description: '',
-          createdAt: Date.now(),
-          urls: [],
-        };
-        try { console.log('[App] handleAddItemToWorkspace: creating new workspace', { id: ws.id, name: ws.name }); } catch { }
-      }
-      const url = item?.url;
-      if (url) {
-        if (!Array.isArray(ws.urls)) ws.urls = [];
-        const already = ws.urls.some(u => u.url === url);
-        if (!already) {
-          ws = {
-            ...ws,
-            urls: [
-              ...ws.urls,
-              { url, title: item.title || url, addedAt: Date.now(), favicon: getFaviconUrl(url) },
-            ],
-          };
-          try { console.log('[App] handleAddItemToWorkspace: saving workspace with new URL', { id: ws.id, name: ws.name, urls: ws.urls.length }); } catch { }
-          await saveWorkspace(ws);
-          const refreshedResult = await listWorkspaces();
-          const refreshed = refreshedResult?.success ? refreshedResult.data : [];
-          setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
-        } else {
-          try { console.log('[App] handleAddItemToWorkspace: URL already saved, skipping save'); } catch { }
-        }
-      }
-    } catch (e) {
-      console.error('Failed to add item to workspace:', e);
-    } finally {
-      setAddingToWorkspace(null);
-    }
-  };
-
-  const openInTab = async () => {
-    try { await openOptionsPage() } catch { /* noop */ }
-  }
-
-  const handleAddRelated = async (url, title) => {
-    setLoadingRelated(true);
-    try {
-      const response = await sendMessage({ action: 'getRelated', context: { url, title, settings } })
-      if (response?.ok) {
-        setRelatedProducts(response.related);
-      } else {
-        console.error('Failed to get related products:', response?.error);
-      }
-    } catch (err) {
-      if (err.message.includes('Receiving end does not exist')) {
-        console.warn('Could not get related products. Service worker might be inactive.');
-      } else {
-        console.error('Error getting related products:', err);
-      }
-    } finally {
-      setLoadingRelated(false);
-    }
-  };
-
-
-  const handleOpenAddLinkModal = (ws) => {
-    try {
-      // Accept either a workspace object or a workspace name
-      let resolved = ws;
-      if (ws && typeof ws === 'string') {
-        const norm = (s) => (s || '').trim().toLowerCase();
-        resolved = savedWorkspaces.find(w => norm(w.name) === norm(ws));
-        if (!resolved) {
-          console.warn('Workspace not found for AddToWorkspaceModal:', ws);
-          return;
-        }
-      }
-      // Prevent adding links to the reserved "All" view
-      const nameLower = (resolved?.name || '').trim().toLowerCase();
-      if (nameLower === 'all') {
-        try { alert('Please select a specific workspace before adding links.'); } catch { }
-        return;
-      }
-      // Open the in-page AddLinkFlow so the user can search history/bookmarks to add
-      setAddingToWorkspace(resolved.name);
-      try { console.log('[App] handleOpenAddLinkModal: modal opened', { addingTo: resolved.name }); } catch { }
-    } catch (e) {
-      console.error('Failed to open add link modal:', e);
-    }
-  };
-
-  const handleCloseAddLinkModal = () => {
-    setShowAddLinkModal(false);
-    setWorkspaceForLinkAdd(null);
-  };
-
-
-  const handleSaveLink = async (workspaceId, newUrl) => {
-    try {
-      const workspacesResult = await listWorkspaces();
-      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
-      let workspaceToUpdate = workspaces.find(ws => ws.id === workspaceId);
-
-      // If not found by id, try resolving by name (when id is of form name:WorkspaceName)
-      if (!workspaceToUpdate) {
-        const byName = (typeof workspaceForLinkAdd?.name === 'string') ? workspaceForLinkAdd.name : null;
-        if (byName) {
-          const norm = (s) => (s || '').trim().toLowerCase();
-          workspaceToUpdate = workspaces.find(ws => norm(ws.name) === norm(byName)) || null;
-          if (!workspaceToUpdate) {
-            // Create a new workspace
-            workspaceToUpdate = {
-              id: Date.now().toString(),
-              name: byName,
-              description: '',
-              createdAt: Date.now(),
-              urls: []
-            };
-          }
-        }
-      }
-
-      if (!workspaceToUpdate) {
-        console.error('Workspace not found and could not resolve name');
-        return;
-      }
-
-      // Avoid adding duplicate URLs
-      if (Array.isArray(workspaceToUpdate.urls) && workspaceToUpdate.urls.some(u => u.url === newUrl)) {
-        console.log('URL already exists in this workspace.');
-        handleCloseAddLinkModal();
-        return;
-      }
-
-      const updatedWorkspace = {
-        ...workspaceToUpdate,
-        urls: [
-          ...(workspaceToUpdate.urls || []),
-          {
-            url: newUrl,
-            title: newUrl, // Using URL as title for simplicity
-            addedAt: Date.now(),
-            favicon: getFaviconUrl(newUrl),
-          },
-        ],
-      };
-
-      await saveWorkspace(updatedWorkspace);
-      // Refresh local list so the newly created workspace appears immediately
-      const wsResult = await listWorkspaces();
-      const ws = wsResult?.success ? wsResult.data : [];
-      setSavedWorkspaces(Array.isArray(ws) ? ws : []);
-      handleCloseAddLinkModal();
-    } catch (err) {
-      console.error('Error saving link to workspace:', err);
-    }
-  };
-
-  // Flatten saved workspaces' URLs into items suitable for ItemGrid
-  const savedUrlsFlat = useMemo(() => {
-    const norm = (v) => (v || '').trim().toLowerCase()
-    const active = norm(workspace)
-    const sourceWorkspaces = active === 'all'
-      ? savedWorkspaces
-      : savedWorkspaces.filter(ws => norm(ws.name) === active);
-
-    return sourceWorkspaces.flatMap(ws =>
-      (ws.urls || []).map(u => ({
-        ...u,
-        workspaceGroup: ws.name, // for filtering
-        id: `${ws.id}-${u.url}` // for unique key
-      }))
-    );
-  }, [savedWorkspaces, workspace]);
-
-  // Merge history/bookmarks with saved URLs and de-duplicate by URL
-  const allItemsCombined = useMemo(() => {
-    const map = new Map();
-    for (const it of filtered) {
-      if (it?.url) map.set(it.url, it);
-    }
-    for (const it of savedUrlsFlat) {
-      if (it?.url && !map.has(it.url)) map.set(it.url, it);
-    }
-    return Array.from(map.values());
-  }, [filtered, savedUrlsFlat]);
-
-  // Saved items for the currently selected workspace (by name)
-  const workspaceSavedItems = useMemo(() => {
-    if (!workspace) return [];
-    const ws = savedWorkspaces.find(w => (w?.name || '').trim().toLowerCase() === (workspace || '').trim().toLowerCase());
-    if (!ws) return [];
-    return (ws.urls || []).map(u => ({
-      ...u,
-      workspaceGroup: ws.name,
-      id: `${ws.id}-${u.url}`,
-    }));
-  }, [savedWorkspaces, workspace]);
-
-  // Merge history/data items in this workspace with saved URLs for this workspace
-  const mergedWorkspaceItems = useMemo(() => {
-    if (!workspace) return [];
-    const byUrl = new Map();
-    for (const it of filtered) {
-      if (it?.url) byUrl.set(it.url, it);
-    }
-    for (const it of workspaceSavedItems) {
-      if (it?.url && !byUrl.has(it.url)) byUrl.set(it.url, it);
-    }
-    return Array.from(byUrl.values());
-  }, [filtered, workspace, workspaceSavedItems]);
-
-  const getCurrentTabInfo = async () => {
-    try {
-      const res = await tabs.query({ active: true, currentWindow: true })
-      const tab = (res.ok && Array.isArray(res.tabs) && res.tabs.length) ? res.tabs[0] : null
-      if (tab) setCurrentTab(tab)
-      return tab
-    } catch (err) {
-      console.error('Error getting current tab:', err)
-      return null
-    }
-  }
-
-
-  // Render the appropriate grid component based on workspace grid type
-  const renderWorkspaceGrid = (workspaceObj, items) => {
-    const gridType = workspaceObj?.gridType || 'ItemGrid'; // Default to ItemGrid
-
-    console.log(`[App] Rendering grid type: ${gridType} for workspace: ${workspaceObj?.name}`);
-
-    switch (gridType) {
-      case 'ProjectGrid':
-        return (
-          <div className="content-section section">
-            <ProjectGrid
-              items={items}
-              workspaces={savedWorkspaces}
-              onAddRelated={handleAddRelated}
-              onAddLink={() => handleOpenAddLinkModal(workspace)}
-              onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
-            />
-          </div>
-        );
-
-      case 'ItemGrid':
-        return (
-          <div className="content-section section">
-            <WorkspacePillList
-              items={items}
-              onDelete={workspace !== 'All' ? handleDeleteFromWorkspace : undefined}
-              onPin={togglePinWorkspace}
-              onAddToWorkspace={(url, workspaceName) => {
-                if (!url || !workspaceName) return;
-                const primaryItem = Array.isArray(items) ? items.find((it) => it?.url === url) : null;
-                const itemForSave = primaryItem || {
-                  id: url,
-                  url,
-                  title: (() => {
-                    try { return new URL(url).hostname; } catch { return url; }
-                  })(),
-                  favicon: getFaviconUrl(url)
-                };
-                return handleAddItemToWorkspace(itemForSave, workspaceName);
-              }}
-              onAddToBookmarks={(chip) => handleAddRelated(chip.url, chip.title)}
-            />
-          </div>
-        );
-
-      case 'ItemGrid1':
-      default:
-        return (
-          <div className="content-section section">
-            <ItemGrid
-              items={items}
-              workspaces={savedWorkspaces}
-              onAddRelated={handleAddRelated}
-              onAddLink={() => handleOpenAddLinkModal(workspace)}
-              onDelete={handleDeleteFromWorkspace}
-              allItems={data}
-              savedItems={savedUrlsFlat}
-              currentWorkspace={workspace || ''}
-              onAddItem={handleAddItemToWorkspace}
-              onAddSavedItem={handleAddSavedUrlToWorkspace}
-            />
-          </div>
-        );
-    }
-  }
-
-  const createWorkspace = async (workspaceName, description) => {
-    try {
-      const tab = await getCurrentTabInfo()
-      if (!tab) return
-
-      const workspace = {
-        id: Date.now().toString(),
-        name: workspaceName,
-        description: description,
-        createdAt: Date.now(),
-        urls: [{
-          url: tab.url,
-          title: tab.title,
-          addedAt: Date.now(),
-          favicon: getFaviconUrl(tab.url)
-        }]
-      }
-
-      // Save to IndexedDB
-      await saveWorkspace(workspace)
-
-      // Update local state optimistically
-      setSavedWorkspaces((prev) => {
-        const exists = prev.some(w => w.id === workspace.id)
-        return exists ? prev : [...prev, workspace]
-      })
-
-      // Switch current filter to the newly created workspace so subsequent actions apply to it
-      setWorkspace(workspaceName)
-
-      // Close modal and refresh data
-      setShowCreateWorkspace(false)
-      // populate() reloads history/bookmarks, not needed for saved workspaces
-    } catch (err) {
-      console.error('Error creating workspace:', err)
-    }
-  }
-
-
-  // Determine if we should show vertical header (responsive or user preference)
-  const shouldShowVertical = windowWidth < 700;
 
   return (
     <div className={`popup-wrap ${themeClass} ${wallpaperEnabled ? 'wallpaper-enabled' : ''}`} style={{
@@ -1666,62 +1234,6 @@ export default function App() {
         wallpaperOpacity={wallpaperOpacity}
         pinnedWorkspaces={pinnedWorkspaces}
         onTogglePin={togglePinWorkspace}
-      />
-
-      {/* Modals */}
-      {addingToWorkspace && (
-        <div
-          className="modal-overlay"
-          onClick={(e) => { if (e.target === e.currentTarget) setAddingToWorkspace(null) }}
-        >
-          <div className="modal">
-            <div
-              className="modal-header"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: 8, paddingBottom: 8, borderBottom: '1px solid #273043', marginBottom: 10,
-              }}
-            >
-              <h3 style={{ margin: 0 }}>Add to "{addingToWorkspace}"</h3>
-              <button
-                onClick={() => setAddingToWorkspace(null)}
-                className="cancel-btn"
-                aria-label="Close"
-                title="Close"
-                style={{ padding: '4px 8px' }}
-              >
-                ×
-              </button>
-            </div>
-            <AddLinkFlow
-              allItems={data}
-              savedItems={savedWorkspaces.flatMap(ws => (ws.urls || []).map(u => ({
-                ...u,
-                workspaceGroup: ws.name,
-                id: `${ws.id}-${u.url}`,
-              })))}
-              currentWorkspace={addingToWorkspace}
-              onAdd={handleAddItemToWorkspace}
-              onAddSaved={handleAddSavedUrlToWorkspace}
-              onCancel={() => setAddingToWorkspace(null)}
-            />
-          </div>
-        </div>
-      )}
-
-      <AddToWorkspaceModal
-        show={showAddLinkModal}
-        workspace={workspaceForLinkAdd}
-        onClose={handleCloseAddLinkModal}
-        onSave={handleSaveLink}
-        suggestions={data.filter(it => !it.workspaceGroup)}
-      />
-
-      <CreateWorkspaceModal
-        show={showCreateWorkspace}
-        onClose={() => setShowCreateWorkspace(false)}
-        onCreate={createWorkspace}
-        currentTab={currentTab}
       />
 
       <SettingsModal

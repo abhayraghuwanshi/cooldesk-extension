@@ -1,13 +1,11 @@
 import { crx } from '@crxjs/vite-plugin'
 import react from '@vitejs/plugin-react'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import manifest from './manifest.json'
 
 // Switch between Chrome Extension (default) and Electron builds using env TARGET=electron
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  const target = env.TARGET || process.env.TARGET
-  const isElectron = mode === 'electron' || target === 'electron'
+  const isElectron = mode === 'electron'
 
   if (isElectron) {
     // Electron build: no crx(), relative paths for file:// protocol
@@ -39,14 +37,12 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         input: {
-          index: 'index.html',
-          offscreen: 'src/offscreen/offscreen.html'
+          index: 'index.html'
         }
       }
     },
-    // esbuild: { drop: ['console', 'debugger'] },
+    esbuild: { drop: ['console', 'debugger'] },
     define: {
-      'process.env': process.env,
       'global': 'window',
     },
     optimizeDeps: {
