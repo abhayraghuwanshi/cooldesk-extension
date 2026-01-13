@@ -18,7 +18,7 @@ import { useEffect, useState } from 'react';
 export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlToWorkspace, onAddNote }) {
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState('url'); // 'url', 'workspace', 'note'
-  const [browseMode, setBrowseMode] = useState('current'); // 'current', 'history', 'bookmarks'
+  const [browseMode, setBrowseMode] = useState('tabs'); // 'tabs', 'history', 'bookmarks'
 
   // Form states
   const [selectedWorkspace, setSelectedWorkspace] = useState(null);
@@ -30,25 +30,21 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
   const [searchQuery, setSearchQuery] = useState('');
 
   // Browser data
-  const [currentTab, setCurrentTab] = useState(null);
+  const [openTabs, setOpenTabs] = useState([]);
   const [historyItems, setHistoryItems] = useState([]);
   const [bookmarks, setBookmarks] = useState([]);
 
   useEffect(() => {
     if (isOpen && mode === 'url') {
-      // Fetch current tab
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]) {
-          setCurrentTab({
-            url: tabs[0].url,
-            title: tabs[0].title,
-            favicon: tabs[0].favIconUrl
-          });
-          if (browseMode === 'current') {
-            setUrlInput(tabs[0].url);
-            setUrlTitle(tabs[0].title);
-          }
-        }
+      // Fetch all open tabs
+      chrome.tabs.query({ currentWindow: true }, (tabs) => {
+        const tabsList = tabs.map(tab => ({
+          url: tab.url,
+          title: tab.title,
+          favicon: tab.favIconUrl,
+          id: tab.id
+        }));
+        setOpenTabs(tabsList);
       });
 
       // Fetch history
@@ -143,7 +139,7 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
   const handleSelectItem = (item) => {
     setUrlInput(item.url);
     setUrlTitle(item.title);
-    setBrowseMode('current');
+    setBrowseMode('tabs');
   };
 
   // Filter history and bookmarks based on search
@@ -222,42 +218,54 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
             className="global-add-modal"
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%)',
-              borderRadius: '24px',
-              maxWidth: '600px',
-              width: '90%',
-              maxHeight: '80vh',
+              background: 'var(--glass-bg, rgba(30, 41, 59, 0.95))',
+              backdropFilter: 'blur(16px)',
+              borderRadius: '20px',
+              maxWidth: '800px',
+              width: '95%',
+              maxHeight: '85vh',
               overflow: 'hidden',
-              boxShadow: '0 24px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(148, 163, 184, 0.1)',
-              animation: 'scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+              animation: 'scaleIn 0.2s ease',
               position: 'relative'
             }}
           >
-            {/* Gradient Accent */}
+            {/* Top Bar */}
             <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              background: 'linear-gradient(90deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%)',
-              opacity: 0.8
-            }} />
+              padding: '24px 32px',
+              borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <h2 style={{
+                fontSize: '20px',
+                fontWeight: 600,
+                color: '#f1f5f9',
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <FontAwesomeIcon icon={faPlus} style={{ color: '#60a5fa' }} />
+                Quick Add
+              </h2>
+            </div>
 
-            {/* Close Button - Redesigned */}
             <button
               className="global-add-close"
               onClick={handleClose}
               style={{
                 position: 'absolute',
-                top: '20px',
-                right: '20px',
-                width: '40px',
-                height: '40px',
-                borderRadius: '12px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.2)',
-                color: '#ef4444',
+                top: '24px',
+                right: '32px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -267,89 +275,71 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
                 zIndex: 10
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                e.currentTarget.style.transform = 'rotate(90deg)';
+                e.currentTarget.style.background = 'rgba(148, 163, 184, 0.1)';
+                e.currentTarget.style.color = '#f1f5f9';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                e.currentTarget.style.transform = 'rotate(0deg)';
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = '#94a3b8';
               }}
             >
               <FontAwesomeIcon icon={faTimes} />
             </button>
 
-            {/* Content Wrapper with Scroll */}
+            {/* Content Wrapper */}
             <div style={{
               padding: '32px',
-              maxHeight: '80vh',
+              maxHeight: 'calc(85vh - 73px)',
               overflowY: 'auto'
             }}>
-              {/* Mode Tabs - Redesigned */}
+              {/* Mode Tabs - Simplified Pills */}
               <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
+                display: 'flex',
                 gap: '12px',
-                marginBottom: '32px'
+                marginBottom: '32px',
+                padding: '6px',
+                background: 'rgba(30, 41, 59, 0.5)',
+                borderRadius: '12px',
+                width: 'fit-content'
               }}>
                 {[
-                  { key: 'url', icon: faLink, label: 'Add URL', gradient: 'from-blue-500 to-cyan-500' },
-                  { key: 'workspace', icon: faFolder, label: 'Workspace', gradient: 'from-purple-500 to-pink-500' },
-                  { key: 'note', icon: faStickyNote, label: 'Quick Note', gradient: 'from-amber-500 to-orange-500' }
-                ].map(({ key, icon, label, gradient }) => (
+                  { key: 'url', icon: faLink, label: 'Add URL' },
+                  { key: 'workspace', icon: faFolder, label: 'New Workspace' },
+                  { key: 'note', icon: faStickyNote, label: 'Quick Note' }
+                ].map(({ key, icon, label }) => (
                   <button
                     key={key}
                     onClick={() => setMode(key)}
                     style={{
-                      padding: '16px 12px',
-                      borderRadius: '16px',
-                      background: mode === key
-                        ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)'
-                        : 'rgba(30, 41, 59, 0.5)',
-                      border: mode === key
-                        ? '2px solid rgba(59, 130, 246, 0.5)'
-                        : '2px solid rgba(148, 163, 184, 0.1)',
-                      color: mode === key ? '#60a5fa' : '#94a3b8',
+                      padding: '10px 20px',
+                      borderRadius: '8px',
+                      background: mode === key ? '#3b82f6' : 'transparent',
+                      border: 'none',
+                      color: mode === key ? '#ffffff' : '#94a3b8',
                       cursor: 'pointer',
                       display: 'flex',
-                      flexDirection: 'column',
                       alignItems: 'center',
                       gap: '8px',
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                      position: 'relative',
-                      overflow: 'hidden'
+                      transition: 'all 0.2s ease',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      whiteSpace: 'nowrap'
                     }}
                     onMouseEnter={(e) => {
                       if (mode !== key) {
-                        e.currentTarget.style.background = 'rgba(30, 41, 59, 0.8)';
-                        e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.3)';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                        e.currentTarget.style.color = '#cbd5e1';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (mode !== key) {
-                        e.currentTarget.style.background = 'rgba(30, 41, 59, 0.5)';
-                        e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)';
-                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = '#94a3b8';
                       }
                     }}
                   >
-                    <FontAwesomeIcon icon={icon} style={{ fontSize: '20px' }} />
+                    <FontAwesomeIcon icon={icon} style={{ fontSize: '14px' }} />
                     <span>{label}</span>
-                    {mode === key && (
-                      <div style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        height: '3px',
-                        background: 'linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)',
-                        borderRadius: '4px 4px 0 0'
-                      }} />
-                    )}
                   </button>
                 ))}
               </div>
@@ -357,22 +347,6 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
               {/* Forms Content */}
               {mode === 'url' && (
                 <div className="add-form">
-                  <h2 style={{
-                    fontSize: '24px',
-                    fontWeight: 700,
-                    color: '#f1f5f9',
-                    marginBottom: '24px',
-                    background: 'linear-gradient(135deg, #f1f5f9 0%, #94a3b8 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <FontAwesomeIcon icon={faStar} style={{ fontSize: '20px', color: '#60a5fa' }} />
-                    Add URL to Workspace
-                  </h2>
-
                   {/* Workspace Selector */}
                   <div className="form-group" style={{ marginBottom: '24px' }}>
                     <label style={{
@@ -451,7 +425,7 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
                       gap: '8px'
                     }}>
                       {[
-                        { key: 'current', icon: faLink, label: 'Current Tab' },
+                        { key: 'tabs', icon: faLink, label: 'Open Tabs', count: openTabs.length },
                         { key: 'history', icon: faHistory, label: 'History', count: filteredHistory.length },
                         { key: 'bookmarks', icon: faBookmark, label: 'Bookmarks', count: filteredBookmarks.length }
                       ].map(({ key, icon, label, count }) => (
@@ -459,10 +433,6 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
                           key={key}
                           onClick={() => {
                             setBrowseMode(key);
-                            if (key === 'current' && currentTab) {
-                              setUrlInput(currentTab.url);
-                              setUrlTitle(currentTab.title);
-                            }
                           }}
                           style={{
                             padding: '12px',
@@ -500,131 +470,205 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
                     </div>
                   </div>
 
-                  {/* Current Tab / Manual Entry */}
-                  {browseMode === 'current' && (
+                  {/* Open Tabs List */}
+                  {browseMode === 'tabs' && (
+                    <div className="browse-section" style={{ marginBottom: '24px' }}>
+                      <div style={{
+                        maxHeight: '300px',
+                        overflowY: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        marginBottom: '20px'
+                      }}>
+                        {openTabs.map((tab, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleSelectItem(tab)}
+                            style={{
+                              padding: '12px',
+                              borderRadius: '12px',
+                              background: 'rgba(30, 41, 59, 0.6)',
+                              border: '2px solid rgba(148, 163, 184, 0.1)',
+                              color: '#cbd5e1',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              textAlign: 'left',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
+                              e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)';
+                            }}
+                          >
+                            <div style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              background: 'rgba(59, 130, 246, 0.1)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              {tab.favicon ? (
+                                <img src={tab.favicon} alt="" width="20" height="20" style={{ borderRadius: '4px' }} />
+                              ) : (
+                                <FontAwesomeIcon icon={faLink} style={{ color: '#60a5fa', fontSize: '14px' }} />
+                              )}
+                            </div>
+                            <div style={{ flex: 1, overflow: 'hidden' }}>
+                              <div style={{
+                                fontSize: '13px',
+                                fontWeight: 500,
+                                color: '#f1f5f9',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                marginBottom: '2px'
+                              }}>{tab.title || tab.url}</div>
+                              <div style={{
+                                fontSize: '11px',
+                                color: '#64748b',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }}>{new URL(tab.url).hostname}</div>
+                            </div>
+                            <FontAwesomeIcon icon={faCheck} style={{ color: '#3b82f6', fontSize: '14px', opacity: 0 }} className="select-icon" />
+                          </button>
+                        ))}
+                        {openTabs.length === 0 && (
+                          <div style={{
+                            padding: '32px',
+                            textAlign: 'center',
+                            color: '#64748b',
+                            fontSize: '14px'
+                          }}>No open tabs found</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Manual Entry */}
+                  {browseMode === 'tabs' && (
                     <>
-                      {currentTab && (
-                        <div style={{
-                          padding: '16px',
-                          borderRadius: '12px',
-                          background: 'rgba(30, 41, 59, 0.6)',
-                          border: '1px solid rgba(148, 163, 184, 0.2)',
+
+                      <div className="form-group" style={{ marginBottom: '20px' }}>
+                        <label style={{
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: '#94a3b8',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '10px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '12px',
-                          marginBottom: '20px'
+                          gap: '6px'
                         }}>
-                          <div style={{
-                            width: '40px',
-                            height: '40px',
-                            borderRadius: '10px',
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            {currentTab.favicon ? (
-                              <img src={currentTab.favicon} alt="" width="24" height="24" style={{ borderRadius: '4px' }} />
-                            ) : (
-                              <FontAwesomeIcon icon={faLink} style={{ color: '#60a5fa', fontSize: '18px' }} />
-                            )}
-                          </div>
-                          <div style={{ flex: 1, overflow: 'hidden' }}>
-                            <div style={{
+                          <FontAwesomeIcon icon={faLink} style={{ fontSize: '11px', color: '#60a5fa' }} />
+                          Enter URL
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <FontAwesomeIcon
+                            icon={faLink}
+                            style={{
+                              position: 'absolute',
+                              left: '16px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              color: '#94a3b8',
                               fontSize: '14px',
-                              fontWeight: 500,
+                              pointerEvents: 'none',
+                              zIndex: 1
+                            }}
+                          />
+                          <input
+                            type="url"
+                            value={urlInput}
+                            onChange={(e) => setUrlInput(e.target.value)}
+                            placeholder="https://example.com"
+                            style={{
+                              width: '100%',
+                              padding: '14px 16px 14px 44px',
+                              borderRadius: '12px',
+                              background: 'rgba(51, 65, 85, 0.5)',
+                              border: '2px solid rgba(148, 163, 184, 0.3)',
                               color: '#f1f5f9',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              marginBottom: '4px'
-                            }}>{currentTab.title}</div>
-                            <div style={{
-                              fontSize: '12px',
-                              color: '#64748b',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
-                            }}>{new URL(currentTab.url).hostname}</div>
-                          </div>
+                              fontSize: '14px',
+                              outline: 'none',
+                              transition: 'all 0.2s ease',
+                              fontFamily: 'inherit',
+                              boxShadow: 'none'
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.borderColor = '#60a5fa';
+                              e.target.style.background = 'rgba(51, 65, 85, 0.8)';
+                              e.target.style.boxShadow = '0 0 0 3px rgba(96, 165, 250, 0.15)';
+                            }}
+                            onBlur={(e) => {
+                              e.target.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+                              e.target.style.background = 'rgba(51, 65, 85, 0.5)';
+                              e.target.style.boxShadow = 'none';
+                            }}
+                          />
                         </div>
-                      )}
-
-                      <div className="form-group" style={{ marginBottom: '16px' }}>
-                        <label style={{
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          color: '#94a3b8',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          marginBottom: '8px',
-                          display: 'block'
-                        }}>URL</label>
-                        <input
-                          type="url"
-                          value={urlInput}
-                          onChange={(e) => setUrlInput(e.target.value)}
-                          placeholder="https://example.com"
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            borderRadius: '12px',
-                            background: 'rgba(30, 41, 59, 0.6)',
-                            border: '2px solid rgba(148, 163, 184, 0.2)',
-                            color: '#f1f5f9',
-                            fontSize: '14px',
-                            outline: 'none',
-                            transition: 'all 0.2s ease',
-                            fontFamily: 'inherit'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.borderColor = '#3b82f6';
-                            e.target.style.background = 'rgba(30, 41, 59, 0.8)';
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-                            e.target.style.background = 'rgba(30, 41, 59, 0.6)';
-                          }}
-                        />
                       </div>
 
-                      <div className="form-group" style={{ marginBottom: '24px' }}>
+                      <div className="form-group" style={{ marginBottom: '28px' }}>
                         <label style={{
                           fontSize: '12px',
                           fontWeight: 600,
                           color: '#94a3b8',
                           textTransform: 'uppercase',
                           letterSpacing: '0.5px',
-                          marginBottom: '8px',
-                          display: 'block'
-                        }}>Title (optional)</label>
-                        <input
-                          type="text"
-                          value={urlTitle}
-                          onChange={(e) => setUrlTitle(e.target.value)}
-                          placeholder="Enter a custom title"
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            borderRadius: '12px',
-                            background: 'rgba(30, 41, 59, 0.6)',
-                            border: '2px solid rgba(148, 163, 184, 0.2)',
-                            color: '#f1f5f9',
-                            fontSize: '14px',
-                            outline: 'none',
-                            transition: 'all 0.2s ease',
-                            fontFamily: 'inherit'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.borderColor = '#3b82f6';
-                            e.target.style.background = 'rgba(30, 41, 59, 0.8)';
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-                            e.target.style.background = 'rgba(30, 41, 59, 0.6)';
-                          }}
-                        />
+                          marginBottom: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          <FontAwesomeIcon icon={faStar} style={{ fontSize: '11px', color: '#fbbf24' }} />
+                          Title (optional)
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type="text"
+                            value={urlTitle}
+                            onChange={(e) => setUrlTitle(e.target.value)}
+                            placeholder="Enter a custom title"
+                            style={{
+                              width: '100%',
+                              padding: '14px 16px',
+                              borderRadius: '14px',
+                              background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.8) 100%)',
+                              border: '2px solid rgba(251, 191, 36, 0.2)',
+                              color: '#f1f5f9',
+                              fontSize: '14px',
+                              outline: 'none',
+                              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                              fontFamily: 'inherit',
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.borderColor = '#fbbf24';
+                              e.target.style.background = 'linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)';
+                              e.target.style.boxShadow = '0 0 0 4px rgba(251, 191, 36, 0.1), 0 8px 16px rgba(0, 0, 0, 0.2)';
+                              e.target.style.transform = 'translateY(-2px)';
+                            }}
+                            onBlur={(e) => {
+                              e.target.style.borderColor = 'rgba(251, 191, 36, 0.2)';
+                              e.target.style.background = 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.8) 100%)';
+                              e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+                              e.target.style.transform = 'translateY(0)';
+                            }}
+                          />
+                        </div>
                       </div>
                     </>
                   )}
