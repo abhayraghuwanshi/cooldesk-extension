@@ -14,6 +14,7 @@ import {
   faShoppingBag,
   faThumbtack,
   faTools,
+  faTrash,
   faUtensils
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -43,7 +44,7 @@ const CATEGORY_ICONS = {
 import { useState } from 'react';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
 
-export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin }) {
+export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete }) {
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
@@ -278,24 +279,53 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
                 padding: '8px',
                 marginLeft: 'auto',
                 transition: 'all 0.2s ease',
-                opacity: isPinned ? 1 : 0,
+                opacity: 0,
                 fontSize: '14px',
                 flexShrink: 0
               }}
               onMouseEnter={(e) => {
-                if (!isPinned) {
-                  e.currentTarget.style.color = '#FDE047';
-                  e.currentTarget.style.opacity = '1';
-                }
+                e.currentTarget.style.color = '#FDE047';
+                e.currentTarget.style.opacity = '1';
               }}
               onMouseLeave={(e) => {
-                if (!isPinned) {
-                  e.currentTarget.style.color = 'rgba(148, 163, 184, 0.4)';
-                  e.currentTarget.style.opacity = '0';
-                }
+                e.currentTarget.style.color = isPinned ? '#FDE047' : 'rgba(148, 163, 184, 0.4)';
+                e.currentTarget.style.opacity = '0';
               }}
             >
               <FontAwesomeIcon icon={faThumbtack} transform={isPinned ? "" : { rotate: 45 }} />
+            </button>
+          )}
+
+          {/* Delete Button - Show on Hover */}
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(workspace);
+              }}
+              className="workspace-delete-btn"
+              title="Delete Workspace"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'rgba(239, 68, 68, 0.4)',
+                cursor: 'pointer',
+                padding: '8px',
+                transition: 'all 0.2s ease',
+                opacity: 0,
+                fontSize: '14px',
+                flexShrink: 0
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#EF4444';
+                e.currentTarget.style.opacity = '1';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'rgba(239, 68, 68, 0.4)';
+                e.currentTarget.style.opacity = '0';
+              }}
+            >
+              <FontAwesomeIcon icon={faTrash} />
             </button>
           )}
         </div>
@@ -328,23 +358,51 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
                   padding: '8px',
                   marginLeft: 'auto',
                   transition: 'all 0.2s ease',
-                  opacity: isPinned ? 1 : 0.6,
+                  opacity: 0,
                   fontSize: '14px'
                 }}
                 onMouseEnter={(e) => {
-                  if (!isPinned) {
-                    e.currentTarget.style.color = '#FDE047';
-                    e.currentTarget.style.opacity = '1';
-                  }
+                  e.currentTarget.style.color = '#FDE047';
+                  e.currentTarget.style.opacity = '1';
                 }}
                 onMouseLeave={(e) => {
-                  if (!isPinned) {
-                    e.currentTarget.style.color = 'rgba(148, 163, 184, 0.4)';
-                    e.currentTarget.style.opacity = '0.6';
-                  }
+                  e.currentTarget.style.color = isPinned ? '#FDE047' : 'rgba(148, 163, 184, 0.4)';
+                  e.currentTarget.style.opacity = '0';
                 }}
               >
                 <FontAwesomeIcon icon={faThumbtack} transform={isPinned ? "" : { rotate: 45 }} />
+              </button>
+            )}
+
+            {/* Delete Button */}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(workspace);
+                }}
+                className="workspace-delete-btn"
+                title="Delete Workspace"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'rgba(239, 68, 68, 0.4)',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  transition: 'all 0.2s ease',
+                  opacity: 0,
+                  fontSize: '14px'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#EF4444';
+                  e.currentTarget.style.opacity = '1';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'rgba(239, 68, 68, 0.4)';
+                  e.currentTarget.style.opacity = '0';
+                }}
+              >
+                <FontAwesomeIcon icon={faTrash} />
               </button>
             )}
           </div>

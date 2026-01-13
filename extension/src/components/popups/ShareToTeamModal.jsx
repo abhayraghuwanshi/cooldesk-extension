@@ -236,525 +236,587 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
         }
     };
 
+
     if (!isOpen) return null;
 
     const selectedCount = selectedTabIds.size;
     const totalTabs = windowTabs.length;
 
     const modalContent = (
-        <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)',
-            zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: "'Inter', sans-serif"
-        }} onClick={onClose}>
+        <>
+            <style>{`
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            `}</style>
             <div style={{
-                width: 600, maxHeight: '80vh', background: '#0f172a', borderRadius: 24,
-                border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                display: 'flex', flexDirection: 'column'
-            }} onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)',
+                zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: "'Inter', sans-serif"
+            }} onClick={onClose}>
                 <div style={{
-                    padding: '20px 24px',
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
-                    background: 'linear-gradient(to right, rgba(255,255,255,0.02), transparent)'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <div style={{
-                                width: 36, height: 36, borderRadius: 10,
-                                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)'
-                            }}>
-                                <FontAwesomeIcon icon={faShare} style={{ color: '#fff', fontSize: 16 }} />
+                    width: 600, maxHeight: '80vh', background: '#0f172a', borderRadius: 24,
+                    border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                    display: 'flex', flexDirection: 'column'
+                }} onClick={e => e.stopPropagation()}>
+
+                    {/* Header */}
+                    <div style={{
+                        padding: '20px 24px',
+                        borderBottom: '1px solid rgba(255,255,255,0.05)',
+                        background: 'linear-gradient(to right, rgba(255,255,255,0.02), transparent)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <div style={{
+                                    width: 36, height: 36, borderRadius: 10,
+                                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)'
+                                }}>
+                                    <FontAwesomeIcon icon={faShare} style={{ color: '#fff', fontSize: 16 }} />
+                                </div>
+                                <div>
+                                    <h3 style={{ margin: 0, color: '#fff', fontSize: 16, fontWeight: 600 }}>Share to Team</h3>
+                                    <div style={{ color: '#94a3b8', fontSize: 12 }}>Share content with your peers</div>
+                                </div>
                             </div>
-                            <div>
-                                <h3 style={{ margin: 0, color: '#fff', fontSize: 16, fontWeight: 600 }}>Share to Team</h3>
-                                <div style={{ color: '#94a3b8', fontSize: 12 }}>Share content with your peers</div>
+                            <button onClick={onClose} style={{
+                                background: 'rgba(255,255,255,0.05)', border: 'none',
+                                width: 32, height: 32, borderRadius: 16,
+                                color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.2s'
+                            }}>
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </div>
+
+                        {/* Team Selector */}
+                        <div style={{ marginBottom: 16 }}>
+                            <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 700, letterSpacing: '0.05em' }}>
+                                DESTINATION TEAM
+                            </label>
+                            <div style={{ position: 'relative' }}>
+                                <select
+                                    value={selectedTeamId || ''}
+                                    onChange={e => setSelectedTeamId(e.target.value)}
+                                    style={{
+                                        width: '100%', padding: '12px 16px', borderRadius: 12,
+                                        background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)',
+                                        color: '#fff', fontSize: 14, fontWeight: 500, outline: 'none',
+                                        appearance: 'none', cursor: 'pointer'
+                                    }}
+                                >
+                                    {teams.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))}
+                                </select>
+                                <FontAwesomeIcon icon={faChevronDown} style={{
+                                    position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
+                                    color: '#94a3b8', pointerEvents: 'none'
+                                }} />
                             </div>
                         </div>
-                        <button onClick={onClose} style={{
-                            background: 'rgba(255,255,255,0.05)', border: 'none',
-                            width: 32, height: 32, borderRadius: 16,
-                            color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            transition: 'all 0.2s'
-                        }}>
-                            <FontAwesomeIcon icon={faTimes} />
-                        </button>
-                    </div>
 
-                    {/* Team Selector */}
-                    <div style={{ marginBottom: 16 }}>
-                        <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 700, letterSpacing: '0.05em' }}>
-                            DESTINATION TEAM
-                        </label>
-                        <div style={{ position: 'relative' }}>
-                            <select
-                                value={selectedTeamId || ''}
-                                onChange={e => setSelectedTeamId(e.target.value)}
+                        {/* Mode Toggle */}
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                                onClick={() => setMode('tabs')}
                                 style={{
-                                    width: '100%', padding: '12px 16px', borderRadius: 12,
-                                    background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)',
-                                    color: '#fff', fontSize: 14, fontWeight: 500, outline: 'none',
-                                    appearance: 'none', cursor: 'pointer'
+                                    flex: 1, padding: '10px', borderRadius: 10,
+                                    background: mode === 'tabs' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                                    color: mode === 'tabs' ? '#60a5fa' : '#94a3b8',
+                                    border: mode === 'tabs' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
+                                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                    transition: 'all 0.2s'
                                 }}
                             >
-                                {teams.map(t => (
-                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                ))}
-                            </select>
-                            <FontAwesomeIcon icon={faChevronDown} style={{
-                                position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
-                                color: '#94a3b8', pointerEvents: 'none'
-                            }} />
+                                <FontAwesomeIcon icon={faGlobe} /> Share Tabs
+                            </button>
+                            <button
+                                onClick={() => setMode('workspace')}
+                                style={{
+                                    flex: 1, padding: '10px', borderRadius: 10,
+                                    background: mode === 'workspace' ? 'rgba(139, 92, 246, 0.15)' : 'transparent',
+                                    color: mode === 'workspace' ? '#a78bfa' : '#94a3b8',
+                                    border: mode === 'workspace' ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid transparent',
+                                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                <FontAwesomeIcon icon={faFolder} /> Share Workspace
+                            </button>
                         </div>
                     </div>
 
-                    {/* Mode Toggle */}
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                            onClick={() => setMode('tabs')}
-                            style={{
-                                flex: 1, padding: '10px', borderRadius: 10,
-                                background: mode === 'tabs' ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                                color: mode === 'tabs' ? '#60a5fa' : '#94a3b8',
-                                border: mode === 'tabs' ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
-                                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                                transition: 'all 0.2s'
-                            }}
-                        >
-                            <FontAwesomeIcon icon={faGlobe} /> Share Tabs
-                        </button>
-                        <button
-                            onClick={() => setMode('workspace')}
-                            style={{
-                                flex: 1, padding: '10px', borderRadius: 10,
-                                background: mode === 'workspace' ? 'rgba(139, 92, 246, 0.15)' : 'transparent',
-                                color: mode === 'workspace' ? '#a78bfa' : '#94a3b8',
-                                border: mode === 'workspace' ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid transparent',
-                                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                                transition: 'all 0.2s'
-                            }}
-                        >
-                            <FontAwesomeIcon icon={faFolder} /> Share Workspace
-                        </button>
-                    </div>
-                </div>
-
-                {/* Content Area */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-                    {mode === 'tabs' ? (
-                        <>
-                            {/* Tab Selection Controls */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                <div style={{ color: '#94a3b8', fontSize: 13 }}>
-                                    {selectedCount} of {totalTabs} tabs selected
-                                </div>
-                                <div style={{ display: 'flex', gap: 8 }}>
-                                    <button
-                                        onClick={handleSelectAll}
-                                        style={{
-                                            padding: '6px 12px', borderRadius: 8,
-                                            background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)',
-                                            color: '#60a5fa', fontSize: 12, fontWeight: 500, cursor: 'pointer'
-                                        }}
-                                    >
-                                        Select All
-                                    </button>
-                                    <button
-                                        onClick={handleDeselectAll}
-                                        style={{
-                                            padding: '6px 12px', borderRadius: 8,
-                                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                                            color: '#94a3b8', fontSize: 12, fontWeight: 500, cursor: 'pointer'
-                                        }}
-                                    >
-                                        Deselect All
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Tab List */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {windowTabs.map(tab => {
-                                    const isSelected = selectedTabIds.has(tab.id);
-                                    let hostname = 'unknown';
-                                    try {
-                                        if (tab.url) hostname = new URL(tab.url).hostname;
-                                    } catch (e) { }
-
-                                    return (
-                                        <div
-                                            key={tab.id}
-                                            onClick={() => handleTabToggle(tab.id)}
+                    {/* Content Area */}
+                    <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                        {mode === 'tabs' ? (
+                            <>
+                                {/* Tab Selection Controls */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                    <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                                        {selectedCount} of {totalTabs} tabs selected
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button
+                                            onClick={handleSelectAll}
                                             style={{
-                                                display: 'flex', alignItems: 'center', gap: 12, padding: 12,
-                                                background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)',
-                                                border: `1px solid ${isSelected ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
-                                                borderRadius: 12, cursor: 'pointer', transition: 'all 0.2s'
-                                            }}
-                                            onMouseEnter={e => {
-                                                if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                                            }}
-                                            onMouseLeave={e => {
-                                                if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                                                padding: '6px 12px', borderRadius: 8,
+                                                background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)',
+                                                color: '#60a5fa', fontSize: 12, fontWeight: 500, cursor: 'pointer'
                                             }}
                                         >
-                                            {/* Checkbox */}
-                                            <div style={{
-                                                width: 18, height: 18, borderRadius: 4,
-                                                border: `2px solid ${isSelected ? '#60a5fa' : '#475569'}`,
-                                                background: isSelected ? '#60a5fa' : 'transparent',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                transition: 'all 0.2s'
-                                            }}>
-                                                {isSelected && (
-                                                    <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#fff', fontSize: 10 }} />
-                                                )}
-                                            </div>
-
-                                            {/* Favicon */}
-                                            <div style={{
-                                                width: 24, height: 24, borderRadius: 6, overflow: 'hidden',
-                                                background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                            }}>
-                                                <img
-                                                    src={tab.favIconUrl || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`}
-                                                    alt=""
-                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                                    onError={(e) => { e.target.style.display = 'none'; }}
-                                                />
-                                            </div>
-
-                                            {/* Tab Info */}
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontSize: 13, fontWeight: 500, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                    {tab.title || 'Untitled'}
-                                                </div>
-                                                <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                    {hostname}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </>
-                    ) : (
-                        /* Workspace Mode - Show all workspaces */
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            {workspaces.length === 0 ? (
-                                <div style={{
-                                    textAlign: 'center', padding: '40px 20px',
-                                    color: '#64748b', fontSize: 13
-                                }}>
-                                    No workspaces found. Create a workspace first.
-                                </div>
-                            ) : (
-                                workspaces.map(workspace => {
-                                    const isExpanded = expandedWorkspaceId === workspace.id;
-                                    const tabCount = workspace.urls?.length || 0;
-                                    const selectedUrlsForWorkspace = selectedWorkspaceUrls.get(workspace.id) || new Set();
-                                    const selectedUrlCount = selectedUrlsForWorkspace.size;
-
-                                    return (
-                                        <div
-                                            key={workspace.id}
+                                            Select All
+                                        </button>
+                                        <button
+                                            onClick={handleDeselectAll}
                                             style={{
-                                                background: isExpanded
-                                                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%)'
-                                                    : 'rgba(255,255,255,0.03)',
-                                                borderRadius: 16,
-                                                border: `1px solid ${isExpanded ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
-                                                transition: 'all 0.2s',
-                                                overflow: 'hidden'
+                                                padding: '6px 12px', borderRadius: 8,
+                                                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                                                color: '#94a3b8', fontSize: 12, fontWeight: 500, cursor: 'pointer'
                                             }}
                                         >
-                                            {/* Workspace Header */}
+                                            Deselect All
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Tab List */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {windowTabs.map(tab => {
+                                        const isSelected = selectedTabIds.has(tab.id);
+                                        let hostname = 'unknown';
+                                        try {
+                                            if (tab.url) hostname = new URL(tab.url).hostname;
+                                        } catch (e) { }
+
+                                        return (
                                             <div
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleToggleExpand(workspace.id);
-                                                }}
+                                                key={tab.id}
+                                                onClick={() => handleTabToggle(tab.id)}
                                                 style={{
-                                                    padding: 16,
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: 12,
-                                                    transition: 'background 0.2s'
+                                                    display: 'flex', alignItems: 'center', gap: 12, padding: 12,
+                                                    background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255,255,255,0.03)',
+                                                    border: `1px solid ${isSelected ? 'rgba(59, 130, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
+                                                    borderRadius: 12, cursor: 'pointer', transition: 'all 0.2s'
                                                 }}
                                                 onMouseEnter={e => {
-                                                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                                                    if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
                                                 }}
                                                 onMouseLeave={e => {
-                                                    e.currentTarget.style.background = 'transparent';
+                                                    if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
                                                 }}
                                             >
-                                                {/* Expand/Collapse Icon */}
+                                                {/* Checkbox */}
                                                 <div style={{
-                                                    width: 24,
-                                                    height: 24,
-                                                    borderRadius: 6,
-                                                    background: 'rgba(139, 92, 246, 0.2)',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    transition: 'transform 0.2s',
-                                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                                                    width: 18, height: 18, borderRadius: 4,
+                                                    border: `2px solid ${isSelected ? '#60a5fa' : '#475569'}`,
+                                                    background: isSelected ? '#60a5fa' : 'transparent',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    transition: 'all 0.2s'
                                                 }}>
-                                                    <FontAwesomeIcon icon={faChevronDown} style={{ color: '#a78bfa', fontSize: 12 }} />
+                                                    {isSelected && (
+                                                        <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#fff', fontSize: 10 }} />
+                                                    )}
                                                 </div>
 
-                                                {/* Workspace icon */}
-                                                <div style={{ fontSize: 24 }}>{workspace.icon || '📁'}</div>
+                                                {/* Favicon */}
+                                                <div style={{
+                                                    width: 24, height: 24, borderRadius: 6, overflow: 'hidden',
+                                                    background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                }}>
+                                                    <img
+                                                        src={tab.favIconUrl || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`}
+                                                        alt=""
+                                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                        onError={(e) => { e.target.style.display = 'none'; }}
+                                                    />
+                                                </div>
 
-                                                {/* Workspace info */}
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
-                                                        {workspace.name}
+                                                {/* Tab Info */}
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontSize: 13, fontWeight: 500, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                        {tab.title || 'Untitled'}
                                                     </div>
-                                                    <div style={{ color: '#64748b', fontSize: 12 }}>
-                                                        {tabCount} URL{tabCount !== 1 ? 's' : ''}
-                                                        {selectedUrlCount > 0 && ` • ${selectedUrlCount} selected`}
-                                                        {!isExpanded && ' • Click to expand'}
+                                                    <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                        {hostname}
                                                     </div>
                                                 </div>
                                             </div>
+                                        );
+                                    })}
+                                </div>
+                            </>
+                        ) : (
+                            /* Workspace Mode - Show all workspaces */
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                {workspaces.length === 0 ? (
+                                    <div style={{
+                                        textAlign: 'center', padding: '40px 20px',
+                                        color: '#64748b', fontSize: 13
+                                    }}>
+                                        No workspaces found. Create a workspace first.
+                                    </div>
+                                ) : (
+                                    workspaces.map(workspace => {
+                                        const isExpanded = expandedWorkspaceId === workspace.id;
+                                        const tabCount = workspace.urls?.length || 0;
+                                        const selectedUrlsForWorkspace = selectedWorkspaceUrls.get(workspace.id) || new Set();
+                                        const selectedUrlCount = selectedUrlsForWorkspace.size;
 
-                                            {/* Expanded URL List */}
-                                            {isExpanded && (
-                                                <div style={{
-                                                    borderTop: '1px solid rgba(255,255,255,0.1)',
-                                                    padding: 16,
-                                                    background: 'rgba(0,0,0,0.2)'
-                                                }}>
-                                                    {/* Select All / Deselect All */}
-                                                    <div style={{
+                                        return (
+                                            <div
+                                                key={workspace.id}
+                                                style={{
+                                                    background: isExpanded
+                                                        ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%)'
+                                                        : 'rgba(255,255,255,0.03)',
+                                                    borderRadius: 16,
+                                                    border: `1px solid ${isExpanded ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
+                                                    transition: 'all 0.2s',
+                                                    overflow: 'hidden'
+                                                }}
+                                            >
+                                                {/* Workspace Header */}
+                                                <div
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleToggleExpand(workspace.id);
+                                                    }}
+                                                    style={{
+                                                        padding: 16,
+                                                        cursor: 'pointer',
                                                         display: 'flex',
-                                                        gap: 8,
-                                                        marginBottom: 12
+                                                        alignItems: 'center',
+                                                        gap: 12,
+                                                        transition: 'background 0.2s'
+                                                    }}
+                                                    onMouseEnter={e => {
+                                                        e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                                                    }}
+                                                    onMouseLeave={e => {
+                                                        e.currentTarget.style.background = 'transparent';
+                                                    }}
+                                                >
+                                                    {/* Expand/Collapse Icon */}
+                                                    <div style={{
+                                                        width: 24,
+                                                        height: 24,
+                                                        borderRadius: 6,
+                                                        background: 'rgba(139, 92, 246, 0.2)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        transition: 'transform 0.2s',
+                                                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
                                                     }}>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleSelectAllUrls(workspace.id, workspace);
-                                                            }}
-                                                            style={{
-                                                                padding: '6px 12px',
-                                                                borderRadius: 8,
-                                                                background: 'rgba(139, 92, 246, 0.2)',
-                                                                border: '1px solid rgba(139, 92, 246, 0.3)',
-                                                                color: '#a78bfa',
-                                                                fontSize: 11,
-                                                                fontWeight: 600,
-                                                                cursor: 'pointer',
-                                                                transition: 'all 0.2s'
-                                                            }}
-                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(139, 92, 246, 0.3)'}
-                                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)'}
-                                                        >
-                                                            Select All
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleDeselectAllUrls(workspace.id);
-                                                            }}
-                                                            style={{
-                                                                padding: '6px 12px',
-                                                                borderRadius: 8,
-                                                                background: 'rgba(255,255,255,0.05)',
-                                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                                color: '#94a3b8',
-                                                                fontSize: 11,
-                                                                fontWeight: 600,
-                                                                cursor: 'pointer',
-                                                                transition: 'all 0.2s'
-                                                            }}
-                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                                                        >
-                                                            Deselect All
-                                                        </button>
+                                                        <FontAwesomeIcon icon={faChevronDown} style={{ color: '#a78bfa', fontSize: 12 }} />
                                                     </div>
 
-                                                    {/* URL List */}
-                                                    <div style={{
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        gap: 8,
-                                                        maxHeight: 300,
-                                                        overflowY: 'auto'
-                                                    }}>
-                                                        {workspace.urls?.map((urlObj, idx) => {
-                                                            const isUrlSelected = selectedUrlsForWorkspace.has(urlObj.url);
-                                                            let hostname = '';
-                                                            try {
-                                                                hostname = new URL(urlObj.url).hostname;
-                                                            } catch (e) {
-                                                                hostname = urlObj.url;
-                                                            }
+                                                    {/* Workspace icon */}
+                                                    <div style={{ fontSize: 24 }}>{workspace.icon || '📁'}</div>
 
-                                                            return (
-                                                                <div
-                                                                    key={idx}
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleToggleWorkspaceUrl(workspace.id, urlObj.url);
-                                                                    }}
-                                                                    style={{
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        gap: 12,
-                                                                        padding: 10,
-                                                                        background: isUrlSelected ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
-                                                                        border: `1px solid ${isUrlSelected ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
-                                                                        borderRadius: 10,
-                                                                        cursor: 'pointer',
-                                                                        transition: 'all 0.2s'
-                                                                    }}
-                                                                    onMouseEnter={e => {
-                                                                        if (!isUrlSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                                                                    }}
-                                                                    onMouseLeave={e => {
-                                                                        if (!isUrlSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                                                                    }}
-                                                                >
-                                                                    {/* Checkbox */}
-                                                                    <div style={{
-                                                                        width: 16,
-                                                                        height: 16,
-                                                                        borderRadius: 4,
-                                                                        border: `2px solid ${isUrlSelected ? '#a78bfa' : '#475569'}`,
-                                                                        background: isUrlSelected ? '#a78bfa' : 'transparent',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        transition: 'all 0.2s'
-                                                                    }}>
-                                                                        {isUrlSelected && (
-                                                                            <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#fff', fontSize: 8 }} />
-                                                                        )}
-                                                                    </div>
-
-                                                                    {/* Favicon */}
-                                                                    <div style={{
-                                                                        width: 20,
-                                                                        height: 20,
-                                                                        borderRadius: 4,
-                                                                        overflow: 'hidden',
-                                                                        background: '#000',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center'
-                                                                    }}>
-                                                                        <img
-                                                                            src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=32`}
-                                                                            alt=""
-                                                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                                                            onError={(e) => { e.target.style.display = 'none'; }}
-                                                                        />
-                                                                    </div>
-
-                                                                    {/* URL Info */}
-                                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                                        <div style={{
-                                                                            fontSize: 12,
-                                                                            fontWeight: 500,
-                                                                            color: '#fff',
-                                                                            whiteSpace: 'nowrap',
-                                                                            overflow: 'hidden',
-                                                                            textOverflow: 'ellipsis'
-                                                                        }}>
-                                                                            {urlObj.title || hostname}
-                                                                        </div>
-                                                                        <div style={{
-                                                                            fontSize: 10,
-                                                                            color: '#64748b',
-                                                                            whiteSpace: 'nowrap',
-                                                                            overflow: 'hidden',
-                                                                            textOverflow: 'ellipsis'
-                                                                        }}>
-                                                                            {hostname}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
+                                                    {/* Workspace info */}
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>
+                                                            {workspace.name}
+                                                        </div>
+                                                        <div style={{ color: '#64748b', fontSize: 12 }}>
+                                                            {tabCount} URL{tabCount !== 1 ? 's' : ''}
+                                                            {selectedUrlCount > 0 && ` • ${selectedUrlCount} selected`}
+                                                            {!isExpanded && ' • Click to expand'}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            )}
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    )}
-                </div>
 
-                {/* Footer */}
-                <div style={{
-                    padding: 24, borderTop: '1px solid rgba(255,255,255,0.1)',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    background: '#1e293b'
-                }}>
-                    {/* Selection Summary */}
-                    <div style={{ color: '#94a3b8', fontSize: 13 }}>
-                        {mode === 'tabs' && selectedCount > 0 && (
-                            `Sharing ${selectedCount} tab${selectedCount !== 1 ? 's' : ''}`
+                                                {/* Expanded URL List */}
+                                                {isExpanded && (
+                                                    <div style={{
+                                                        borderTop: '1px solid rgba(255,255,255,0.1)',
+                                                        padding: 16,
+                                                        background: 'rgba(0,0,0,0.2)'
+                                                    }}>
+                                                        {/* Select All / Deselect All */}
+                                                        <div style={{
+                                                            display: 'flex',
+                                                            gap: 8,
+                                                            marginBottom: 12
+                                                        }}>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleSelectAllUrls(workspace.id, workspace);
+                                                                }}
+                                                                style={{
+                                                                    padding: '6px 12px',
+                                                                    borderRadius: 8,
+                                                                    background: 'rgba(139, 92, 246, 0.2)',
+                                                                    border: '1px solid rgba(139, 92, 246, 0.3)',
+                                                                    color: '#a78bfa',
+                                                                    fontSize: 11,
+                                                                    fontWeight: 600,
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s'
+                                                                }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(139, 92, 246, 0.3)'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)'}
+                                                            >
+                                                                Select All
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeselectAllUrls(workspace.id);
+                                                                }}
+                                                                style={{
+                                                                    padding: '6px 12px',
+                                                                    borderRadius: 8,
+                                                                    background: 'rgba(255,255,255,0.05)',
+                                                                    border: '1px solid rgba(255,255,255,0.1)',
+                                                                    color: '#94a3b8',
+                                                                    fontSize: 11,
+                                                                    fontWeight: 600,
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s'
+                                                                }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                                            >
+                                                                Deselect All
+                                                            </button>
+                                                        </div>
+
+                                                        {/* URL List */}
+                                                        <div style={{
+                                                            display: 'flex',
+                                                            flexDirection: 'column',
+                                                            gap: 8,
+                                                            maxHeight: 300,
+                                                            overflowY: 'auto'
+                                                        }}>
+                                                            {workspace.urls?.map((urlObj, idx) => {
+                                                                const isUrlSelected = selectedUrlsForWorkspace.has(urlObj.url);
+                                                                let hostname = '';
+                                                                try {
+                                                                    hostname = new URL(urlObj.url).hostname;
+                                                                } catch (e) {
+                                                                    hostname = urlObj.url;
+                                                                }
+
+                                                                return (
+                                                                    <div
+                                                                        key={idx}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleToggleWorkspaceUrl(workspace.id, urlObj.url);
+                                                                        }}
+                                                                        style={{
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            gap: 12,
+                                                                            padding: 10,
+                                                                            background: isUrlSelected ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                                            border: `1px solid ${isUrlSelected ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
+                                                                            borderRadius: 10,
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.2s'
+                                                                        }}
+                                                                        onMouseEnter={e => {
+                                                                            if (!isUrlSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                                                                        }}
+                                                                        onMouseLeave={e => {
+                                                                            if (!isUrlSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                                                                        }}
+                                                                    >
+                                                                        {/* Checkbox */}
+                                                                        <div style={{
+                                                                            width: 16,
+                                                                            height: 16,
+                                                                            borderRadius: 4,
+                                                                            border: `2px solid ${isUrlSelected ? '#a78bfa' : '#475569'}`,
+                                                                            background: isUrlSelected ? '#a78bfa' : 'transparent',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            transition: 'all 0.2s'
+                                                                        }}>
+                                                                            {isUrlSelected && (
+                                                                                <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#fff', fontSize: 8 }} />
+                                                                            )}
+                                                                        </div>
+
+                                                                        {/* Favicon */}
+                                                                        <div style={{
+                                                                            width: 20,
+                                                                            height: 20,
+                                                                            borderRadius: 4,
+                                                                            overflow: 'hidden',
+                                                                            background: '#000',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center'
+                                                                        }}>
+                                                                            <img
+                                                                                src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=32`}
+                                                                                alt=""
+                                                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                                                onError={(e) => { e.target.style.display = 'none'; }}
+                                                                            />
+                                                                        </div>
+
+                                                                        {/* URL Info */}
+                                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                                            <div style={{
+                                                                                fontSize: 12,
+                                                                                fontWeight: 500,
+                                                                                color: '#fff',
+                                                                                whiteSpace: 'nowrap',
+                                                                                overflow: 'hidden',
+                                                                                textOverflow: 'ellipsis'
+                                                                            }}>
+                                                                                {urlObj.title || hostname}
+                                                                            </div>
+                                                                            <div style={{
+                                                                                fontSize: 10,
+                                                                                color: '#64748b',
+                                                                                whiteSpace: 'nowrap',
+                                                                                overflow: 'hidden',
+                                                                                textOverflow: 'ellipsis'
+                                                                            }}>
+                                                                                {hostname}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
                         )}
-                        {mode === 'workspace' && (() => {
-                            const totalSelectedUrls = Array.from(selectedWorkspaceUrls.values())
-                                .reduce((sum, urlSet) => sum + urlSet.size, 0);
-                            if (totalSelectedUrls > 0) {
-                                return `Sharing ${totalSelectedUrls} URL${totalSelectedUrls !== 1 ? 's' : ''}`;
-                            }
-                            return '';
-                        })()}
                     </div>
 
-                    <div style={{ display: 'flex', gap: 12 }}>
-                        <button
-                            onClick={onClose}
-                            style={{
-                                padding: '12px 20px', borderRadius: 10,
-                                background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
-                                color: '#94a3b8', fontSize: 14, fontWeight: 500, cursor: 'pointer'
-                            }}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleShare}
-                            disabled={loading || !selectedTeamId ||
-                                (mode === 'tabs' && selectedCount === 0) ||
-                                (mode === 'workspace' && selectedWorkspaceUrls.size === 0)}
-                            style={{
-                                padding: '12px 24px', borderRadius: 10,
-                                background: successMsg ? '#10b981' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                                border: 'none',
-                                color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                                boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)',
-                                opacity: (loading || !selectedTeamId || (mode === 'tabs' && selectedCount === 0) || (mode === 'workspace' && !selectedWorkspaceId)) ? 0.5 : 1,
-                                minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
-                            }}
-                        >
-                            {successMsg ? (
-                                <><FontAwesomeIcon icon={faCheckCircle} /> Sent!</>
-                            ) : (
-                                <>{loading ? 'Sending...' : 'Share Now'}</>
+                    {/* Footer */}
+                    <div style={{
+                        padding: 24, borderTop: '1px solid rgba(255,255,255,0.1)',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        background: '#1e293b'
+                    }}>
+                        {/* Selection Summary */}
+                        <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                            {mode === 'tabs' && selectedCount > 0 && (
+                                `Sharing ${selectedCount} tab${selectedCount !== 1 ? 's' : ''}`
                             )}
-                        </button>
+                            {mode === 'workspace' && (() => {
+                                const totalSelectedUrls = Array.from(selectedWorkspaceUrls.values())
+                                    .reduce((sum, urlSet) => sum + urlSet.size, 0);
+                                if (totalSelectedUrls > 0) {
+                                    return `Sharing ${totalSelectedUrls} URL${totalSelectedUrls !== 1 ? 's' : ''}`;
+                                }
+                                return '';
+                            })()}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 12 }}>
+                            <button
+                                onClick={onClose}
+                                style={{
+                                    padding: '12px 20px', borderRadius: 10,
+                                    background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#94a3b8', fontSize: 14, fontWeight: 500, cursor: 'pointer'
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleShare}
+                                disabled={loading || !selectedTeamId ||
+                                    (mode === 'tabs' && selectedCount === 0) ||
+                                    (mode === 'workspace' && selectedWorkspaceUrls.size === 0)}
+                                style={{
+                                    padding: '14px 28px',
+                                    borderRadius: 12,
+                                    background: successMsg ? '#10b981' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                    border: 'none',
+                                    color: '#fff',
+                                    fontSize: 15,
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    boxShadow: '0 4px 12px -2px rgba(59, 130, 246, 0.4)',
+                                    opacity: (loading || !selectedTeamId ||
+                                        (mode === 'tabs' && selectedCount === 0) ||
+                                        (mode === 'workspace' && selectedWorkspaceUrls.size === 0)) ? 0.5 : 1,
+                                    minWidth: 160,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 10,
+                                    transition: 'all 0.2s',
+                                    transform: 'translateY(0)'
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (!loading && selectedTeamId &&
+                                        ((mode === 'tabs' && selectedCount > 0) ||
+                                            (mode === 'workspace' && selectedWorkspaceUrls.size > 0))) {
+                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                        e.currentTarget.style.boxShadow = '0 6px 16px -2px rgba(59, 130, 246, 0.5)';
+                                    }
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'translateY(0)';
+                                    e.currentTarget.style.boxShadow = '0 4px 12px -2px rgba(59, 130, 246, 0.4)';
+                                }}
+                            >
+                                {successMsg ? (
+                                    <>
+                                        <FontAwesomeIcon icon={faCheckCircle} style={{ fontSize: 16 }} />
+                                        <span>Successfully Shared!</span>
+                                    </>
+                                ) : loading ? (
+                                    <>
+                                        <div style={{
+                                            width: 14,
+                                            height: 14,
+                                            border: '2px solid rgba(255,255,255,0.3)',
+                                            borderTopColor: '#fff',
+                                            borderRadius: '50%',
+                                            animation: 'spin 0.8s linear infinite'
+                                        }} />
+                                        <span>Sharing...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <FontAwesomeIcon icon={faShare} style={{ fontSize: 14 }} />
+                                        <span>
+                                            {mode === 'tabs' && selectedCount > 0
+                                                ? `Share ${selectedCount} Tab${selectedCount !== 1 ? 's' : ''} to Team`
+                                                : mode === 'workspace' && (() => {
+                                                    const totalUrls = Array.from(selectedWorkspaceUrls.values())
+                                                        .reduce((sum, urlSet) => sum + urlSet.size, 0);
+                                                    return totalUrls > 0
+                                                        ? `Share ${totalUrls} URL${totalUrls !== 1 ? 's' : ''} to Team`
+                                                        : 'Share to Team';
+                                                })()
+                                            }
+                                        </span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 
     return createPortal(modalContent, document.body);

@@ -560,8 +560,15 @@
   transform: translateY(0);
 }
 
-/* Show pin button on hover in list view */
-.cooldesk-workspace-card.compact:hover .workspace-pin-btn {
+/* Show pin and delete buttons on hover in list view */
+.cooldesk-workspace-card.compact:hover .workspace-pin-btn,
+.cooldesk-workspace-card.compact:hover .workspace-delete-btn {
+  opacity: 1 !important;
+}
+
+/* Show pin and delete buttons on hover in grid view */
+.cooldesk-workspace-card:hover .workspace-pin-btn,
+.cooldesk-workspace-card:hover .workspace-delete-btn {
   opacity: 1 !important;
 }
 

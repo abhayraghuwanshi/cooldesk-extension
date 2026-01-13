@@ -171,6 +171,24 @@ export function WorkspaceList({
         }
     };
 
+    const handleDeleteWorkspace = async (workspace) => {
+        // Confirm deletion
+        const confirmed = window.confirm(`Are you sure you want to delete the workspace "${workspace.name}"? This action cannot be undone.`);
+
+        if (!confirmed) return;
+
+        try {
+            await deleteWorkspace(workspace.id);
+            console.log(`[WorkspaceList] Deleted workspace: ${workspace.name}`);
+
+            // Reload the page to refresh the workspace list
+            window.location.reload();
+        } catch (error) {
+            console.error('[WorkspaceList] Failed to delete workspace:', error);
+            alert('Failed to delete workspace. Please try again.');
+        }
+    };
+
     return (
         <div style={{
             display: 'flex',
@@ -290,6 +308,7 @@ export function WorkspaceList({
                                             compact={viewMode === 'list'}
                                             isPinned={true}
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
+                                            onDelete={handleDeleteWorkspace}
                                         />
                                     ))}
                                 </div>
@@ -331,6 +350,7 @@ export function WorkspaceList({
                                             compact={viewMode === 'list'}
                                             isPinned={false}
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
+                                            onDelete={handleDeleteWorkspace}
                                         />
                                     ))}
                                 </div>
