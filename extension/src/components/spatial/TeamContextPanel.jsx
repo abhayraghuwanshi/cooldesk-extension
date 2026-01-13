@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
 
 export default function TeamContextPanel({ teamId }) {
+    console.log('[TeamContext] Component rendered with teamId:', teamId);
+
     const [context, setContext] = useState({
         sprintGoal: '',
         incident: '',
@@ -16,35 +18,47 @@ export default function TeamContextPanel({ teamId }) {
     const mapRef = useRef(null);
 
     useEffect(() => {
-        if (!teamId) return;
+        console.log('[TeamContext] useEffect triggered. teamId:', teamId);
+        if (!teamId) {
+            console.warn('[TeamContext] No teamId provided, skipping initialization');
+            return;
+        }
 
         let observer = null;
         let pMap = null;
 
         const load = async () => {
+            console.log('[TeamContext] Initializing for team:', teamId);
             await p2pStorage.initializeTeamStorage(teamId);
             pMap = p2pStorage.getSharedContext(teamId);
             mapRef.current = pMap;
 
             const updateState = () => {
-                setContext({
+                const newContext = {
                     sprintGoal: pMap.get('sprintGoal') || '',
                     incident: pMap.get('incident') || '',
                     todaysFocus: pMap.get('todaysFocus') || '',
                     deploymentFreeze: pMap.get('deploymentFreeze') || false
-                });
+                };
+                console.log('[TeamContext] Updating state:', newContext);
+                setContext(newContext);
             };
 
             updateState();
 
-            observer = () => updateState();
+            observer = () => {
+                console.log('[TeamContext] Observer fired!');
+                updateState();
+            };
             pMap.observe(observer);
+            console.log('[TeamContext] Observer attached for team:', teamId);
         };
         load();
 
         return () => {
             if (pMap && observer) pMap.unobserve(observer);
             mapRef.current = null;
+            console.log('[TeamContext] Cleanup for team:', teamId);
         };
     }, [teamId]);
 

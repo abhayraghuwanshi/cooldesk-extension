@@ -22,6 +22,8 @@ const PAPER_STYLES = [
 ];
 
 export default function NoticeBoard({ teamId }) {
+    console.log('[NoticeBoard] Component rendered with teamId:', teamId);
+
     const [notices, setNotices] = useState([]);
     const [isAdding, setIsAdding] = useState(false);
     const [newNoteText, setNewNoteText] = useState('');
@@ -29,28 +31,39 @@ export default function NoticeBoard({ teamId }) {
     const noticesRef = useRef(null);
 
     useEffect(() => {
-        if (!teamId) return;
+        console.log('[NoticeBoard] useEffect triggered. teamId:', teamId);
+        if (!teamId) {
+            console.warn('[NoticeBoard] No teamId provided, skipping initialization');
+            return;
+        }
 
         let observer = null;
         let pArray = null;
 
         const load = async () => {
+            console.log('[NoticeBoard] Initializing for team:', teamId);
             await p2pStorage.initializeTeamStorage(teamId);
             pArray = p2pStorage.getSharedNotices(teamId);
             noticesRef.current = pArray;
 
-            setNotices(pArray.toArray());
+            const currentNotices = pArray.toArray();
+            console.log('[NoticeBoard] Loaded notices:', currentNotices);
+            setNotices(currentNotices);
 
             observer = () => {
-                setNotices(pArray.toArray());
+                const updated = pArray.toArray();
+                console.log('[NoticeBoard] Observer fired! Updated notices:', updated);
+                setNotices(updated);
             };
             pArray.observe(observer);
+            console.log('[NoticeBoard] Observer attached for team:', teamId);
         };
         load();
 
         return () => {
             if (pArray && observer) pArray.unobserve(observer);
             noticesRef.current = null;
+            console.log('[NoticeBoard] Cleanup for team:', teamId);
         };
     }, [teamId]);
 
@@ -70,8 +83,12 @@ export default function NoticeBoard({ teamId }) {
             createdAt: Date.now(),
         };
 
+        console.log('[NoticeBoard] Adding new notice:', newNote);
         if (noticesRef.current) {
             noticesRef.current.push([newNote]);
+            console.log('[NoticeBoard] Notice added. New array length:', noticesRef.current.length);
+        } else {
+            console.error('[NoticeBoard] Cannot add notice - noticesRef.current is null!');
         }
         setNewNoteText('');
         setNewNoteImage('');
@@ -125,10 +142,10 @@ export default function NoticeBoard({ teamId }) {
                         <FontAwesomeIcon icon={faMapPin} style={{ color: '#fff', fontSize: 18 }} />
                     </div>
                     <div>
-                        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#fff' }}>
+                        <h2 style={{ fontSize: 'var(--font-2xl)', fontWeight: 700, margin: 0, color: '#fff' }}>
                             Notice Board
                         </h2>
-                        <div style={{ fontSize: 13, opacity: 0.6, marginTop: 2 }}>
+                        <div style={{ fontSize: 'var(--font-sm)', opacity: 0.6, marginTop: 2 }}>
                             {notices.length} active note{notices.length !== 1 ? 's' : ''}
                         </div>
                     </div>
@@ -140,7 +157,7 @@ export default function NoticeBoard({ teamId }) {
                         background: isAdding ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.1)',
                         border: '1px solid rgba(255,255,255,0.1)',
                         borderRadius: 10, padding: '8px 16px',
-                        color: '#fff', fontWeight: 600, fontSize: 13,
+                        color: '#fff', fontWeight: 600, fontSize: 'var(--font-sm)',
                         cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
                         transition: 'all 0.2s',
                         backdropFilter: 'blur(10px)'
@@ -184,7 +201,7 @@ export default function NoticeBoard({ teamId }) {
                                 background: 'rgba(0,0,0,0.2)',
                                 border: '1px solid rgba(255,255,255,0.1)',
                                 borderRadius: 12, padding: 16,
-                                color: '#fff', fontSize: 16, fontFamily: 'inherit',
+                                color: '#fff', fontSize: 'var(--font-lg)', fontFamily: 'inherit',
                                 resize: 'none', outline: 'none',
                                 lineHeight: 1.6
                             }}
@@ -201,7 +218,7 @@ export default function NoticeBoard({ teamId }) {
                                     background: 'rgba(0,0,0,0.2)',
                                     border: '1px solid rgba(255,255,255,0.1)',
                                     borderRadius: 10, padding: '0 16px', height: 44,
-                                    color: '#fff', fontSize: 14, outline: 'none'
+                                    color: '#fff', fontSize: 'var(--font-md)', outline: 'none'
                                 }}
                             />
                             <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)' }} />
@@ -262,12 +279,12 @@ export default function NoticeBoard({ teamId }) {
                         }}>
                             <FontAwesomeIcon icon={faMapPin} size="lg" />
                         </div>
-                        <div style={{ fontSize: 15, fontWeight: 500 }}>The board is empty</div>
+                        <div style={{ fontSize: 'var(--font-lg)', fontWeight: 500 }}>The board is empty</div>
                         <button
                             onClick={() => setIsAdding(true)}
                             style={{
                                 background: 'transparent', border: 'none',
-                                color: '#3b82f6', cursor: 'pointer', fontSize: 14
+                                color: '#3b82f6', cursor: 'pointer', fontSize: 'var(--font-md)'
                             }}
                         >
                             Create the first note
@@ -356,7 +373,7 @@ export default function NoticeBoard({ teamId }) {
                                         </div>
                                     )}
                                     <div style={{
-                                        whiteSpace: 'pre-wrap', lineHeight: 1.6, fontSize: 16, fontWeight: 500,
+                                        whiteSpace: 'pre-wrap', lineHeight: 1.6, fontSize: 'var(--font-lg)', fontWeight: 500,
                                         // Fix for font fallback
                                         fontFamily: "'Coming Soon', 'Patrick Hand', 'Segoe Print', 'Chalkboard SE', sans-serif"
                                     }}>
@@ -369,14 +386,13 @@ export default function NoticeBoard({ teamId }) {
                                     marginTop: 20, paddingTop: 12,
                                     borderTop: '1px dashed rgba(0,0,0,0.08)',
                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                    fontSize: 12, color: '#64748b'
+                                    fontSize: 'var(--font-sm)'
                                 }}>
-                                    <span style={{
-                                        fontFamily: "'Courier New', Courier, monospace",
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        letterSpacing: '0.02em',
-                                        opacity: 0.7,
+                                    <span className="notice-date" style={{
+                                        fontSize: 'var(--font-sm)',
+
+                                        color: '#1e293b',
+                                        letterSpacing: '0.01em',
                                         textTransform: 'uppercase'
                                     }}>
                                         {new Date(note.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
@@ -406,7 +422,7 @@ export default function NoticeBoard({ teamId }) {
                     })
                 )}
             </div>
-        </div>
+        </div >
     );
 }
 
@@ -415,6 +431,17 @@ style.textContent = `
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(-10px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+    .notice-date {
+        color: #1e293b !important;
+        opacity: 1 !important;
+        font-weight: 600 !important;
+    }
+    .sticky-board-root span {
+        color: inherit;
+    }
+    .sticky-board-root .notice-date {
+        color: #1e293b !important;
     }
 `;
 document.head.appendChild(style);

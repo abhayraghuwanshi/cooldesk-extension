@@ -137,7 +137,7 @@ export default function TeamView({ team: propTeam }) {
                 display: 'flex', flexDirection: 'column',
                 background: 'rgba(0,0,0,0.2)'
             }}>
-                <div style={{ padding: '16px', fontSize: 13, fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div style={{ padding: '16px', fontSize: 'var(--font-sm)', fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     Your Teams
                 </div>
                 <div style={{ overflowY: 'auto', flex: 1 }}>
@@ -171,7 +171,7 @@ export default function TeamView({ team: propTeam }) {
                         );
                     })}
                     {teams.length === 0 && (
-                        <div style={{ padding: 16, fontSize: 12, opacity: 0.5 }}>
+                        <div style={{ padding: 16, fontSize: 'var(--font-sm)', opacity: 0.5 }}>
                             No teams yet. Create one in Settings.
                         </div>
                     )}
@@ -194,8 +194,8 @@ export default function TeamView({ team: propTeam }) {
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                         }}>
                             <div>
-                                <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>{activeTeam.name}</h1>
-                                <div style={{ fontSize: 13, opacity: 0.5, marginTop: 4 }}>
+                                <h1 style={{ margin: 0, fontSize: 'var(--font-4xl)', fontWeight: 700 }}>{activeTeam.name}</h1>
+                                <div style={{ fontSize: 'var(--font-sm)', opacity: 0.5, marginTop: 4 }}>
                                     Shared Workspace • {peerCounts.get(activeTeam.id) || 0} active peers connected
                                 </div>
                             </div>
@@ -230,7 +230,7 @@ export default function TeamView({ team: propTeam }) {
                             <div style={{ padding: '0 32px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                                     <FontAwesomeIcon icon={faLink} style={{ color: '#60a5fa', opacity: 0.8 }} />
-                                    <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: '#e5e7eb' }}>
+                                    <h2 style={{ fontSize: 'var(--font-xl)', fontWeight: 600, margin: 0, color: '#e5e7eb' }}>
                                         Shared Links
                                     </h2>
                                     <div style={{ height: 1, flex: 1, background: 'rgba(255,255,255,0.06)' }} />
@@ -271,16 +271,16 @@ export default function TeamView({ team: propTeam }) {
                                                 >
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                                                         <div style={{
-                                                            fontSize: 24, width: 40, height: 40, borderRadius: 10,
+                                                            fontSize: 'var(--font-4xl)', width: 40, height: 40, borderRadius: 10,
                                                             background: 'rgba(139, 92, 246, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center'
                                                         }}>
                                                             {item.meta?.icon || '📁'}
                                                         </div>
                                                         <div style={{ flex: 1 }}>
-                                                            <div style={{ color: '#a78bfa', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
+                                                            <div style={{ color: '#a78bfa', fontSize: 'var(--font-xs)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
                                                                 SHARED WORKSPACE
                                                             </div>
-                                                            <div style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>
+                                                            <div style={{ fontSize: 'var(--font-lg)', fontWeight: 600, color: '#fff' }}>
                                                                 {item.meta?.workspaceName || item.title || 'Untitled'}
                                                             </div>
                                                         </div>
@@ -300,10 +300,10 @@ export default function TeamView({ team: propTeam }) {
                                                         </button>
                                                     </div>
                                                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                                                        <div style={{ fontSize: 12, color: '#a78bfa', background: 'rgba(139, 92, 246, 0.1)', padding: '4px 8px', borderRadius: 6 }}>
+                                                        <div style={{ fontSize: 'var(--font-sm)', color: '#a78bfa', background: 'rgba(139, 92, 246, 0.1)', padding: '4px 8px', borderRadius: 6 }}>
                                                             Click to Open
                                                         </div>
-                                                        <div style={{ fontSize: 11, opacity: 0.4 }}>
+                                                        <div style={{ fontSize: 'var(--font-xs)', opacity: 0.4 }}>
                                                             Shared by {item.addedBy || 'Unknown'} • {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
                                                         </div>
                                                     </div>
@@ -371,10 +371,10 @@ export default function TeamView({ team: propTeam }) {
                                                             opacity: 0.6
                                                         }}
                                                     >
-                                                        <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
+                                                        <span style={{ fontSize: 'var(--font-xl)', lineHeight: 1 }}>×</span>
                                                     </button>
                                                 </div>
-                                                <div style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.4, height: 40, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                                <div style={{ fontSize: 'var(--font-base)', fontWeight: 500, lineHeight: 1.4, height: 40, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                                                     {item.title || item.url || 'Untitled Link'}
                                                 </div>
                                             </a>
@@ -395,7 +395,7 @@ export default function TeamView({ team: propTeam }) {
                                             <FontAwesomeIcon icon={faLink} size="lg" style={{ opacity: 0.5 }} />
                                         </div>
                                         <div style={{ fontWeight: 500 }}>No shared items yet</div>
-                                        <div style={{ fontSize: 13, marginTop: 6, opacity: 0.7 }}>Share a tab to start collaborating with your team.</div>
+                                        <div style={{ fontSize: 'var(--font-sm)', marginTop: 6, opacity: 0.7 }}>Share a tab to start collaborating with your team.</div>
                                     </div>
                                 )}
                             </div>

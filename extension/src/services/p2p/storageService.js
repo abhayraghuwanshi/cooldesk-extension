@@ -68,7 +68,9 @@ class P2PStorageService {
         if (!doc) {
             throw new Error(`Storage not initialized for team ${teamId}`);
         }
-        return doc.getArray('shared-notices');
+        const notices = doc.getArray('shared-notices');
+        console.log(`[P2P Storage] Accessed shared-notices for team ${teamId}, current length:`, notices.length);
+        return notices;
     }
 
     /**
@@ -81,7 +83,9 @@ class P2PStorageService {
         if (!doc) {
             throw new Error(`Storage not initialized for team ${teamId}`);
         }
-        return doc.getMap('team-context');
+        const context = doc.getMap('team-context');
+        console.log(`[P2P Storage] Accessed team-context for team ${teamId}, keys:`, Array.from(context.keys()));
+        return context;
     }
 
     /**
@@ -250,6 +254,46 @@ class P2PStorageService {
             return keysToDelete.length;
         } catch (error) {
             console.error(`[P2P Storage] Error cleaning up duplicates for team ${teamId}:`, error);
+            return 0;
+        }
+    }
+
+    /**
+     * Fix admin status to ensure only one admin exists
+     * The admin should be the member with the earliest joinedAt timestamp
+     * @param {string} teamId 
+     */
+    fixAdminStatus(teamId) {
+        try {
+            const membersMap = this.getSharedMembers(teamId);
+            let earliestMember = null;
+            let earliestJoinTime = Infinity;
+
+            // Find the member with the earliest join time
+            membersMap.forEach((member, key) => {
+                if (member.joinedAt < earliestJoinTime) {
+                    earliestJoinTime = member.joinedAt;
+                    earliestMember = { ...member, key };
+                }
+            });
+
+            // Update all members: only the earliest one should be admin
+            let fixedCount = 0;
+            membersMap.forEach((member, key) => {
+                const shouldBeAdmin = (key === earliestMember?.key);
+                if (member.isAdmin !== shouldBeAdmin) {
+                    membersMap.set(key, {
+                        ...member,
+                        isAdmin: shouldBeAdmin
+                    });
+                    fixedCount++;
+                }
+            });
+
+            console.log(`[P2P Storage] Fixed admin status for ${fixedCount} members in team ${teamId}`);
+            return fixedCount;
+        } catch (error) {
+            console.error(`[P2P Storage] Error fixing admin status for team ${teamId}:`, error);
             return 0;
         }
     }

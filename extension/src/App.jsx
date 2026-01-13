@@ -907,25 +907,9 @@ export default function App() {
           body.classList.add(newThemeClass);
           setThemeClass(newThemeClass);
 
-          // Initialize font size using utility
+          // Initialize font settings (size and family) using utility
           const initialFontSize = initializeFontSize();
           setFontSize(initialFontSize);
-
-          // Apply font family
-          const fontFamilies = [
-            { id: 'system', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif' },
-            { id: 'inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' },
-            { id: 'roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif' },
-            { id: 'poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif' },
-            { id: 'jetbrains', family: 'JetBrains Mono, Consolas, Monaco, monospace' }
-          ];
-
-          if (savedFontFamily) {
-            const fontFamilyObj = fontFamilies.find(f => f.id === savedFontFamily);
-            if (fontFamilyObj) {
-              body.style.fontFamily = fontFamilyObj.family;
-            }
-          }
 
         } catch (e) {
           console.warn('Failed to apply saved preferences:', e);

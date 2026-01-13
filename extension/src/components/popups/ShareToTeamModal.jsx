@@ -17,6 +17,10 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
     const [loading, setLoading] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
 
+    // New state for expandable workspaces and selective URL sharing
+    const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(null);
+    const [selectedWorkspaceUrls, setSelectedWorkspaceUrls] = useState(new Map()); // Map<workspaceId, Set<urlString>>
+
     useEffect(() => {
         if (isOpen) {
             // Load Teams
@@ -46,15 +50,36 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                 });
             }
 
+
             // Load All Workspaces from IndexedDB
-            listWorkspaces().then((allWorkspaces) => {
+            console.log('[ShareModal] Loading workspaces...');
+            listWorkspaces().then((response) => {
+                console.log('[ShareModal] Workspaces loaded:', response);
+                console.log('[ShareModal] Is array?', Array.isArray(response));
+                console.log('[ShareModal] Length:', response?.length);
+
+                // The error handler wraps the result in {success, data}
+                let allWorkspaces = response;
+                if (response && typeof response === 'object' && 'data' in response) {
+                    console.log('[ShareModal] Extracting data from wrapper object');
+                    allWorkspaces = response.data;
+                }
+
                 const workspaceArray = Array.isArray(allWorkspaces) ? allWorkspaces : [];
+                console.log('[ShareModal] Workspace array:', workspaceArray);
+                console.log('[ShareModal] Workspace count:', workspaceArray.length);
+
                 setWorkspaces(workspaceArray);
+
                 // Pre-select context workspace if available
                 if (contextWorkspace) {
+                    console.log('[ShareModal] Pre-selecting context workspace:', contextWorkspace.id);
                     setSelectedWorkspaceId(contextWorkspace.id);
                 } else if (workspaceArray.length > 0) {
+                    console.log('[ShareModal] Pre-selecting first workspace:', workspaceArray[0].id);
                     setSelectedWorkspaceId(workspaceArray[0].id);
+                } else {
+                    console.warn('[ShareModal] No workspaces to select');
                 }
             }).catch(err => {
                 console.error('[ShareModal] Failed to load workspaces:', err);
@@ -81,6 +106,53 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
         setSelectedTabIds(new Set());
     };
 
+    // Toggle workspace expansion
+    const handleToggleExpand = (workspaceId) => {
+        setExpandedWorkspaceId(prev => prev === workspaceId ? null : workspaceId);
+    };
+
+    // Toggle individual URL selection within a workspace
+    const handleToggleWorkspaceUrl = (workspaceId, url) => {
+        setSelectedWorkspaceUrls(prev => {
+            const newMap = new Map(prev);
+            const urlSet = newMap.get(workspaceId) || new Set();
+            const newUrlSet = new Set(urlSet);
+
+            if (newUrlSet.has(url)) {
+                newUrlSet.delete(url);
+            } else {
+                newUrlSet.add(url);
+            }
+
+            if (newUrlSet.size === 0) {
+                newMap.delete(workspaceId);
+            } else {
+                newMap.set(workspaceId, newUrlSet);
+            }
+
+            return newMap;
+        });
+    };
+
+    // Select all URLs in a workspace
+    const handleSelectAllUrls = (workspaceId, workspace) => {
+        const allUrls = workspace.urls?.map(u => u.url) || [];
+        setSelectedWorkspaceUrls(prev => {
+            const newMap = new Map(prev);
+            newMap.set(workspaceId, new Set(allUrls));
+            return newMap;
+        });
+    };
+
+    // Deselect all URLs in a workspace
+    const handleDeselectAllUrls = (workspaceId) => {
+        setSelectedWorkspaceUrls(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(workspaceId);
+            return newMap;
+        });
+    };
+
     const handleShare = async () => {
         if (!selectedTeamId) return;
         setLoading(true);
@@ -100,23 +172,55 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                     })
                 );
                 await Promise.all(promises);
-            } else if (mode === 'workspace' && selectedWorkspaceId) {
-                // Share workspace reference
-                const workspace = workspaces.find(w => w.id === selectedWorkspaceId);
-                if (workspace) {
-                    await p2pStorage.addItemToTeam(selectedTeamId, {
-                        id: Date.now().toString(),
-                        url: `workspace://${workspace.id}`,
-                        title: `Workspace: ${workspace.name}`,
-                        addedBy: 'Me',
-                        addedAt: Date.now(),
-                        type: 'workspace_ref',
-                        meta: {
-                            workspaceId: workspace.id,
-                            workspaceName: workspace.name,
-                            icon: workspace.icon || '📁'
+            } else if (mode === 'workspace') {
+                // Check if we have selected URLs from expanded workspaces
+                const hasSelectedUrls = selectedWorkspaceUrls.size > 0;
+
+                if (hasSelectedUrls) {
+                    // Share individual URLs from selected workspaces
+                    const promises = [];
+                    let urlIndex = 0;
+
+                    selectedWorkspaceUrls.forEach((urlSet, workspaceId) => {
+                        const workspace = workspaces.find(w => w.id === workspaceId);
+                        if (workspace) {
+                            urlSet.forEach(urlString => {
+                                const urlObj = workspace.urls?.find(u => u.url === urlString);
+                                if (urlObj) {
+                                    promises.push(
+                                        p2pStorage.addItemToTeam(selectedTeamId, {
+                                            id: Date.now().toString() + urlIndex++,
+                                            url: urlObj.url,
+                                            title: urlObj.title || urlString,
+                                            addedBy: 'Me',
+                                            addedAt: Date.now(),
+                                            type: 'link'
+                                        })
+                                    );
+                                }
+                            });
                         }
                     });
+
+                    await Promise.all(promises);
+                } else if (selectedWorkspaceId) {
+                    // Share workspace reference (old behavior)
+                    const workspace = workspaces.find(w => w.id === selectedWorkspaceId);
+                    if (workspace) {
+                        await p2pStorage.addItemToTeam(selectedTeamId, {
+                            id: Date.now().toString(),
+                            url: `workspace://${workspace.id}`,
+                            title: `Workspace: ${workspace.name}`,
+                            addedBy: 'Me',
+                            addedAt: Date.now(),
+                            type: 'workspace_ref',
+                            meta: {
+                                workspaceId: workspace.id,
+                                workspaceName: workspace.name,
+                                icon: workspace.icon || '📁'
+                            }
+                        });
+                    }
                 }
             }
 
@@ -353,49 +457,58 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                                 </div>
                             ) : (
                                 workspaces.map(workspace => {
-                                    const isSelected = selectedWorkspaceId === workspace.id;
-                                    const tabCount = workspace.tabs?.length || 0;
+                                    const isExpanded = expandedWorkspaceId === workspace.id;
+                                    const tabCount = workspace.urls?.length || 0;
+                                    const selectedUrlsForWorkspace = selectedWorkspaceUrls.get(workspace.id) || new Set();
+                                    const selectedUrlCount = selectedUrlsForWorkspace.size;
 
                                     return (
                                         <div
                                             key={workspace.id}
-                                            onClick={() => setSelectedWorkspaceId(workspace.id)}
                                             style={{
-                                                background: isSelected
+                                                background: isExpanded
                                                     ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%)'
                                                     : 'rgba(255,255,255,0.03)',
-                                                borderRadius: 16, padding: 16,
-                                                border: `1px solid ${isSelected ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
-                                                cursor: 'pointer', transition: 'all 0.2s',
-                                                position: 'relative', overflow: 'hidden'
-                                            }}
-                                            onMouseEnter={e => {
-                                                if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                                            }}
-                                            onMouseLeave={e => {
-                                                if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                                                borderRadius: 16,
+                                                border: `1px solid ${isExpanded ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
+                                                transition: 'all 0.2s',
+                                                overflow: 'hidden'
                                             }}
                                         >
-                                            {isSelected && (
+                                            {/* Workspace Header */}
+                                            <div
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleToggleExpand(workspace.id);
+                                                }}
+                                                style={{
+                                                    padding: 16,
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 12,
+                                                    transition: 'background 0.2s'
+                                                }}
+                                                onMouseEnter={e => {
+                                                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                                                }}
+                                                onMouseLeave={e => {
+                                                    e.currentTarget.style.background = 'transparent';
+                                                }}
+                                            >
+                                                {/* Expand/Collapse Icon */}
                                                 <div style={{
-                                                    position: 'absolute', top: -10, right: -10,
-                                                    fontSize: 60, opacity: 0.05, transform: 'rotate(15deg)'
+                                                    width: 24,
+                                                    height: 24,
+                                                    borderRadius: 6,
+                                                    background: 'rgba(139, 92, 246, 0.2)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    transition: 'transform 0.2s',
+                                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
                                                 }}>
-                                                    {workspace.icon || '📁'}
-                                                </div>
-                                            )}
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                {/* Selection indicator */}
-                                                <div style={{
-                                                    width: 18, height: 18, borderRadius: 4,
-                                                    border: `2px solid ${isSelected ? '#a78bfa' : '#475569'}`,
-                                                    background: isSelected ? '#a78bfa' : 'transparent',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    transition: 'all 0.2s'
-                                                }}>
-                                                    {isSelected && (
-                                                        <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#fff', fontSize: 10 }} />
-                                                    )}
+                                                    <FontAwesomeIcon icon={faChevronDown} style={{ color: '#a78bfa', fontSize: 12 }} />
                                                 </div>
 
                                                 {/* Workspace icon */}
@@ -407,10 +520,176 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                                                         {workspace.name}
                                                     </div>
                                                     <div style={{ color: '#64748b', fontSize: 12 }}>
-                                                        {tabCount} tab{tabCount !== 1 ? 's' : ''} • Workspace Reference
+                                                        {tabCount} URL{tabCount !== 1 ? 's' : ''}
+                                                        {selectedUrlCount > 0 && ` • ${selectedUrlCount} selected`}
+                                                        {!isExpanded && ' • Click to expand'}
                                                     </div>
                                                 </div>
                                             </div>
+
+                                            {/* Expanded URL List */}
+                                            {isExpanded && (
+                                                <div style={{
+                                                    borderTop: '1px solid rgba(255,255,255,0.1)',
+                                                    padding: 16,
+                                                    background: 'rgba(0,0,0,0.2)'
+                                                }}>
+                                                    {/* Select All / Deselect All */}
+                                                    <div style={{
+                                                        display: 'flex',
+                                                        gap: 8,
+                                                        marginBottom: 12
+                                                    }}>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleSelectAllUrls(workspace.id, workspace);
+                                                            }}
+                                                            style={{
+                                                                padding: '6px 12px',
+                                                                borderRadius: 8,
+                                                                background: 'rgba(139, 92, 246, 0.2)',
+                                                                border: '1px solid rgba(139, 92, 246, 0.3)',
+                                                                color: '#a78bfa',
+                                                                fontSize: 11,
+                                                                fontWeight: 600,
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(139, 92, 246, 0.3)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)'}
+                                                        >
+                                                            Select All
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeselectAllUrls(workspace.id);
+                                                            }}
+                                                            style={{
+                                                                padding: '6px 12px',
+                                                                borderRadius: 8,
+                                                                background: 'rgba(255,255,255,0.05)',
+                                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                                color: '#94a3b8',
+                                                                fontSize: 11,
+                                                                fontWeight: 600,
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                                        >
+                                                            Deselect All
+                                                        </button>
+                                                    </div>
+
+                                                    {/* URL List */}
+                                                    <div style={{
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: 8,
+                                                        maxHeight: 300,
+                                                        overflowY: 'auto'
+                                                    }}>
+                                                        {workspace.urls?.map((urlObj, idx) => {
+                                                            const isUrlSelected = selectedUrlsForWorkspace.has(urlObj.url);
+                                                            let hostname = '';
+                                                            try {
+                                                                hostname = new URL(urlObj.url).hostname;
+                                                            } catch (e) {
+                                                                hostname = urlObj.url;
+                                                            }
+
+                                                            return (
+                                                                <div
+                                                                    key={idx}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleToggleWorkspaceUrl(workspace.id, urlObj.url);
+                                                                    }}
+                                                                    style={{
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: 12,
+                                                                        padding: 10,
+                                                                        background: isUrlSelected ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                                                                        border: `1px solid ${isUrlSelected ? 'rgba(139, 92, 246, 0.3)' : 'rgba(255,255,255,0.05)'}`,
+                                                                        borderRadius: 10,
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s'
+                                                                    }}
+                                                                    onMouseEnter={e => {
+                                                                        if (!isUrlSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                                                                    }}
+                                                                    onMouseLeave={e => {
+                                                                        if (!isUrlSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                                                                    }}
+                                                                >
+                                                                    {/* Checkbox */}
+                                                                    <div style={{
+                                                                        width: 16,
+                                                                        height: 16,
+                                                                        borderRadius: 4,
+                                                                        border: `2px solid ${isUrlSelected ? '#a78bfa' : '#475569'}`,
+                                                                        background: isUrlSelected ? '#a78bfa' : 'transparent',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        transition: 'all 0.2s'
+                                                                    }}>
+                                                                        {isUrlSelected && (
+                                                                            <FontAwesomeIcon icon={faCheckCircle} style={{ color: '#fff', fontSize: 8 }} />
+                                                                        )}
+                                                                    </div>
+
+                                                                    {/* Favicon */}
+                                                                    <div style={{
+                                                                        width: 20,
+                                                                        height: 20,
+                                                                        borderRadius: 4,
+                                                                        overflow: 'hidden',
+                                                                        background: '#000',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center'
+                                                                    }}>
+                                                                        <img
+                                                                            src={`https://www.google.com/s2/favicons?domain=${hostname}&sz=32`}
+                                                                            alt=""
+                                                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                                            onError={(e) => { e.target.style.display = 'none'; }}
+                                                                        />
+                                                                    </div>
+
+                                                                    {/* URL Info */}
+                                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                                        <div style={{
+                                                                            fontSize: 12,
+                                                                            fontWeight: 500,
+                                                                            color: '#fff',
+                                                                            whiteSpace: 'nowrap',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis'
+                                                                        }}>
+                                                                            {urlObj.title || hostname}
+                                                                        </div>
+                                                                        <div style={{
+                                                                            fontSize: 10,
+                                                                            color: '#64748b',
+                                                                            whiteSpace: 'nowrap',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis'
+                                                                        }}>
+                                                                            {hostname}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })
@@ -422,38 +701,57 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                 {/* Footer */}
                 <div style={{
                     padding: 24, borderTop: '1px solid rgba(255,255,255,0.1)',
-                    display: 'flex', justifyContent: 'flex-end', gap: 12,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     background: '#1e293b'
                 }}>
-                    <button
-                        onClick={onClose}
-                        style={{
-                            padding: '12px 20px', borderRadius: 10,
-                            background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
-                            color: '#94a3b8', fontSize: 14, fontWeight: 500, cursor: 'pointer'
-                        }}
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleShare}
-                        disabled={loading || !selectedTeamId || (mode === 'tabs' && selectedCount === 0) || (mode === 'workspace' && !selectedWorkspaceId)}
-                        style={{
-                            padding: '12px 24px', borderRadius: 10,
-                            background: successMsg ? '#10b981' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                            border: 'none',
-                            color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                            boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)',
-                            opacity: (loading || !selectedTeamId || (mode === 'tabs' && selectedCount === 0) || (mode === 'workspace' && !selectedWorkspaceId)) ? 0.5 : 1,
-                            minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
-                        }}
-                    >
-                        {successMsg ? (
-                            <><FontAwesomeIcon icon={faCheckCircle} /> Sent!</>
-                        ) : (
-                            <>{loading ? 'Sending...' : 'Share Now'}</>
+                    {/* Selection Summary */}
+                    <div style={{ color: '#94a3b8', fontSize: 13 }}>
+                        {mode === 'tabs' && selectedCount > 0 && (
+                            `Sharing ${selectedCount} tab${selectedCount !== 1 ? 's' : ''}`
                         )}
-                    </button>
+                        {mode === 'workspace' && (() => {
+                            const totalSelectedUrls = Array.from(selectedWorkspaceUrls.values())
+                                .reduce((sum, urlSet) => sum + urlSet.size, 0);
+                            if (totalSelectedUrls > 0) {
+                                return `Sharing ${totalSelectedUrls} URL${totalSelectedUrls !== 1 ? 's' : ''}`;
+                            }
+                            return '';
+                        })()}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 12 }}>
+                        <button
+                            onClick={onClose}
+                            style={{
+                                padding: '12px 20px', borderRadius: 10,
+                                background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
+                                color: '#94a3b8', fontSize: 14, fontWeight: 500, cursor: 'pointer'
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleShare}
+                            disabled={loading || !selectedTeamId ||
+                                (mode === 'tabs' && selectedCount === 0) ||
+                                (mode === 'workspace' && selectedWorkspaceUrls.size === 0)}
+                            style={{
+                                padding: '12px 24px', borderRadius: 10,
+                                background: successMsg ? '#10b981' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                border: 'none',
+                                color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                                boxShadow: '0 4px 6px -1px rgba(59, 130, 246, 0.3)',
+                                opacity: (loading || !selectedTeamId || (mode === 'tabs' && selectedCount === 0) || (mode === 'workspace' && !selectedWorkspaceId)) ? 0.5 : 1,
+                                minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                            }}
+                        >
+                            {successMsg ? (
+                                <><FontAwesomeIcon icon={faCheckCircle} /> Sent!</>
+                            ) : (
+                                <>{loading ? 'Sending...' : 'Share Now'}</>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
