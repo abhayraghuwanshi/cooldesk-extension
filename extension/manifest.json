@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "cooldesk",
-  "version": "0.1.3",
+  "version": "1.0.0",
   "action": {
     "default_title": "Open CoolDesk Sidebar"
   },

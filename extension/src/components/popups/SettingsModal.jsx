@@ -1,13 +1,12 @@
 import { faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
-import { listWorkspaces, saveSettings as saveSettingsDB, saveWorkspace } from '../../db';
+import { listWorkspaces, saveWorkspace } from '../../db';
 import { getSyncStatus } from '../../services/conditionalSync';
-import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
+import { sendMessage, storageGet } from '../../services/extensionApi';
 import { loadSyncConfig } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
 import ExportData from '../settings/ExportData';
-import SetupTab from '../settings/SetupTab';
 import TeamsTab from '../settings/TeamsTab';
 import ThemesTab from '../settings/ThemesTab';
 
@@ -381,7 +380,7 @@ export function SettingsModal({
               </div>
             )}
 
-            {activeTabId === 'general' && (
+            {/* {activeTabId === 'general' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                 <section>
                   <div style={{ marginBottom: 20 }}>
@@ -432,7 +431,7 @@ export function SettingsModal({
                   </label>
                 </section>
               </div>
-            )}
+            )} */}
 
             {activeTabId === 'teams' && (
               <TeamsTab />
