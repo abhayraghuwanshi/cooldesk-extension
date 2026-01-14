@@ -1,0 +1,144 @@
+/* White CRED Theme - Clean minimalist white theme with proper light mode colors */
+.bg-white-cred {
+  background: radial-gradient(60% 80% at 30% 20%, #f8fafc20, #0000 60%), 
+              radial-gradient(50% 60% at 70% 10%, #e2e8f020, #0000 60%), 
+              linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  min-height: 100vh;
+  color: #1e293b;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+
+.bg-white-cred {
+  --primary-color: #0f172a;
+  --primary-hover: #1e293b;
+  --secondary-color: #334155;
+  --accent-color: #0ea5e9;
+  --text-primary: #0f172a;
+  --text: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --background-primary: #ffffff;
+  --background-secondary: #f8fafc;
+  --background-tertiary: #f1f5f9;
+  --border-color: rgba(226, 232, 240, 0.8);
+  --border-hover: rgba(15, 23, 42, 0.2);
+  --border-primary: rgba(15, 23, 42, 0.15);
+  --border-secondary: rgba(15, 23, 42, 0.08);
+  --border-accent: rgba(14, 165, 233, 0.3);
+  --glass-bg: rgba(15, 23, 42, 0.03);
+  --glass-border: rgba(15, 23, 42, 0.1);
+  --glass-backdrop: blur(20px);
+  --shadow-color: rgba(15, 23, 42, 0.1);
+  --interactive-hover: rgba(15, 23, 42, 0.08);
+  --interactive-active: rgba(15, 23, 42, 0.12);
+  --interactive-disabled: rgba(15, 23, 42, 0.03);
+
+  /* Font size variables */
+  --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);
+  --font-size-sm: calc(var(--base-font-size, 14px) * 0.875);
+  --font-size-base: var(--base-font-size, 14px);
+  --font-size-lg: calc(var(--base-font-size, 14px) * 1.125);
+  --font-size-xl: calc(var(--base-font-size, 14px) * 1.25);
+  --font-size-2xl: calc(var(--base-font-size, 14px) * 1.5);
+  --font-size-3xl: calc(var(--base-font-size, 14px) * 1.875);
+}
+
+/* Button styles */
+.bg-white-cred .btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  border: none;
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-white-cred .btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-hover), var(--accent-color));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.15);
+}
+
+/* Glass morphism effects */
+.bg-white-cred .glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+/* Input styles */
+.bg-white-cred input, 
+.bg-white-cred select, 
+.bg-white-cred textarea {
+  background: rgba(248, 250, 252, 0.8);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.bg-white-cred input:focus, 
+.bg-white-cred select:focus, 
+.bg-white-cred textarea:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+
+/* Navigation styles */
+.bg-white-cred .nav-active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-white-cred .nav-item:hover {
+  background: rgba(15, 23, 42, 0.05);
+  border-color: var(--border-hover);
+}
+
+/* Workspace item styles */
+.bg-white-cred .workspace-item {
+  background: rgba(248, 250, 252, 0.6);
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.bg-white-cred .workspace-item:hover {
+  background: rgba(248, 250, 252, 0.9);
+  border-color: var(--accent-color);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+/* Header specific overrides for light theme */
+.bg-white-cred .header {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Search input light theme override */
+.bg-white-cred .ai-input,
+.bg-white-cred .search-input {
+  background: rgba(248, 250, 252, 0.8) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.bg-white-cred .ai-input:focus,
+.bg-white-cred .search-input:focus {
+  border-color: var(--accent-color) !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Override any global dark text colors */
+.bg-white-cred * {
+  color: inherit;
+}
+
+.bg-white-cred .icon-btn {
+  background: rgba(241, 245, 249, 0.6) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.bg-white-cred .icon-btn:hover {
+  background: rgba(226, 232, 240, 0.8) !important;
+  color: var(--accent-color) !important;
+}

@@ -1,0 +1,148 @@
+/* Component variable bridge for all bg-* themes.
+   Ensures components in styles/components.css have the variables they expect. */
+
+/* Default fallback (applies to body if no theme set) */
+:root,
+body {
+  --text: #e5e7eb;
+  --border-primary: rgba(255, 255, 255, 0.18);
+  --border-color: var(--border-primary);
+  --accent-primary: #8b5cf6; /* purple */
+  --accent-blue: #3b82f6;   /* blue */
+}
+
+/* AI Midnight Nebula */
+.bg-ai-midnight-nebula {
+  --text: #e5e7eb;
+  --border-primary: rgba(255, 255, 255, 0.18);
+  --accent-primary: #8b5cf6;
+  --accent-blue: #3b82f6;
+}
+
+/* Cosmic Aurora */
+.bg-cosmic-aurora {
+  --text: #eef2ff;
+  --border-primary: rgba(255, 255, 255, 0.22);
+  --accent-primary: #a78bfa;
+  --accent-blue: #60a5fa;
+}
+
+/* Sunset Horizon */
+.bg-sunset-horizon {
+  --text: #fff7ed;
+  --border-primary: rgba(255, 255, 255, 0.25);
+  --accent-primary: #fb7185; /* rose */
+  --accent-blue: #f59e0b;    /* amber accent */
+}
+
+/* Forest Depths */
+.bg-forest-depths {
+  --text: #e7f6ec;
+  --border-primary: rgba(255, 255, 255, 0.16);
+  --accent-primary: #22c55e; /* green */
+  --accent-blue: #10b981;    /* teal */
+}
+
+/* Minimal Dark */
+.bg-minimal-dark {
+  --text: #e5e7eb;
+  --border-primary: rgba(255, 255, 255, 0.14);
+  --accent-primary: #8b5cf6;
+  --accent-blue: #60a5fa;
+}
+
+/* Ocean Depths */
+.bg-ocean-depths {
+  --text: #e6f3ff;
+  --border-primary: rgba(255, 255, 255, 0.20);
+  --accent-primary: #60a5fa;
+  --accent-blue: #38bdf8;
+}
+
+/* Cherry Blossom */
+.bg-cherry-blossom {
+  --text: #fff1f2;
+  --border-primary: rgba(255, 255, 255, 0.22);
+  --accent-primary: #fb7185;
+  --accent-blue: #f472b6;
+}
+
+/* Arctic Frost */
+.bg-arctic-frost {
+  --text: #f0f9ff;
+  --border-primary: rgba(255, 255, 255, 0.2);
+  --accent-primary: #38bdf8;
+  --accent-blue: #60a5fa;
+}
+
+/* Volcanic Ember */
+.bg-volcanic-ember {
+  --text: #fff1f0;
+  --border-primary: rgba(255, 255, 255, 0.24);
+  --accent-primary: #f97316; /* orange */
+  --accent-blue: #ef4444;    /* red */
+}
+
+/* Neon Cyberpunk */
+.bg-neon-cyberpunk {
+  --text: #eaffff;
+  --border-primary: rgba(255, 255, 255, 0.28);
+  --accent-primary: #22d3ee; /* cyan */
+  --accent-blue: #a78bfa;    /* purple */
+}
+
+/* White Cred (light) */
+.bg-white-cred {
+  --text: #0f172a;
+  --border-primary: rgba(15, 23, 42, 0.18);
+  --accent-primary: #2563eb;
+  --accent-blue: #0ea5e9;
+}
+
+/* Orange Warm */
+.bg-orange-warm {
+  --text: #fff7ed;
+  --border-primary: rgba(255, 255, 255, 0.2);
+  --accent-primary: #f59e0b;
+  --accent-blue: #fb7185;
+}
+
+/* Brown Earth */
+.bg-brown-earth {
+  --text: #f5efe6;
+  --border-primary: rgba(255, 255, 255, 0.18);
+  --accent-primary: #d97706;
+  --accent-blue: #a3e635; /* lime accent */
+}
+
+/* Royal Purple */
+.bg-royal-purple {
+  --text: #f5f3ff;
+  --border-primary: rgba(255, 255, 255, 0.22);
+  --accent-primary: #a78bfa;
+  --accent-blue: #c084fc;
+}
+
+/* Golden Honey */
+.bg-golden-honey {
+  --text: #fffbeb;
+  --border-primary: rgba(255, 255, 255, 0.22);
+  --accent-primary: #f59e0b;
+  --accent-blue: #fbbf24;
+}
+
+/* Mint Sage */
+.bg-mint-sage {
+  --text: #ecfdf5;
+  --border-primary: rgba(255, 255, 255, 0.18);
+  --accent-primary: #34d399;
+  --accent-blue: #10b981;
+}
+
+/* Crimson Fire */
+.bg-crimson-fire {
+  --text: #fff1f2;
+  --border-primary: rgba(255, 255, 255, 0.24);
+  --accent-primary: #ef4444;
+  --accent-blue: #f43f5e;
+}

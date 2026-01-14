@@ -1,0 +1,283 @@
+/* Bento Grid Layout Styles - Clean & Simple */
+
+.bento-container {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 clamp(16px, 2vw, 24px);
+  width: 100%;
+  padding-bottom: 40px;
+}
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: clamp(14px, 1.8vw, 20px);
+  width: 100%;
+  grid-auto-rows: auto;
+}
+
+/* Bento Grid Items - Clean cards with varied sizes */
+
+.bento-item {
+  background: var(--glass-bg, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.08));
+  border-radius: 18px;
+  padding: clamp(18px, 2vw, 24px);
+  backdrop-filter: blur(16px);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  position: relative;
+}
+
+.bento-item:hover {
+  background: var(--interactive-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--border-hover, rgba(255, 255, 255, 0.15));
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  z-index: 10;
+}
+
+/* Size Variants - Simple & Clean */
+
+/* Featured - Full width, compact height */
+.bento-item.size-featured {
+  grid-column: span 12;
+  min-height: 120px;
+  max-height: 150px;
+}
+
+/* Large - Main content area */
+.bento-item.size-large {
+  grid-column: span 8;
+  min-height: 500px;
+}
+
+/* Medium - Half width */
+.bento-item.size-medium {
+  grid-column: span 6;
+  min-height: 380px;
+}
+
+/* Regular - Third width */
+.bento-item.size-regular {
+  grid-column: span 4;
+  min-height: 320px;
+}
+
+/* Small - Third width, shorter */
+.bento-item.size-small {
+  grid-column: span 4;
+  min-height: 280px;
+}
+
+/* Compact - Quarter width */
+.bento-item.size-compact {
+  grid-column: span 3;
+  min-height: 240px;
+}
+
+/* Tablet Breakpoint - 1200px */
+@media (max-width: 1200px) {
+  .bento-container {
+    padding: 0 clamp(14px, 2vw, 20px);
+  }
+
+  .bento-grid {
+    grid-template-columns: repeat(8, 1fr);
+    gap: clamp(12px, 1.5vw, 16px);
+  }
+
+  .bento-item.size-featured {
+    grid-column: span 8;
+    min-height: 100px;
+    max-height: 130px;
+  }
+
+  .bento-item.size-large {
+    grid-column: span 8;
+    min-height: 450px;
+  }
+
+  .bento-item.size-medium {
+    grid-column: span 4;
+    min-height: 340px;
+  }
+
+  .bento-item.size-regular,
+  .bento-item.size-small {
+    grid-column: span 4;
+    min-height: 300px;
+  }
+
+  .bento-item.size-compact {
+    grid-column: span 4;
+    min-height: 260px;
+  }
+}
+
+/* Mobile Breakpoint - 768px */
+@media (max-width: 768px) {
+  .bento-container {
+    padding: 0 14px;
+  }
+
+  .bento-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .bento-item {
+    grid-column: span 1 !important;
+    padding: 18px;
+    border-radius: 16px;
+  }
+
+  .bento-item.size-featured {
+    min-height: 100px;
+    max-height: 120px;
+  }
+
+  .bento-item.size-large {
+    min-height: 350px;
+  }
+
+  .bento-item.size-medium,
+  .bento-item.size-regular,
+  .bento-item.size-small {
+    min-height: 280px;
+  }
+
+  .bento-item.size-compact {
+    min-height: 220px;
+  }
+}
+
+/* Small Mobile - 480px */
+@media (max-width: 480px) {
+  .bento-container {
+    padding: 0 12px;
+  }
+
+  .bento-grid {
+    gap: 12px;
+  }
+
+  .bento-item {
+    padding: 16px;
+    border-radius: 14px;
+  }
+}
+
+/* Content Wrapper inside Bento Items - Enable internal scrolling */
+.bento-item-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  width: 100%;
+  height: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-primary, rgba(255, 255, 255, 0.2)) transparent;
+}
+
+.bento-item-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.bento-item-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bento-item-content::-webkit-scrollbar-thumb {
+  background: var(--border-primary, rgba(255, 255, 255, 0.2));
+  border-radius: 3px;
+}
+
+.bento-item-content::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover, rgba(255, 255, 255, 0.3));
+}
+
+/* Allow components to render properly */
+.bento-item-content > * {
+  width: 100%;
+  max-width: 100%;
+  flex-shrink: 0;
+}
+
+/* Custom scrollbar for overflow sections */
+.bento-item-content *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.bento-item-content *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bento-item-content *::-webkit-scrollbar-thumb {
+  background: var(--border-primary, rgba(255, 255, 255, 0.2));
+  border-radius: 3px;
+}
+
+.bento-item-content *::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover, rgba(255, 255, 255, 0.3));
+}
+
+.bento-item-content * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-primary, rgba(255, 255, 255, 0.2)) transparent;
+}
+
+/* Animation for initial load */
+@keyframes bentoFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bento-item {
+  animation: bentoFadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+}
+
+.bento-item:nth-child(1) { animation-delay: 0.05s; }
+.bento-item:nth-child(2) { animation-delay: 0.1s; }
+.bento-item:nth-child(3) { animation-delay: 0.15s; }
+.bento-item:nth-child(4) { animation-delay: 0.2s; }
+.bento-item:nth-child(5) { animation-delay: 0.25s; }
+.bento-item:nth-child(6) { animation-delay: 0.3s; }
+
+/* Remove default section styling when inside bento to prevent conflicts */
+.bento-item .section {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+}
+
+/* Ensure proper spacing for nested content */
+.bento-item .section > * {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* Fix overflow issues in nested components */
+.bento-item-content .workspace-filters-section,
+.bento-item-content .search-panel-section {
+  overflow: visible;
+  height: auto;
+  display: block !important;
+}

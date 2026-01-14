@@ -1,0 +1,107 @@
+/* Orange Warm Theme - Vibrant orange and coral with sunset vibes */
+.bg-orange-warm {
+  background: radial-gradient(60% 80% at 30% 20%, #ff660020, #0000 60%), 
+              radial-gradient(50% 60% at 70% 10%, #ff851b20, #0000 60%), 
+              linear-gradient(180deg, #2d1b0e 0%, #3d1a00 100%);
+  min-height: 100vh;
+  color: #fff7ed;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+
+.bg-orange-warm {
+  --primary-color: #ff6600;
+  --primary-hover: #e55a00;
+  --secondary-color: #ff851b;
+  --accent-color: #ffcc02;
+  --text-primary: #fff7ed;
+  --text: #fff7ed;
+  --text-secondary: #fed7aa;
+  --text-muted: #fdba74;
+  --background-primary: #2d1b0e;
+  --background-secondary: #3d1a00;
+  --background-tertiary: #4d2500;
+  --border-color: rgba(255, 102, 0, 0.3);
+  --border-hover: rgba(255, 102, 0, 0.5);
+  --border-primary: rgba(255, 102, 0, 0.2);
+  --border-secondary: rgba(255, 102, 0, 0.1);
+  --border-accent: rgba(255, 204, 2, 0.4);
+  --glass-bg: rgba(255, 102, 0, 0.05);
+  --glass-border: rgba(255, 102, 0, 0.15);
+  --glass-backdrop: blur(20px);
+  --shadow-color: rgba(255, 102, 0, 0.4);
+  --interactive-hover: rgba(255, 102, 0, 0.15);
+  --interactive-active: rgba(255, 102, 0, 0.25);
+  --interactive-disabled: rgba(255, 255, 255, 0.05);
+
+  /* Font size variables */
+  --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);
+  --font-size-sm: calc(var(--base-font-size, 14px) * 0.875);
+  --font-size-base: var(--base-font-size, 14px);
+  --font-size-lg: calc(var(--base-font-size, 14px) * 1.125);
+  --font-size-xl: calc(var(--base-font-size, 14px) * 1.25);
+  --font-size-2xl: calc(var(--base-font-size, 14px) * 1.5);
+  --font-size-3xl: calc(var(--base-font-size, 14px) * 1.875);
+}
+
+/* Button styles */
+.bg-orange-warm .btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  border: none;
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-orange-warm .btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-hover), var(--accent-color));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--shadow-color);
+}
+
+/* Glass morphism effects */
+.bg-orange-warm .glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+/* Input styles */
+.bg-orange-warm input, 
+.bg-orange-warm select, 
+.bg-orange-warm textarea {
+  background: rgba(255, 102, 0, 0.1);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.bg-orange-warm input:focus, 
+.bg-orange-warm select:focus, 
+.bg-orange-warm textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.1);
+}
+
+/* Navigation styles */
+.bg-orange-warm .nav-active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-orange-warm .nav-item:hover {
+  background: rgba(255, 102, 0, 0.1);
+  border-color: var(--border-hover);
+}
+
+/* Workspace item styles */
+.bg-orange-warm .workspace-item {
+  background: rgba(255, 102, 0, 0.05);
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.bg-orange-warm .workspace-item:hover {
+  background: rgba(255, 102, 0, 0.1);
+  border-color: var(--secondary-color);
+  box-shadow: 0 4px 12px rgba(255, 102, 0, 0.2);
+}

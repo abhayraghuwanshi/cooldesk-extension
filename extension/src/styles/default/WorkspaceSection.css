@@ -1,0 +1,110 @@
+/* Workspace Section Styles */
+
+.workspace-section {
+    margin-bottom: var(--section-spacing, 24px);
+}
+
+.workspace-section--collapsed {
+    padding: 0;
+}
+
+.workspace-section--expanded {
+    padding: 0;
+}
+
+/* Toggle button for collapsed state */
+.workspace-section__toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid rgba(70, 70, 75, 0.7);
+    border-radius: 16px;
+    background: rgba(28, 28, 33, 0.45);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: inherit;
+    font-family: inherit;
+}
+
+.workspace-section__toggle:hover {
+    background: rgba(28, 28, 33, 0.65);
+    border-color: rgba(100, 100, 105, 0.7);
+}
+
+.workspace-section__heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.workspace-section__eyebrow {
+    font-size: var(--font-size-2xl, 1.5rem);
+    font-weight: 600;
+    margin: 0;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+}
+
+.workspace-section__hint {
+    font-size: 0.85rem;
+    opacity: 0.5;
+    color: var(--text-secondary, #aaa);
+}
+
+.workspace-section__chevron {
+    font-size: 1.5rem;
+    opacity: 0.5;
+    transition: transform 0.2s ease;
+}
+
+/* Header for expanded state */
+.workspace-section__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+
+    transition: opacity 0.2s ease;
+}
+
+.workspace-section__header:hover {
+    opacity: 0.7;
+}
+
+.workspace-section__title {
+    font-size: var(--font-size-2xl, 1.5rem);
+    font-weight: 600;
+    margin: 0;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+}
+
+.workspace-section__collapse-link {
+    font-size: 0.75rem;
+    opacity: 0.4;
+    color: var(--text-secondary, #aaa);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: opacity 0.2s ease;
+}
+
+.workspace-section__collapse-link:hover {
+    opacity: 0.6;
+}
+
+/* Filters section */
+.workspace-section__filters {
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 24px 0 8px;
+}
+
+.workspace-section__filters-inner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}

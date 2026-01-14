@@ -1,0 +1,67 @@
+.bg-arctic-frost {
+  /* Arctic Frost Theme - Cool arctic with teal and mint ice accents */
+  --surface-0: #0f1b1a;
+  --surface-1: #1e332f;
+  --surface-2: #2d4a42;
+  --primary: #14b8a6;
+  --accent: #5eead4;
+  --text: #f0fdfa;
+  --text-secondary: #a7f3d0;
+  --text-muted: #6b8a84;
+  --text-dim: #a7f3d0;
+  --border: #0d9488;
+  
+  /* Interactive Colors */
+  --interactive-hover: rgba(20, 184, 166, 0.15);
+  --interactive-active: rgba(20, 184, 166, 0.25);
+  --interactive-disabled: rgba(255, 255, 255, 0.05);
+  
+  /* Border Colors */
+  --border-primary: rgba(20, 184, 166, 0.2);
+  --border-secondary: rgba(20, 184, 166, 0.1);
+  --border-accent: rgba(94, 234, 212, 0.4);
+  
+  /* Glass Effect */
+  --glass-bg: rgba(20, 184, 166, 0.05);
+  --glass-border: rgba(20, 184, 166, 0.15);
+  --glass-backdrop: blur(20px);
+
+  /* Font size variables */
+  --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);
+  --font-size-sm: calc(var(--base-font-size, 14px) * 0.875);
+  --font-size-base: var(--base-font-size, 14px);
+  --font-size-lg: calc(var(--base-font-size, 14px) * 1.125);
+  --font-size-xl: calc(var(--base-font-size, 14px) * 1.25);
+  --font-size-2xl: calc(var(--base-font-size, 14px) * 1.5);
+  --font-size-3xl: calc(var(--base-font-size, 14px) * 1.875);
+
+  background-image:
+    radial-gradient(40% 50% at 30% 20%, rgba(20, 184, 166, 0.08) 0%, rgba(0, 0, 0, 0) 70%),
+    radial-gradient(60% 40% at 70% 80%, rgba(94, 234, 212, 0.08) 0%, rgba(0, 0, 0, 0) 60%),
+    linear-gradient(155deg, var(--surface-0) 0%, var(--surface-2) 100%);
+  color: var(--text);
+}
+
+.bg-arctic-frost .header {
+  background: rgba(15, 20, 25, 0.8);
+  border-bottom: 1px solid var(--border);
+}
+
+.bg-arctic-frost .workspace-item {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+
+.bg-arctic-frost .workspace-item:hover {
+  background: rgba(20, 184, 166, 0.05);
+  border-color: var(--primary);
+}
+
+.bg-arctic-frost .btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.bg-arctic-frost .btn-primary:hover {
+  background: var(--accent);
+}

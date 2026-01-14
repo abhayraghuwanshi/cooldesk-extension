@@ -1,0 +1,101 @@
+.sticky-board-root {
+    padding: 12px;
+    color: #fff;
+    width: 100%;
+}
+
+.sticky-board-title {
+    font-size: 26px;
+    font-weight: 600;
+    margin-bottom: 14px;
+}
+
+/* Input row */
+.sticky-board-input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 22px;
+}
+
+.sticky-board-input {
+    flex: 1;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    resize: none;
+    min-height: 48px;
+}
+
+.sticky-board-add-btn {
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    cursor: pointer;
+}
+
+/* Grid layout */
+.sticky-board-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 18px;
+}
+
+/* Sticky note card */
+.sticky-card {
+    padding: 14px;
+    border-radius: 14px;
+    min-height: 130px;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.sticky-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
+}
+
+.sticky-card-text {
+    font-size: 15px;
+    white-space: pre-wrap;
+}
+
+.sticky-card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.sticky-card:hover .sticky-card-meta {
+    opacity: 1;
+}
+
+.sticky-card-age {
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.sticky-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: #555;
+}
+
+.sticky-btn:hover {
+    color: #222;
+}
+
+.sticky-delete {
+    color: #b82a2a !important;
+}

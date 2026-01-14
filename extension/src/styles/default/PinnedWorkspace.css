@@ -1,0 +1,198 @@
+/* PinnedWorkspace styles */
+
+.pinnedws-container {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+    margin-bottom: 24px;
+}
+
+.pinnedws-hidden {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px dashed var(--border-primary, rgba(255, 255, 255, 0.15));
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.pinnedws-hidden:hover {
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    border-color: var(--border-secondary, rgba(255, 255, 255, 0.25));
+}
+
+.pinnedws-pills {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    white-space: nowrap;
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 8px;
+    gap: 10px;
+    padding-bottom: 4px;
+}
+
+.pinnedws-pill {
+    position: relative;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 12px;
+    transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    flex: 0 0 auto;
+    max-width: calc(100vw - 80px);
+}
+
+.pinnedws-pill--active {
+    background: linear-gradient(135deg,
+            color-mix(in srgb, var(--accent-primary, #60a5fa) 24%, transparent),
+            color-mix(in srgb, var(--accent-secondary, var(--accent-primary, #60a5fa)) 18%, transparent));
+    border: 1px solid color-mix(in srgb, var(--accent-primary, #60a5fa) 48%, transparent);
+    color: var(--text, #ffffff);
+    font-weight: 600;
+}
+
+.pinnedws-pill--active .pinnedws-pill-title {
+    color: #ffffff;
+}
+
+.pinnedws-pill--dragover {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pinnedws-pill-title {
+    font-size: 13px;
+    max-width: min(180px, 60vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.pinnedws-itemsGrid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.pinnedws-listCard {
+    background: rgba(28, 28, 33, 0.50);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 14px;
+    padding: 10px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.pinnedws-urlChips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pinnedws-urlChip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    flex: 0 0 auto;
+    max-width: calc(100vw - 80px);
+}
+
+.pinnedws-urlTitle {
+    max-width: min(220px, 60vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #fff;
+    min-width: 0;
+}
+
+/* Medium-small screens: pre-empt overflow before 600px rules */
+@media (max-width: 700px) {
+    .pinnedws-pills {
+        gap: 10px;
+        padding: 0 8px 6px;
+        scrollbar-gutter: stable both-edges;
+        box-sizing: border-box;
+    }
+
+    .pinnedws-pill {
+        max-width: 100%;
+    }
+
+    .pinnedws-pill-title {
+        max-width: 100%;
+    }
+
+    .pinnedws-urlChip {
+        max-width: 100%;
+    }
+
+    .pinnedws-urlTitle {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 600px) {
+    .pinnedws-pills {
+        gap: 8px;
+    }
+}
+
+/* Tweak layout slightly earlier for narrow devices */
+@media (max-width: 500px) {
+    .pinnedws-pills {
+        gap: 8px;
+        padding: 0 8px 6px;
+        scrollbar-gutter: stable both-edges;
+        box-sizing: border-box;
+    }
+
+    .pinnedws-pill {
+        max-width: 100%;
+    }
+
+    .pinnedws-pill-title {
+        max-width: 100%;
+    }
+
+    .pinnedws-urlChip {
+        max-width: 100%;
+    }
+
+    .pinnedws-urlTitle {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .pinnedws-pill-title {
+        max-width: min(160px, 55vw);
+    }
+
+    .pinnedws-urlTitle {
+        max-width: min(180px, 55vw);
+    }
+}

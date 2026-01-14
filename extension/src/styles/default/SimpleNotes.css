@@ -1,0 +1,425 @@
+/* Simple Notes - Apple Style */
+.simple-notes-root {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* Header */
+.simple-notes-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 0 4px;
+}
+
+.simple-notes-title {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    margin: 0;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+}
+
+/* Toolbar */
+.simple-notes-toolbar {
+    display: flex;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.simple-notes-filter {
+    padding: 4px 10px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.simple-notes-filter:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.simple-notes-filter.is-active {
+    background: rgba(52, 199, 89, 0.15);
+    color: #34C759;
+}
+
+/* Input Area */
+.simple-notes-input {
+    margin-bottom: 16px;
+    border-radius: 14px;
+
+    backdrop-filter: var(--glass-backdrop, blur(12px));
+}
+
+.simple-notes-input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.simple-notes-textarea {
+    flex: 1;
+    min-height: 48px;
+    max-height: 140px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.12));
+    background: var(--background-tertiary, rgba(255, 255, 255, 0.04));
+    color: var(--text, #ffffff);
+    font-size: var(--font-size-base);
+    line-height: 1.5;
+    resize: none;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.simple-notes-textarea:focus {
+    border-color: var(--accent-primary, rgba(52, 199, 89, 0.45));
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 12%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary, #34C759) 20%, transparent);
+}
+
+.simple-notes-textarea::placeholder {
+    color: var(--text-secondary, rgba(255, 255, 255, 0.4));
+}
+
+.simple-notes-input-actions {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    padding: 6px;
+    border-radius: 10px;
+    border: 1px solid var(--border-secondary, rgba(255, 255, 255, 0.08));
+}
+
+.simple-notes-type-toggle {
+    height: 32px;
+    width: 32px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.18));
+    background: color-mix(in srgb, var(--background-tertiary, #111827) 70%, transparent);
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.simple-notes-type-toggle:hover {
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 12%, transparent);
+    color: var(--text, rgba(255, 255, 255, 0.95));
+}
+
+.simple-notes-type-toggle.is-todo {
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 22%, transparent);
+    color: var(--accent-primary, #34C759);
+    border-color: color-mix(in srgb, var(--accent-primary, #34C759) 45%, transparent);
+}
+
+.simple-notes-btn {
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+    border-radius: 8px;
+    border: none;
+    background: color-mix(in srgb, var(--background-tertiary, #111827) 65%, transparent);
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.simple-notes-btn:hover {
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 18%, transparent);
+    color: var(--accent-primary, #34C759);
+}
+
+.simple-notes-btn.is-recording {
+    --danger-color: var(--accent-danger, #ff4d4f);
+    background: color-mix(in srgb, var(--danger-color) 22%, transparent);
+    color: var(--danger-color);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.simple-notes-btn.simple-notes-save {
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 20%, transparent);
+    color: var(--accent-primary, #34C759);
+}
+
+.simple-notes-btn.simple-notes-save:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent-primary, #34C759) 32%, transparent);
+}
+
+.simple-notes-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Notes List */
+.simple-notes-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Group Sections */
+.simple-notes-group {
+    margin-bottom: 24px;
+}
+
+.simple-notes-group:last-child {
+    margin-bottom: 0;
+}
+
+.simple-notes-group-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 12px 0;
+    padding: 0 4px;
+}
+
+/* Note Item */
+.simple-note-item {
+    margin-bottom: 8px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.simple-note-content {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.simple-note-item:hover .simple-note-content {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.simple-note-text {
+    color: #ffffff;
+    font-size: var(--font-size-base);
+    line-height: 1.5;
+    flex: 1;
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+/* Todo */
+.simple-note-todo {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.simple-note-checkbox {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin-top: 3px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s ease;
+}
+
+.simple-note-checkbox:hover {
+    color: #34C759;
+    transform: scale(1.08);
+}
+
+.simple-note-checkbox.is-checked {
+    color: #34C759;
+}
+
+.simple-note-checkbox:active {
+    transform: scale(0.95);
+}
+
+.simple-note-todo-text {
+    flex: 1;
+    transition: all 0.2s ease;
+}
+
+.simple-note-todo-text.is-checked {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+.simple-note-thought {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Edit Mode */
+.simple-note-edit {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+}
+
+.simple-note-edit-textarea {
+    flex: 1;
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 1px solid rgba(52, 199, 89, 0.25);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+    font-size: var(--font-size-base);
+    font-family: inherit;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.simple-note-edit-textarea:focus {
+    border-color: rgba(52, 199, 89, 0.4);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.08);
+}
+
+.simple-note-edit-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.simple-note-edit-actions .simple-note-btn {
+    height: 28px;
+    min-width: 28px;
+    padding: 0 8px;
+    font-size: 11px;
+}
+
+/* Actions */
+.simple-note-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    flex-shrink: 0;
+}
+
+.simple-note-actions.is-visible {
+    opacity: 1;
+}
+
+.simple-note-time {
+    font-size: var(--font-size-xs);
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+.simple-note-btn {
+    height: 28px;
+    min-width: 28px;
+    padding: 0 6px;
+    font-size: 11px;
+}
+
+.simple-note-btn.simple-note-delete {
+    color: rgba(255, 255, 255, 0.4);
+    background: transparent;
+}
+
+.simple-note-btn.simple-note-delete:hover {
+    background: rgba(255, 59, 48, 0.1);
+    color: #FF3B30;
+    transform: scale(1.05);
+}
+
+.simple-note-btn.is-playing {
+    background: rgba(52, 199, 89, 0.1);
+    color: #34C759;
+}
+
+.simple-note-btn.is-playing:hover {
+    background: rgba(52, 199, 89, 0.15);
+    transform: scale(1.05);
+}
+
+/* Empty State */
+.simple-notes-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: var(--font-size-sm);
+    font-style: italic;
+}
+
+/* Pulse Animation */
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* Scrollbar */
+.simple-notes-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.simple-notes-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.simple-notes-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}

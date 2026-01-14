@@ -1,0 +1,107 @@
+/* Brown Earth Theme - Rich chocolate and coffee with copper accents */
+.bg-brown-earth {
+  background: radial-gradient(60% 80% at 40% 30%, #8b4513b0, #0000 60%), 
+              radial-gradient(50% 60% at 70% 20%, #a0522db0, #0000 60%), 
+              linear-gradient(180deg, #2f1b14 0%, #1a0e0a 100%);
+  min-height: 100vh;
+  color: #f5deb3;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+}
+
+.bg-brown-earth {
+  --primary-color: #8b4513;
+  --primary-hover: #a0522d;
+  --secondary-color: #cd853f;
+  --accent-color: #daa520;
+  --text-primary: #f5deb3;
+  --text: #f5deb3;
+  --text-secondary: #deb887;
+  --text-muted: #d2b48c;
+  --background-primary: #2f1b14;
+  --background-secondary: #1a0e0a;
+  --background-tertiary: #654321;
+  --border-color: rgba(139, 69, 19, 0.4);
+  --border-hover: rgba(139, 69, 19, 0.6);
+  --border-primary: rgba(139, 69, 19, 0.2);
+  --border-secondary: rgba(139, 69, 19, 0.1);
+  --border-accent: rgba(218, 165, 32, 0.4);
+  --glass-bg: rgba(139, 69, 19, 0.05);
+  --glass-border: rgba(139, 69, 19, 0.15);
+  --glass-backdrop: blur(20px);
+  --shadow-color: rgba(139, 69, 19, 0.5);
+  --interactive-hover: rgba(139, 69, 19, 0.15);
+  --interactive-active: rgba(139, 69, 19, 0.25);
+  --interactive-disabled: rgba(255, 255, 255, 0.05);
+
+  /* Font size variables */
+  --font-size-xs: calc(var(--base-font-size, 14px) * 0.75);
+  --font-size-sm: calc(var(--base-font-size, 14px) * 0.875);
+  --font-size-base: var(--base-font-size, 14px);
+  --font-size-lg: calc(var(--base-font-size, 14px) * 1.125);
+  --font-size-xl: calc(var(--base-font-size, 14px) * 1.25);
+  --font-size-2xl: calc(var(--base-font-size, 14px) * 1.5);
+  --font-size-3xl: calc(var(--base-font-size, 14px) * 1.875);
+}
+
+/* Button styles */
+.bg-brown-earth .btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  border: none;
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-brown-earth .btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-hover), var(--accent-color));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--shadow-color);
+}
+
+/* Glass morphism effects */
+.bg-brown-earth .glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+/* Input styles */
+.bg-brown-earth input, 
+.bg-brown-earth select, 
+.bg-brown-earth textarea {
+  background: rgba(139, 69, 19, 0.15);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.bg-brown-earth input:focus, 
+.bg-brown-earth select:focus, 
+.bg-brown-earth textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(139, 69, 19, 0.2);
+}
+
+/* Navigation styles */
+.bg-brown-earth .nav-active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 16px var(--shadow-color);
+}
+
+.bg-brown-earth .nav-item:hover {
+  background: rgba(139, 69, 19, 0.15);
+  border-color: var(--border-hover);
+}
+
+/* Workspace item styles */
+.bg-brown-earth .workspace-item {
+  background: rgba(139, 69, 19, 0.08);
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.bg-brown-earth .workspace-item:hover {
+  background: rgba(139, 69, 19, 0.15);
+  border-color: var(--accent-color);
+  box-shadow: 0 4px 12px rgba(139, 69, 19, 0.3);
+}

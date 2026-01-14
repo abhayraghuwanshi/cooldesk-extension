@@ -1,0 +1,52 @@
+/* Workspace Pills Section Container */
+.workspace-pills-section {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 14px;
+    background: var(--glass-bg, rgba(28, 28, 33, 0.45));
+    border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.12));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.workspace-section__pills {
+    transition: all 0.3s ease;
+}
+
+/* Pill Scroll Container */
+.workspace-pill-scroll {
+    scrollbar-gutter: stable;
+}
+
+.workspace-pill-scroll::-webkit-scrollbar {
+    height: 8px;
+}
+
+.workspace-pill-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+}
+
+.workspace-pill-scroll::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, rgba(147, 197, 253, 0.35), rgba(59, 130, 246, 0.55));
+    border-radius: 999px;
+    border: 1px solid rgba(14, 165, 233, 0.45);
+    box-shadow: inset 0 0 4px rgba(13, 148, 136, 0.35);
+}
+
+.workspace-pill-scroll::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(90deg, rgba(147, 197, 253, 0.45), rgba(59, 130, 246, 0.65));
+}
+
+.workspace-pill-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .workspace-pills-section {
+        padding: 12px;
+        margin-top: 12px;
+    }
+}

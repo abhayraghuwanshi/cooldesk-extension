@@ -1,0 +1,224 @@
+/* Onboarding Tour Styles */
+
+.onboarding-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(0.5px);
+  z-index: 9998;
+  animation: fadeIn 0.3s ease;
+}
+
+.onboarding-spotlight {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.onboarding-tooltip {
+  position: fixed;
+  width: 320px;
+  max-width: 90vw;
+  background: var(--background-primary, #1a1a1f);
+  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  padding: 20px;
+  z-index: 10000;
+  animation: slideIn 0.3s ease;
+}
+
+.onboarding-tooltip.center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.onboarding-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.onboarding-close:hover {
+  background: var(--interactive-hover, rgba(255, 255, 255, 0.1));
+  color: var(--text, #e5e7eb);
+}
+
+.onboarding-content {
+  margin-bottom: 20px;
+}
+
+.onboarding-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text, #e5e7eb);
+  margin: 0 0 12px 0;
+  padding-right: 24px;
+}
+
+.onboarding-description {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary, #999);
+  margin: 0;
+}
+
+.onboarding-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.onboarding-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-primary, rgba(255, 255, 255, 0.2));
+  transition: all 0.3s ease;
+}
+
+.progress-dot.active {
+  width: 24px;
+  border-radius: 4px;
+  background: #667eea;
+}
+
+.progress-dot.completed {
+  background: #667eea;
+  opacity: 0.5;
+}
+
+.onboarding-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.onboarding-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  font-family: inherit;
+}
+
+.onboarding-btn.primary {
+  background: #667eea;
+  color: white;
+}
+
+.onboarding-btn.primary:hover {
+  background: #5568d3;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.onboarding-btn.secondary {
+  background: transparent;
+  color: var(--text-secondary, #999);
+  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
+}
+
+.onboarding-btn.secondary:hover {
+  background: var(--interactive-hover, rgba(255, 255, 255, 0.05));
+  color: var(--text, #e5e7eb);
+  border-color: var(--border-accent, rgba(255, 255, 255, 0.2));
+}
+
+/* Highlight effect for targeted elements */
+.onboarding-highlight {
+  position: relative;
+  z-index: 9999;
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.5), 0 0 0 8px rgba(102, 126, 234, 0.2);
+  border-radius: 8px;
+  animation: highlightPulse 2s ease-in-out infinite;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes highlightPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.5), 0 0 0 8px rgba(102, 126, 234, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(102, 126, 234, 0.6), 0 0 0 12px rgba(102, 126, 234, 0.3);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .onboarding-tooltip {
+    width: calc(100vw - 32px);
+    left: 16px !important;
+    right: 16px !important;
+  }
+
+  .onboarding-tooltip.center {
+    transform: translate(0, -50%);
+    left: 16px !important;
+  }
+
+  .onboarding-actions {
+    flex-direction: column;
+  }
+
+  .onboarding-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
