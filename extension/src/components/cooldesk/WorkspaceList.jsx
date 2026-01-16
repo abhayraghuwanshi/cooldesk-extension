@@ -27,12 +27,12 @@ export function WorkspaceList({
     pinnedWorkspaces = [], // New prop
     onTogglePin            // New prop
 }) {
-    // Load view mode from localStorage, default to 'grid'
+    // Load view mode from localStorage, default to 'list'
     const [viewMode, setViewMode] = useState(() => {
         try {
-            return localStorage.getItem('cooldesk_view_mode') || 'grid';
+            return localStorage.getItem('cooldesk_view_mode') || 'list';
         } catch {
-            return 'grid';
+            return 'list';
         }
     });
     const [bookmarks, setBookmarks] = useState([]);

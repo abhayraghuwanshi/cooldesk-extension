@@ -65,6 +65,94 @@ class P2PCryptoUtils {
             return null;
         }
     }
+    /**
+     * Encrypt data using a PIN/Password with PBKDF2 + AES
+     * Protocol: Salt (16 bytes) + IV (16 bytes) + Ciphertext
+     * key = PBKDF2(pin, salt, 10000, 256/32)
+     * @param {any} data - Data to encrypt
+     * @param {string} pin - The PIN/Password
+     * @returns {string} Base64 encoded string of (Salt + IV + Ciphertext)
+     */
+    encryptWithPin(data, pin) {
+        if (!data || !pin) throw new Error('Data and PIN are required');
+
+        // 1. Generate Salt and IV
+        const salt = CryptoJS.lib.WordArray.random(128 / 8); // 16 bytes
+        const iv = CryptoJS.lib.WordArray.random(128 / 8);   // 16 bytes
+
+        // 2. Derive Key using PBKDF2
+        const key = CryptoJS.PBKDF2(pin, salt, {
+            keySize: 256 / 32,
+            iterations: 10000
+        });
+
+        // 3. Encrypt
+        const json = JSON.stringify(data);
+        const encrypted = CryptoJS.AES.encrypt(json, key, {
+            iv: iv,
+            padding: CryptoJS.pad.Pkcs7,
+            mode: CryptoJS.mode.CBC
+        });
+
+        // 4. Combine Salt + IV + Ciphertext
+        // We need to access the ciphertext words directly
+        const encryptedWords = encrypted.ciphertext;
+
+        // Concatenate: salt + iv + ciphertext
+        const combined = salt.clone().concat(iv).concat(encryptedWords);
+
+        // 5. Return as Base64
+        return CryptoJS.enc.Base64.stringify(combined);
+    }
+
+    /**
+     * Decrypt data using a PIN/Password
+     * @param {string} encryptedBase64 - The Base64 encoded string (Salt + IV + Ciphertext)
+     * @param {string} pin - The PIN/Password
+     * @returns {any} Decrypted data
+     */
+    decryptWithPin(encryptedBase64, pin) {
+        if (!encryptedBase64 || !pin) throw new Error('Encrypted data and PIN are required');
+
+        try {
+            // 1. Decode Base64
+            const combined = CryptoJS.enc.Base64.parse(encryptedBase64);
+
+            // 2. Extract Salt (first 16 bytes = 4 words)
+            // Note: WordArray uses 32-bit (4 byte) words
+            const salt = CryptoJS.lib.WordArray.create(combined.words.slice(0, 4));
+
+            // 3. Extract IV (next 16 bytes = 4 words)
+            const iv = CryptoJS.lib.WordArray.create(combined.words.slice(4, 8));
+
+            // 4. Extract Ciphertext (rest)
+            const ciphertext = CryptoJS.lib.WordArray.create(combined.words.slice(8));
+
+            // 5. Derive Key
+            const key = CryptoJS.PBKDF2(pin, salt, {
+                keySize: 256 / 32,
+                iterations: 10000
+            });
+
+            // 6. Decrypt
+            const decryptParams = {
+                ciphertext: ciphertext
+            };
+            const decrypted = CryptoJS.AES.decrypt(decryptParams, key, {
+                iv: iv,
+                padding: CryptoJS.pad.Pkcs7,
+                mode: CryptoJS.mode.CBC
+            });
+
+            const utf8 = decrypted.toString(CryptoJS.enc.Utf8);
+            if (!utf8) throw new Error('Decryption resulted in empty data (wrong PIN?)');
+
+            return JSON.parse(utf8);
+        } catch (e) {
+            console.error('[P2P Crypto] PIN Decryption failed:', e);
+            throw new Error('Decryption failed. Incorrect PIN or invalid link.');
+        }
+    }
 }
 
 export const cryptoUtils = new P2PCryptoUtils();

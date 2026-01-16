@@ -44,7 +44,9 @@ import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorksp
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
 import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
+import { cryptoUtils } from './services/p2p/cryptoUtils';
 import { p2pSyncService } from './services/p2p/syncService';
+import { teamManager } from './services/p2p/teamManager';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
 import { getFaviconUrl } from './utils';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
@@ -729,6 +731,47 @@ export default function App() {
       const params = new URLSearchParams(window.location.search)
       const q = (params.get('q') || '').trim()
       if (q) setSearch(q)
+
+      // Handle Team Invite (Protected)
+      const inviteParam = params.get('invite');
+      if (inviteParam) {
+        // Delay slightly to ensure app is ready
+        setTimeout(async () => {
+          try {
+            // Ask for PIN
+            const pin = window.prompt('Enter the PIN to unlock this team invite:');
+            if (!pin) return; // User cancelled
+
+            // Decrypt
+            const payload = cryptoUtils.decryptWithPin(inviteParam, pin);
+            if (!payload || !payload.name || !payload.secret) {
+              throw new Error('Invalid invite data');
+            }
+
+            // Join Team
+            await teamManager.init();
+            await teamManager.addTeam(payload.name, payload.secret);
+
+            alert(`Successfully joined team: ${payload.name}`);
+
+            // Clean URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } catch (err) {
+            console.error('Invite failed:', err);
+            alert('Failed to join team. Incorrect PIN or invalid link.');
+          }
+        }, 500);
+      }
+
+      // Handle Team Join (Safe Link - Name only)
+      const joinTeamName = params.get('join_team');
+      if (joinTeamName) {
+        // We can't auto-join, but we can open the settings tab and pre-fill
+        // For now, let's just alert user what to do since we don't have deep-link to specific tab implemented yet
+        setTimeout(() => {
+          alert(`You've been invited to join "${joinTeamName}".\n\nPlease go to Settings > Teams > Join / Create and enter the Team Name and Secret Phrase provided to you.`);
+        }, 500);
+      }
     } catch { }
   }, [])
 

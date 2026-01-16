@@ -1,10 +1,12 @@
-import { faLink, faShare, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faLink, faPlus, faShare, faUserPlus, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { p2pSyncService } from '../../services/p2p/syncService';
 import { teamManager } from '../../services/p2p/teamManager';
 import { getFaviconUrl } from '../../utils';
+import { CreateTeamModal } from '../popups/CreateTeamModal';
+import { InviteUserModal } from '../popups/InviteUserModal';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import NoticeBoard from './NoticeBoard';
 import TeamContextPanel from './TeamContextPanel';
@@ -15,6 +17,8 @@ export default function TeamView({ team: propTeam }) {
     const [items, setItems] = useState([]);
     const [peerCounts, setPeerCounts] = useState(new Map());
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    const [isCreateTeamModalOpen, setIsCreateTeamModalOpen] = useState(false);
     const yArrayRef = useRef(null);
 
     // Initial load of teams & active team
@@ -125,6 +129,14 @@ export default function TeamView({ team: propTeam }) {
 
     const activeTeam = teams.find(t => t.id === activeTeamId);
 
+    // Helper to get member count text (assuming teamManager has this info)
+    const getMemberCountText = (teamId) => {
+        const team = teamManager.getTeams().find(t => t.id === teamId);
+        if (!team || !team.members) return '0 members';
+        const count = team.members.length;
+        return `${count} member${count !== 1 ? 's' : ''}`;
+    };
+
     return (
         <div style={{
             display: 'flex', height: '100%', color: '#fff',
@@ -178,6 +190,30 @@ export default function TeamView({ team: propTeam }) {
                         </div>
                     )}
                 </div>
+                {/* Create Team Button */}
+                <div style={{ padding: 16, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                    <button
+                        onClick={() => setIsCreateTeamModalOpen(true)}
+                        style={{
+                            width: '100%', padding: '10px', borderRadius: 8,
+                            background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)',
+                            color: '#60a5fa', fontSize: 'var(--font-sm)', fontWeight: 600,
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={e => {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                        }}
+                        onMouseLeave={e => {
+                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                            e.currentTarget.style.transform = 'none';
+                        }}
+                    >
+                        <FontAwesomeIcon icon={faPlus} />
+                        Create Team
+                    </button>
+                </div>
             </div>
 
             {/* Main Content */}
@@ -198,21 +234,34 @@ export default function TeamView({ team: propTeam }) {
                             <div>
                                 <h1 style={{ margin: 0, fontSize: 'var(--font-4xl)', fontWeight: 700 }}>{activeTeam.name}</h1>
                                 <div style={{ fontSize: 'var(--font-sm)', opacity: 0.5, marginTop: 4 }}>
-                                    Shared Workspace • {peerCounts.get(activeTeam.id) || 0} active peers connected
+                                    {getMemberCountText(activeTeam.id)} • {peerCounts.get(activeTeam.id) || 0} active peers connected
                                 </div>
                             </div>
-                            <button
-                                onClick={() => setIsShareModalOpen(true)}
-                                style={{
-                                    padding: '8px 16px', borderRadius: 8, border: 'none',
-                                    background: '#3b82f6', color: '#fff', fontWeight: 600,
-                                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
-                                }}
-                            >
-                                <FontAwesomeIcon icon={faShare} />
-                                Share
-                            </button>
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                <button
+                                    onClick={() => setIsInviteModalOpen(true)}
+                                    style={{
+                                        padding: '8px 16px', borderRadius: 8, border: 'none',
+                                        background: 'rgba(255, 255, 255, 0.1)', color: '#fff', fontWeight: 600,
+                                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
+                                    }}
+                                >
+                                    <FontAwesomeIcon icon={faUserPlus} />
+                                    Invite
+                                </button>
+                                <button
+                                    onClick={() => setIsShareModalOpen(true)}
+                                    style={{
+                                        padding: '8px 16px', borderRadius: 8, border: 'none',
+                                        background: '#3b82f6', color: '#fff', fontWeight: 600,
+                                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                                        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                                    }}
+                                >
+                                    <FontAwesomeIcon icon={faShare} />
+                                    Share
+                                </button>
+                            </div>
                         </div>
 
                         {/* Scrollable Content Area */}
@@ -411,6 +460,17 @@ export default function TeamView({ team: propTeam }) {
                 onClose={() => setIsShareModalOpen(false)}
                 initialTeamId={activeTeamId}
             />
-        </div>
+            {/* Invite Modal */}
+            <InviteUserModal
+                isOpen={isInviteModalOpen}
+                onClose={() => setIsInviteModalOpen(false)}
+                team={activeTeam ? { name: activeTeam.name, secretPhrase: activeTeam.secretPhrase } : null}
+            />
+            {/* Create Team Modal */}
+            <CreateTeamModal
+                isOpen={isCreateTeamModalOpen}
+                onClose={() => setIsCreateTeamModalOpen(false)}
+            />
+        </div >
     );
 }

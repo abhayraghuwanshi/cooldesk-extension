@@ -2,8 +2,6 @@
   faBold,
   faCheckSquare,
   faClock,
-  faCompress,
-  faExpand,
   faFolder,
   faFolderOpen,
   faItalic,
@@ -512,7 +510,7 @@ export function NotesCanvas({ workspaceId }) {
             </div>
           )}
 
-          <button
+          {/* <button
             onClick={() => setIsFullScreen(!isFullScreen)}
             style={{
               background: 'transparent',
@@ -534,7 +532,7 @@ export function NotesCanvas({ workspaceId }) {
             title={isFullScreen ? 'Exit focus mode' : 'Focus mode'}
           >
             <FontAwesomeIcon icon={isFullScreen ? faCompress : faExpand} />
-          </button>
+          </button> */}
 
           <button
             onClick={createNewNote}
