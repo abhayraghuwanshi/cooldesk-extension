@@ -194,6 +194,23 @@ let tabSessions = new Map(); // Track sessions per tab ID to prevent duplicates
 let sessionStartTimes = new Map(); // Track session start times for bounce detection
 let sessionHadInteraction = new Map(); // Track if session had any interaction
 
+// Memory optimization: Limit Map sizes to prevent unbounded growth
+const MAX_MAP_SIZE = 100; // Maximum entries per Map
+const MAX_ACTIVITY_DATA_SIZE = 200; // Maximum URLs to track in activityData
+
+// Helper function to enforce Map size limits with LRU eviction
+function enforceMapSizeLimit(map, maxSize = MAX_MAP_SIZE) {
+    if (map.size > maxSize) {
+        // Remove oldest 20% of entries (LRU eviction)
+        const entriesToRemove = Math.floor(maxSize * 0.2);
+        const iterator = map.keys();
+        for (let i = 0; i < entriesToRemove; i++) {
+            const key = iterator.next().value;
+            if (key !== undefined) map.delete(key);
+        }
+    }
+}
+
 // Create unique session ID using tab ID and URL
 function createTabSessionId(tabId, url) {
     const cleaned = cleanUrl(url);
@@ -471,6 +488,10 @@ async function accumulateTime(url, now = Date.now()) {
             isAudioSite: isAudioSite,
             tabSessionId: tabSessionId  // FIXED: Add tab session ID
         });
+
+        // Memory optimization: Enforce size limits
+        enforceMapSizeLimit(sessionEvents);
+        enforceMapSizeLimit(urlSessionIds);
     }
 
     if (!sessionEvent) return;
@@ -499,6 +520,11 @@ async function accumulateTime(url, now = Date.now()) {
 
     // Also maintain urlSessions for backward compatibility
     urlSessions.set(cleaned, tabSessions.get(tabSessionId));
+
+    // Memory optimization: Enforce size limits
+    enforceMapSizeLimit(tabSessions);
+    enforceMapSizeLimit(urlSessions);
+    enforceMapSizeLimit(urlSessionIds);
 }
 
 // Tab event handlers
@@ -673,10 +699,31 @@ export function initializeActivityTracking() {
                 if (urlSessionIds && typeof urlSessionIds.clear === 'function') {
                     urlSessionIds.clear();
                 }
+                if (sessionEvents && typeof sessionEvents.clear === 'function') {
+                    sessionEvents.clear();
+                }
             } catch (e) {
-                console.warn('[Activity] Failed to clear urlSessionIds:', e);
+                console.warn('[Activity] Failed to clear urlSessionIds/sessionEvents:', e);
                 urlSessionIds = new Map();
+                sessionEvents = new Map();
             }
+
+            // Memory optimization: Clear old activityData entries
+            const activityDataKeys = Object.keys(activityData);
+            if (activityDataKeys.length > MAX_ACTIVITY_DATA_SIZE) {
+                // Keep only the most recently visited URLs
+                const sorted = activityDataKeys
+                    .map(url => ({ url, lastVisit: activityData[url]?.lastVisit || 0 }))
+                    .sort((a, b) => b.lastVisit - a.lastVisit)
+                    .slice(0, MAX_ACTIVITY_DATA_SIZE);
+
+                const newActivityData = {};
+                sorted.forEach(({ url }) => {
+                    newActivityData[url] = activityData[url];
+                });
+                activityData = newActivityData;
+            }
+
             // Start new session when returning from idle
             currentSessionId = `session_${now}_${Math.random().toString(36).substr(2, 9)}`;
             sessionStartTime = now;
@@ -817,6 +864,10 @@ export function handleActivityMessage(msg, sender) {
 
                 // Also maintain urlSessions for backward compatibility
                 urlSessions.set(cleaned, tabSessions.get(tabSessionId));
+
+                // Memory optimization: Enforce size limits
+                enforceMapSizeLimit(tabSessions);
+                enforceMapSizeLimit(urlSessions);
             }
         } else {
             console.log('[Activity Debug] Skipping persistence (below engagement threshold):', cleaned);

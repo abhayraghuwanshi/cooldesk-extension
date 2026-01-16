@@ -1,4 +1,4 @@
-import { faGear, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faGear } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
@@ -13,7 +13,7 @@ import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
 import { CoolSearch } from './CoolSearch';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
-import { TabCard, TabGroupCard } from './TabCard';
+import { TabManagement } from './TabManagement';
 import { WorkspaceList } from './WorkspaceList';
 
 console.log('[CoolDesk] Module loaded. OverviewDashboard:', OverviewDashboard);
@@ -303,193 +303,7 @@ export function CoolDeskContainer({
 
         {/* Face 4: Tabs (Right) */}
         <Face index="tabs">
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            height: '100%'
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}>
-              <h2 style={{
-                fontSize: 'var(--font-2xl, 16px)',
-                fontWeight: 600,
-                color: 'var(--text-primary, #F1F5F9)',
-                margin: 0
-              }}>
-                Browser Tabs
-              </h2>
-              <button
-                onClick={refreshTabs}
-                style={{
-                  background: 'rgba(59, 130, 246, 0.15)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  borderRadius: '8px',
-                  padding: '6px 12px',
-                  color: '#60A5FA',
-                  cursor: 'pointer',
-                  fontSize: 'var(--font-sm, 12px)',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)';
-                  e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
-                  e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                }}
-              >
-                🔄 Refresh
-              </button>
-            </div>
-
-            <div style={{
-              flex: 1,
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px'
-            }}>
-              {tabsLoading ? (
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '12px',
-                  padding: '40px 20px',
-                  color: 'var(--text-secondary, #64748B)',
-                  textAlign: 'center',
-                  height: '100%'
-                }}>
-                  <FontAwesomeIcon icon={faSync} spin size="2x" style={{ opacity: 0.5 }} />
-                  <div style={{ fontSize: 'var(--font-sm, 12px)' }}>Loading tabs...</div>
-                </div>
-              ) : (
-                <>
-                  {/* Pinned Tabs Section */}
-                  {tabs.filter(tab => tab.pinned).length > 0 && (
-                    <div>
-                      <h3 style={{
-                        fontSize: 'var(--font-sm, 12px)',
-                        fontWeight: 600,
-                        color: 'var(--text-secondary, #94A3B8)',
-                        marginBottom: '8px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>
-                        Pinned ({tabs.filter(tab => tab.pinned).length})
-                      </h3>
-                      <div className="tabs-grid">
-                        {tabs.filter(tab => tab.pinned).map(tab => (
-                          <TabCard
-                            key={tab.id}
-                            tab={tab}
-                            onClick={handleTabClick}
-                            onClose={handleTabClose}
-                            onPin={handleTabPin}
-                            isPinned={true}
-                            isActive={tab.active}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* All Tabs Section */}
-                  <div>
-                    <h3 style={{
-                      fontSize: 'var(--font-sm, 12px)',
-                      fontWeight: 600,
-                      color: 'var(--text-secondary, #94A3B8)',
-                      marginBottom: '8px',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
-                    }}>
-                      All Tabs ({tabs.length})
-                    </h3>
-                    {tabs.length > 0 ? (
-                      <div className="tabs-grid">
-                        {tabs.map(tab => (
-                          <TabCard
-                            key={tab.id}
-                            tab={tab}
-                            onClick={handleTabClick}
-                            onClose={handleTabClose}
-                            onPin={handleTabPin}
-                            isPinned={tab.pinned}
-                            isActive={tab.active}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '12px',
-                        padding: '40px 20px',
-                        color: 'var(--text-secondary, #64748B)',
-                        textAlign: 'center',
-                        background: 'var(--glass-bg, rgba(30, 41, 59, 0.95))',
-                        borderRadius: '12px',
-                        border: '1px solid rgba(59, 130, 246, 0.2)'
-                      }}>
-                        <div style={{ fontSize: '48px', opacity: 0.3 }}>📑</div>
-                        <div>
-                          <div style={{
-                            fontSize: 'var(--font-lg, 14px)',
-                            fontWeight: 500,
-                            marginBottom: '8px'
-                          }}>
-                            No Tabs Found
-                          </div>
-                          <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
-                            Open some browser tabs to see them here
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Grouped by Domain Section */}
-                  {Object.keys(tabsByDomain()).length > 1 && (
-                    <div>
-                      <h3 style={{
-                        fontSize: 'var(--font-sm, 12px)',
-                        fontWeight: 600,
-                        color: 'var(--text-secondary, #94A3B8)',
-                        marginBottom: '8px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>
-                        Grouped by Domain
-                      </h3>
-                      <div className="tabs-grid">
-                        {Object.entries(tabsByDomain())
-                          .filter(([_, domainTabs]) => domainTabs.length > 1)
-                          .map(([domain, domainTabs]) => (
-                            <TabGroupCard
-                              key={domain}
-                              domain={domain}
-                              tabs={domainTabs}
-                              onClick={() => setExpandedDomain(expandedDomain === domain ? null : domain)}
-                              isExpanded={expandedDomain === domain}
-                            />
-                          ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
+          <TabManagement />
         </Face>
 
         {/* Face 5: Team (Further Right) */}

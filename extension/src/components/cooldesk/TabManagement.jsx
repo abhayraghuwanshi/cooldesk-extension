@@ -1,50 +1,48 @@
-import { faLayerGroup, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
+import { TabCard, TabGroupCard } from './TabCard';
 
-export function TabManagement({ maxTabs = 8 }) {
+export function TabManagement() {
   const [tabs, setTabs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [tabsLoading, setTabsLoading] = useState(true);
+  const [expandedDomain, setExpandedDomain] = useState(null);
+  const [autoGroupEnabled, setAutoGroupEnabled] = useState(false);
 
-  const refreshTabs = useCallback(() => {
-    // Determine if we should show a loading state initially
-    // We don't want to set loading=true on every background refresh as it causes flickering
-    // So we only set it if we have no tabs yet
-    if (tabs.length === 0) setLoading(true);
+  // Load auto-group state on mount
+  useEffect(() => {
+    chrome.storage.local.get(['autoGroupEnabled'], (result) => {
+      setAutoGroupEnabled(result.autoGroupEnabled || false);
+    });
+  }, []);
+
+  // Fetch browser tabs
+  const refreshTabs = useCallback(async () => {
+    // Only set loading on initial empty state to avoid flickering
+    if (tabs.length === 0) setTabsLoading(true);
 
     try {
-      const hasTabsQuery = typeof chrome !== 'undefined' && chrome?.tabs?.query;
-      if (hasTabsQuery) {
-        chrome.tabs.query({}, (list) => {
-          const lastErr = chrome.runtime?.lastError;
-          if (lastErr) {
-            console.warn('[TabManagement] Error querying tabs:', lastErr);
-            // Don't clear tabs on error, just keep existing
-            setLoading(false);
-            return;
-          }
-          // Fix: Show ALL tabs, do not slice by maxTabs
-          // Sort tabs: Active tab first, then by index/window
-          const sortedList = (list || []).sort((a, b) => {
-            if (a.active && !b.active) return -1;
-            if (!a.active && b.active) return 1;
-            return a.index - b.index;
-          });
+      if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
+        const allTabs = await chrome.tabs.query({});
 
-          setTabs(sortedList);
-          setLoading(false);
+        // Sort: Active tabs first, then by windowId + index
+        const sortedTabs = (allTabs || []).sort((a, b) => {
+          if (a.active && !b.active) return -1;
+          if (!a.active && b.active) return 1;
+          if (a.windowId !== b.windowId) return a.windowId - b.windowId;
+          return a.index - b.index;
         });
-      } else {
-        // Fallback for non-extension context
-        setTabs([]);
-        setLoading(false);
-      }
-    } catch (e) {
-      console.warn('[TabManagement] Error:', e);
-      setLoading(false);
-    }
-  }, []); // Remove maxTabs dependency as we don't use it anymore
 
+        setTabs(sortedTabs);
+      }
+    } catch (error) {
+      console.error('[TabManagement] Failed to fetch tabs:', error);
+    } finally {
+      setTabsLoading(false);
+    }
+  }, []);
+
+  // Load tabs on mount and keep updated
   useEffect(() => {
     refreshTabs();
 
@@ -76,310 +74,321 @@ export function TabManagement({ maxTabs = 8 }) {
     };
   }, [refreshTabs]);
 
-  const handleTabClick = (tab) => {
-    if (tab?.id && typeof chrome !== 'undefined' && chrome?.tabs?.update) {
-      chrome.tabs.update(tab.id, { active: true });
-      if (tab.windowId && chrome?.windows?.update) {
-        chrome.windows.update(tab.windowId, { focused: true });
+  // Group tabs by domain
+  const tabsByDomain = useCallback(() => {
+    const grouped = {};
+    tabs.forEach(tab => {
+      try {
+        const url = new URL(tab.url);
+        const domain = url.hostname;
+        if (!grouped[domain]) {
+          grouped[domain] = [];
+        }
+        grouped[domain].push(tab);
+      } catch (e) {
+        // Invalid URL, skip
       }
-    }
-  };
+    });
+    return grouped;
+  }, [tabs]);
 
-  const handleCloseTab = (e, tabId) => {
-    e.stopPropagation();
-    if (typeof chrome !== 'undefined' && chrome?.tabs?.remove) {
-      chrome.tabs.remove(tabId, () => {
-        if (chrome.runtime?.lastError) {
-          console.warn('[TabManagement] Error closing tab:', chrome.runtime.lastError);
-        } else {
-          refreshTabs();
+  // Handle tab actions
+  const handleTabClick = useCallback(async (tab) => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
+        await chrome.tabs.update(tab.id, { active: true });
+        if (tab.windowId && chrome?.windows?.update) {
+          await chrome.windows.update(tab.windowId, { focused: true });
         }
-      });
+      }
+    } catch (error) {
+      console.error('[TabManagement] Failed to activate tab:', error);
     }
-  };
+  }, []);
 
-  const handlePinTab = (e, tab) => {
-    e.stopPropagation();
-    if (tab?.id && typeof chrome !== 'undefined' && chrome?.tabs?.update) {
-      chrome.tabs.update(tab.id, { pinned: !tab.pinned }, () => {
-        if (chrome.runtime?.lastError) {
-          console.warn('[TabManagement] Error pinning tab:', chrome.runtime.lastError);
-        } else {
-          refreshTabs();
-        }
-      });
+  const handleTabClose = useCallback(async (tab) => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome?.tabs?.remove) {
+        await chrome.tabs.remove(tab.id);
+      }
+    } catch (error) {
+      console.error('[TabManagement] Failed to close tab:', error);
     }
-  };
+  }, []);
 
-  if (loading) {
-    return (
-      <div className="cooldesk-panel tab-management-widget">
-        <div className="panel-header">
-          <div className="panel-title">
-            <FontAwesomeIcon icon={faLayerGroup} style={{ marginRight: '8px' }} />
-            Browser Tabs
-          </div>
-        </div>
-        <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>
-          <FontAwesomeIcon icon={faSync} spin style={{ fontSize: 'var(--font-4xl)', marginBottom: '12px' }} />
-          <div>Loading tabs...</div>
-        </div>
-      </div>
-    );
-  }
+  const handleTabPin = useCallback(async (tab) => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
+        await chrome.tabs.update(tab.id, { pinned: !tab.pinned });
+      }
+    } catch (error) {
+      console.error('[TabManagement] Failed to pin/unpin tab:', error);
+    }
+  }, []);
 
   return (
-    <div className="cooldesk-panel tab-management-widget">
-      <div className="panel-header">
-        <div className="panel-title">
-          <FontAwesomeIcon icon={faLayerGroup} style={{ marginRight: '8px' }} />
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '16px',
+      height: '100%'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <h2 style={{
+          fontSize: 'var(--font-2xl, 16px)',
+          fontWeight: 600,
+          color: 'var(--text-primary, #F1F5F9)',
+          margin: 0
+        }}>
           Browser Tabs
-        </div>
-        <div className="panel-action" onClick={refreshTabs} title="Refresh tabs">
-          <FontAwesomeIcon icon={faSync} />
-          <span>Refresh</span>
+        </h2>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={async () => {
+              try {
+                const newState = !autoGroupEnabled;
+                const response = await chrome.runtime.sendMessage({
+                  type: 'TOGGLE_AUTO_GROUP',
+                  enabled: newState
+                });
+
+                if (response?.success) {
+                  setAutoGroupEnabled(newState);
+                  console.log('[TabManagement] Auto-group toggled:', newState);
+                  refreshTabs(); // Refresh to show updated groups
+                } else {
+                  console.error('[TabManagement] Toggle failed:', response?.error);
+                }
+              } catch (error) {
+                console.error('[TabManagement] Toggle error:', error);
+              }
+            }}
+            style={{
+              background: autoGroupEnabled
+                ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.15))'
+                : 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
+              border: autoGroupEnabled
+                ? '1px solid rgba(34, 197, 94, 0.4)'
+                : '1px solid rgba(100, 116, 139, 0.3)',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              color: autoGroupEnabled ? '#4ADE80' : '#94A3B8',
+              cursor: 'pointer',
+              fontSize: 'var(--font-sm, 12px)',
+              fontWeight: 600,
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            onMouseEnter={(e) => {
+              if (autoGroupEnabled) {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(16, 185, 129, 0.25))';
+                e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.6)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              } else {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.25))';
+                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.5)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (autoGroupEnabled) {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.15))';
+                e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              } else {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))';
+                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.3)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
+            }}
+            title={autoGroupEnabled
+              ? "Auto-grouping enabled - Click to disable and ungroup all tabs"
+              : "Auto-grouping disabled - Click to enable automatic grouping by domain"}
+          >
+            <FontAwesomeIcon
+              icon={autoGroupEnabled ? faToggleOn : faToggleOff}
+              size="lg"
+              style={{ pointerEvents: 'none' }}
+            />
+            <span style={{ pointerEvents: 'none' }}>Auto Group</span>
+          </button>
+          <button
+            onClick={refreshTabs}
+            style={{
+              background: 'rgba(59, 130, 246, 0.15)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              color: '#60A5FA',
+              cursor: 'pointer',
+              fontSize: 'var(--font-sm, 12px)',
+              fontWeight: 500,
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)';
+              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
+              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+            }}
+          >
+            <FontAwesomeIcon icon={faSync} style={{ pointerEvents: 'none' }} />
+            <span style={{ pointerEvents: 'none' }}>Refresh</span>
+          </button>
         </div>
       </div>
 
-      {
-        tabs.length === 0 ? (
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
+      }}>
+        {tabsLoading ? (
           <div style={{
-            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
             padding: '40px 20px',
-            color: '#64748B',
-            fontSize: 'var(--font-base)',
+            color: 'var(--text-secondary, #64748B)',
+            textAlign: 'center',
+            height: '100%'
           }}>
-            <div style={{ fontSize: 'var(--font-5xl)', marginBottom: '12px' }}>📑</div>
-            <div>No tabs found</div>
-            <div style={{ fontSize: 'var(--font-sm)', marginTop: '8px', opacity: 0.7 }}>
-              Open some browser tabs to see them here
-            </div>
+            <FontAwesomeIcon icon={faSync} spin size="2x" style={{ opacity: 0.5 }} />
+            <div style={{ fontSize: 'var(--font-sm, 12px)' }}>Loading tabs...</div>
           </div>
         ) : (
-          <div className="tabs-container" style={{ padding: '0 12px 12px' }}>
-            {/* Grouped Tabs Section */}
-            {(() => {
-              // 1. Group tabs by hostname
-              const groups = {};
-              tabs.forEach(tab => {
-                try {
-                  const url = new URL(tab.url);
-                  let hostname = url.hostname;
-                  // Handle local development specially if needed, or treat as normal domain
-                  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                    hostname = `${hostname}${url.port ? ':' + url.port : ''}`;
-                  }
-                  if (!groups[hostname]) groups[hostname] = [];
-                  groups[hostname].push(tab);
-                } catch {
-                  if (!groups['Other']) groups['Other'] = [];
-                  groups['Other'].push(tab);
-                }
-              });
+          <>
+            {/* Pinned Tabs Section */}
+            {tabs.filter(tab => tab.pinned).length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-sm, 12px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Pinned ({tabs.filter(tab => tab.pinned).length})
+                </h3>
+                <div className="tabs-grid">
+                  {tabs.filter(tab => tab.pinned).map(tab => (
+                    <TabCard
+                      key={tab.id}
+                      tab={tab}
+                      onClick={handleTabClick}
+                      onClose={handleTabClose}
+                      onPin={handleTabPin}
+                      isPinned={true}
+                      isActive={tab.active}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-              // 2. Define Color Palette & Helper
-              const PALETTE = [
-                '#3B82F6', // Blue
-                '#8B5CF6', // Purple
-                '#10B981', // Emerald
-                '#F59E0B', // Amber
-                '#EC4899', // Pink
-                '#06B6D4', // Cyan
-                '#6366F1', // Indigo
-                '#F43F5E', // Rose
-              ];
+            {/* Grouped by Domain Section */}
+            {Object.keys(tabsByDomain()).length > 1 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-sm, 12px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Grouped by Domain
+                </h3>
+                <div className="tabs-grid">
+                  {Object.entries(tabsByDomain())
+                    .filter(([_, domainTabs]) => domainTabs.length > 1)
+                    .map(([domain, domainTabs]) => (
+                      <TabGroupCard
+                        key={domain}
+                        domain={domain}
+                        tabs={domainTabs}
+                        onClick={() => setExpandedDomain(expandedDomain === domain ? null : domain)}
+                        isExpanded={expandedDomain === domain}
+                      />
+                    ))}
+                </div>
+              </div>
+            )}
 
-              const getDomainColor = (hostname) => {
-                if (hostname === 'Other') return '#94A3B8';
-                let hash = 0;
-                for (let i = 0; i < hostname.length; i++) {
-                  hash = hostname.charCodeAt(i) + ((hash << 5) - hash);
-                }
-                return PALETTE[Math.abs(hash) % PALETTE.length];
-              };
-
-              // 3. Sort groups
-              // Priority: Group containing active tab > Localhost > Others sorted by count
-              const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
-                const aHasActive = groups[a].some(t => t.active);
-                const bHasActive = groups[b].some(t => t.active);
-                if (aHasActive && !bHasActive) return -1;
-                if (!aHasActive && bHasActive) return 1;
-
-                // Keep localhost at top if no active tab preference
-                const aIsLocal = a.includes('localhost') || a.includes('127.0.0.1');
-                const bIsLocal = b.includes('localhost') || b.includes('127.0.0.1');
-                if (aIsLocal && !bIsLocal) return -1;
-                if (!aIsLocal && bIsLocal) return 1;
-
-                return groups[b].length - groups[a].length; // Descending by count
-              });
-
-              return (
-                <>
-                  {sortedGroupKeys.map(hostname => {
-                    const groupTabs = groups[hostname];
-                    const color = getDomainColor(hostname);
-
-                    return (
-                      <div key={hostname} style={{ marginBottom: '20px' }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          marginBottom: '10px',
-                          paddingLeft: '4px'
-                        }}>
-                          <div style={{
-                            width: '4px',
-                            height: '14px',
-                            borderRadius: '2px',
-                            backgroundColor: color,
-                            boxShadow: `0 0 8px ${color}66`
-                          }} />
-                          <div style={{
-                            fontSize: 'var(--font-xs)',
-                            fontWeight: 700,
-                            color: '#E2E8F0',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                            fontFamily: 'monospace',
-                            display: 'flex',
-                            alignItems: 'baseline',
-                            gap: '6px'
-                          }}>
-                            {hostname}
-                            <span style={{
-                              fontSize: 'var(--font-xs)',
-                              color: color,
-                              opacity: 0.8,
-                              background: `${color}1A`,
-                              padding: '1px 6px',
-                              borderRadius: '4px'
-                            }}>
-                              {groupTabs.length}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="tabs-grid">
-                          {groupTabs.map(tab => (
-                            <TabItem
-                              key={tab.id}
-                              tab={tab}
-                              color={color}
-                              handleTabClick={handleTabClick}
-                              handlePinTab={handlePinTab}
-                              handleCloseTab={handleCloseTab}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              );
-            })()}
-          </div>
-        )
-      }
-
-      <style jsx>{`
-        .tab-card:hover .tab-pin-btn,
-        .tab-card:hover .tab-close-btn {
-          opacity: 1 !important;
-        }
-        .tab-card:hover .tab-hover-bg {
-          opacity: 1 !important;
-        }
-        .tab-pin-btn:hover {
-          color: #F59E0B !important;
-        }
-        .tab-close-btn:hover {
-          color: #EF4444 !important;
-        }
-      `}</style>
-    </div >
-  );
-}
-
-function TabItem({ tab, color, handleTabClick, handlePinTab, handleCloseTab }) {
-  const accentColor = color || '#3B82F6';
-  return (
-    <div
-      className="browser-tab-card tab-card"
-      onClick={() => handleTabClick(tab)}
-      data-active={tab.active}
-      style={{
-        position: 'relative',
-        overflow: 'hidden',
-        '--domain-color': accentColor // Keep this available for subtle accents if needed via CSS
-      }}
-    >
-      {/* Dynamic hover gradient effect */}
-      <div className="tab-hover-bg" style={{
-        position: 'absolute',
-        inset: 0,
-        opacity: 0,
-        transition: 'opacity 0.2s',
-        pointerEvents: 'none',
-        // Moving gradient to CSS using the variable or generic
-        background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, transparent 100%)'
-      }} />
-      <img
-        src={getFaviconUrl(tab.url)}
-        alt=""
-        className="tab-favicon"
-        onError={(e) => {
-          e.target.style.display = 'none';
-        }}
-      />
-      <div className="tab-info">
-        <div className="tab-title">{tab.title || 'Untitled'}</div>
-        <div className="tab-url">
-          {tab.url ? new URL(tab.url).hostname : 'No URL'}
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-        {tab.pinned && (
-          <FontAwesomeIcon
-            icon={faThumbtack}
-            style={{ color: '#F59E0B', fontSize: 'var(--font-sm)' }}
-            title="Pinned"
-          />
+            {/* All Tabs Section */}
+            <div>
+              <h3 style={{
+                fontSize: 'var(--font-sm, 12px)',
+                fontWeight: 600,
+                color: 'var(--text-secondary, #94A3B8)',
+                marginBottom: '8px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                All Tabs ({tabs.length})
+              </h3>
+              {tabs.length > 0 ? (
+                <div className="tabs-grid">
+                  {tabs.map(tab => (
+                    <TabCard
+                      key={tab.id}
+                      tab={tab}
+                      onClick={handleTabClick}
+                      onClose={handleTabClose}
+                      onPin={handleTabPin}
+                      isPinned={tab.pinned}
+                      isActive={tab.active}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '40px 20px',
+                  color: 'var(--text-secondary, #64748B)',
+                  textAlign: 'center',
+                  background: 'var(--glass-bg, rgba(30, 41, 59, 0.95))',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(59, 130, 246, 0.2)'
+                }}>
+                  <div style={{ fontSize: '48px', opacity: 0.3 }}>📑</div>
+                  <div>
+                    <div style={{
+                      fontSize: 'var(--font-lg, 14px)',
+                      fontWeight: 500,
+                      marginBottom: '8px'
+                    }}>
+                      No Tabs Found
+                    </div>
+                    <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
+                      Open some browser tabs to see them here
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         )}
-        <button
-          onClick={(e) => handlePinTab(e, tab)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: tab.pinned ? '#F59E0B' : '#64748B',
-            cursor: 'pointer',
-            padding: '4px',
-            opacity: 0,
-            transition: 'opacity 0.2s ease',
-          }}
-          className="tab-pin-btn"
-          title={tab.pinned ? 'Unpin' : 'Pin'}
-        >
-          <FontAwesomeIcon icon={faThumbtack} />
-        </button>
-        <button
-          onClick={(e) => handleCloseTab(e, tab.id)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#64748B',
-            cursor: 'pointer',
-            padding: '4px',
-            opacity: 0,
-            transition: 'opacity 0.2s ease',
-          }}
-          className="tab-close-btn"
-          title="Close tab"
-        >
-          <FontAwesomeIcon icon={faClose} />
-        </button>
       </div>
     </div>
   );

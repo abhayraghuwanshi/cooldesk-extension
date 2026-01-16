@@ -416,6 +416,50 @@ async function main() {
     };
 
 
+    // Handle auto-group tabs command
+    if (msg?.type === 'AUTO_GROUP_TABS') {
+      console.log('[Background] Auto-group tabs command received');
+
+      (async () => {
+        try {
+          const result = await autoGroupTabsByDomain();
+          sendResponse(result);
+        } catch (error) {
+          console.error('[Background] Auto-group error:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+
+      return true; // Keep channel open for async response
+    }
+
+    // Handle toggle auto-group
+    if (msg?.type === 'TOGGLE_AUTO_GROUP') {
+      console.log('[Background] Toggle auto-group command received:', msg.enabled);
+
+      (async () => {
+        try {
+          autoGroupEnabled = msg.enabled;
+          await chrome.storage.local.set({ autoGroupEnabled: msg.enabled });
+
+          if (msg.enabled) {
+            // Group all existing tabs
+            const result = await autoGroupTabsByDomain();
+            sendResponse({ success: true, enabled: true, ...result });
+          } else {
+            // Ungroup all tabs
+            const result = await ungroupAllTabs();
+            sendResponse({ success: true, enabled: false, ...result });
+          }
+        } catch (error) {
+          console.error('[Background] Toggle auto-group error:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+
+      return true; // Keep channel open for async response
+    }
+
     // Handle media control commands
     if (msg?.type === 'MEDIA_COMMAND') {
       console.log('[Background] Full message received:', JSON.stringify(msg));
@@ -1785,6 +1829,266 @@ async function main() {
   });
 
 }
+
+// ============================================================================
+// CHROME TAB GROUPS - Auto-group tabs by domain
+// ============================================================================
+
+const GROUP_COLORS = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan'];
+
+// Extract domain from URL
+function getDomainFromUrl(url) {
+  try {
+    if (!url) return null;
+
+    // Skip system URLs
+    if (url.startsWith('chrome://') || url.startsWith('about:') ||
+      url.startsWith('chrome-extension://') || url.startsWith('edge://')) {
+      return null;
+    }
+
+    const urlObj = new URL(url);
+    let domain = urlObj.hostname.replace('www.', '');
+
+    // For localhost, include port
+    if (domain === 'localhost' || domain === '127.0.0.1') {
+      domain = `${domain}${urlObj.port ? ':' + urlObj.port : ''}`;
+      return domain;
+    }
+
+    // Remove common TLDs for cleaner display
+    domain = domain
+      .replace(/\.com$/, '')
+      .replace(/\.org$/, '')
+      .replace(/\.net$/, '')
+      .replace(/\.io$/, '')
+      .replace(/\.dev$/, '')
+      .replace(/\.ai$/, '')
+      .replace(/\.co$/, '');
+
+    return domain;
+  } catch {
+    return null;
+  }
+}
+
+// Get color for domain based on hash
+function getGroupColorForDomain(domain) {
+  const hash = domain.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return GROUP_COLORS[hash % GROUP_COLORS.length];
+}
+
+// Auto-group all tabs by domain
+async function autoGroupTabsByDomain() {
+  try {
+    const allTabs = await chrome.tabs.query({});
+    const domainGroups = {};
+
+    // Group tabs by domain
+    for (const tab of allTabs) {
+      const domain = getDomainFromUrl(tab.url);
+      if (!domain) continue; // Skip system URLs
+
+      const key = `${tab.windowId}_${domain}`;
+      if (!domainGroups[key]) {
+        domainGroups[key] = {
+          domain,
+          windowId: tab.windowId,
+          tabIds: []
+        };
+      }
+      domainGroups[key].tabIds.push(tab.id);
+    }
+
+    // Create groups for each domain
+    for (const group of Object.values(domainGroups)) {
+      if (group.tabIds.length < 2) continue; // Only group if 2+ tabs
+
+      try {
+        // Check if a group already exists for this domain
+        const existingGroups = await chrome.tabGroups.query({
+          windowId: group.windowId
+        });
+
+        let targetGroupId = null;
+        for (const existingGroup of existingGroups) {
+          if (existingGroup.title === group.domain) {
+            targetGroupId = existingGroup.id;
+            break;
+          }
+        }
+
+        if (targetGroupId) {
+          // Add tabs to existing group
+          await chrome.tabs.group({
+            tabIds: group.tabIds,
+            groupId: targetGroupId
+          });
+        } else {
+          // Create new group
+          const groupId = await chrome.tabs.group({
+            tabIds: group.tabIds
+          });
+
+          // Update group properties
+          await chrome.tabGroups.update(groupId, {
+            title: group.domain,
+            color: getGroupColorForDomain(group.domain),
+            collapsed: false
+          });
+        }
+
+        console.log(`[TabGroups] Grouped ${group.tabIds.length} tabs for ${group.domain}`);
+      } catch (error) {
+        console.error(`[TabGroups] Failed to group ${group.domain}:`, error);
+      }
+    }
+
+    return { success: true, grouped: Object.keys(domainGroups).length };
+  } catch (error) {
+    console.error('[TabGroups] Auto-group failed:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Ungroup all tabs
+async function ungroupAllTabs() {
+  try {
+    const allTabs = await chrome.tabs.query({});
+    const groupedTabs = allTabs.filter(tab => tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE);
+
+    if (groupedTabs.length > 0) {
+      const tabIds = groupedTabs.map(tab => tab.id);
+      await chrome.tabs.ungroup(tabIds);
+      console.log(`[TabGroups] Ungrouped ${tabIds.length} tabs`);
+    }
+
+    return { success: true, ungrouped: groupedTabs.length };
+  } catch (error) {
+    console.error('[TabGroups] Ungroup failed:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Auto-group state
+let autoGroupEnabled = false;
+
+// Load auto-group state from storage
+chrome.storage.local.get(['autoGroupEnabled'], (result) => {
+  autoGroupEnabled = result.autoGroupEnabled || false;
+  console.log('[TabGroups] Auto-group enabled:', autoGroupEnabled);
+
+  // If enabled on startup, group existing tabs
+  if (autoGroupEnabled) {
+    autoGroupTabsByDomain();
+  }
+});
+
+// Listen for tab creation and updates to auto-group
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (!autoGroupEnabled) return;
+
+  // Wait a bit for the URL to be set
+  setTimeout(async () => {
+    try {
+      const updatedTab = await chrome.tabs.get(tab.id);
+      const domain = getDomainFromUrl(updatedTab.url);
+      if (!domain) return;
+
+      // Find existing group for this domain
+      const existingGroups = await chrome.tabGroups.query({
+        windowId: updatedTab.windowId
+      });
+
+      let targetGroupId = null;
+      for (const group of existingGroups) {
+        if (group.title === domain) {
+          targetGroupId = group.id;
+          break;
+        }
+      }
+
+      if (targetGroupId) {
+        // Add to existing group
+        await chrome.tabs.group({
+          tabIds: [updatedTab.id],
+          groupId: targetGroupId
+        });
+      } else {
+        // Check if there are other tabs with same domain
+        const allTabs = await chrome.tabs.query({ windowId: updatedTab.windowId });
+        const sameDomainTabs = allTabs.filter(t => {
+          const tDomain = getDomainFromUrl(t.url);
+          return tDomain === domain && t.id !== updatedTab.id;
+        });
+
+        if (sameDomainTabs.length > 0) {
+          // Create new group with this tab and others
+          const tabIds = [updatedTab.id, ...sameDomainTabs.map(t => t.id)];
+          const groupId = await chrome.tabs.group({ tabIds });
+          await chrome.tabGroups.update(groupId, {
+            title: domain,
+            color: getGroupColorForDomain(domain),
+            collapsed: false
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[TabGroups] Auto-group on create failed:', error);
+    }
+  }, 500);
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (!autoGroupEnabled) return;
+  if (!changeInfo.url) return; // Only react to URL changes
+
+  try {
+    const domain = getDomainFromUrl(tab.url);
+    if (!domain) return;
+
+    // Find existing group for this domain
+    const existingGroups = await chrome.tabGroups.query({
+      windowId: tab.windowId
+    });
+
+    let targetGroupId = null;
+    for (const group of existingGroups) {
+      if (group.title === domain) {
+        targetGroupId = group.id;
+        break;
+      }
+    }
+
+    if (targetGroupId && tab.groupId !== targetGroupId) {
+      // Move to correct group
+      await chrome.tabs.group({
+        tabIds: [tabId],
+        groupId: targetGroupId
+      });
+    } else if (!targetGroupId && tab.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+      // Check if there are other tabs with same domain
+      const allTabs = await chrome.tabs.query({ windowId: tab.windowId });
+      const sameDomainTabs = allTabs.filter(t => {
+        const tDomain = getDomainFromUrl(t.url);
+        return tDomain === domain && t.id !== tabId;
+      });
+
+      if (sameDomainTabs.length > 0) {
+        // Create new group
+        const tabIds = [tabId, ...sameDomainTabs.map(t => t.id)];
+        const groupId = await chrome.tabs.group({ tabIds });
+        await chrome.tabGroups.update(groupId, {
+          title: domain,
+          color: getGroupColorForDomain(domain),
+          collapsed: false
+        });
+      }
+    }
+  } catch (error) {
+    console.error('[TabGroups] Auto-group on update failed:', error);
+  }
+});
 
 main()
   .then(() => {

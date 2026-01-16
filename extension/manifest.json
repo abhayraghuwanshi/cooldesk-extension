@@ -21,6 +21,7 @@
     "history",
     "bookmarks",
     "tabs",
+    "tabGroups",
     "windows",
     "scripting",
     "idle",
