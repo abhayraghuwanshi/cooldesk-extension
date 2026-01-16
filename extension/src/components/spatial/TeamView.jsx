@@ -1,10 +1,11 @@
-import { faLink, faPlus, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faLink, faShare, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { p2pSyncService } from '../../services/p2p/syncService';
 import { teamManager } from '../../services/p2p/teamManager';
 import { getFaviconUrl } from '../../utils';
+import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import NoticeBoard from './NoticeBoard';
 import TeamContextPanel from './TeamContextPanel';
 
@@ -13,6 +14,7 @@ export default function TeamView({ team: propTeam }) {
     const [teams, setTeams] = useState([]);
     const [items, setItems] = useState([]);
     const [peerCounts, setPeerCounts] = useState(new Map());
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const yArrayRef = useRef(null);
 
     // Initial load of teams & active team
@@ -200,7 +202,7 @@ export default function TeamView({ team: propTeam }) {
                                 </div>
                             </div>
                             <button
-                                onClick={handleAddItem}
+                                onClick={() => setIsShareModalOpen(true)}
                                 style={{
                                     padding: '8px 16px', borderRadius: 8, border: 'none',
                                     background: '#3b82f6', color: '#fff', fontWeight: 600,
@@ -208,8 +210,8 @@ export default function TeamView({ team: propTeam }) {
                                     boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
                                 }}
                             >
-                                <FontAwesomeIcon icon={faPlus} />
-                                Share Current Tab
+                                <FontAwesomeIcon icon={faShare} />
+                                Share
                             </button>
                         </div>
 
@@ -403,6 +405,12 @@ export default function TeamView({ team: propTeam }) {
                     </>
                 )}
             </div>
+            {/* Share Modal */}
+            <ShareToTeamModal
+                isOpen={isShareModalOpen}
+                onClose={() => setIsShareModalOpen(false)}
+                initialTeamId={activeTeamId}
+            />
         </div>
     );
 }

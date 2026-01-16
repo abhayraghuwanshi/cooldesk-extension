@@ -6,7 +6,7 @@ import { listWorkspaces } from '../../db/index.js';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { teamManager } from '../../services/p2p/teamManager';
 
-export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
+export function ShareToTeamModal({ isOpen, onClose, contextWorkspace, initialTeamId }) {
     const [teams, setTeams] = useState([]);
     const [selectedTeamId, setSelectedTeamId] = useState(null);
     const [windowTabs, setWindowTabs] = useState([]);
@@ -28,11 +28,15 @@ export function ShareToTeamModal({ isOpen, onClose, contextWorkspace }) {
                 const allTeams = teamManager.getTeams();
                 setTeams(allTeams);
                 if (allTeams.length > 0) {
-                    const activeId = teamManager.activeTeamId;
-                    if (activeId && allTeams.find(t => t.id === activeId)) {
-                        setSelectedTeamId(activeId);
+                    if (initialTeamId && allTeams.find(t => t.id === initialTeamId)) {
+                        setSelectedTeamId(initialTeamId);
                     } else {
-                        setSelectedTeamId(allTeams[0].id);
+                        const activeId = teamManager.activeTeamId;
+                        if (activeId && allTeams.find(t => t.id === activeId)) {
+                            setSelectedTeamId(activeId);
+                        } else {
+                            setSelectedTeamId(allTeams[0].id);
+                        }
                     }
                 }
             });
