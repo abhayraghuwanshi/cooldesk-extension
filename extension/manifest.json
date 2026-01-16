@@ -28,7 +28,9 @@
     "activeTab",
     "sessions",
     "sidePanel",
-    "search"
+    "search",
+    "alarms",
+    "commands"
   ],
   "host_permissions": [
     "https://*/*"

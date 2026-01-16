@@ -896,60 +896,61 @@ export function NotesCanvas({ workspaceId }) {
                 </div>
               )}
 
-              {/* Title Input */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <div style={{ position: 'relative', flex: '0 0 200px' }}>
-                    <FontAwesomeIcon
-                      icon={faFolder}
-                      style={{
-                        position: 'absolute',
-                        left: '14px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        color: 'var(--text-muted)',
-                        fontSize: '14px',
-                        pointerEvents: 'none'
-                      }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Folder..."
-                      value={noteFolder}
-                      onChange={handleFolderChange}
-                      list="existing-folders"
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px 10px 40px',
-                        borderRadius: '10px',
-                        background: 'var(--surface-2)',
-                        border: '1px solid var(--border-primary)',
-                        color: 'var(--text)',
-                        fontSize: '13px',
-                        outline: 'none',
-                        transition: 'all 0.2s ease'
-                      }}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = 'var(--accent-blue)';
-                        e.target.style.background = 'var(--surface-3)';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = 'var(--border-primary)';
-                        e.target.style.background = 'var(--surface-2)';
-                      }}
-                    />
-                    <datalist id="existing-folders">
-                      {folders.filter(f => f !== 'All Notes').map(f => <option key={f} value={f} />)}
-                    </datalist>
-                  </div>
+              {/* Title and Folder Inputs - Same Line */}
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexShrink: 0 }}>
+                {/* Folder Input */}
+                <div style={{ position: 'relative', flex: '0 0 200px' }}>
+                  <FontAwesomeIcon
+                    icon={faFolder}
+                    style={{
+                      position: 'absolute',
+                      left: '14px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: 'var(--text-muted)',
+                      fontSize: '14px',
+                      pointerEvents: 'none'
+                    }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Folder..."
+                    value={noteFolder}
+                    onChange={handleFolderChange}
+                    list="existing-folders"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px 10px 40px',
+                      borderRadius: '10px',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border-primary)',
+                      color: 'var(--text)',
+                      fontSize: '13px',
+                      outline: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = 'var(--accent-blue)';
+                      e.target.style.background = 'var(--surface-3)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = 'var(--border-primary)';
+                      e.target.style.background = 'var(--surface-2)';
+                    }}
+                  />
+                  <datalist id="existing-folders">
+                    {folders.filter(f => f !== 'All Notes').map(f => <option key={f} value={f} />)}
+                  </datalist>
                 </div>
 
+                {/* Title Input */}
                 <input
                   type="text"
                   placeholder="Note Title"
                   value={noteTitle}
                   onChange={handleTitleChange}
                   style={{
+                    flex: 1,
                     padding: '12px 16px',
                     borderRadius: '10px',
                     background: 'var(--surface-2)',

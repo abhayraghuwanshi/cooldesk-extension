@@ -1810,23 +1810,23 @@ async function main() {
     }
   });
 
-  // (Legacy devlink-ai migration code removed after successful migration)
-
   // Listen for global commands (shortcuts)
-  chrome.commands.onCommand.addListener(async (command) => {
-    console.log('[Background] Command received:', command);
-    if (command === 'open-spotlight') {
-      try {
-        const window = await chrome.windows.getLastFocused();
-        if (chrome.sidePanel && chrome.sidePanel.open) {
-          await chrome.sidePanel.open({ windowId: window.id });
-          console.log('[Background] Opened side panel via shortcut');
+  if (chrome?.commands?.onCommand?.addListener) {
+    chrome.commands.onCommand.addListener(async (command) => {
+      console.log('[Background] Command received:', command);
+      if (command === 'open-spotlight') {
+        try {
+          const window = await chrome.windows.getLastFocused();
+          if (chrome.sidePanel && chrome.sidePanel.open) {
+            await chrome.sidePanel.open({ windowId: window.id });
+            console.log('[Background] Opened side panel via shortcut');
+          }
+        } catch (error) {
+          console.error('[Background] Failed to open side panel via command:', error);
         }
-      } catch (error) {
-        console.error('[Background] Failed to open side panel via command:', error);
       }
-    }
-  });
+    });
+  }
 
 }
 

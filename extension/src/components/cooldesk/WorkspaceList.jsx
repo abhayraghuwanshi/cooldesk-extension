@@ -52,11 +52,15 @@ export function WorkspaceList({
     const [isSortingByActivity, setIsSortingByActivity] = useState(false);
     const [isCalculatingScores, setIsCalculatingScores] = useState(false);
 
-    // Calculate activity score for a workspace (memoized)
-    const calculateWorkspaceScore = useMemo(() => async (workspace) => {
+
+    // Calculate activity score for a workspace
+    const calculateWorkspaceScore = async (workspace) => {
         if (!workspace.urls || workspace.urls.length === 0) {
+            console.log(`[WorkspaceList] Workspace "${workspace.name}" has no URLs`);
             return 0;
         }
+
+        console.log(`[WorkspaceList] Calculating score for "${workspace.name}" with ${workspace.urls.length} URLs:`, workspace.urls.map(u => u.url));
 
         try {
             // Import getUrlAnalytics dynamically to avoid circular deps
@@ -66,8 +70,10 @@ export function WorkspaceList({
             const analyticsPromises = workspace.urls.map(async (urlObj) => {
                 try {
                     const stats = await getUrlAnalytics(urlObj.url);
+                    console.log(`[WorkspaceList]   URL "${urlObj.url}" stats:`, stats);
                     return stats || { totalVisits: 0, totalTime: 0, lastVisit: 0 };
                 } catch (error) {
+                    console.error(`[WorkspaceList]   Error getting stats for "${urlObj.url}":`, error);
                     return { totalVisits: 0, totalTime: 0, lastVisit: 0 };
                 }
             });
@@ -80,18 +86,23 @@ export function WorkspaceList({
             const mostRecentVisit = Math.max(...allStats.map(s => s.lastVisit || 0), 0);
 
             // Calculate composite score
+            // Formula: (visits * 10) + (time_in_hours * 50) + (recency_bonus)
             const timeInHours = totalTime / (1000 * 60 * 60);
             const recencyBonus = mostRecentVisit > 0
-                ? Math.max(0, 100 - (Date.now() - mostRecentVisit) / (1000 * 60 * 60 * 24))
+                ? Math.max(0, 100 - (Date.now() - mostRecentVisit) / (1000 * 60 * 60 * 24)) // Decay over days
                 : 0;
 
             const score = (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
+
+            console.log(`[WorkspaceList]   "${workspace.name}" totals: visits=${totalVisits}, time=${timeInHours.toFixed(2)}h, recency=${recencyBonus.toFixed(2)}, SCORE=${score.toFixed(2)}`);
+
             return score;
         } catch (error) {
-            console.error(`[WorkspaceList] Error calculating workspace score:`, error);
+            console.error(`[WorkspaceList] Error calculating workspace score for "${workspace.name}":`, error);
             return 0;
         }
-    }, []);
+    };
+
 
     // Debounced activity score loader
     const loadActivityScores = useMemo(
@@ -114,7 +125,7 @@ export function WorkspaceList({
             setIsCalculatingScores(false);
             console.log('[WorkspaceList] Scores calculated:', scores.size);
         }, 500),
-        [unpinned, isSortingByActivity, calculateWorkspaceScore]
+        [unpinned, isSortingByActivity]
     );
 
     // Load activity scores only when sorting is enabled
