@@ -1747,37 +1747,24 @@ async function main() {
     console.warn('[Background] Could not register commands listener:', e);
   }
 
-  setInterval(async () => {
-    try {
-      const stats = await getTimeSeriesStorageStats();
-      if (stats.estimatedSizeMB > 25) { // Cleanup if >25MB
-        const deleted = await cleanupOldTimeSeriesData(30);
-        console.log(`[Background] Daily cleanup: removed ${deleted} old events, size: ${stats.estimatedSizeMB}MB`);
+  // Use chrome.alarms for periodic tasks instead of setInterval
+  // Daily cleanup alarm
+  chrome.alarms.create('dailyCleanup', { periodInMinutes: 1440 }); // 24 hours
+
+  // Listen for alarm events
+  chrome.alarms.onAlarm.addListener(async (alarm) => {
+    if (alarm.name === 'dailyCleanup') {
+      try {
+        const stats = await getTimeSeriesStorageStats();
+        if (stats.estimatedSizeMB > 25) { // Cleanup if >25MB
+          const deleted = await cleanupOldTimeSeriesData(30);
+          console.log(`[Background] Daily cleanup: removed ${deleted} old events, size: ${stats.estimatedSizeMB}MB`);
+        }
+      } catch (e) {
+        console.warn('[Background] Daily cleanup failed:', e);
       }
-    } catch (e) {
-      console.warn('[Background] Daily cleanup failed:', e);
     }
-  }, 24 * 60 * 60 * 1000); // 24 hours
-
-  // ML Model Training (periodic, every 24 hours)
-  setInterval(async () => {
-    try {
-      console.log('[ML] Scheduled training check...');
-      // Use statically imported ModelTrainer (imported at top of file)
-
-      const result = await ModelTrainer.trainIfNeeded();
-
-      if (result.success) {
-        console.log(`[ML] ✅ Scheduled training complete: ${result.examples} examples, ${(result.accuracy * 100).toFixed(1)}% accuracy`);
-      } else if (result.skipped) {
-        console.log('[ML] Scheduled training skipped:', result.reason);
-      } else {
-        console.warn('[ML] Scheduled training failed:', result.message || result.error);
-      }
-    } catch (e) {
-      console.warn('[ML] Scheduled training check failed:', e);
-    }
-  }, 24 * 60 * 60 * 1000); // 24 hours
+  });
 
   // (Legacy devlink-ai migration code removed after successful migration)
 

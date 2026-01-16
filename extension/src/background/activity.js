@@ -580,24 +580,34 @@ function handleTabUpdated(tabId, changeInfo, tab) {
 
 // Initialize activity tracking
 export function initializeActivityTracking() {
-    // Periodic flush every 5s
-    setInterval(() => {
-        flushActivityBatch().catch(() => { });
-        flushTimeSeriesEvents().catch(() => { });
-    }, 5000);
+    let flushIntervalId = null;
+    let isUserActive = true;
 
-    // Daily cleanup of old time series data (every 24 hours)
-    setInterval(async () => {
-        try {
-            const stats = await getTimeSeriesStorageStats();
-            if (stats.estimatedSizeMB > 25) { // Cleanup if >25MB
-                const deleted = await cleanupOldTimeSeriesData(30);
-                console.log(`[Background] Daily cleanup: removed ${deleted} old events, size: ${stats.estimatedSizeMB}MB`);
-            }
-        } catch (e) {
-            console.warn('[Background] Daily cleanup failed:', e);
+    // Start flush interval
+    const startFlushInterval = () => {
+        if (!flushIntervalId) {
+            flushIntervalId = setInterval(() => {
+                if (isUserActive) {
+                    flushActivityBatch().catch(() => { });
+                    flushTimeSeriesEvents().catch(() => { });
+                }
+            }, 5000);
         }
-    }, 24 * 60 * 60 * 1000); // 24 hours
+    };
+
+    // Stop flush interval
+    const stopFlushInterval = () => {
+        if (flushIntervalId) {
+            clearInterval(flushIntervalId);
+            flushIntervalId = null;
+        }
+    };
+
+    // Start the interval initially
+    startFlushInterval();
+
+    // NOTE: Daily cleanup is now handled by chrome.alarms in background.js
+    // Removed duplicate 24-hour setInterval to reduce CPU usage
 
     // One-time backfill: mirror existing local activity to host so Electron can display historical data
     (async () => {
@@ -635,10 +645,13 @@ export function initializeActivityTracking() {
     chrome.windows.onFocusChanged.addListener(handleFocusChanged);
     chrome.tabs.onUpdated.addListener(handleTabUpdated);
 
-    // Pause/resume time counting based on OS idle state
+    // Pause/resume time counting AND flush interval based on OS idle state
     chrome.idle.onStateChanged.addListener((state) => {
         const now = Date.now();
         if (state === 'idle' || state === 'locked') {
+            // User is idle - pause flushing to save CPU
+            isUserActive = false;
+
             if (currentActive.url) accumulateTime(currentActive.url, now);
             currentActive.since = 0;
             flushActivityBatch().catch(() => { });
@@ -668,6 +681,9 @@ export function initializeActivityTracking() {
             currentSessionId = `session_${now}_${Math.random().toString(36).substr(2, 9)}`;
             sessionStartTime = now;
         } else if (state === 'active') {
+            // User is active - resume flushing
+            isUserActive = true;
+
             if (currentActive.tabId && currentActive.url) currentActive.since = now;
             flushActivityBatch().catch(() => { });
         }

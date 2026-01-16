@@ -105,9 +105,26 @@ export function QuickAccess() {
     };
 
     loadRecentTabs();
-    // Refresh every 5 seconds
-    const interval = setInterval(loadRecentTabs, 5000);
-    return () => clearInterval(interval);
+
+    // Event-driven updates instead of polling
+    const handleTabUpdate = () => loadRecentTabs();
+
+    try {
+      chrome.tabs.onCreated.addListener(handleTabUpdate);
+      chrome.tabs.onRemoved.addListener(handleTabUpdate);
+      chrome.tabs.onUpdated.addListener(handleTabUpdate);
+      chrome.tabs.onActivated.addListener(handleTabUpdate);
+
+      return () => {
+        chrome.tabs.onCreated.removeListener(handleTabUpdate);
+        chrome.tabs.onRemoved.removeListener(handleTabUpdate);
+        chrome.tabs.onUpdated.removeListener(handleTabUpdate);
+        chrome.tabs.onActivated.removeListener(handleTabUpdate);
+      };
+    } catch (error) {
+      console.warn('[QuickAccess] Failed to setup tab event listeners', error);
+      return () => { };
+    }
   }, []);
 
 

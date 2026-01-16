@@ -8,18 +8,31 @@ export function initContentInteractions() {
     } catch { /* no-op */ }
   }
 
-  // Scroll tracking (report scroll percentage at most every 3s; only if change > 5%)
+  // Scroll tracking (report scroll percentage on scroll events with throttling)
   let lastScrollPercent = 0;
-  try {
-    setInterval(() => {
+  let scrollTimeout = null;
+
+  // Throttled scroll handler - only check scroll every 3 seconds max
+  const handleScroll = () => {
+    if (scrollTimeout) return; // Already scheduled
+
+    scrollTimeout = setTimeout(() => {
       const total = Math.max(1, document.documentElement.scrollHeight || document.body.scrollHeight || 1);
       const viewportBottom = (window.scrollY || window.pageYOffset || 0) + window.innerHeight;
       const scrollPercent = Math.max(0, Math.min(1, viewportBottom / total));
+
       if (Math.abs(scrollPercent - lastScrollPercent) >= 0.05) {
         lastScrollPercent = scrollPercent;
         sendInteraction('scroll', { scrollPercent: Number(scrollPercent.toFixed(3)) });
       }
+
+      scrollTimeout = null;
     }, 3000);
+  };
+
+  // Use event listener instead of interval
+  try {
+    addEventListener('scroll', handleScroll, { passive: true });
   } catch { /* no-op */ }
 
   // Click tracking
@@ -88,31 +101,31 @@ export function initContentInteractions() {
       if (selectionTimeout) {
         clearTimeout(selectionTimeout);
       }
-      
+
       // Debounce selection changes to avoid capturing every character while dragging
       selectionTimeout = setTimeout(() => {
         try {
           const selection = window.getSelection();
           const selectedText = selection.toString().trim();
-          
+
           // Only process meaningful selections (>= 15 chars, different from last)
           if (selectedText.length >= 15 && selectedText !== lastSelectedText) {
             lastSelectedText = selectedText;
-            
+
             // Get selection context and position
             const range = selection.getRangeAt(0);
             const boundingRect = range.getBoundingClientRect();
-            
+
             // Get surrounding context (50 chars before/after)
             const beforeText = range.startContainer.textContent?.substring(
-              Math.max(0, range.startOffset - 50), 
+              Math.max(0, range.startOffset - 50),
               range.startOffset
             ) || '';
             const afterText = range.endContainer.textContent?.substring(
-              range.endOffset, 
+              range.endOffset,
               Math.min(range.endContainer.textContent.length, range.endOffset + 50)
             ) || '';
-            
+
             sendInteraction('textSelected', {
               text: selectedText,
               beforeText,
@@ -126,7 +139,7 @@ export function initContentInteractions() {
               length: selectedText.length,
               wordCount: selectedText.split(/\s+/).length
             });
-            
+
             console.log('[ContentInteractions] Text selected:', selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''));
           } else if (selectedText.length === 0 && lastSelectedText) {
             // Selection cleared

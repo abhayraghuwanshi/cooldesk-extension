@@ -483,30 +483,11 @@ export function setupRealTimeCategorizor() {
       }
     });
 
-    // ENHANCED: Periodically check active tab for SPA navigation that might be missed
-    // This catches ChatGPT/Claude chat changes that happen via history.pushState
-    const periodicCheck = setInterval(async () => {
-      try {
-        const [activeTab] = await browserAPI.tabs.query({ active: true, currentWindow: true });
-        if (activeTab?.url && !isInternalUrl(activeTab.url)) {
-          // Only categorize chat platforms that use SPA navigation
-          const isChatPlatform =
-            activeTab.url.includes('chat.openai.com') ||
-            activeTab.url.includes('chatgpt.com') ||
-            activeTab.url.includes('claude.ai') ||
-            activeTab.url.includes('gemini.google.com') ||
-            activeTab.url.includes('perplexity.ai');
+    // NOTE: Removed 5-second periodic check for SPA navigation
+    // Tab event listeners (onUpdated, onActivated) are sufficient for catching URL changes
+    // This eliminates continuous CPU usage when idle
 
-          if (isChatPlatform) {
-            categorizeUrl(activeTab.url, activeTab.title, activeTab.id);
-          }
-        }
-      } catch (e) {
-        // Ignore errors from closed tabs
-      }
-    }, 5000); // Check every 5 seconds
-
-    console.log('✅ Real-time URL categorization enabled (with SPA support)');
+    console.log('✅ Real-time URL categorization enabled (event-driven)');
   };
 
   // Helper function to detect internal/system URLs across browsers

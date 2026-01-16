@@ -132,9 +132,30 @@ export function ActivityFeed() {
         };
         loadAll();
 
-        // Refresh every 10s
-        const interval = setInterval(loadAll, 10000);
-        return () => clearInterval(interval);
+        // Event-driven updates instead of polling
+        const handleUpdate = () => loadAll();
+
+        try {
+            // Listen to tab events for real-time updates
+            chrome.tabs.onCreated.addListener(handleUpdate);
+            chrome.tabs.onRemoved.addListener(handleUpdate);
+            chrome.tabs.onUpdated.addListener(handleUpdate);
+            chrome.tabs.onActivated.addListener(handleUpdate);
+
+            // Listen to storage changes for chat updates
+            chrome.storage.onChanged.addListener(handleUpdate);
+
+            return () => {
+                chrome.tabs.onCreated.removeListener(handleUpdate);
+                chrome.tabs.onRemoved.removeListener(handleUpdate);
+                chrome.tabs.onUpdated.removeListener(handleUpdate);
+                chrome.tabs.onActivated.removeListener(handleUpdate);
+                chrome.storage.onChanged.removeListener(handleUpdate);
+            };
+        } catch (error) {
+            console.warn('[ActivityFeed] Failed to setup event listeners', error);
+            return () => { };
+        }
     }, [loadQuickLinks, loadFeed]);
 
     const handleItemClick = async (url) => {

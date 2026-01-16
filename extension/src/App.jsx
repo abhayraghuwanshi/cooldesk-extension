@@ -43,7 +43,7 @@ import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
-import { getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
+import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
 import { p2pSyncService } from './services/p2p/syncService';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
 import { getFaviconUrl } from './utils';
@@ -108,7 +108,6 @@ export default function App() {
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
   const activeSectionTimeoutRef = useRef(null)
   const sharedClientRef = useRef(null)
-  const [processes, setProcesses] = useState([])
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const [fontSize, setFontSize] = useState('medium')
 
@@ -685,118 +684,36 @@ export default function App() {
   };
 
 
-  // Populate settings on load from host (Electron app API), then mirror locally
+  // NOTE: Disabled host settings sync (Electron app not running)
+  // Settings are loaded from local IndexedDB/storage only
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await getHostSettings();
-        if (res?.ok && res.settings && Object.keys(res.settings).length) {
-          const s = res.settings;
-          setSettings({
-            geminiApiKey: s.geminiApiKey || '',
-            modelName: s.modelName || '',
-            visitCountThreshold: Number.isFinite(s.visitCountThreshold) ? String(s.visitCountThreshold) : ''
-          });
-          try {
-            const payload = {
-              ...(s.geminiApiKey ? { geminiApiKey: s.geminiApiKey } : {}),
-              ...(s.modelName ? { modelName: s.modelName } : {}),
-              ...(Number.isFinite(s.visitCountThreshold) ? { visitCountThreshold: s.visitCountThreshold } : {}),
-            };
-            await saveSettingsDB(payload);
-            await storageSet(payload);
-          } catch { }
-        }
-      } catch { }
-    })();
+    // No-op: Host sync is disabled by default
+    return () => { };
   }, [])
 
-  // Populate dashboard on load from host and notify listeners
+  // NOTE: Disabled host dashboard sync (Electron app not running)
+  // Dashboard data is loaded from local storage only
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await getHostDashboard();
-        const dash = res?.ok ? res.dashboard : null;
-        if (dash && (Array.isArray(dash.history) || Array.isArray(dash.bookmarks))) {
-          try {
-            await storageSet({ dashboardData: dash });
-            await sendMessage({ action: 'updateData' });
-          } catch { }
-        }
-      } catch { }
-    })();
+    // No-op: Host sync is disabled by default
+    return () => { };
   }, [])
 
   // Poll running processes from the host app
+  // NOTE: Disabled since host sync is not enabled (Electron app not running)
+  // This eliminates unnecessary failed network requests every 60 seconds
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const list = await getProcesses();
-        if (!cancelled && Array.isArray(list)) setProcesses(list);
-      } catch {
-        // ignore
-      }
-    };
-    // Always attempt an initial load
-    load();
-    // Use lower frequency inside Chrome extension to reduce traffic
-    const intervalMs = hasRuntime() ? 30000 : 15000;
-    const id = setInterval(load, intervalMs);
-    return () => { cancelled = true; clearInterval(id); };
+    // No-op: Host sync is disabled by default
+    // This will be re-enabled when Electron host integration is implemented
+    return () => { };
   }, [])
 
   // Mirror Chrome tabs to host (/tabs) so Electron app can read them
+  // NOTE: Disabled since host sync is not enabled (Electron app not running)
+  // This eliminates unnecessary network requests on every tab event
   useEffect(() => {
-    // Only in extension context with chrome.tabs available
-    const canUseTabs = typeof chrome !== 'undefined' && chrome?.tabs;
-    if (!canUseTabs) return;
-
-    let disposed = false;
-
-    const pushTabs = async () => {
-      try {
-        const res = await tabs.query({});
-        if (!disposed && res?.ok && Array.isArray(res.tabs)) {
-          await setHostTabs(res.tabs);
-        }
-      } catch { /* noop */ }
-    };
-
-    // Initial push
-    pushTabs();
-
-    // Periodic sync
-    const interval = setInterval(pushTabs, 15000);
-
-    // Event-driven sync
-    const handlers = [];
-    try {
-      if (chrome.tabs?.onCreated?.addListener) {
-        const h = () => pushTabs();
-        chrome.tabs.onCreated.addListener(h); handlers.push(['onCreated', h]);
-      }
-      if (chrome.tabs?.onUpdated?.addListener) {
-        const h = () => pushTabs();
-        chrome.tabs.onUpdated.addListener(h); handlers.push(['onUpdated', h]);
-      }
-      if (chrome.tabs?.onRemoved?.addListener) {
-        const h = () => pushTabs();
-        chrome.tabs.onRemoved.addListener(h); handlers.push(['onRemoved', h]);
-      }
-      if (chrome.tabs?.onActivated?.addListener) {
-        const h = () => pushTabs();
-        chrome.tabs.onActivated.addListener(h); handlers.push(['onActivated', h]);
-      }
-    } catch { }
-
-    return () => {
-      disposed = true;
-      clearInterval(interval);
-      handlers.forEach(([evt, h]) => {
-        try { chrome.tabs?.[evt]?.removeListener(h); } catch { }
-      });
-    };
+    // No-op: Host sync is disabled by default
+    // This will be re-enabled when Electron host integration is implemented
+    return () => { };
   }, []);
 
   // Initialize P2P Sync Service
@@ -926,15 +843,8 @@ export default function App() {
         }
       })()
 
-      // After loading local settings, mirror to host so app sees them
-      ; (async () => {
-        try {
-          const s = await getSettingsDB();
-          if (s && Object.keys(s).length) {
-            await setHostSettings(s);
-          }
-        } catch { }
-      })()
+    // NOTE: Disabled host settings mirroring (Electron app not running)
+    // Settings are only stored locally
 
     const onMsg = (req) => {
       if (req?.action === 'updateData') {
@@ -1100,8 +1010,7 @@ export default function App() {
       await saveSettingsDB(payload);
       // Mirror to storage for background/service worker compatibility
       try { await storageSet(payload) } catch (e) { console.warn('Could not save settings to storage', e) }
-      // Push to host so Electron app stays in sync
-      try { await setHostSettings(payload) } catch { }
+      // NOTE: Disabled host settings push (Electron app not running)
 
       setSettings(newSettings);
       setShowSettings(false);

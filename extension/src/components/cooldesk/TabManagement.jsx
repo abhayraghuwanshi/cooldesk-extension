@@ -67,11 +67,7 @@ export function TabManagement({ maxTabs = 8 }) {
       }
     });
 
-    // Keep the interval as a fallback backup
-    const interval = setInterval(refreshTabs, 10000);
-
     return () => {
-      clearInterval(interval);
       events.forEach(event => {
         if (event?.removeListener) {
           event.removeListener(handleEvent);
