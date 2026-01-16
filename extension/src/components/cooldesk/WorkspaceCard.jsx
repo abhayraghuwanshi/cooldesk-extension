@@ -18,7 +18,9 @@ import {
   faUtensils
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { memo, useState } from 'react';
 import { getFaviconUrl } from '../../utils.js';
+import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
@@ -41,10 +43,8 @@ const CATEGORY_ICONS = {
   utilities: faTools
 };
 
-import { useState } from 'react';
-import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
-
-export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete }) {
+// Memoized WorkspaceCard to prevent unnecessary re-renders
+export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete }) {
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
@@ -553,9 +553,10 @@ export function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive
       )}
     </div>
   );
-}
+});
 
-export function CreateWorkspaceCard({ onCreate }) {
+// Memoized CreateWorkspaceCard
+export const CreateWorkspaceCard = memo(function CreateWorkspaceCard({ onCreate }) {
   const handleClick = () => {
     onCreate?.();
   };
@@ -568,4 +569,4 @@ export function CreateWorkspaceCard({ onCreate }) {
       <div className="create-text">Create New Workspace</div>
     </div>
   );
-}
+});

@@ -1,7 +1,20 @@
 import { faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TabCard, TabGroupCard } from './TabCard';
+
+// Debounce utility
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
 
 export function TabManagement() {
   const [tabs, setTabs] = useState([]);
@@ -40,7 +53,13 @@ export function TabManagement() {
     } finally {
       setTabsLoading(false);
     }
-  }, []);
+  }, [tabs.length]);
+
+  // Debounced refresh (300ms delay)
+  const debouncedRefresh = useMemo(
+    () => debounce(() => refreshTabs(), 300),
+    [refreshTabs]
+  );
 
   // Load tabs on mount and keep updated
   useEffect(() => {
@@ -57,22 +76,21 @@ export function TabManagement() {
       chrome?.tabs?.onAttached
     ];
 
-    const handleEvent = () => refreshTabs();
-
+    // Use debounced refresh for all events
     events.forEach(event => {
       if (event?.addListener) {
-        event.addListener(handleEvent);
+        event.addListener(debouncedRefresh);
       }
     });
 
     return () => {
       events.forEach(event => {
         if (event?.removeListener) {
-          event.removeListener(handleEvent);
+          event.removeListener(debouncedRefresh);
         }
       });
     };
-  }, [refreshTabs]);
+  }, [refreshTabs, debouncedRefresh]);
 
   // Group tabs by domain
   const tabsByDomain = useCallback(() => {
@@ -95,6 +113,7 @@ export function TabManagement() {
   // Handle tab actions
   const handleTabClick = useCallback(async (tab) => {
     try {
+      // Switch to the existing tab instead of opening a new one
       if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
         await chrome.tabs.update(tab.id, { active: true });
         if (tab.windowId && chrome?.windows?.update) {

@@ -1,5 +1,6 @@
 import { faExternalLinkAlt, faGlobe, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { memo } from 'react';
 import { getFaviconUrl } from '../../utils.js';
 
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
@@ -7,8 +8,9 @@ const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 /**
  * TabCard - Card component for displaying browser tabs in spatial interface
  * Follows WorkspaceCard design pattern with tab-specific features
+ * Memoized to prevent unnecessary re-renders
  */
-export function TabCard({ tab, onClick, onClose, onPin, isPinned = false, isActive = false }) {
+export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isPinned = false, isActive = false }) {
   if (!tab) return null;
 
   const { url, title, favIconUrl } = tab;
@@ -99,12 +101,13 @@ export function TabCard({ tab, onClick, onClose, onPin, isPinned = false, isActi
       </div>
     </div>
   );
-}
+});
 
 /**
  * TabGroupCard - Card for displaying grouped tabs by domain
+ * Memoized to prevent unnecessary re-renders
  */
-export function TabGroupCard({ domain, tabs = [], onClick, isExpanded = false }) {
+export const TabGroupCard = memo(function TabGroupCard({ domain, tabs = [], onClick, isExpanded = false }) {
   if (!domain || tabs.length === 0) return null;
 
   const colorClass = ICON_COLORS[Math.abs(domain.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
@@ -151,9 +154,19 @@ export function TabGroupCard({ domain, tabs = [], onClick, isExpanded = false })
             <div
               key={idx}
               className="tab-group-item"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                if (tab.url) window.open(tab.url, '_blank');
+                // Switch to the existing tab instead of opening a new one
+                if (tab.id && typeof chrome !== 'undefined' && chrome?.tabs?.update) {
+                  try {
+                    await chrome.tabs.update(tab.id, { active: true });
+                    if (tab.windowId && chrome?.windows?.update) {
+                      await chrome.windows.update(tab.windowId, { focused: true });
+                    }
+                  } catch (error) {
+                    console.error('[TabGroupCard] Failed to activate tab:', error);
+                  }
+                }
               }}
               title={tab.title}
             >
@@ -195,4 +208,4 @@ export function TabGroupCard({ domain, tabs = [], onClick, isExpanded = false })
       )}
     </div>
   );
-}
+});

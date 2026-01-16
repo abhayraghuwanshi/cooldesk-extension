@@ -1,8 +1,21 @@
 import { faComments, faFolder, faHome, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { teamManager } from '../../services/p2p/teamManager';
 import '../../styles/spatial.css';
+
+// Debounce utility
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
 
 /**
  * WorkspaceShell - Spatial container for workspace faces (cube metaphor)
@@ -23,6 +36,16 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   });
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [activeTeam, setActiveTeam] = useState(null);
+  const transitionTimeoutRef = useRef(null);
+
+  // Debounced localStorage save
+  const debouncedSave = useMemo(
+    () =>
+      debounce((face) => {
+        localStorage.setItem('cooldesk-active-face', face);
+      }, 300),
+    []
+  );
 
   // Load active team on mount
   useEffect(() => {
@@ -37,19 +60,19 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     });
   }, []);
 
-  // Persist state to localStorage
+  // Persist state to localStorage (debounced)
   useEffect(() => {
-    localStorage.setItem('cooldesk-active-face', currentFace);
-  }, [currentFace]);
+    debouncedSave(currentFace);
+  }, [currentFace, debouncedSave]);
 
-  // Update when parent changes active face (only if strictly different and not just initial mount)
+  // Update when parent changes active face
   useEffect(() => {
     if (activeFace && activeFace !== 'overview') {
       setCurrentFace(activeFace);
     }
   }, [activeFace]);
 
-  // Navigate to a specific face
+  // Navigate to a specific face (memoized)
   const navigateToFace = useCallback((face) => {
     if (face === currentFace || isTransitioning) return;
 
@@ -61,10 +84,13 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       onFaceChange(face);
     }
 
-    // Reset transition lock after animation completes
-    setTimeout(() => {
+    // Reset transition lock after animation completes (reduced to 200ms)
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+    }
+    transitionTimeoutRef.current = setTimeout(() => {
       setIsTransitioning(false);
-    }, 360); // Match CSS transition duration
+    }, 200);
   }, [currentFace, isTransitioning, onFaceChange]);
 
   // Keyboard navigation (supports both Ctrl for Windows and Cmd for Mac)
@@ -176,18 +202,18 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     };
   }, [navigateToFace, currentFace]);
 
-  // Transform for 6 faces: 0, -16.66, -33.33, -50, -66.66, -83.33
-  const getTransform = () => {
-    switch (currentFace) {
-      case 'chat': return 'translateX(0)';
-      case 'workspace': return 'translateX(-16.666667%)';
-      case 'overview': return 'translateX(-33.333333%)';
-      case 'tabs': return 'translateX(-50%)';
-      case 'team': return 'translateX(-66.666667%)';
-      case 'notes': return 'translateX(-83.333333%)';
-      default: return 'translateX(-33.333333%)';
-    }
-  };
+  // Memoized transform calculation
+  const transform = useMemo(() => {
+    const transforms = {
+      'chat': 'translateX(0)',
+      'workspace': 'translateX(-16.666667%)',
+      'overview': 'translateX(-33.333333%)',
+      'tabs': 'translateX(-50%)',
+      'team': 'translateX(-66.666667%)',
+      'notes': 'translateX(-83.333333%)'
+    };
+    return transforms[currentFace] || transforms.overview;
+  }, [currentFace]);
 
   return (
     <div className="workspace-shell">
@@ -208,7 +234,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       </div>
 
       {/* Sliding container */}
-      <div className={`workspace-faces ${isTransitioning ? 'transitioning' : ''}`} style={{ transform: getTransform() }}>
+      <div className={`workspace-faces ${isTransitioning ? 'transitioning' : ''}`} style={{ transform, willChange: 'transform' }}>
         {/* We assume 'children' are passed in a specific order or we construct them here if they are static faces */}
         {/* But wait, 'children' was used before. Let's see how App.jsx passes them. */}
         {/* Assuming children contains the 3 existing faces: Chat, Workspace, Overview. Notes was hardcoded? No, notes logic was missing in view? */}

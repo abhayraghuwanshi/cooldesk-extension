@@ -4,10 +4,23 @@ import {
     faLink
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { getFaviconUrl } from '../../utils.js';
+
+// Debounce utility
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
 
 // Platform config for chats (reused)
 const PLATFORM_CONFIG = {
@@ -24,7 +37,7 @@ export function ActivityFeed() {
     const [activeTab, setActiveTab] = useState('all');
     const [isLoading, setIsLoading] = useState(true);
 
-    // Load Most Visited (Quick Access)
+    // Load Most Visited (Quick Access) - memoized
     const loadQuickLinks = useCallback(async () => {
         try {
             // Priority: UI State -> Chrome History
@@ -76,7 +89,7 @@ export function ActivityFeed() {
         return [];
     }, []);
 
-    // Load Feed Items (Chats + Tabs)
+    // Load Feed Items (Chats + Tabs) - memoized
     const loadFeed = useCallback(async () => {
         const items = [];
 
@@ -107,7 +120,7 @@ export function ActivityFeed() {
                         id: `tab_${tab.id}`,
                         title: tab.title,
                         url: tab.url,
-                        timestamp: tab.lastAccessed || Date.now(), // Fallback if lastAccessed undefined
+                        timestamp: tab.lastAccessed || Date.now(),
                         type: 'tab',
                         subtitle: new URL(tab.url).hostname,
                         favIconUrl: tab.favIconUrl
@@ -119,8 +132,20 @@ export function ActivityFeed() {
         }
 
         // Sort combined feed by timestamp (newest first)
-        return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20); // Top 20 items
+        return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
     }, []);
+
+    // Debounced update handler (500ms delay)
+    const debouncedUpdate = useMemo(
+        () => debounce(async () => {
+            setIsLoading(true);
+            const [links, feed] = await Promise.all([loadQuickLinks(), loadFeed()]);
+            setQuickLinks(links);
+            setFeedItems(feed);
+            setIsLoading(false);
+        }, 500),
+        [loadQuickLinks, loadFeed]
+    );
 
     useEffect(() => {
         const loadAll = async () => {
@@ -132,31 +157,30 @@ export function ActivityFeed() {
         };
         loadAll();
 
-        // Event-driven updates instead of polling
-        const handleUpdate = () => loadAll();
-
+        // Event-driven updates with debouncing
         try {
             // Listen to tab events for real-time updates
-            chrome.tabs.onCreated.addListener(handleUpdate);
-            chrome.tabs.onRemoved.addListener(handleUpdate);
-            chrome.tabs.onUpdated.addListener(handleUpdate);
-            chrome.tabs.onActivated.addListener(handleUpdate);
+            chrome.tabs.onCreated.addListener(debouncedUpdate);
+            chrome.tabs.onRemoved.addListener(debouncedUpdate);
+            chrome.tabs.onUpdated.addListener(debouncedUpdate);
+            chrome.tabs.onActivated.addListener(debouncedUpdate);
 
             // Listen to storage changes for chat updates
-            chrome.storage.onChanged.addListener(handleUpdate);
+            chrome.storage.onChanged.addListener(debouncedUpdate);
 
             return () => {
-                chrome.tabs.onCreated.removeListener(handleUpdate);
-                chrome.tabs.onRemoved.removeListener(handleUpdate);
-                chrome.tabs.onUpdated.removeListener(handleUpdate);
-                chrome.tabs.onActivated.removeListener(handleUpdate);
-                chrome.storage.onChanged.removeListener(handleUpdate);
+                chrome.tabs.onCreated.removeListener(debouncedUpdate);
+                chrome.tabs.onRemoved.removeListener(debouncedUpdate);
+                chrome.tabs.onUpdated.removeListener(debouncedUpdate);
+                chrome.tabs.onActivated.removeListener(debouncedUpdate);
+                chrome.storage.onChanged.removeListener(debouncedUpdate);
             };
         } catch (error) {
             console.warn('[ActivityFeed] Failed to setup event listeners', error);
             return () => { };
         }
-    }, [loadQuickLinks, loadFeed]);
+    }, [loadQuickLinks, loadFeed, debouncedUpdate]);
+
 
     const handleItemClick = async (url) => {
         if (!url) return;
