@@ -27,8 +27,10 @@
   min-height: 0;
   transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
-  transform: translateZ(0); /* Force GPU acceleration */
-  backface-visibility: hidden; /* Prevent flickering */
+  transform: translateZ(0);
+  /* Force GPU acceleration */
+  backface-visibility: hidden;
+  /* Prevent flickering */
 }
 
 .workspace-faces.transitioning {
@@ -108,71 +110,104 @@
 
 .face-indicator {
   position: fixed;
-  bottom: 24px;
+  bottom: 12px;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) translateY(0);
   z-index: 1000;
-  display: flex;
-  gap: 12px;
-  background: var(--glass-bg, rgba(30, 41, 59, 0.95));
-  backdrop-filter: blur(20px);
-  padding: 10px 20px;
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-.face-dot {
-  background: transparent;
-  border: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-lg, 14px);
-  opacity: 0.5;
+  box-sizing: border-box;
+
+  /* Dynamic Hue Variables */
+  --face-hue: 250;
+  /* Default (Violet) */
+  --face-color: hsla(var(--face-hue), 85%, 65%, 1);
+  --face-glow: hsla(var(--face-hue), 85%, 65%, 0.4);
+
+  /* Condensed state: Perfect Living Orb */
+  gap: 0px;
+  width: 44px;
+  height: 44px;
+  background: var(--glass-bg, rgba(15, 23, 42, 0.85));
+  backdrop-filter: blur(16px);
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--face-color);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 12px var(--face-glow);
+  transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  opacity: 0.95;
+  overflow: visible;
+  animation: barPulse 4s infinite ease-in-out;
 }
 
-.face-dot:hover {
-  opacity: 0.8;
-  background: rgba(255, 255, 255, 0.05);
+/* Face-specific hues */
+.face-indicator[data-face='chat'] {
+  --face-hue: 210;
 }
 
-.face-dot.active {
-  opacity: 1;
-  background: rgba(139, 92, 246, 0.15);
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+/* Blue */
+.face-indicator[data-face='workspace'] {
+  --face-hue: 35;
 }
 
-.face-icon {
-  pointer-events: none;
+/* Amber */
+.face-indicator[data-face='overview'] {
+  --face-hue: 150;
 }
 
-/* ========== Keyboard Hint ========== */
+/* Emerald */
+.face-indicator[data-face='tabs'] {
+  --face-hue: 185;
+}
 
-.keyboard-hint {
-  position: fixed;
-  bottom: 32px;
+/* Cyan */
+.face-indicator[data-face='team'] {
+  --face-hue: 330;
+}
+
+/* Pink */
+.face-indicator[data-face='notes'] {
+  --face-hue: 260;
+}
+
+/* Violet */
+
+.face-label {
+  position: absolute;
+  top: -52px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 999;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.95) 0%, rgba(59, 130, 246, 0.95) 100%);
-  backdrop-filter: blur(16px);
-  padding: 16px 24px;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.4);
-  cursor: pointer;
-  animation: slideUpFade 0.4s ease;
+  background: var(--face-color);
+  color: white;
+  padding: 6px 16px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1001;
 }
 
-@keyframes slideUpFade {
+.face-indicator:hover .face-label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-5px);
+}
+
+@keyframes fadeInOut {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(20px);
+    transform: translateX(-50%) translateY(10px);
   }
 
   to {
@@ -181,43 +216,140 @@
   }
 }
 
-.hint-content {
-  color: white;
-  text-align: center;
+/* Glass Orb Internal "Core" */
+.face-indicator::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at center, var(--face-glow) 0%, transparent 70%);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  transition: all 0.8s ease;
 }
 
-.hint-title {
-  font-size: var(--font-base, 12px);
-  font-weight: 600;
-  margin-bottom: 8px;
+/* Glass Orb "High-light" (Lens Flare) */
+.face-indicator::after {
+  content: '';
+  position: absolute;
+  top: -10%;
+  left: 15%;
+  width: 60%;
+  height: 40%;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.3) 0%, transparent 100%);
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(1.5px);
+  transition: all 0.6s ease;
 }
 
-.hint-shortcuts {
-  font-size: var(--font-md, 11px);
+.face-indicator:hover::before {
+  background: radial-gradient(circle at 30% 30%, var(--face-glow) 0%, transparent 60%);
+  opacity: 0.6;
+}
+
+.face-indicator:hover::after {
+  width: 90%;
+  height: 15%;
+  top: 2%;
+  left: 5%;
+  opacity: 0.3;
+}
+
+@keyframes barPulse {
+
+  0%,
+  100% {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4), 0 0 12px var(--face-glow);
+    border-color: var(--face-color);
+  }
+
+  50% {
+    box-shadow: 0 4px 25px rgba(0, 0, 0, 0.5), 0 0 25px var(--face-glow);
+    border-color: hsla(var(--face-hue), 85%, 75%, 1);
+  }
+}
+
+.face-indicator:hover {
+  bottom: 24px;
+  gap: 8px;
+  width: auto;
+  min-width: 380px;
+  max-width: 90vw;
+  height: 56px;
+  padding: 0 24px;
+  border-radius: 30px;
+  background: var(--glass-bg, rgba(15, 23, 42, 0.95));
+  backdrop-filter: blur(32px);
+  border: 1.5px solid rgba(139, 92, 246, 0.6);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 30px rgba(139, 92, 246, 0.4);
+  opacity: 1;
+  animation: none;
+  /* Disable pulse on hover */
+}
+
+.face-dot {
+  background: transparent;
+  border: none;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  font-size: 0;
+  color: white;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
-.hint-shortcuts kbd {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: inherit;
-  font-size: var(--font-sm, 10px);
-  font-weight: 600;
+/* Show only active icon or first few in condensed state */
+.face-dot.active {
+  width: 32px;
+  height: 32px;
+  opacity: 1 !important;
+  font-size: 16px;
+  background: rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
 }
 
-.hint-separator {
-  opacity: 0.5;
+.face-indicator:hover .face-dot {
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  opacity: 0.6;
 }
 
-.hint-dismiss {
-  font-size: var(--font-xs, 9px);
-  opacity: 0.7;
+.face-dot:hover {
+  opacity: 1 !important;
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.3) translateY(-8px);
+  /* Dock-style lift effect */
+  margin: 0 4px;
 }
+
+.face-indicator:hover .face-dot.active {
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  background: rgba(139, 92, 246, 0.45);
+  transform: scale(1.15) translateY(-4px);
+}
+
+.face-icon {
+  pointer-events: none;
+}
+
+
 
 /* ========== Notes Canvas ========== */
 

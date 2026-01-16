@@ -36,7 +36,41 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   });
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [activeTeam, setActiveTeam] = useState(null);
+  const [hoveredFace, setHoveredFace] = useState(null);
+  const [activeTabTitle, setActiveTabTitle] = useState('');
   const transitionTimeoutRef = useRef(null);
+
+  // Track active browser tab title
+  useEffect(() => {
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      // Initial fetch
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) setActiveTabTitle(tabs[0].title);
+      });
+
+      // Listen for updates (URL/Title changes)
+      const handleTabUpdate = (tabId, changeInfo, tab) => {
+        if (tab.active && changeInfo.title) {
+          setActiveTabTitle(changeInfo.title);
+        }
+      };
+
+      // Listen for tab switching
+      const handleTabActivated = (activeInfo) => {
+        chrome.tabs.get(activeInfo.tabId, (tab) => {
+          if (tab) setActiveTabTitle(tab.title);
+        });
+      };
+
+      chrome.tabs.onUpdated.addListener(handleTabUpdate);
+      chrome.tabs.onActivated.addListener(handleTabActivated);
+
+      return () => {
+        chrome.tabs.onUpdated.removeListener(handleTabUpdate);
+        chrome.tabs.onActivated.removeListener(handleTabActivated);
+      };
+    }
+  }, []);
 
   // Debounced localStorage save
   const debouncedSave = useMemo(
@@ -224,13 +258,64 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       </div> */}
 
       {/* Face indicator dots */}
-      <div className="face-indicator">
-        <button className={`face-dot ${currentFace === 'chat' ? 'active' : ''}`} onClick={() => navigateToFace('chat')} title="Chat (Ctrl + 1)"><FontAwesomeIcon icon={faComments} className="face-icon" /></button>
-        <button className={`face-dot ${currentFace === 'workspace' ? 'active' : ''}`} onClick={() => navigateToFace('workspace')} title="Workspace (Ctrl + 2)"><FontAwesomeIcon icon={faFolder} className="face-icon" /></button>
-        <button className={`face-dot ${currentFace === 'overview' ? 'active' : ''}`} onClick={() => navigateToFace('overview')} title="Overview (Ctrl + 3)"><FontAwesomeIcon icon={faHome} className="face-icon" /></button>
-        <button className={`face-dot ${currentFace === 'tabs' ? 'active' : ''}`} onClick={() => navigateToFace('tabs')} title="Tabs (Ctrl + 4)"><FontAwesomeIcon icon={faTh} className="face-icon" /></button>
-        <button className={`face-dot ${currentFace === 'team' ? 'active' : ''}`} onClick={() => navigateToFace('team')} title="Team (Ctrl + 5)"><FontAwesomeIcon icon={faUsers} className="face-icon" /></button>
-        <button className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`} onClick={() => navigateToFace('notes')} title="Notes (Ctrl + 6)"><FontAwesomeIcon icon={faStickyNote} className="face-icon" /></button>
+      <div
+        className="face-indicator"
+        data-face={currentFace}
+        onMouseLeave={() => setHoveredFace(null)}
+      >
+        <div className="face-label">
+          {hoveredFace
+            ? hoveredFace.charAt(0).toUpperCase() + hoveredFace.slice(1)
+            : (activeTabTitle || currentFace.charAt(0).toUpperCase() + currentFace.slice(1))}
+        </div>
+        <button
+          className={`face-dot ${currentFace === 'chat' ? 'active' : ''}`}
+          onClick={() => navigateToFace('chat')}
+          onMouseEnter={() => setHoveredFace('chat')}
+          title="Chat (Ctrl + 1)"
+        >
+          <FontAwesomeIcon icon={faComments} className="face-icon" />
+        </button>
+        <button
+          className={`face-dot ${currentFace === 'workspace' ? 'active' : ''}`}
+          onClick={() => navigateToFace('workspace')}
+          onMouseEnter={() => setHoveredFace('workspace')}
+          title="Workspace (Ctrl + 2)"
+        >
+          <FontAwesomeIcon icon={faFolder} className="face-icon" />
+        </button>
+        <button
+          className={`face-dot ${currentFace === 'overview' ? 'active' : ''}`}
+          onClick={() => navigateToFace('overview')}
+          onMouseEnter={() => setHoveredFace('overview')}
+          title="Overview (Ctrl + 3)"
+        >
+          <FontAwesomeIcon icon={faHome} className="face-icon" />
+        </button>
+        <button
+          className={`face-dot ${currentFace === 'tabs' ? 'active' : ''}`}
+          onClick={() => navigateToFace('tabs')}
+          onMouseEnter={() => setHoveredFace('tabs')}
+          title="Tabs (Ctrl + 4)"
+        >
+          <FontAwesomeIcon icon={faTh} className="face-icon" />
+        </button>
+        <button
+          className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
+          onClick={() => navigateToFace('team')}
+          onMouseEnter={() => setHoveredFace('team')}
+          title="Team (Ctrl + 5)"
+        >
+          <FontAwesomeIcon icon={faUsers} className="face-icon" />
+        </button>
+        <button
+          className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`}
+          onClick={() => navigateToFace('notes')}
+          onMouseEnter={() => setHoveredFace('notes')}
+          title="Notes (Ctrl + 6)"
+        >
+          <FontAwesomeIcon icon={faStickyNote} className="face-icon" />
+        </button>
       </div>
 
       {/* Sliding container */}
@@ -260,28 +345,12 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         {/* I'll need to modify App.jsx to include TeamView in the children list */}
       </div>
 
-      {currentFace === 'overview' && <KeyboardHint />}
+
     </div>
   );
 }
 
-function KeyboardHint() {
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem('cooldesk-spatial-hint-dismissed') === 'true');
-  if (dismissed) return null;
-  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-  const modifierKey = isMac ? 'Cmd' : 'Ctrl';
-  return (
-    <div className="keyboard-hint" onClick={() => { localStorage.setItem('cooldesk-spatial-hint-dismissed', 'true'); setDismissed(true); }}>
-      <div className="hint-content">
-        <div className="hint-title">💡 Spatial Navigation</div>
-        <div className="hint-shortcuts">
-          <div style={{ marginBottom: 4 }}>Ctrl + 1-6 to switch views</div>
-          <div>Swipe/Scroll to navigate</div>
-        </div>
-      </div>
-    </div>
-  );
-}
+
 
 export function Face({ index, children, className = '' }) {
   return (

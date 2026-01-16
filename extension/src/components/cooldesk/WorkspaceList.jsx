@@ -1,7 +1,7 @@
 import { faBookmark, faChartLine, faList, faSearch, faShare, faThLarge } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useEffect, useMemo, useState } from 'react';
-import { deleteWorkspace } from '../../db/index.js';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import { WorkspaceCard } from './WorkspaceCard';
@@ -44,8 +44,8 @@ export function WorkspaceList({
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false); // New state
 
-    const pinned = savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name));
-    const unpinned = savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name));
+    const pinned = useMemo(() => savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name)), [savedWorkspaces, pinnedWorkspaces]);
+    const unpinned = useMemo(() => savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name)), [savedWorkspaces, pinnedWorkspaces]);
 
     // State for workspace activity scores
     const [workspaceScores, setWorkspaceScores] = useState(new Map());
@@ -54,26 +54,22 @@ export function WorkspaceList({
 
 
     // Calculate activity score for a workspace
-    const calculateWorkspaceScore = async (workspace) => {
+    const calculateWorkspaceScore = useCallback(async (workspace) => {
         if (!workspace.urls || workspace.urls.length === 0) {
             console.log(`[WorkspaceList] Workspace "${workspace.name}" has no URLs`);
             return 0;
         }
 
-        console.log(`[WorkspaceList] Calculating score for "${workspace.name}" with ${workspace.urls.length} URLs:`, workspace.urls.map(u => u.url));
+        console.log(`[WorkspaceList] Calculating score for "${workspace.name}" with ${workspace.urls.length} URLs`);
 
         try {
-            // Import getUrlAnalytics dynamically to avoid circular deps
-            const { getUrlAnalytics } = await import('../../db/index');
-
             // Fetch analytics for all URLs in parallel
             const analyticsPromises = workspace.urls.map(async (urlObj) => {
                 try {
                     const stats = await getUrlAnalytics(urlObj.url);
-                    console.log(`[WorkspaceList]   URL "${urlObj.url}" stats:`, stats);
                     return stats || { totalVisits: 0, totalTime: 0, lastVisit: 0 };
                 } catch (error) {
-                    console.error(`[WorkspaceList]   Error getting stats for "${urlObj.url}":`, error);
+                    console.error(`[WorkspaceList] Error getting stats for "${urlObj.url}":`, error);
                     return { totalVisits: 0, totalTime: 0, lastVisit: 0 };
                 }
             });
@@ -94,14 +90,14 @@ export function WorkspaceList({
 
             const score = (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
 
-            console.log(`[WorkspaceList]   "${workspace.name}" totals: visits=${totalVisits}, time=${timeInHours.toFixed(2)}h, recency=${recencyBonus.toFixed(2)}, SCORE=${score.toFixed(2)}`);
+            console.log(`[WorkspaceList]   "${workspace.name}" SCORE=${score.toFixed(2)} (Visits: ${totalVisits}, Time: ${timeInHours.toFixed(1)}h)`);
 
             return score;
         } catch (error) {
             console.error(`[WorkspaceList] Error calculating workspace score for "${workspace.name}":`, error);
             return 0;
         }
-    };
+    }, []);
 
 
     // Debounced activity score loader
@@ -110,7 +106,6 @@ export function WorkspaceList({
             if (!isSortingByActivity || unpinned.length === 0) return;
 
             setIsCalculatingScores(true);
-            console.log('[WorkspaceList] Calculating activity scores (debounced)');
             const scores = new Map();
 
             // Calculate scores for all unpinned workspaces
@@ -123,9 +118,8 @@ export function WorkspaceList({
 
             setWorkspaceScores(scores);
             setIsCalculatingScores(false);
-            console.log('[WorkspaceList] Scores calculated:', scores.size);
         }, 500),
-        [unpinned, isSortingByActivity]
+        [unpinned, isSortingByActivity, calculateWorkspaceScore]
     );
 
     // Load activity scores only when sorting is enabled
