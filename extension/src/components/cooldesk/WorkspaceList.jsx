@@ -49,7 +49,15 @@ export function WorkspaceList({
 
     // State for workspace activity scores
     const [workspaceScores, setWorkspaceScores] = useState(new Map());
-    const [isSortingByActivity, setIsSortingByActivity] = useState(false);
+    const [isSortingByActivity, setIsSortingByActivity] = useState(() => {
+        try {
+            // Default to true (sort by activity) if not set
+            const saved = localStorage.getItem('cooldesk_sort_by_activity');
+            return saved !== null ? saved === 'true' : true;
+        } catch {
+            return true;
+        }
+    });
     const [isCalculatingScores, setIsCalculatingScores] = useState(false);
 
 
@@ -66,7 +74,8 @@ export function WorkspaceList({
             // Fetch analytics for all URLs in parallel
             const analyticsPromises = workspace.urls.map(async (urlObj) => {
                 try {
-                    const stats = await getUrlAnalytics(urlObj.url);
+                    const response = await getUrlAnalytics(urlObj.url);
+                    const stats = response?.success ? response.data : null;
                     return stats || { totalVisits: 0, totalTime: 0, lastVisit: 0 };
                 } catch (error) {
                     console.error(`[WorkspaceList] Error getting stats for "${urlObj.url}":`, error);
@@ -89,8 +98,6 @@ export function WorkspaceList({
                 : 0;
 
             const score = (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
-
-            console.log(`[WorkspaceList]   "${workspace.name}" SCORE=${score.toFixed(2)} (Visits: ${totalVisits}, Time: ${timeInHours.toFixed(1)}h)`);
 
             return score;
         } catch (error) {
@@ -141,7 +148,6 @@ export function WorkspaceList({
         });
     }, [unpinned, isSortingByActivity, workspaceScores]);
 
-    // Save view mode to localStorage whenever it changes
     useEffect(() => {
         try {
             localStorage.setItem('cooldesk_view_mode', viewMode);
@@ -149,6 +155,15 @@ export function WorkspaceList({
             console.error('Failed to save view mode:', e);
         }
     }, [viewMode]);
+
+    // Save sort preference
+    useEffect(() => {
+        try {
+            localStorage.setItem('cooldesk_sort_by_activity', isSortingByActivity);
+        } catch (e) {
+            console.error('Failed to save sort preference:', e);
+        }
+    }, [isSortingByActivity]);
 
     // Fetch bookmarks on mount
     useEffect(() => {

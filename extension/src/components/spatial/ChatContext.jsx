@@ -1,4 +1,4 @@
-import { faArrowRight, faComments, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
@@ -20,6 +20,8 @@ const PLATFORM_CONFIG = {
   'Gemini': { url: 'https://gemini.google.com', emoji: '💎', gradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.05))', borderColor: 'rgba(59, 130, 246, 0.3)', textColor: '#93C5FD', accentColor: '#3b82f6' },
   'Grok': { url: 'https://x.com', emoji: '🚀', gradient: 'linear-gradient(135deg, rgba(251, 146, 60, 0.2), rgba(251, 146, 60, 0.05))', borderColor: 'rgba(251, 146, 60, 0.3)', textColor: '#FCA5A5', accentColor: '#fb923c' },
   'Perplexity': { url: 'https://www.perplexity.ai', emoji: '🔍', gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05))', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#A7F3D0', accentColor: '#10b981' },
+  'AI Studio': { url: 'https://aistudio.google.com', emoji: '🧪', gradient: 'linear-gradient(135deg, rgba(66, 133, 244, 0.2), rgba(66, 133, 244, 0.05))', borderColor: 'rgba(66, 133, 244, 0.3)', textColor: '#8AB4F8', accentColor: '#4285F4' },
+  'Lovable': { url: 'https://lovable.dev', emoji: '💜', gradient: 'linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(167, 139, 250, 0.05))', borderColor: 'rgba(167, 139, 250, 0.3)', textColor: '#C4B5FD', accentColor: '#8b5cf6' },
 };
 
 const WORKSPACE_PROMPTS = [
@@ -33,25 +35,37 @@ const WORKSPACE_PROMPTS = [
 export function ChatContext({ workspaceId, workspaceName }) {
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState(() => localStorage.getItem('chatFilter') || 'All');
+
+  useEffect(() => {
+    localStorage.setItem('chatFilter', filter);
+  }, [filter]);
 
   // Load chats
   const loadChats = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await listScrapedChats({
+      const queryOptions = {
         sortBy: 'scrapedAt',
         sortOrder: 'desc',
-      });
+        limit: 50
+      };
+
+      if (filter !== 'All') {
+        queryOptions.platform = filter;
+      }
+
+      const response = await listScrapedChats(queryOptions);
 
       const allChats = response?.data || response || [];
-      setChats(Array.isArray(allChats) ? allChats.slice(0, 40) : []);
+      setChats(Array.isArray(allChats) ? allChats : []);
     } catch (error) {
       console.error('[ChatContext] Error loading chats:', error);
       setChats([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filter]);
 
   useEffect(() => {
     loadChats();
@@ -96,7 +110,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
       overflow: 'hidden'
     }}>
       {/* Header */}
-      <div style={{
+      {/* <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -148,7 +162,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
           title="Refresh">
           <FontAwesomeIcon icon={faSync} spin={loading} />
         </button>
-      </div>
+      </div> */}
 
       {/* Scrollable Content */}
       <div style={{
@@ -306,18 +320,46 @@ export function ChatContext({ workspaceId, workspaceName }) {
           </div>
         </div>
 
-        {/* Recent chats */}
+
         <div style={{ paddingBottom: '20px' }}>
           <div style={{
-            fontSize: '12px',
-            fontWeight: 600,
-            color: 'var(--text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             marginBottom: '12px',
-            paddingLeft: '4px'
+            paddingRight: '4px'
           }}>
-            Recent Conversations
+            <div style={{
+              fontSize: '12px',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              paddingLeft: '4px'
+            }}>
+              Recent Conversations
+            </div>
+
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              style={{
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border-primary)',
+                color: 'var(--text)',
+                fontSize: '12px',
+                padding: '4px 8px',
+                borderRadius: '6px',
+                outline: 'none',
+                cursor: 'pointer',
+                maxWidth: '120px'
+              }}
+            >
+              <option value="All" style={{ background: '#1e1e1e', color: '#ffffff' }}>All Platforms</option>
+              {Object.keys(PLATFORM_CONFIG).map(platform => (
+                <option key={platform} value={platform} style={{ background: '#1e1e1e', color: '#ffffff' }}>{platform}</option>
+              ))}
+            </select>
           </div>
 
           {loading ? (
@@ -344,9 +386,11 @@ export function ChatContext({ workspaceId, workspaceName }) {
               gap: '12px'
             }}>
               <div style={{ fontSize: '48px', opacity: 0.3 }}>💬</div>
-              <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text)' }}>No AI chats yet</div>
+              <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text)' }}>
+                {filter === 'All' ? 'No AI chats yet' : `No ${filter} chats`}
+              </div>
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '300px' }}>
-                Visit ChatGPT, Claude, or Gemini to start tracking your conversations
+                Visit AI platforms to start tracking your conversations
               </div>
             </div>
           ) : (
@@ -480,6 +524,6 @@ export function ChatContext({ workspaceId, workspaceName }) {
           }
         }
       `}</style>
-    </div>
+    </div >
   );
 }

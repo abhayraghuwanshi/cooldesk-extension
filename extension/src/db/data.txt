@@ -1,0 +1,532 @@
+[Unified API Debug] getUrlAnalytics searching for: ['https://hellofresh.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://brad-carter.medium.com', 'https://medium.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://medium.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://dreamstime.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://makemytrip.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://amazon.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://myntra.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://bing.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://cricbuzz.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://canva.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://dribbble.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://99designs.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://behance.net']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://pixlr.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://flaticon.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://app.runwayml.com', 'https://runwayml.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://runwayml.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://stackoverflow.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://w3schools.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://chatgpt.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://ilovepdf.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://claude.ai']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://app.grammarly.com', 'https://grammarly.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://perplexity.ai']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://hotstar.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://primevideo.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://youtube.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://mail.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://microsoftedge.microsoft.com', 'https://microsoft.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://support.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://gemini.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://groups.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://accounts.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://chrome.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://calendar.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://console.cloud.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://aistudio.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://chromewebstore.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://adobe.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://support.microsoft.com', 'https://microsoft.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://npmjs.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://microsoft.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://wordpress.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://fast.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://console.firebase.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://web.whatsapp.com', 'https://whatsapp.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://reddit.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://my.telegram.org', 'https://telegram.org']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://telegram.org']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://web.telegram.org', 'https://telegram.org']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://developers.dropbox.com', 'https://dropbox.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://dropbox.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://x.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://accounts.google.com', 'https://google.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://linkedin.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://quora.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://whatsapp.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: ['https://wix.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.notion.so/Cool-desk-25b910891b83804aa362e6764fcd6185', 'https://notion.so']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.notion.so/?cookie_sync_completed=true', 'https://notion.so']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.notion.so/', 'https://notion.so']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.notion.so/Website-277910891b838018afa5f45da82416ca', 'https://notion.so']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.notion.so/Auto-categories-278910891b838044bb1eeb9ef793e3d8', 'https://notion.so']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/8bEM7bw70vMhXVi1m7xT1c/MacBook-Pro-Mockup--Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/O5XLBhKB0wYo5bGSgtCLUL/Free-MacBook-Pro-16-Mockups--Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/ZHEmZGbYFMwU5Uu32wHop…SS-Figma-Design-System--Free-Edition---Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/VleeE0nxKJIsizg6r6wn0t/Pinterest-Free-UI-Kit---By-Marvilo--Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/7J1aFnWvEqeJzXFVZdj2V…Home-Page-Design---Pinterest-Clone--4--Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/uEGtKibtLws0g53Ot0q3q…Home-Page-Design---Pinterest-Clone--4--Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/DiKMXXAZQzNQhPAojHPyN…rest-Grid-Wireframe-Using-Auto-layout--Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/jHk4JadB35EEnXaPOsugF…llection-of-25-hero-sections---Vol-01--Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/w1tW1LGcDRNgSLmDqbU7C…ons-Figma-Template-%7C-BRIX-Templates--Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://www.figma.com/design/cvZ3ZBQRemD5PPGMYa5Ts…%94-Components-%E2%80%94-Web-to-Figma--Community-', 'https://figma.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/abhayraghuwanshi/cooldesk-extension', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/abhayraghuwanshi', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/dropbox/dropbox-sdk-js', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/ferviddigital/y-webrtc-signaler', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/roymckenzie/y-webrtc-signaler', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/yjs/yjs-demos', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/yjs/yjs', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/canonical', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/canonical/livepatch-k8s-operator', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/dashboard', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/abhayraghuwanshi/cooldesk-help', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/abhayraghuwanshi/cooldesk-help/issues', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/peterdotjs/tab-resize', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/abhayraghuwanshi/cooldesk-extension/pulls', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/topics/voice-navigation', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/new', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/Ghosh/uiGradients#contributing', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] getUrlAnalytics searching for: (2) ['https://github.com/abhayraghuwanshi/cooldesk-onboard-smoothly', 'https://github.com']
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 1 events for https://hellofresh.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 1
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 1 events for https://hellofresh.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://hellofresh.com: Visits=1, Time=0ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://brad-carter.medium.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 3 events for https://medium.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 3
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 3 events for https://brad-carter.medium.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://brad-carter.medium.com: Visits=3, Time=20218ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 3 events for https://medium.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 3
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 3 events for https://medium.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://medium.com: Visits=3, Time=20218ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://dreamstime.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 3 events for https://makemytrip.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 3
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 3 events for https://makemytrip.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://makemytrip.com: Visits=3, Time=69462ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 2 events for https://amazon.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 2
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 2 events for https://amazon.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://amazon.com: Visits=2, Time=1467ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://myntra.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 31 events for https://bing.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 31
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 31 events for https://bing.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://bing.com: Visits=31, Time=191135ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 1 events for https://cricbuzz.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 1
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 1 events for https://cricbuzz.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://cricbuzz.com: Visits=1, Time=1230ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://canva.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 6 events for https://dribbble.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 6
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 6 events for https://dribbble.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://dribbble.com: Visits=6, Time=91931ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://99designs.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://behance.net
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://pixlr.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 1 events for https://flaticon.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 1
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 1 events for https://flaticon.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://flaticon.com: Visits=1, Time=26977ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://app.runwayml.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://runwayml.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://runwayml.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 9 events for https://stackoverflow.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 9
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 9 events for https://stackoverflow.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://stackoverflow.com: Visits=9, Time=22030ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://w3schools.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 68 events for https://chatgpt.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 68
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 68 events for https://chatgpt.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://chatgpt.com: Visits=68, Time=1274383ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://ilovepdf.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 11 events for https://claude.ai
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 11
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 11 events for https://claude.ai
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://claude.ai: Visits=11, Time=168345ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://app.grammarly.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://grammarly.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 5 events for https://perplexity.ai
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 5
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 5 events for https://perplexity.ai
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://perplexity.ai: Visits=5, Time=63858ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 10 events for https://hotstar.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 10
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 10 events for https://hotstar.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://hotstar.com: Visits=10, Time=39148ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 10 events for https://primevideo.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 10
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 10 events for https://primevideo.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://primevideo.com: Visits=10, Time=106440ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 90 events for https://youtube.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 90
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 90 events for https://youtube.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://youtube.com: Visits=90, Time=850702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://mail.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://mail.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://mail.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://microsoftedge.microsoft.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 6 events for https://microsoft.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 6
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 6 events for https://microsoftedge.microsoft.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://microsoftedge.microsoft.com: Visits=6, Time=27543ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://support.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://support.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://support.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://gemini.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://gemini.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://gemini.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://groups.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://groups.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://groups.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://accounts.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://accounts.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://accounts.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://chrome.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://chrome.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://chrome.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://calendar.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://calendar.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://calendar.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://console.cloud.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://console.cloud.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://console.cloud.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://aistudio.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://aistudio.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://aistudio.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://chromewebstore.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://chromewebstore.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://chromewebstore.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://adobe.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://adobe.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://adobe.com: Visits=4, Time=57923ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://support.microsoft.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 6 events for https://microsoft.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 6
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 6 events for https://support.microsoft.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://support.microsoft.com: Visits=6, Time=27543ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://npmjs.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://npmjs.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://npmjs.com: Visits=4, Time=4832ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 6 events for https://microsoft.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 6
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 6 events for https://microsoft.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://microsoft.com: Visits=6, Time=27543ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://wordpress.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://fast.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://console.firebase.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://console.firebase.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://console.firebase.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://web.whatsapp.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 22 events for https://whatsapp.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 22
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 22 events for https://web.whatsapp.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://web.whatsapp.com: Visits=22, Time=126132ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 64 events for https://reddit.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 64
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 64 events for https://reddit.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://reddit.com: Visits=64, Time=1384934ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://my.telegram.org
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://telegram.org
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://telegram.org
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://web.telegram.org
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://telegram.org
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://developers.dropbox.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://dropbox.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://dropbox.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 27 events for https://x.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 27
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 27 events for https://x.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://x.com: Visits=27, Time=788713ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://accounts.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 553 events for https://google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 553
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 553 events for https://accounts.google.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://accounts.google.com: Visits=553, Time=8398264ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 5 events for https://linkedin.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 5
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 5 events for https://linkedin.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://linkedin.com: Visits=5, Time=44503ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://quora.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 22 events for https://whatsapp.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 22
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 22 events for https://whatsapp.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://whatsapp.com: Visits=22, Time=126132ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://wix.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 0
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.notion.so/Cool-desk-25b910891b83804aa362e6764fcd6185
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 1 events for https://notion.so
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 1
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 1 events for https://www.notion.so/Cool-desk-25b910891b83804aa362e6764fcd6185
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.notion.so/Cool-desk-25b910891b83804aa362e6764fcd6185: Visits=1, Time=25494ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.notion.so/?cookie_sync_completed=true
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 1 events for https://notion.so
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 1
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 1 events for https://www.notion.so/?cookie_sync_completed=true
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.notion.so/?cookie_sync_completed=true: Visits=1, Time=25494ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.notion.so/
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 1 events for https://notion.so
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 1
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 1 events for https://www.notion.so/
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.notion.so/: Visits=1, Time=25494ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.notion.so/Website-277910891b838018afa5f45da82416ca
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 1 events for https://notion.so
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 1
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 1 events for https://www.notion.so/Website-277910891b838018afa5f45da82416ca
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.notion.so/Website-277910891b838018afa5f45da82416ca: Visits=1, Time=25494ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.notion.so/Auto-categories-278910891b838044bb1eeb9ef793e3d8
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 1 events for https://notion.so
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 1
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 1 events for https://www.notion.so/Auto-categories-278910891b838044bb1eeb9ef793e3d8
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.notion.so/Auto-categories-278910891b838044bb1eeb9ef793e3d8: Visits=1, Time=25494ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/8bEM7bw70vMhXVi1m7xT1c/MacBook-Pro-Mockup--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/8bEM7bw70vMhXVi1m7xT1c/MacBook-Pro-Mockup--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/8bEM7bw70vMhXVi1m7xT1c/MacBook-Pro-Mockup--Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/O5XLBhKB0wYo5bGSgtCLUL/Free-MacBook-Pro-16-Mockups--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/O5XLBhKB0wYo5bGSgtCLUL/Free-MacBook-Pro-16-Mockups--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/O5XLBhKB0wYo5bGSgtCLUL/Free-MacBook-Pro-16-Mockups--Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/ZHEmZGbYFMwU5Uu32wHopW/Flowbite---Tailwind-CSS-Figma-Design-System--Free-Edition---Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/ZHEmZGbYFMwU5Uu32wHopW/Flowbite---Tailwind-CSS-Figma-Design-System--Free-Edition---Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/ZHEmZGbYFMwU5Uu32wHopW/Flowbite---Tailwind-CSS-Figma-Design-System--Free-Edition---Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/VleeE0nxKJIsizg6r6wn0t/Pinterest-Free-UI-Kit---By-Marvilo--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/VleeE0nxKJIsizg6r6wn0t/Pinterest-Free-UI-Kit---By-Marvilo--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/VleeE0nxKJIsizg6r6wn0t/Pinterest-Free-UI-Kit---By-Marvilo--Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/7J1aFnWvEqeJzXFVZdj2Vx/Pinterest-Home-Page-Design---Pinterest-Clone--4--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/7J1aFnWvEqeJzXFVZdj2Vx/Pinterest-Home-Page-Design---Pinterest-Clone--4--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/7J1aFnWvEqeJzXFVZdj2Vx/Pinterest-Home-Page-Design---Pinterest-Clone--4--Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/uEGtKibtLws0g53Ot0q3q2/Pinterest-Home-Page-Design---Pinterest-Clone--4--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/uEGtKibtLws0g53Ot0q3q2/Pinterest-Home-Page-Design---Pinterest-Clone--4--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/uEGtKibtLws0g53Ot0q3q2/Pinterest-Home-Page-Design---Pinterest-Clone--4--Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/DiKMXXAZQzNQhPAojHPyNH/Pinterest-Grid-Wireframe-Using-Auto-layout--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/DiKMXXAZQzNQhPAojHPyNH/Pinterest-Grid-Wireframe-Using-Auto-layout--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/DiKMXXAZQzNQhPAojHPyNH/Pinterest-Grid-Wireframe-Using-Auto-layout--Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/jHk4JadB35EEnXaPOsugFN/Collection-of-25-hero-sections---Vol-01--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/jHk4JadB35EEnXaPOsugFN/Collection-of-25-hero-sections---Vol-01--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/jHk4JadB35EEnXaPOsugFN/Collection-of-25-hero-sections---Vol-01--Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/w1tW1LGcDRNgSLmDqbU7Cl/Website-Hero-Sections-Figma-Template-%7C-BRIX-Templates--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/w1tW1LGcDRNgSLmDqbU7Cl/Website-Hero-Sections-Figma-Template-%7C-BRIX-Templates--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/w1tW1LGcDRNgSLmDqbU7Cl/Website-Hero-Sections-Figma-Template-%7C-BRIX-Templates--Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://www.figma.com/design/cvZ3ZBQRemD5PPGMYa5TsI/FAQ-Sections-%E2%80%94-Components-%E2%80%94-Web-to-Figma--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 4 events for https://figma.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 4
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 4 events for https://www.figma.com/design/cvZ3ZBQRemD5PPGMYa5TsI/FAQ-Sections-%E2%80%94-Components-%E2%80%94-Web-to-Figma--Community-
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://www.figma.com/design/cvZ3ZBQRemD5PPGMYa5TsI/FAQ-Sections-%E2%80%94-Components-%E2%80%94-Web-to-Figma--Community-: Visits=4, Time=3007ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/abhayraghuwanshi/cooldesk-extension
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/abhayraghuwanshi/cooldesk-extension
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/abhayraghuwanshi/cooldesk-extension: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/abhayraghuwanshi
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/abhayraghuwanshi
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/abhayraghuwanshi: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/dropbox/dropbox-sdk-js
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/dropbox/dropbox-sdk-js
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/dropbox/dropbox-sdk-js: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/ferviddigital/y-webrtc-signaler
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/ferviddigital/y-webrtc-signaler
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/ferviddigital/y-webrtc-signaler: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/roymckenzie/y-webrtc-signaler
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/roymckenzie/y-webrtc-signaler
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/roymckenzie/y-webrtc-signaler: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/yjs/yjs-demos
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/yjs/yjs-demos
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/yjs/yjs-demos: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/yjs/yjs
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/yjs/yjs
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/yjs/yjs: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/canonical
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/canonical
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/canonical: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/canonical/livepatch-k8s-operator
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/canonical/livepatch-k8s-operator
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/canonical/livepatch-k8s-operator: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/dashboard
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/dashboard
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/dashboard: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/abhayraghuwanshi/cooldesk-help
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/abhayraghuwanshi/cooldesk-help
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/abhayraghuwanshi/cooldesk-help: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/abhayraghuwanshi/cooldesk-help/issues
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/abhayraghuwanshi/cooldesk-help/issues
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/abhayraghuwanshi/cooldesk-help/issues: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/peterdotjs/tab-resize
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/peterdotjs/tab-resize
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/peterdotjs/tab-resize: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/abhayraghuwanshi/cooldesk-extension/pulls
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/abhayraghuwanshi/cooldesk-extension/pulls
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/abhayraghuwanshi/cooldesk-extension/pulls: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/topics/voice-navigation
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/topics/voice-navigation
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/topics/voice-navigation: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/new
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/new
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/new: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/Ghosh/uiGradients#contributing
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/Ghosh/uiGradients#contributing
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/Ghosh/uiGradients#contributing: Visits=113, Time=2117702ms
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 0 events for https://github.com/abhayraghuwanshi/cooldesk-onboard-smoothly
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Found 113 events for https://github.com
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Total events found: 113
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregating 113 events for https://github.com/abhayraghuwanshi/cooldesk-onboard-smoothly
+extensionApi-CWJJE4tf.js:1 [Unified API Debug] Aggregation Result for https://github.com/abhayraghuwanshi/cooldesk-onboard-smoothly: Visits=113, Time=2117702ms
+
+
+[WorkspaceList] Calculating score for "Food" with 1 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Information" with 3 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Travel" with 1 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Shopping" with 2 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Finance" with 1 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Sports" with 1 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Creativity" with 8 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Education" with 2 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Productivity" with 5 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Entertainment" with 4 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Utilities" with 19 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Social" with 13 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Notion" with 5 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "Figma" with 10 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Calculating score for "GitHub" with 19 URLs
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Food": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Food" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Information": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Information" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Travel": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Travel" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Shopping": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Shopping" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Finance": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Finance" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Sports": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Sports" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Creativity": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Creativity" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Education": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Education" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Productivity": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Productivity" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Entertainment": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Entertainment" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Utilities": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Utilities" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Social": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Social" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Notion": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Notion" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "Figma": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "Figma" SCORE=0.00 (Visits: 0, Time: 0.0h)
+index-BXaiapUP.js:730 [WorkspaceList] Stats for "GitHub": Visits=0, Time=0, Recency=0
+index-BXaiapUP.js:730 [WorkspaceList]   "GitHub" SCORE=0.00 (Visits: 0, Time: 0.0h)

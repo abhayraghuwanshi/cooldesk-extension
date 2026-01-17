@@ -1508,9 +1508,16 @@ export const getUrlAnalytics = withErrorHandling(async (url) => {
 
         events.forEach(event => {
             // Visit Counting
-            if (event.sessionId && !seenSessions.has(event.sessionId)) {
+            // Prioritize sessionId if available, otherwise fallback to timestamp differentiation
+            if (event.sessionId) {
+                if (!seenSessions.has(event.sessionId)) {
+                    visitCount++;
+                    seenSessions.add(event.sessionId);
+                }
+            } else {
+                // Legacy support or missing sessionId: count every event as a visit? 
+                // Better: count as visit if significantly different timestamp
                 visitCount++;
-                seenSessions.add(event.sessionId);
             }
 
             // Time aggregation
@@ -1525,22 +1532,25 @@ export const getUrlAnalytics = withErrorHandling(async (url) => {
             const timeValue = (typeof duration === 'number' ? duration : 0);
             totalTime += timeValue;
 
+            // Log significant events to help debugging
+            if (timeValue > 0) {
+                // console.log(`[Unified API Debug] Event time: ${timeValue}ms`, event.id);
+            }
+
             // Date ranges
             if (event.timestamp < firstVisit) firstVisit = event.timestamp;
             if (event.timestamp > lastVisit) lastVisit = event.timestamp;
 
-            // Daily aggregation
-            if (timeValue > 0) {
-                const dateKey = new Date(event.timestamp).toISOString().split('T')[0];
-                if (!dailyMap.has(dateKey)) {
-                    dailyMap.set(dateKey, 0);
-                }
-                dailyMap.set(dateKey, dailyMap.get(dateKey) + timeValue);
+            // Daily aggregation: Count visits even if time is 0
+            const dateKey = new Date(event.timestamp).toISOString().split('T')[0];
+            if (!dailyMap.has(dateKey)) {
+                dailyMap.set(dateKey, 0);
             }
+            dailyMap.set(dateKey, dailyMap.get(dateKey) + timeValue);
         });
 
-        // Fallback if no sessions found (legacy data)
-        if (visitCount === 0) visitCount = events.length;
+        // Ensure at least 1 visit if events exist
+        if (visitCount === 0 && events.length > 0) visitCount = events.length;
 
         // Convert map to sorted array for chart
         // Fill in last 14 days even if empty for continuity

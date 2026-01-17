@@ -19,7 +19,7 @@ const PLATFORM_CONFIGS = {
       return match ? match[1] : null;
     },
   },
-  
+
   'chatgpt.com': {
     name: 'ChatGPT',
     selectors: {
@@ -33,7 +33,7 @@ const PLATFORM_CONFIGS = {
       return match ? match[1] : null;
     },
   },
-  
+
   'claude.ai': {
     name: 'Claude',
     selectors: {
@@ -48,7 +48,7 @@ const PLATFORM_CONFIGS = {
       return match ? match[1] : null;
     },
   },
-  
+
   'grok.com': {
     name: 'Grok',
     selectors: {
@@ -62,16 +62,16 @@ const PLATFORM_CONFIGS = {
       // Find the link inside the container
       const link = element.querySelector('a[href*="/c/"]');
       if (!link) return null;
-      
+
       const href = link.getAttribute('href');
       if (!href) return null;
-      
+
       // Extract UUID from /c/39aab857-be5c-4bab-a7dc-e50c0d23f9f4
       const match = href.match(/\/c\/([a-f0-9-]+)/);
       return match ? match[1] : null;
     },
   },
-  
+
   'gemini.google.com': {
     name: 'Gemini',
     selectors: {
@@ -95,6 +95,52 @@ const PLATFORM_CONFIGS = {
       return title ? `gemini_${title.replace(/\s+/g, '_').substring(0, 30)}` : null;
     },
   },
+
+  'perplexity.ai': {
+    name: 'Perplexity',
+    selectors: {
+      chatItems: 'a[href^="/search/"]',
+      titleElement: 'div[data-testid^="thread-title-"]',
+      titleAttribute: null,
+      waitFor: 'a[href^="/search/"]',
+    },
+    extractChatId: (href) => {
+      // Extract UUID/slug from /search/role-you-are-a-cloud-pricing-s-hlF5adzTS4aBsnpCaFLfnw
+      const match = href.match(/\/search\/([a-zA-Z0-9-_]+)/);
+      return match ? match[1] : null;
+    },
+  },
+
+  'aistudio.google.com': {
+    name: 'AI Studio',
+    selectors: {
+      chatItems: 'a.applet-link',
+      titleElement: null, // Title is the link text itself
+      titleAttribute: null,
+      waitFor: '.recently-viewed-applets-container, a.applet-link',
+    },
+    extractChatId: (href) => {
+      // Extract ID from /apps/bundled/promptdj?showPreview=true...
+      // or /apps/prompts/saved/123456
+      const match = href.match(/\/apps\/(?:bundled\/|prompts\/saved\/)?([^/?]+)/);
+      return match ? match[1] : null;
+    },
+  },
+
+  'lovable.dev': {
+    name: 'Lovable',
+    selectors: {
+      chatItems: 'a[href^="/projects/"]',
+      titleElement: '.truncate',
+      titleAttribute: null,
+      waitFor: 'a[href^="/projects/"]',
+    },
+    extractChatId: (href) => {
+      // Extract UUID from /projects/f2fa5106-245f-4c18-9096-12ff6a9976d1
+      const match = href.match(/\/projects\/([a-f0-9-]+)/);
+      return match ? match[1] : null;
+    },
+  },
 };
 
 /**
@@ -107,7 +153,7 @@ function waitForElement(selector, timeout = 10000) {
       resolve(element);
       return;
     }
-    
+
     const observer = new MutationObserver((mutations, obs) => {
       const element = document.querySelector(selector);
       if (element) {
@@ -115,12 +161,12 @@ function waitForElement(selector, timeout = 10000) {
         resolve(element);
       }
     });
-    
+
     observer.observe(document.body, {
       childList: true,
       subtree: true,
     });
-    
+
     setTimeout(() => {
       observer.disconnect();
       reject(new Error(`Timeout waiting for ${selector}`));
@@ -139,7 +185,7 @@ function extractTitle(element, config) {
     const title = titleDiv.getAttribute('title');
     if (title && title.trim()) return title.trim();
   }
-  
+
   // Strategy 2: Try titleElement selector
   if (config.selectors.titleElement) {
     const titleEl = element.querySelector(config.selectors.titleElement);
@@ -148,19 +194,19 @@ function extractTitle(element, config) {
       if (text) return text;
     }
   }
-  
+
   // Strategy 3: Try title attribute on main element
   if (config.selectors.titleAttribute) {
     const titleAttr = element.getAttribute(config.selectors.titleAttribute);
     if (titleAttr && titleAttr.trim()) return titleAttr.trim();
   }
-  
+
   // Strategy 4: Fallback to element text content
   const text = element.textContent?.trim();
   if (text && text.length > 0 && text.length < 200) {
     return text;
   }
-  
+
   return 'Untitled Chat';
 }
 
@@ -170,14 +216,14 @@ function extractTitle(element, config) {
 async function scrapeChats() {
   const hostname = window.location.hostname.replace('www.', '');
   const config = PLATFORM_CONFIGS[hostname];
-  
+
   if (!config) {
     console.log('[ChatScraper] Not an AI platform page:', hostname);
     return { success: false, error: 'Not an AI platform' };
   }
-  
+
   console.log(`[ChatScraper] Scraping ${config.name} chats...`);
-  
+
   try {
     // Wait for sidebar/navigation to load
     if (config.selectors.waitFor) {
@@ -185,24 +231,24 @@ async function scrapeChats() {
       await waitForElement(config.selectors.waitFor, 10000);
       console.log('[ChatScraper] Sidebar loaded');
     }
-    
+
     // Small delay to ensure content is rendered
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
+
     // Find all chat items
     const chatElements = document.querySelectorAll(config.selectors.chatItems);
     console.log(`[ChatScraper] Found ${chatElements.length} chat elements`);
     console.log(`[ChatScraper] Selector used: "${config.selectors.chatItems}"`);
     console.log(`[ChatScraper] chatElements type:`, typeof chatElements, chatElements.constructor.name);
     console.log(`[ChatScraper] First element:`, chatElements[0]);
-    
+
     // Convert NodeList to Array for better compatibility
     const chatElementsArray = Array.from(chatElements);
     console.log(`[ChatScraper] Converted to array, length: ${chatElementsArray.length}`);
-    
+
     const chats = [];
     const seenIds = new Set();
-    
+
     console.log(`[ChatScraper] Starting forEach loop...`);
     chatElementsArray.forEach((element, index) => {
       console.log(`[ChatScraper] Processing element ${index}/${chatElementsArray.length}`);
@@ -210,7 +256,7 @@ async function scrapeChats() {
         // Handle both link-based (ChatGPT, Claude) and div-based (Gemini, Grok) items
         const href = element.getAttribute('href');
         let url, chatId;
-        
+
         if (href) {
           // Link-based chat item (ChatGPT, Claude) - element IS the link
           url = href.startsWith('http') ? href : `${window.location.origin}${href}`;
@@ -219,15 +265,15 @@ async function scrapeChats() {
         } else {
           // Container-based chat item (Gemini, Grok) - element is a container
           console.log(`[ChatScraper] Chat ${index}: No href on element, trying extractChatId on container`);
-          
+
           chatId = config.extractChatId(element);
           console.log(`[ChatScraper] Chat ${index}: Extracted chatId="${chatId}"`);
-          
+
           if (!chatId) {
             console.log(`[ChatScraper] Chat ${index}: No chatId, skipping`);
             return;
           }
-          
+
           // For Grok, find the link inside the container
           const link = element.querySelector('a[href*="/c/"]');
           if (link) {
@@ -240,28 +286,28 @@ async function scrapeChats() {
             console.log(`[ChatScraper] Chat ${index}: No link found, constructed url="${url}"`);
           }
         }
-        
+
         if (!chatId) {
           console.log(`[ChatScraper] Chat ${index}: chatId is null/undefined, skipping`);
           return;
         }
-        
+
         if (seenIds.has(chatId)) {
           console.log(`[ChatScraper] Chat ${index}: Duplicate chatId="${chatId}", skipping`);
           return;
         }
-        
+
         seenIds.add(chatId);
-        
+
         // Extract title
         const title = extractTitle(element, config);
-        
+
         // Skip generic titles
         if (title === 'New Chat' || title === 'Untitled' || title.length < 3) {
           console.log(`[ChatScraper] Skipping generic title: "${title}"`);
           return;
         }
-        
+
         chats.push({
           url,
           chatId,
@@ -269,7 +315,7 @@ async function scrapeChats() {
           platform: config.name,
           scrapedAt: Date.now(),
         });
-        
+
         console.log(`[ChatScraper] ✓ ${title.substring(0, 50)}...`);
       } catch (err) {
         console.error(`[ChatScraper] Error processing element ${index}:`, err);
@@ -277,9 +323,9 @@ async function scrapeChats() {
         console.error('[ChatScraper] Stack:', err.stack);
       }
     });
-    
+
     console.log(`[ChatScraper] ✅ Scraped ${chats.length} unique chats from ${config.name}`);
-    
+
     return {
       success: true,
       platform: config.name,
@@ -287,7 +333,7 @@ async function scrapeChats() {
       chats,
       scrapedAt: Date.now(),
     };
-    
+
   } catch (error) {
     console.error('[ChatScraper] Error scraping chats:', error);
     return {
@@ -309,28 +355,28 @@ async function sendMessageWithRetry(message, maxRetries = 3) {
         console.warn('[ChatScraper] Extension context invalidated');
         return null;
       }
-      
+
       const result = await chrome.runtime.sendMessage(message);
-      
+
       // Check for lastError after successful send
       if (chrome.runtime.lastError) {
         throw new Error(chrome.runtime.lastError.message);
       }
-      
+
       return result;
     } catch (error) {
       const isLastAttempt = attempt === maxRetries;
-      const isConnectionError = error.message?.includes('Could not establish connection') || 
-                                error.message?.includes('Receiving end does not exist') ||
-                                error.message?.includes('message port closed');
-      
+      const isConnectionError = error.message?.includes('Could not establish connection') ||
+        error.message?.includes('Receiving end does not exist') ||
+        error.message?.includes('message port closed');
+
       if (isConnectionError && !isLastAttempt) {
         console.log(`[ChatScraper] Connection error on attempt ${attempt}/${maxRetries}, retrying...`);
         // Wait before retry (exponential backoff)
         await new Promise(resolve => setTimeout(resolve, 100 * Math.pow(2, attempt - 1)));
         continue;
       }
-      
+
       // For last attempt or non-connection errors, log and return null
       console.warn(`[ChatScraper] Message failed after ${attempt} attempts:`, error.message);
       return null;
@@ -347,13 +393,13 @@ async function getLastScrapeTime() {
     const hostname = window.location.hostname.replace('www.', '');
     const config = PLATFORM_CONFIGS[hostname];
     if (!config) return 0;
-    
+
     // Request last scrape time from background (which has DB access)
     const result = await sendMessageWithRetry({
       type: 'GET_LAST_SCRAPE_TIME',
       data: { platform: config.name }
     });
-    
+
     return result?.timestamp || 0;
   } catch (error) {
     console.warn('[ChatScraper] Failed to get last scrape time:', error);
@@ -369,16 +415,16 @@ async function updateLastScrapeTime(timestamp) {
     const hostname = window.location.hostname.replace('www.', '');
     const config = PLATFORM_CONFIGS[hostname];
     if (!config) return;
-    
+
     // Send update to background
     const result = await sendMessageWithRetry({
       type: 'UPDATE_LAST_SCRAPE_TIME',
-      data: { 
+      data: {
         platform: config.name,
-        timestamp 
+        timestamp
       }
     });
-    
+
     if (result?.success) {
       console.log(`[ChatScraper] Updated last scrape time: ${new Date(timestamp).toLocaleString()}`);
     }
@@ -393,45 +439,45 @@ async function updateLastScrapeTime(timestamp) {
 async function scrapeNewChats() {
   const hostname = window.location.hostname.replace('www.', '');
   const config = PLATFORM_CONFIGS[hostname];
-  
+
   if (!config) {
     console.log('[ChatScraper] Not an AI platform page:', hostname);
     return { success: false, error: 'Not an AI platform' };
   }
-  
+
   console.log(`[ChatScraper] Scraping new ${config.name} chats...`);
-  
+
   try {
     // Get last scrape timestamp from IndexedDB
     const lastScrapeTime = await getLastScrapeTime();
     const lastScrapeDate = lastScrapeTime ? new Date(lastScrapeTime).toLocaleString() : 'Never';
     console.log(`[ChatScraper] Last scraped: ${lastScrapeDate}`);
-    
+
     // Wait for sidebar/navigation to load
     if (config.selectors.waitFor) {
       console.log('[ChatScraper] Waiting for sidebar...');
       await waitForElement(config.selectors.waitFor, 10000);
       console.log('[ChatScraper] Sidebar loaded');
     }
-    
+
     // Small delay to ensure content is rendered
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
+
     // Find all chat items
     const chatElements = document.querySelectorAll(config.selectors.chatItems);
     console.log(`[ChatScraper] Found ${chatElements.length} chat elements`);
-    
+
     const allChats = [];
     const newChats = [];
     const seenIds = new Set();
     const currentScrapeTime = Date.now();
-    
+
     chatElements.forEach((element) => {
       try {
         // Handle both link-based (ChatGPT, Claude) and container-based (Gemini, Grok) items
         const href = element.getAttribute('href');
         let url, chatId;
-        
+
         if (href) {
           // Link-based chat item (ChatGPT, Claude) - element IS the link
           url = href.startsWith('http') ? href : `${window.location.origin}${href}`;
@@ -440,7 +486,7 @@ async function scrapeNewChats() {
           // Container-based chat item (Gemini, Grok) - element is a container
           chatId = config.extractChatId(element);
           if (!chatId) return;
-          
+
           // For Grok, find the link inside the container
           const link = element.querySelector('a[href*="/c/"]');
           if (link) {
@@ -451,20 +497,20 @@ async function scrapeNewChats() {
             url = `${window.location.origin}/app/${chatId}`;
           }
         }
-        
+
         if (!chatId || seenIds.has(chatId)) return;
-        
+
         seenIds.add(chatId);
-        
+
         // Extract title
         const title = extractTitle(element, config);
-        
+
         // Skip generic titles
         if (title === 'New Chat' || title === 'Untitled' || title.length < 3) {
           console.log(`[ChatScraper] Skipping generic title: "${title}"`);
           return;
         }
-        
+
         const chat = {
           url,
           chatId,
@@ -472,9 +518,9 @@ async function scrapeNewChats() {
           platform: config.name,
           scrapedAt: currentScrapeTime,
         };
-        
+
         allChats.push(chat);
-        
+
         // For first scrape (lastScrapeTime === 0), mark all as new
         // Otherwise, we'll let the background check against existing DB entries
         if (lastScrapeTime === 0) {
@@ -489,9 +535,9 @@ async function scrapeNewChats() {
         console.warn('[ChatScraper] Error processing chat element:', err);
       }
     });
-    
+
     console.log(`[ChatScraper] ✅ Found ${allChats.length} total chats`);
-    
+
     return {
       success: true,
       platform: config.name,
@@ -502,7 +548,7 @@ async function scrapeNewChats() {
       scrapedAt: currentScrapeTime,
       lastScrapeTime, // Include for background processing
     };
-    
+
   } catch (error) {
     console.error('[ChatScraper] Error scraping chats:', error);
     return {
@@ -522,13 +568,13 @@ async function autoScrape() {
   if (autoScrapeTimeout) {
     clearTimeout(autoScrapeTimeout);
   }
-  
+
   // Debounce: wait 5 seconds after page settles to ensure background is ready
   autoScrapeTimeout = setTimeout(async () => {
     console.log('[ChatScraper] Auto-scraping new chats...');
-    
+
     const result = await scrapeNewChats();
-    
+
     if (result.success && result.newChatsCount > 0) {
       // Send new chats to background for storage
       try {
@@ -537,7 +583,7 @@ async function autoScrape() {
           type: 'AUTO_SCRAPED_CHATS',
           data: result
         });
-        
+
         if (response !== null) {
           console.log(`[ChatScraper] ✅ Auto-scraped ${result.newChatsCount} new chats`);
         } else {
@@ -558,7 +604,7 @@ async function autoScrape() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SCRAPE_CHATS') {
     console.log('[ChatScraper] Received manual scrape request');
-    
+
     // Manual scrape: get ALL chats (not just new ones)
     scrapeChats()
       .then(result => {
@@ -572,13 +618,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           error: error.message,
         });
       });
-    
+
     return true; // Keep message channel open for async response
   }
-  
+
   if (message.type === 'SCRAPE_NEW_CHATS') {
     console.log('[ChatScraper] Received new chats scrape request');
-    
+
     // Scrape only new chats
     scrapeNewChats()
       .then(result => {
@@ -592,7 +638,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           error: error.message,
         });
       });
-    
+
     return true;
   }
 });

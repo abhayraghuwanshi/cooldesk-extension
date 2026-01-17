@@ -510,29 +510,6 @@ export function NotesCanvas({ workspaceId }) {
             </div>
           )}
 
-          {/* <button
-            onClick={() => setIsFullScreen(!isFullScreen)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              padding: '8px',
-              borderRadius: '8px',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--interactive-hover)';
-              e.currentTarget.style.color = 'var(--text)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = 'var(--text-secondary)';
-            }}
-            title={isFullScreen ? 'Exit focus mode' : 'Focus mode'}
-          >
-            <FontAwesomeIcon icon={isFullScreen ? faCompress : faExpand} />
-          </button> */}
 
           <button
             onClick={createNewNote}

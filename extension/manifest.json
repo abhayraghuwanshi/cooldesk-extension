@@ -69,7 +69,11 @@
         "https://chatgpt.com/*",
         "https://claude.ai/*",
         "https://gemini.google.com/*",
-        "https://grok.com/*"
+        "https://grok.com/*",
+        "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
+        "https://aistudio.google.com/*",
+        "https://lovable.dev/*"
       ],
       "js": [
         "src/chatScraper.js"
