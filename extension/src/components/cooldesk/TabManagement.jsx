@@ -21,6 +21,7 @@ export function TabManagement() {
   const [tabsLoading, setTabsLoading] = useState(true);
   const [expandedDomain, setExpandedDomain] = useState(null);
   const [autoGroupEnabled, setAutoGroupEnabled] = useState(false);
+  const [visibleTabsCount, setVisibleTabsCount] = useState(12);
 
   // Load auto-group state on mount
   useEffect(() => {
@@ -350,6 +351,8 @@ export function TabManagement() {
               </div>
             )}
 
+
+
             {/* All Tabs Section */}
             <div>
               <h3 style={{
@@ -363,19 +366,51 @@ export function TabManagement() {
                 All Tabs ({tabs.length})
               </h3>
               {tabs.length > 0 ? (
-                <div className="tabs-grid">
-                  {tabs.map(tab => (
-                    <TabCard
-                      key={tab.id}
-                      tab={tab}
-                      onClick={handleTabClick}
-                      onClose={handleTabClose}
-                      onPin={handleTabPin}
-                      isPinned={tab.pinned}
-                      isActive={tab.active}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="tabs-grid">
+                    {tabs.slice(0, visibleTabsCount).map(tab => (
+                      <TabCard
+                        key={tab.id}
+                        tab={tab}
+                        onClick={handleTabClick}
+                        onClose={handleTabClose}
+                        onPin={handleTabPin}
+                        isPinned={tab.pinned}
+                        isActive={tab.active}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Load More Button */}
+                  {tabs.length > visibleTabsCount && (
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+                      <button
+                        onClick={() => setVisibleTabsCount(prev => prev + 12)}
+                        style={{
+                          background: 'rgba(59, 130, 246, 0.1)',
+                          color: '#60A5FA',
+                          border: '1px solid rgba(59, 130, 246, 0.2)',
+                          padding: '8px 24px',
+                          borderRadius: '20px',
+                          fontSize: '13px',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                          e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                          e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.2)';
+                        }}
+                      >
+                        Show More ({tabs.length - visibleTabsCount} remaining)
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div style={{
                   display: 'flex',
