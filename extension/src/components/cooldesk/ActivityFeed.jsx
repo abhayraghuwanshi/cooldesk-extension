@@ -31,32 +31,45 @@ export function ActivityFeed() {
             const { getUIState } = await import('../../db/index.js');
             const ui = await getUIState();
 
+            let urls = [];
+
             if (ui?.quickUrls?.length > 0) {
-                return ui.quickUrls.slice(0, 8).map((url, idx) => ({
+                urls = ui.quickUrls.map((url, idx) => ({
                     id: `saved_${idx}`,
                     title: new URL(url).hostname,
                     url: url,
-                    type: 'link'
+                    type: 'link',
+                    hostname: new URL(url).hostname.replace('www.', '')
                 }));
-            }
-
-            if (chrome?.history?.search) {
+            } else if (chrome?.history?.search) {
                 const results = await chrome.history.search({
                     text: '',
                     maxResults: 50,
                     startTime: Date.now() - 30 * 24 * 60 * 60 * 1000
                 });
-                return results
+                urls = results
                     .filter(i => i.url && !i.url.startsWith('chrome://'))
                     .sort((a, b) => b.visitCount - a.visitCount)
-                    .slice(0, 8)
                     .map(item => ({
                         id: item.id || `hist_${Math.random()}`,
                         title: item.title || new URL(item.url).hostname,
                         url: item.url,
-                        type: 'link'
+                        type: 'link',
+                        hostname: new URL(item.url).hostname.replace('www.', '')
                     }));
             }
+
+            // Deduplicate by hostname - keep only the first occurrence of each domain
+            const seenHostnames = new Set();
+            const uniqueUrls = urls.filter(item => {
+                if (seenHostnames.has(item.hostname)) {
+                    return false;
+                }
+                seenHostnames.add(item.hostname);
+                return true;
+            });
+
+            return uniqueUrls.slice(0, 8);
         } catch (e) {
             console.error('Failed to load quick links', e);
         }
@@ -172,91 +185,156 @@ export function ActivityFeed() {
                 }}>
                     <FontAwesomeIcon icon={faBookmark} /> Favorites
                 </div>
-                <div
-                    className="favorites-scroll-container"
-                    style={{
-                        display: 'flex',
-                        gap: '8px',
-                        overflowX: 'auto',
-                        paddingBottom: '8px', // Space for scrollbar
-                        // Removed scrollbarWidth: none to ensure it is scrollable
-                    }}
-                >
-                    {quickLinks.length > 0 ? quickLinks.map(link => (
-                        <div key={link.id}
-                            onClick={() => handleItemClick(link.url)}
-                            title={link.title}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                background: 'rgba(59, 130, 246, 0.1)',
-                                border: '1px solid rgba(59, 130, 246, 0.2)',
-                                borderRadius: '20px',
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                color: '#E2E8F0',
-                                cursor: 'pointer',
-                                whiteSpace: 'nowrap',
-                                transition: 'all 0.2s',
-                                flexShrink: 0 // Prevent squashing
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'}
-                        >
-                            <img
-                                src={getFaviconUrl(link.url, 16)}
-                                onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block' }}
-                                style={{ width: '14px', height: '14px', borderRadius: '2px' }}
-                            />
-                            <FontAwesomeIcon icon={faLink} style={{ display: 'none', fontSize: '10px' }} />
-                            <span style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{link.title}</span>
-                        </div>
-                    )) : (
-                        <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
-                    )}
+                {/* Wrapper to hide scrollbar */}
+                <div style={{
+                    overflow: 'hidden',
+                    margin: '0 -4px' // Compensate for inner padding
+                }}>
+                    <div
+                        className="favorites-scroll-container"
+                        style={{
+                            display: 'flex',
+                            gap: '8px',
+                            overflowX: 'auto',
+                            overflowY: 'hidden',
+                            padding: '0 4px 16px 4px', // Extra bottom padding to hide scrollbar
+                            margin: '0 0 -16px 0', // Negative margin to pull up and hide scrollbar
+                            WebkitOverflowScrolling: 'touch' // Smooth scrolling on iOS
+                        }}
+                    >
+                        {quickLinks.length > 0 ? quickLinks.map(link => (
+                            <div key={link.id}
+                                onClick={() => handleItemClick(link.url)}
+                                title={link.title}
+                                style={{
+                                    width: '44px',
+                                    height: '44px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: 'rgba(59, 130, 246, 0.12)',
+                                    border: '1.5px solid rgba(59, 130, 246, 0.25)',
+                                    borderRadius: '12px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    flexShrink: 0,
+                                    position: 'relative',
+                                    overflow: 'hidden'
+                                }}
+                                onMouseEnter={e => {
+                                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)';
+                                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+                                    e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)';
+                                    e.currentTarget.style.boxShadow = '0 8px 20px rgba(59, 130, 246, 0.3)';
+                                }}
+                                onMouseLeave={e => {
+                                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)';
+                                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.25)';
+                                    e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                                    e.currentTarget.style.boxShadow = 'none';
+                                }}
+                            >
+                                <img
+                                    src={getFaviconUrl(link.url, 24)}
+                                    onError={e => {
+                                        e.target.style.display = 'none';
+                                        e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                    style={{
+                                        width: '22px',
+                                        height: '22px',
+                                        borderRadius: '4px',
+                                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
+                                    }}
+                                />
+                                <FontAwesomeIcon
+                                    icon={faLink}
+                                    style={{
+                                        display: 'none',
+                                        fontSize: '18px',
+                                        color: 'rgba(96, 165, 250, 0.8)'
+                                    }}
+                                />
+                            </div>
+                        )) : (
+                            <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
+                        )}
+                    </div>
                 </div>
             </div>
 
             {/* Feed Tabs & List */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0', display: 'flex', flexDirection: 'column' }}>
                 <div style={{
-                    padding: '0 16px',
+                    padding: '16px',
                     position: 'sticky',
                     top: 0,
                     background: 'var(--glass-bg, rgba(15, 23, 42, 0.95))',
                     zIndex: 10,
-                    backdropFilter: 'blur(8px)',
+                    backdropFilter: 'blur(12px)',
                     borderBottom: '1px solid rgba(148, 163, 184, 0.1)'
                 }}>
+                    {/* Modern Pill-Style Segmented Control */}
                     <div style={{
-                        display: 'flex',
-                        gap: '24px' // More spacing
+                        display: 'inline-flex',
+                        background: 'rgba(15, 23, 42, 0.6)',
+                        border: '1px solid rgba(148, 163, 184, 0.15)',
+                        borderRadius: '12px',
+                        padding: '4px',
+                        gap: '4px',
+                        position: 'relative'
                     }}>
                         {['all', 'chats', 'tabs'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 style={{
-                                    padding: '12px 0',
-                                    background: 'transparent',
+                                    padding: '8px 20px',
+                                    background: activeTab === tab
+                                        ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.25), rgba(59, 130, 246, 0.15))'
+                                        : 'transparent',
+                                    border: activeTab === tab
+                                        ? '1px solid rgba(96, 165, 250, 0.4)'
+                                        : '1px solid transparent',
+                                    borderRadius: '10px',
                                     color: activeTab === tab ? '#60A5FA' : '#94A3B8',
-                                    border: 'none',
-                                    borderBottom: activeTab === tab ? '2px solid #60A5FA' : '2px solid transparent',
                                     fontSize: '13px',
                                     fontWeight: activeTab === tab ? 600 : 500,
                                     cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                    textTransform: 'capitalize'
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    textTransform: 'capitalize',
+                                    position: 'relative',
+                                    zIndex: 1,
+                                    whiteSpace: 'nowrap',
+                                    boxShadow: activeTab === tab
+                                        ? '0 4px 12px rgba(96, 165, 250, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                                        : 'none'
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (activeTab !== tab) {
+                                        e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
+                                        e.currentTarget.style.color = '#CBD5E1';
+                                    }
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (activeTab !== tab) {
+                                        e.currentTarget.style.background = 'transparent';
+                                        e.currentTarget.style.color = '#94A3B8';
+                                    }
                                 }}
                             >
-                                {tab === 'all' ? 'All Activity' : tab}
+                                {tab === 'all' ? 'All Activity' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                             </button>
                         ))}
                     </div>
                 </div>
 
-                <div style={{ flex: 1, paddingBottom: '16px' }}>
+                <div style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    minHeight: 0 // Important for flex children with overflow
+                }}>
                     {isLoading && feedItems.length === 0 ? (
                         <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>Loading feed...</div>
                     ) : feedItems.filter(item => activeTab === 'all' || item.type === (activeTab === 'chats' ? 'chat' : 'tab')).length > 0 ? (
@@ -384,6 +462,13 @@ export function ActivityFeed() {
                     )}
                 </div>
             </div>
+
+            {/* Hide scrollbar for webkit browsers */}
+            <style>{`
+                .favorites-scroll-container::-webkit-scrollbar {
+                    display: none;
+                }
+            `}</style>
         </div>
     );
 }

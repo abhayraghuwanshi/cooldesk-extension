@@ -161,7 +161,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
         minHeight: 0
       }}>
         {/* Workspace-aware prompts */}
-        <div>
+        {/* <div>
           <div style={{
             fontSize: '12px',
             fontWeight: 600,
@@ -211,7 +211,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
               </button>
             ))}
           </div>
-        </div>
+        </div> */}
 
         {/* Quick access platforms */}
         <div>
@@ -221,54 +221,85 @@ export function ChatContext({ workspaceId, workspaceName }) {
             color: 'var(--text-secondary)',
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
-            marginBottom: '12px',
+            marginBottom: '16px',
             paddingLeft: '4px'
           }}>
             Quick Access
           </div>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-            gap: '12px'
+            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+            gap: '14px'
           }}>
             {Object.entries(PLATFORM_CONFIG).map(([name, config]) => {
-              const faviconUrl = getFaviconUrl(config.url, 16);
+              const faviconUrl = getFaviconUrl(config.url, 32);
               return (
                 <button
                   key={name}
                   onClick={() => window.open(config.url, '_blank')}
                   style={{
-                    padding: '14px 16px',
-                    borderRadius: '12px',
-                    background: config.gradient,
-                    border: `1px solid ${config.borderColor}`,
+                    padding: '18px 20px',
+                    borderRadius: '16px',
+                    background: `linear-gradient(135deg, ${config.accentColor}15, ${config.accentColor}05)`,
+                    backdropFilter: 'blur(12px)',
+                    border: `1.5px solid ${config.borderColor}`,
                     color: config.textColor,
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '13px',
-                    fontWeight: 500
+                    gap: '14px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    position: 'relative',
+                    overflow: 'hidden'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-                    e.currentTarget.style.boxShadow = `0 8px 24px ${config.accentColor}40`;
+                    e.currentTarget.style.transform = 'translateY(-3px)';
+                    e.currentTarget.style.boxShadow = `0 12px 32px ${config.accentColor}35, 0 0 0 1px ${config.accentColor}30`;
+                    e.currentTarget.style.background = `linear-gradient(135deg, ${config.accentColor}25, ${config.accentColor}10)`;
+                    e.currentTarget.style.borderColor = config.accentColor;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                    e.currentTarget.style.transform = 'translateY(0)';
                     e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.background = `linear-gradient(135deg, ${config.accentColor}15, ${config.accentColor}05)`;
+                    e.currentTarget.style.borderColor = config.borderColor;
                   }}
                 >
-                  {faviconUrl && (
-                    <img
-                      src={faviconUrl}
-                      alt={name}
-                      style={{ width: '16px', height: '16px' }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  )}
-                  <span>{name}</span>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '12px',
+                    background: `linear-gradient(135deg, ${config.accentColor}30, ${config.accentColor}15)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    border: `1px solid ${config.accentColor}40`,
+                    transition: 'all 0.3s ease'
+                  }}>
+                    {faviconUrl && (
+                      <img
+                        src={faviconUrl}
+                        alt={name}
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentElement.textContent = config.emoji;
+                          e.target.parentElement.style.fontSize = '22px';
+                        }}
+                      />
+                    )}
+                  </div>
+                  <span style={{
+                    flex: 1,
+                    letterSpacing: '0.01em'
+                  }}>{name}</span>
                 </button>
               );
             })}

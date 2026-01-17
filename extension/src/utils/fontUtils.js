@@ -8,6 +8,7 @@ export const fontSizes = [
   { id: 'medium', name: 'Medium', size: '14px', description: 'Default comfortable reading' },
   { id: 'large', name: 'Large', size: '16px', description: 'Easier reading, larger text' },
   { id: 'extra-large', name: 'Extra Large', size: '18px', description: 'Maximum readability' }
+
 ];
 
 /**
@@ -70,11 +71,78 @@ export const setAndSaveFontSize = (fontSizeId) => {
   }
 };
 
+
+// Default font family using CSS variable for dynamic updates
+export const defaultFontFamily = 'var(--font-family-base)';
+
+// Font family options
+export const fontFamilies = [
+  { id: 'system', name: 'System Default', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif', description: 'Native system fonts' },
+  { id: 'inter', name: 'Inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Modern geometric sans-serif' },
+  { id: 'roboto', name: 'Roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Google\'s friendly sans-serif' },
+  { id: 'poppins', name: 'Poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Rounded geometric typeface' },
+  { id: 'jetbrains', name: 'JetBrains Mono', family: 'JetBrains Mono, Consolas, Monaco, monospace', description: 'Developer-focused monospace' }
+];
+
 /**
- * Initialize font size system on app startup
+ * Apply font family to the document root
+ * @param {string} fontFamilyId - The font family ID
  */
-export const initializeFontSize = () => {
+export const applyFontFamily = (fontFamilyId) => {
+  const fontObj = fontFamilies.find(f => f.id === fontFamilyId) || fontFamilies[0];
+
+  // Set CSS custom property
+  document.documentElement.style.setProperty('--font-family-base', fontObj.family);
+
+  // Also set directly on body to ensure inheritance
+  document.body.style.fontFamily = fontObj.family;
+
+  console.log('Applied font family:', fontObj.name);
+};
+
+/**
+ * Get the current font family setting from localStorage
+ * @returns {string} The current font family ID
+ */
+export const getCurrentFontFamily = () => {
+  try {
+    return localStorage.getItem('cooldesk-font-family') || 'system';
+  } catch (e) {
+    console.warn('Failed to get font family from localStorage:', e);
+    return 'system';
+  }
+};
+
+/**
+ * Save font family setting to localStorage and apply it
+ * @param {string} fontFamilyId - The font family ID to save and apply
+ */
+export const setAndSaveFontFamily = (fontFamilyId) => {
+  try {
+    localStorage.setItem('cooldesk-font-family', fontFamilyId);
+    applyFontFamily(fontFamilyId);
+  } catch (e) {
+    console.error('Failed to save font family:', e);
+  }
+};
+
+/**
+ * Initialize font settings on app startup
+ */
+export const initializeFontSettings = () => {
   const savedFontSize = getCurrentFontSize();
   applyBaseFontSize(savedFontSize);
-  return savedFontSize;
+
+  const savedFontFamily = getCurrentFontFamily();
+  applyFontFamily(savedFontFamily);
+
+  return { fontSize: savedFontSize, fontFamily: savedFontFamily };
+};
+
+/**
+ * Initialize font size system on app startup (Legacy support)
+ */
+export const initializeFontSize = () => {
+  const settings = initializeFontSettings();
+  return settings.fontSize;
 };

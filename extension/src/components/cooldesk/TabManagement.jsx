@@ -125,7 +125,7 @@ export function TabManagement({ maxTabs = 8 }) {
           </div>
         </div>
         <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748B' }}>
-          <FontAwesomeIcon icon={faSync} spin style={{ fontSize: '24px', marginBottom: '12px' }} />
+          <FontAwesomeIcon icon={faSync} spin style={{ fontSize: 'var(--font-4xl)', marginBottom: '12px' }} />
           <div>Loading tabs...</div>
         </div>
       </div>
@@ -151,11 +151,11 @@ export function TabManagement({ maxTabs = 8 }) {
             textAlign: 'center',
             padding: '40px 20px',
             color: '#64748B',
-            fontSize: '14px',
+            fontSize: 'var(--font-base)',
           }}>
-            <div style={{ fontSize: '32px', marginBottom: '12px' }}>📑</div>
+            <div style={{ fontSize: 'var(--font-5xl)', marginBottom: '12px' }}>📑</div>
             <div>No tabs found</div>
-            <div style={{ fontSize: '12px', marginTop: '8px', opacity: 0.7 }}>
+            <div style={{ fontSize: 'var(--font-sm)', marginTop: '8px', opacity: 0.7 }}>
               Open some browser tabs to see them here
             </div>
           </div>
@@ -242,7 +242,7 @@ export function TabManagement({ maxTabs = 8 }) {
                             boxShadow: `0 0 8px ${color}66`
                           }} />
                           <div style={{
-                            fontSize: '11px',
+                            fontSize: 'var(--font-xs)',
                             fontWeight: 700,
                             color: '#E2E8F0',
                             textTransform: 'uppercase',
@@ -254,7 +254,7 @@ export function TabManagement({ maxTabs = 8 }) {
                           }}>
                             {hostname}
                             <span style={{
-                              fontSize: '10px',
+                              fontSize: 'var(--font-xs)',
                               color: color,
                               opacity: 0.8,
                               background: `${color}1A`,
@@ -311,24 +311,24 @@ function TabItem({ tab, color, handleTabClick, handlePinTab, handleCloseTab }) {
   const accentColor = color || '#3B82F6';
   return (
     <div
-      className="tab-card"
+      className="browser-tab-card tab-card"
       onClick={() => handleTabClick(tab)}
+      data-active={tab.active}
       style={{
-        border: tab.active ? `1px solid ${accentColor}80` : `1px solid ${accentColor}20`,
-        background: tab.active ? `${accentColor}1A` : 'transparent',
-        borderLeft: tab.active ? `3px solid ${accentColor}` : `1px solid ${accentColor}20`,
         position: 'relative',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        '--domain-color': accentColor // Keep this available for subtle accents if needed via CSS
       }}
     >
       {/* Dynamic hover gradient effect */}
       <div className="tab-hover-bg" style={{
         position: 'absolute',
         inset: 0,
-        background: `linear-gradient(90deg, ${accentColor}0D 0%, transparent 100%)`,
         opacity: 0,
         transition: 'opacity 0.2s',
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        // Moving gradient to CSS using the variable or generic
+        background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, transparent 100%)'
       }} />
       <img
         src={getFaviconUrl(tab.url)}
@@ -348,7 +348,7 @@ function TabItem({ tab, color, handleTabClick, handlePinTab, handleCloseTab }) {
         {tab.pinned && (
           <FontAwesomeIcon
             icon={faThumbtack}
-            style={{ color: '#F59E0B', fontSize: '12px' }}
+            style={{ color: '#F59E0B', fontSize: 'var(--font-sm)' }}
             title="Pinned"
           />
         )}

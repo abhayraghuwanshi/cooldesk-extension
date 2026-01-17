@@ -366,18 +366,12 @@ export function injectFooterBar() {
     const addNoteBtn = document.createElement('div');
     addNoteBtn.className = 'action-btn add-note-btn';
 
-    // Create Plus Icon
-    const plusSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    plusSvg.setAttribute('width', '24');
-    plusSvg.setAttribute('height', '24');
-    plusSvg.setAttribute('viewBox', '0 0 24 24');
-    plusSvg.setAttribute('fill', 'none');
-    plusSvg.setAttribute('stroke', '#4b5563');
-    plusSvg.setAttribute('stroke-width', '2');
-    plusSvg.setAttribute('stroke-linecap', 'round');
-    plusSvg.setAttribute('stroke-linejoin', 'round');
-    plusSvg.innerHTML = '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>';
-    addNoteBtn.appendChild(plusSvg);
+    // Create Note Icon
+    const noteIcon = document.createElement('div');
+    noteIcon.textContent = '📝';
+    noteIcon.style.fontSize = '20px';
+    noteIcon.style.lineHeight = '1';
+    addNoteBtn.appendChild(noteIcon);
 
     addNoteBtn.title = 'Add Sticky Note';
     addNoteBtn.onclick = (e) => {
@@ -400,22 +394,11 @@ export function injectFooterBar() {
     highlightBtn.className = 'action-btn highlight-btn';
 
     // Create Highlight Icon
-    const highlightSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    highlightSvg.setAttribute('width', '22');
-    highlightSvg.setAttribute('height', '22');
-    highlightSvg.setAttribute('viewBox', '0 0 24 24');
-    highlightSvg.setAttribute('fill', 'none');
-    highlightSvg.setAttribute('stroke', '#4b5563');
-    highlightSvg.setAttribute('stroke-width', '2');
-    highlightSvg.setAttribute('stroke-linecap', 'round');
-    highlightSvg.setAttribute('stroke-linejoin', 'round');
-    // Using standard paths
-    highlightSvg.innerHTML = `
-      <path d="M9 11l-6 6v3h3l6-6"/>
-      <path d="M22 7l-3-3"/>
-      <path d="M19 4l3 3"/>
-    `;
-    highlightBtn.appendChild(highlightSvg);
+    const highlightIcon = document.createElement('div');
+    highlightIcon.textContent = '🖍️';
+    highlightIcon.style.fontSize = '20px';
+    highlightIcon.style.lineHeight = '1';
+    highlightBtn.appendChild(highlightIcon);
 
     highlightBtn.onclick = async (e) => {
       e.stopPropagation();
@@ -475,40 +458,13 @@ export function injectFooterBar() {
     voiceBtn.id = 'cooldesk-voice-btn'; // For easier selection
 
     // Create Microphone Icon
-    const micSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    micSvg.setAttribute('width', '20');
-    micSvg.setAttribute('height', '20');
-    micSvg.setAttribute('viewBox', '0 0 24 24');
-    micSvg.setAttribute('fill', 'none');
-    micSvg.setAttribute('stroke', '#4b5563'); // Default gray
-    micSvg.setAttribute('stroke-width', '2');
-    micSvg.setAttribute('stroke-linecap', 'round');
-    micSvg.setAttribute('stroke-linejoin', 'round');
-    micSvg.innerHTML = `
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-      <line x1="8" y1="23" x2="16" y2="23"/>
-    `;
-    voiceBtn.appendChild(micSvg);
+    const micIcon = document.createElement('div');
+    micIcon.textContent = '🎤';
+    micIcon.style.fontSize = '20px';
+    micIcon.style.lineHeight = '1';
+    voiceBtn.appendChild(micIcon);
 
-    // Voice active animation styles
-    const micStyle = document.createElement('style');
-    micStyle.textContent = `
-      @keyframes mic-pulse {
-        0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); transform: scale(1); }
-        70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); transform: scale(1.1); }
-        100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); transform: scale(1); }
-      }
-      .voice-active {
-        animation: mic-pulse 1.5s infinite;
-        border-color: #ef4444 !important; /* Red border */
-      }
-      .voice-active svg {
-        stroke: #ef4444 !important; /* Red icon */
-      }
-    `;
-    shadow.appendChild(micStyle);
+
 
     voiceBtn.onclick = async (e) => {
       e.stopPropagation();
@@ -516,20 +472,10 @@ export function injectFooterBar() {
       voiceBtn.style.transform = 'scale(0.95)';
       setTimeout(() => voiceBtn.style.transform = '', 150);
 
-      // Determine if we are turning ON or OFF based on current class
-      // But actually the toggle logic handles it.
-      // Ideally we want to know state locally.
-      const isCurrentlyActive = voiceBtn.classList.contains('voice-active');
-      const action = isCurrentlyActive ? 'Stopping' : 'Activating';
+      showNotification('Opening Voice Chat...', '#ec4899', 2000);
 
-      showNotification(`${action} Voice Control...`, isCurrentlyActive ? '#ef4444' : '#ec4899', 2000);
-
-      // Send headless toggle request
-      chrome.runtime.sendMessage({
-        action: 'toggleVoice',
-        fromFooter: true,
-        forceStart: !isCurrentlyActive // optional hint
-      });
+      // Open side panel with voice mode enabled
+      await openSidePanel(true); // Pass true to start voice mode
     };
     voiceBtn.onmousedown = (e) => e.stopPropagation();
 
@@ -940,20 +886,9 @@ export function injectFooterBar() {
     let observer = null;
     let observerTimeout = null;
 
-    // Listen for voice state changes and notifications
+    // Listen for notifications
     chrome.runtime.onMessage.addListener((msg) => {
-      if (msg.type === 'voiceStateChange') {
-        const voiceBtn = shadow.getElementById('cooldesk-voice-btn');
-        if (voiceBtn) {
-          if (msg.isListening) {
-            voiceBtn.classList.add('voice-active');
-            showNotification('Listening...', '#10b981', 2000); // Green for active listening
-          } else {
-            voiceBtn.classList.remove('voice-active');
-            // showNotification('Voice Paused', '#6b7280', 2000);
-          }
-        }
-      } else if (msg.type === 'SHOW_NOTIFICATION') {
+      if (msg.type === 'SHOW_NOTIFICATION') {
         showNotification(msg.message, msg.color || '#4A90E2');
       }
     });

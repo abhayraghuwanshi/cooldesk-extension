@@ -7,63 +7,42 @@ const ONBOARDING_STEPS = [
   {
     id: 'welcome',
     title: '👋 Welcome to CoolDesk!',
-    description: 'Let\'s take a quick tour of your new workspace dashboard. This will only take a minute!',
-    target: null, // Center modal
+    description: 'Your intelligent workspace dashboard is ready! Let\'s take a quick tour to help you get started.',
+    target: null,
     position: 'center'
   },
   {
-    id: 'workspace-section',
-    title: '💼 Workspaces',
-    description: 'Organize your tabs into workspaces. Auto-created workspaces group related sites (GitHub, ChatGPT, etc.). Click titles to collapse sections and save space!',
-    target: '[data-onboarding="workspace-filters"]',
-    position: 'bottom'
+    id: 'workspaces',
+    title: '💼 Organize with Workspaces',
+    description: 'Create custom workspaces to organize your tabs! Use the floating + button (bottom right) to add URLs from your open tabs, history, or bookmarks. Click any workspace card to open all its URLs at once.',
+    target: null,
+    position: 'center'
   },
   {
-    id: 'current-tabs',
-    title: '📑 Current Tabs',
-    description: 'See all your open browser tabs in one place. Right-click URLs to add notes! Auto-cleanup keeps your tabs organized (20 tab limit, 10min timeout).',
-    target: '[data-onboarding="current-tabs-section"]',
-    position: 'left'
+    id: 'quick-add',
+    title: '➕ Quick Add Button',
+    description: 'Look for the blue + button in the bottom right corner! It\'s your quick access hub to add URLs to workspaces, create new workspaces, or jot down notes. You can browse your open tabs, history, and bookmarks all in one place.',
+    target: null,
+    position: 'center'
   },
   {
-    id: 'voice-navigation',
-    title: '🎤 Voice Navigation',
-    description: 'Control ChatGPT with voice commands. Say "scroll down", "click send", or "read response" for hands-free navigation!',
-    target: '[data-onboarding="voice-navigation-section"]',
-    position: 'left'
-  },
-  {
-    id: 'ai-chats',
-    title: '🤖 AI Chats History',
-    description: 'All your AI conversations in one place! View chat history from ChatGPT, Claude, Gemini, and other platforms. Click to reopen chats.',
-    target: '[data-onboarding="ai-chats-section"]',
-    position: 'left'
-  },
-  {
-    id: 'notes',
-    title: '📝 Smart Notes',
-    description: 'Create quick notes, todos, or URL-specific notes! Use voice input 🎤 or type. Right-click any URL in workspaces to add a note for that link.',
-    target: '[data-onboarding="notes-section"]',
-    position: 'left'
-  },
-  {
-    id: 'drag-sections',
-    title: '🎯 Drag & Drop Sections',
-    description: 'Pro tip: You can drag and reorder ALL sections below! Click and hold the section title, then drag to rearrange your layout however you like.',
-    target: '[data-onboarding="current-tabs-section"]',
-    position: 'left'
+    id: 'features',
+    title: '✨ Powerful Features',
+    description: 'CoolDesk tracks your open tabs, saves AI chat history from ChatGPT/Claude/Gemini, and lets you create smart notes. All sections are draggable - click and hold any section title to rearrange your layout!',
+    target: null,
+    position: 'center'
   },
   {
     id: 'settings',
-    title: '⚙️ Settings & Themes',
-    description: 'Customize everything! Change themes, fonts, wallpapers, toggle sections, export data, and restart this tour anytime from Help.',
+    title: '⚙️ Customize Everything',
+    description: 'Click the settings button (top right) to customize themes, fonts, wallpapers, toggle sections, and manage your data. You can restart this tour anytime from the Help section!',
     target: '[data-onboarding="settings-button"]',
     position: 'bottom'
   },
   {
     id: 'complete',
     title: '🎉 You\'re All Set!',
-    description: 'Remember: Sections are draggable, titles are collapsible, and you can right-click URLs for quick actions. Enjoy your personalized workspace!',
+    description: 'Remember: Use the + button for quick actions, sections are draggable, and workspaces keep you organized. Enjoy your personalized workspace!',
     target: null,
     position: 'center'
   }
@@ -87,7 +66,7 @@ export function OnboardingTour({ onComplete, onSkip }) {
 
     const updatePosition = () => {
       const element = document.querySelector(step.target);
-      
+
       // If element not found, retry after a short delay
       if (!element) {
         if (retryCount < maxRetries) {

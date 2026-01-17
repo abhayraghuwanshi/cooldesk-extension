@@ -1,5 +1,5 @@
 
-import { useEffect, useState, useRef } from 'react';
+import { fontFamilies } from '../../utils/fontUtils';
 
 const ThemesTab = ({
   selectedTheme,
@@ -9,19 +9,15 @@ const ThemesTab = ({
   onFontSizeChange,
   onFontFamilyChange,
   wallpaperEnabled = false,
-  wallpaperUrl = 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&q=80',
+  wallpaperUrl = 'https://source.unsplash.com/1920x1080/?nature',
   wallpaperOpacity = 0.3,
-  onWallpaperEnabledChange = () => {},
-  onWallpaperUrlChange = () => {},
-  onWallpaperOpacityChange = () => {}
+  onWallpaperEnabledChange = () => { },
+  onWallpaperUrlChange = () => { },
+  onWallpaperOpacityChange = () => { }
 }) => {
-  // Auto wallpaper state
-  const [autoWallpaperEnabled, setAutoWallpaperEnabled] = useState(false);
-  const [autoWallpaperInterval, setAutoWallpaperInterval] = useState(30); // minutes
-  const [wallpaperTopic, setWallpaperTopic] = useState('nature');
-  const [isChangingWallpaper, setIsChangingWallpaper] = useState(false);
-  const [lastWallpaperChange, setLastWallpaperChange] = useState(null);
-  const autoWallpaperTimerRef = useRef(null);
+
+
+
 
   // Theme options with font family pairings (includes gradient themes + customizable wallpaper theme)
   const themes = [
@@ -170,126 +166,83 @@ const ThemesTab = ({
     { id: 'extra-large', name: 'Extra Large', size: '18px', description: 'Maximum readability' }
   ];
 
-  // Font family options
-  const fontFamilies = [
-    { id: 'system', name: 'System Default', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif', description: 'Native system fonts' },
-    { id: 'inter', name: 'Inter', family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Modern geometric sans-serif' },
-    { id: 'roboto', name: 'Roboto', family: 'Roboto, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Google\'s friendly sans-serif' },
-    { id: 'poppins', name: 'Poppins', family: 'Poppins, -apple-system, BlinkMacSystemFont, sans-serif', description: 'Rounded geometric typeface' },
-    { id: 'jetbrains', name: 'JetBrains Mono', family: 'JetBrains Mono, Consolas, Monaco, monospace', description: 'Developer-focused monospace' }
+
+
+  // Curated high-quality wallpapers for the application
+  const curatedWallpapers = [
+    {
+      id: 1,
+      name: 'Mountain Sunset',
+      url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&q=80',
+      category: 'nature'
+    },
+    {
+      id: 2,
+      name: 'Ocean Waves',
+      url: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=300&q=80',
+      category: 'nature'
+    },
+    {
+      id: 3,
+      name: 'Northern Lights',
+      url: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=300&q=80',
+      category: 'nature'
+    },
+    {
+      id: 4,
+      name: 'Starry Night',
+      url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=300&q=80',
+      category: 'space'
+    },
+    {
+      id: 5,
+      name: 'Abstract Gradient',
+      url: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=300&q=80',
+      category: 'abstract'
+    },
+    {
+      id: 6,
+      name: 'Minimal Desk',
+      url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=300&q=80',
+      category: 'minimal'
+    },
+    {
+      id: 7,
+      name: 'Forest Path',
+      url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=300&q=80',
+      category: 'nature'
+    },
+    {
+      id: 8,
+      name: 'City Lights',
+      url: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=300&q=80',
+      category: 'urban'
+    },
+    {
+      id: 9,
+      name: 'Desert Dunes',
+      url: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=300&q=80',
+      category: 'nature'
+    },
+    {
+      id: 10,
+      name: 'Cosmic Nebula',
+      url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=300&q=80',
+      category: 'space'
+    }
   ];
 
-  // Wallpaper topics for Unsplash
-  const wallpaperTopics = [
-    { id: 'nature', name: 'Nature', description: 'Landscapes, forests, mountains' },
-    { id: 'architecture', name: 'Architecture', description: 'Buildings, modern structures' },
-    { id: 'ocean', name: 'Ocean', description: 'Seascapes, beaches, water' },
-    { id: 'mountains', name: 'Mountains', description: 'Peaks, alpine scenes' },
-    { id: 'city', name: 'City', description: 'Urban scenes, skyline' },
-    { id: 'abstract', name: 'Abstract', description: 'Artistic, patterns' },
-    { id: 'space', name: 'Space', description: 'Cosmos, stars, galaxies' },
-    { id: 'animals', name: 'Animals', description: 'Wildlife, pets' },
-    { id: 'technology', name: 'Technology', description: 'Tech, gadgets' },
-    { id: 'food', name: 'Food', description: 'Cuisine, ingredients' }
-  ];
 
-  // Auto wallpaper intervals
-  const autoWallpaperIntervals = [
-    { id: 15, name: '15 minutes', description: 'Frequent changes' },
-    { id: 30, name: '30 minutes', description: 'Balanced' },
-    { id: 60, name: '1 hour', description: 'Hourly updates' },
-    { id: 120, name: '2 hours', description: 'Less frequent' },
-    { id: 240, name: '4 hours', description: 'Quarter daily' },
-    { id: 480, name: '8 hours', description: 'Three times daily' }
-  ];
-
-  // Fetch random wallpaper from Unsplash
-  const fetchRandomWallpaper = async (topic = null) => {
-    try {
-      setIsChangingWallpaper(true);
-      const topicQuery = topic ? `&query=${topic}` : '';
-      const response = await fetch(`https://api.unsplash.com/photos/random?client_id=YOUR_UNSPLASH_ACCESS_KEY&w=1920&h=1080&fit=crop${topicQuery}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch wallpaper');
-      }
-      
-      const data = await response.json();
-      const newWallpaperUrl = `${data.urls.regular}?w=1920&q=80`;
-      
-      onWallpaperUrlChange(newWallpaperUrl);
-      setLastWallpaperChange(new Date());
-      
-      // Save to localStorage for persistence
-      localStorage.setItem('cooldesk_auto_wallpaper_enabled', autoWallpaperEnabled);
-      localStorage.setItem('cooldesk_auto_wallpaper_interval', autoWallpaperInterval);
-      localStorage.setItem('cooldesk_wallpaper_topic', wallpaperTopic);
-      localStorage.setItem('cooldesk_last_wallpaper_change', new Date().toISOString());
-      
-    } catch (error) {
-      console.error('Error fetching wallpaper:', error);
-      // Fallback to a default URL if API fails
-      const fallbackUrls = [
-        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80',
-        'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&q=80',
-        'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80',
-        'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1920&q=80'
-      ];
-      const randomFallback = fallbackUrls[Math.floor(Math.random() * fallbackUrls.length)];
-      onWallpaperUrlChange(randomFallback);
-      setLastWallpaperChange(new Date());
-    } finally {
-      setIsChangingWallpaper(false);
-    }
-  };
-
-  // Start/stop auto wallpaper timer
-  useEffect(() => {
-    if (autoWallpaperEnabled && wallpaperEnabled) {
-      // Clear existing timer
-      if (autoWallpaperTimerRef.current) {
-        clearInterval(autoWallpaperTimerRef.current);
-      }
-      
-      // Set new timer
-      autoWallpaperTimerRef.current = setInterval(() => {
-        fetchRandomWallpaper(wallpaperTopic);
-      }, autoWallpaperInterval * 60 * 1000); // Convert minutes to milliseconds
-      
-      // Fetch initial wallpaper if none exists
-      if (!wallpaperUrl || wallpaperUrl.includes('photo-1579546929518-9e396f3cc809')) {
-        fetchRandomWallpaper(wallpaperTopic);
-      }
-    } else {
-      // Clear timer when disabled
-      if (autoWallpaperTimerRef.current) {
-        clearInterval(autoWallpaperTimerRef.current);
-        autoWallpaperTimerRef.current = null;
-      }
-    }
-    
-    return () => {
-      if (autoWallpaperTimerRef.current) {
-        clearInterval(autoWallpaperTimerRef.current);
-      }
-    };
-  }, [autoWallpaperEnabled, wallpaperEnabled, autoWallpaperInterval, wallpaperTopic]);
-
-  // Load saved settings on mount
-  useEffect(() => {
-    const savedEnabled = localStorage.getItem('cooldesk_auto_wallpaper_enabled') === 'true';
-    const savedInterval = parseInt(localStorage.getItem('cooldesk_auto_wallpaper_interval')) || 30;
-    const savedTopic = localStorage.getItem('cooldesk_wallpaper_topic') || 'nature';
-    const savedLastChange = localStorage.getItem('cooldesk_last_wallpaper_change');
-    
-    setAutoWallpaperEnabled(savedEnabled);
-    setAutoWallpaperInterval(savedInterval);
-    setWallpaperTopic(savedTopic);
-    
-    if (savedLastChange) {
-      setLastWallpaperChange(new Date(savedLastChange));
-    }
-  }, []);
 
   return (
     <div style={{ padding: '16px 0' }}>
@@ -708,6 +661,95 @@ const ThemesTab = ({
           </h3>
 
           <>
+            {/* Curated Wallpaper Gallery */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{
+                display: 'block',
+                color: '#e5e7eb',
+                fontWeight: '500',
+                marginBottom: '12px',
+                fontSize: '14px'
+              }}>
+                Choose a Wallpaper
+              </label>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: '10px',
+                marginBottom: '8px'
+              }}>
+                {curatedWallpapers.map(wallpaper => (
+                  <div
+                    key={wallpaper.id}
+                    onClick={() => onWallpaperUrlChange(wallpaper.url)}
+                    style={{
+                      position: 'relative',
+                      aspectRatio: '16/9',
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      border: wallpaperUrl === wallpaper.url ? '3px solid #34C759' : '2px solid rgba(255, 255, 255, 0.1)',
+                      transition: 'all 0.2s ease',
+                      backgroundImage: `url(${wallpaper.thumbnail})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (wallpaperUrl !== wallpaper.url) {
+                        e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.5)';
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (wallpaperUrl !== wallpaper.url) {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }
+                    }}
+                  >
+                    {wallpaperUrl === wallpaper.url && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        background: '#34C759',
+                        borderRadius: '50%',
+                        width: '20px',
+                        height: '20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        color: '#fff'
+                      }}>
+                        ✓
+                      </div>
+                    )}
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+                      padding: '6px 8px',
+                      fontSize: '10px',
+                      color: '#fff',
+                      fontWeight: '500'
+                    }}>
+                      {wallpaper.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{
+                fontSize: '11px',
+                color: 'rgba(255, 255, 255, 0.4)',
+                marginTop: '6px'
+              }}>
+                Click any image to set as wallpaper
+              </div>
+            </div>
+
             {/* Wallpaper URL Input */}
             <div style={{ marginBottom: '16px' }}>
               <label style={{
@@ -717,13 +759,13 @@ const ThemesTab = ({
                 marginBottom: '8px',
                 fontSize: '14px'
               }}>
-                Wallpaper URL
+                Or Use Custom URL (Optional)
               </label>
               <input
                 type="url"
                 value={wallpaperUrl}
                 onChange={(e) => onWallpaperUrlChange(e.target.value)}
-                placeholder="https://images.unsplash.com/..."
+                placeholder="https://source.unsplash.com/1920x1080/?nature"
                 style={{
                   width: '100%',
                   padding: '12px 14px',
@@ -749,7 +791,7 @@ const ThemesTab = ({
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>
-                Try: unsplash.com, pexels.com, or your own image URL
+                Try: source.unsplash.com/1920x1080/?nature or your own image URL
               </div>
             </div>
 
@@ -766,8 +808,8 @@ const ThemesTab = ({
               </label>
               <input
                 type="range"
-                min="0.1"
-                max="0.8"
+                min="0"
+                max="1"
                 step="0.05"
                 value={wallpaperOpacity}
                 onChange={(e) => onWallpaperOpacityChange(parseFloat(e.target.value))}
@@ -775,7 +817,7 @@ const ThemesTab = ({
                   width: '100%',
                   height: '6px',
                   borderRadius: '3px',
-                  background: `linear-gradient(to right, #34C759 0%, #34C759 ${wallpaperOpacity * 125}%, rgba(255, 255, 255, 0.1) ${wallpaperOpacity * 125}%, rgba(255, 255, 255, 0.1) 100%)`,
+                  background: `linear-gradient(to right, #34C759 0%, #34C759 ${wallpaperOpacity * 100}%, rgba(255, 255, 255, 0.1) ${wallpaperOpacity * 100}%, rgba(255, 255, 255, 0.1) 100%)`,
                   outline: 'none',
                   WebkitAppearance: 'none',
                   appearance: 'none'
@@ -786,173 +828,11 @@ const ThemesTab = ({
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>
-                Lower opacity keeps content readable
+                0% = fully transparent, 100% = fully visible (clearer image)
               </div>
             </div>
 
-            {/* Auto Wallpaper Controls */}
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '12px'
-              }}>
-                <label style={{
-                  color: '#e5e7eb',
-                  fontWeight: '500',
-                  fontSize: '14px'
-                }}>
-                  Auto Change Wallpaper
-                </label>
-                <button
-                  onClick={() => setAutoWallpaperEnabled(!autoWallpaperEnabled)}
-                  style={{
-                    width: '44px',
-                    height: '24px',
-                    borderRadius: '12px',
-                    background: autoWallpaperEnabled ? '#34C759' : 'rgba(255, 255, 255, 0.1)',
-                    border: 'none',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    transition: 'background 0.2s ease'
-                  }}
-                >
-                  <div style={{
-                    position: 'absolute',
-                    top: '2px',
-                    left: autoWallpaperEnabled ? '22px' : '2px',
-                    width: '20px',
-                    height: '20px',
-                    borderRadius: '50%',
-                    background: '#fff',
-                    transition: 'left 0.2s ease',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-                  }} />
-                </button>
-              </div>
 
-              {autoWallpaperEnabled && (
-                <div style={{
-                  padding: '12px',
-                  background: 'rgba(52, 199, 89, 0.1)',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(52, 199, 89, 0.2)',
-                  marginBottom: '12px'
-                }}>
-                  {/* Topic Selection */}
-                  <div style={{ marginBottom: '12px' }}>
-                    <label style={{
-                      display: 'block',
-                      color: '#e5e7eb',
-                      fontWeight: '500',
-                      marginBottom: '6px',
-                      fontSize: '13px'
-                    }}>
-                      Wallpaper Topic
-                    </label>
-                    <select
-                      value={wallpaperTopic}
-                      onChange={(e) => setWallpaperTopic(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '6px',
-                        color: '#e5e7eb',
-                        fontSize: '13px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {wallpaperTopics.map(topic => (
-                        <option key={topic.id} value={topic.id}>
-                          {topic.name} - {topic.description}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Interval Selection */}
-                  <div style={{ marginBottom: '12px' }}>
-                    <label style={{
-                      display: 'block',
-                      color: '#e5e7eb',
-                      fontWeight: '500',
-                      marginBottom: '6px',
-                      fontSize: '13px'
-                    }}>
-                      Change Interval
-                    </label>
-                    <select
-                      value={autoWallpaperInterval}
-                      onChange={(e) => setAutoWallpaperInterval(parseInt(e.target.value))}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '6px',
-                        color: '#e5e7eb',
-                        fontSize: '13px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {autoWallpaperIntervals.map(interval => (
-                        <option key={interval.id} value={interval.id}>
-                          {interval.name} ({interval.description})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Manual Change Button & Status */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '8px'
-                  }}>
-                    <button
-                      onClick={() => fetchRandomWallpaper(wallpaperTopic)}
-                      disabled={isChangingWallpaper}
-                      style={{
-                        flex: 1,
-                        padding: '8px 12px',
-                        background: isChangingWallpaper 
-                          ? 'rgba(255, 255, 255, 0.05)' 
-                          : 'rgba(52, 199, 89, 0.2)',
-                        border: isChangingWallpaper 
-                          ? '1px solid rgba(255, 255, 255, 0.1)' 
-                          : '1px solid rgba(52, 199, 89, 0.3)',
-                        borderRadius: '6px',
-                        color: isChangingWallpaper ? '#6b7280' : '#34C759',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        cursor: isChangingWallpaper ? 'not-allowed' : 'pointer',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      {isChangingWallpaper ? 'Changing...' : 'Change Now'}
-                    </button>
-                    
-                    <div style={{
-                      fontSize: '11px',
-                      color: 'rgba(255, 255, 255, 0.5)',
-                      textAlign: 'right'
-                    }}>
-                      {lastWallpaperChange && (
-                        <>
-                          Last: {new Date(lastWallpaperChange).toLocaleTimeString()}
-                          <br />
-                          Next: {new Date(lastWallpaperChange.getTime() + autoWallpaperInterval * 60000).toLocaleTimeString()}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Preview Box */}
             <div style={{

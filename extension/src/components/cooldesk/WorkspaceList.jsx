@@ -1,7 +1,9 @@
-import { faBookmark, faChartLine, faList, faSearch, faThLarge } from '@fortawesome/free-solid-svg-icons';
+import { faBookmark, faChartLine, faList, faSearch, faShare, faThLarge } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
+import { deleteWorkspace } from '../../db/index.js';
 import '../../styles/cooldesk.css';
+import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import { WorkspaceCard } from './WorkspaceCard';
 
 export function WorkspaceList({
@@ -12,7 +14,14 @@ export function WorkspaceList({
     pinnedWorkspaces = [], // New prop
     onTogglePin            // New prop
 }) {
-    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    // Load view mode from localStorage, default to 'grid'
+    const [viewMode, setViewMode] = useState(() => {
+        try {
+            return localStorage.getItem('cooldesk_view_mode') || 'grid';
+        } catch {
+            return 'grid';
+        }
+    });
     const [bookmarks, setBookmarks] = useState([]);
     const [bookmarkSearch, setBookmarkSearch] = useState('');
     const [showBookmarks, setShowBookmarks] = useState(true);
@@ -20,10 +29,110 @@ export function WorkspaceList({
     const [popoverState, setPopoverState] = useState({ id: null, rect: null });
     const [hoveredBookmark, setHoveredBookmark] = useState(null);
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false); // New state
 
-    // Separate pinned and unpinned workspaces
     const pinned = savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name));
     const unpinned = savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name));
+
+    // State for workspace activity scores
+    const [workspaceScores, setWorkspaceScores] = useState(new Map());
+    const [isSortingByActivity, setIsSortingByActivity] = useState(false);
+
+    // Calculate activity score for a workspace
+    const calculateWorkspaceScore = async (workspace) => {
+        if (!workspace.urls || workspace.urls.length === 0) {
+            console.log(`[WorkspaceList] Workspace "${workspace.name}" has no URLs`);
+            return 0;
+        }
+
+        console.log(`[WorkspaceList] Calculating score for "${workspace.name}" with ${workspace.urls.length} URLs:`, workspace.urls.map(u => u.url));
+
+        try {
+            // Import getUrlAnalytics dynamically to avoid circular deps
+            const { getUrlAnalytics } = await import('../../db/index');
+
+            // Fetch analytics for all URLs in parallel
+            const analyticsPromises = workspace.urls.map(async (urlObj) => {
+                try {
+                    const stats = await getUrlAnalytics(urlObj.url);
+                    console.log(`[WorkspaceList]   URL "${urlObj.url}" stats:`, stats);
+                    return stats || { totalVisits: 0, totalTime: 0, lastVisit: 0 };
+                } catch (error) {
+                    console.error(`[WorkspaceList]   Error getting stats for "${urlObj.url}":`, error);
+                    return { totalVisits: 0, totalTime: 0, lastVisit: 0 };
+                }
+            });
+
+            const allStats = await Promise.all(analyticsPromises);
+
+            // Aggregate metrics
+            const totalVisits = allStats.reduce((sum, s) => sum + (s.totalVisits || 0), 0);
+            const totalTime = allStats.reduce((sum, s) => sum + (s.totalTime || 0), 0);
+            const mostRecentVisit = Math.max(...allStats.map(s => s.lastVisit || 0), 0);
+
+            // Calculate composite score
+            // Formula: (visits * 10) + (time_in_hours * 50) + (recency_bonus)
+            const timeInHours = totalTime / (1000 * 60 * 60);
+            const recencyBonus = mostRecentVisit > 0
+                ? Math.max(0, 100 - (Date.now() - mostRecentVisit) / (1000 * 60 * 60 * 24)) // Decay over days
+                : 0;
+
+            const score = (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
+
+            console.log(`[WorkspaceList]   "${workspace.name}" totals: visits=${totalVisits}, time=${timeInHours.toFixed(2)}h, recency=${recencyBonus.toFixed(2)}, SCORE=${score.toFixed(2)}`);
+
+            return score;
+        } catch (error) {
+            console.error(`[WorkspaceList] Error calculating workspace score for "${workspace.name}":`, error);
+            return 0;
+        }
+    };
+
+
+    // Load activity scores on mount and when workspaces change
+    useEffect(() => {
+        const loadActivityScores = async () => {
+            console.log('[WorkspaceList] Calculating activity scores for', unpinned.length, 'workspaces');
+            const scores = new Map();
+
+            // Calculate scores for all unpinned workspaces
+            await Promise.all(
+                unpinned.map(async (workspace) => {
+                    const score = await calculateWorkspaceScore(workspace);
+                    scores.set(workspace.id, score);
+                    console.log(`[WorkspaceList] Workspace "${workspace.name}" score:`, score);
+                })
+            );
+
+            setWorkspaceScores(scores);
+            console.log('[WorkspaceList] All scores calculated:', scores);
+        };
+
+        if (unpinned.length > 0) {
+            loadActivityScores();
+        }
+    }, [savedWorkspaces, pinnedWorkspaces]); // Re-calculate when workspaces or pins change
+
+    // Sort unpinned workspaces by activity score
+    const sortedUnpinned = isSortingByActivity
+        ? [...unpinned].sort((a, b) => {
+            const scoreA = workspaceScores.get(a.id) || 0;
+            const scoreB = workspaceScores.get(b.id) || 0;
+            console.log(`[WorkspaceList] Comparing "${a.name}" (${scoreA}) vs "${b.name}" (${scoreB})`);
+            return scoreB - scoreA; // Descending order (highest activity first)
+        })
+        : unpinned;
+
+    console.log('[WorkspaceList] isSortingByActivity:', isSortingByActivity, 'sortedUnpinned:', sortedUnpinned.map(w => w.name));
+
+    // Save view mode to localStorage whenever it changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('cooldesk_view_mode', viewMode);
+        } catch (e) {
+            console.error('Failed to save view mode:', e);
+        }
+    }, [viewMode]);
 
     // Fetch bookmarks on mount
     useEffect(() => {
@@ -63,6 +172,24 @@ export function WorkspaceList({
         }
     };
 
+    const handleDeleteWorkspace = async (workspace) => {
+        // Confirm deletion
+        const confirmed = window.confirm(`Are you sure you want to delete the workspace "${workspace.name}"? This action cannot be undone.`);
+
+        if (!confirmed) return;
+
+        try {
+            await deleteWorkspace(workspace.id);
+            console.log(`[WorkspaceList] Deleted workspace: ${workspace.name}`);
+
+            // Reload the page to refresh the workspace list
+            window.location.reload();
+        } catch (error) {
+            console.error('[WorkspaceList] Failed to delete workspace:', error);
+            alert('Failed to delete workspace. Please try again.');
+        }
+    };
+
     return (
         <div style={{
             display: 'flex',
@@ -96,7 +223,25 @@ export function WorkspaceList({
                     </span>
                 </h2>
 
-                <div className="view-toggle">
+                <div className="view-toggle" style={{ display: 'flex', gap: 8 }}>
+                    <button
+                        className="view-toggle-btn"
+                        onClick={() => setIsShareModalOpen(true)}
+                        title="Share to Team"
+                        style={{ color: '#60a5fa' }}
+                    >
+                        <FontAwesomeIcon icon={faShare} />
+                    </button>
+                    <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
+                    <button
+                        className={`view-toggle-btn ${isSortingByActivity ? 'active' : ''}`}
+                        onClick={() => setIsSortingByActivity(!isSortingByActivity)}
+                        title={isSortingByActivity ? "Sort Alphabetically" : "Sort by Activity"}
+                        style={{ color: isSortingByActivity ? '#34d399' : undefined }}
+                    >
+                        <FontAwesomeIcon icon={faChartLine} />
+                    </button>
+                    <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
                     <button
                         className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
                         onClick={() => setViewMode('grid')}
@@ -164,6 +309,7 @@ export function WorkspaceList({
                                             compact={viewMode === 'list'}
                                             isPinned={true}
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
+                                            onDelete={handleDeleteWorkspace}
                                         />
                                     ))}
                                 </div>
@@ -195,7 +341,7 @@ export function WorkspaceList({
                                         gap: '8px'
                                     }}
                                 >
-                                    {unpinned.slice(0, workspaceLimit).map((workspace) => (
+                                    {sortedUnpinned.slice(0, workspaceLimit).map((workspace) => (
                                         <WorkspaceCard
                                             key={workspace.id}
                                             workspace={workspace}
@@ -205,6 +351,7 @@ export function WorkspaceList({
                                             compact={viewMode === 'list'}
                                             isPinned={false}
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
+                                            onDelete={handleDeleteWorkspace}
                                         />
                                     ))}
                                 </div>
@@ -564,6 +711,12 @@ export function WorkspaceList({
                     </div>
                 )}
             </div>
+            {/* Share Modal */}
+            <ShareToTeamModal
+                isOpen={isShareModalOpen}
+                onClose={() => setIsShareModalOpen(false)}
+                contextWorkspace={savedWorkspaces.find(w => w.id === activeWorkspaceId)}
+            />
         </div>
     );
 }

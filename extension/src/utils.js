@@ -60,30 +60,42 @@ export const getUrlParts = (url) => {
 }
 
 export const getFaviconUrl = (url, size = 32, favIconUrl = null) => {
-  // If tab.favIconUrl is provided (from Chrome tabs API), use it directly
-  // This works offline as Chrome caches these favicons locally
-  if (favIconUrl && favIconUrl.startsWith('http')) {
-    return favIconUrl;
-  }
-
   try {
+    // 1️⃣ Chrome cached favicon (best quality, works offline)
+    if (favIconUrl && favIconUrl.startsWith('http')) {
+      return favIconUrl;
+    }
+
     const u = new URL(url);
     // Only resolve favicons for http/https pages
-    if (!(u.protocol === 'http:' || u.protocol === 'https:')) return null;
+    if (!['http:', 'https:'].includes(u.protocol)) return null;
 
-    const host = u.hostname;
+    const hostname = u.hostname.replace('www.', '');
     const s = Math.max(16, Math.min(256, Number(size) || 32));
 
-    // Use a data URL for offline fallback to prevent flickering
-    // Construct a simple SVG as fallback
-    const fallbackSvg = `data:image/svg+xml,${encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24">
-        <rect width="24" height="24" rx="4" fill="%23${Math.abs(hashCode(host)).toString(16).substring(0, 6)}"/>
-        <text x="12" y="16" font-size="12" text-anchor="middle" fill="white" font-family="Arial">${host.charAt(0).toUpperCase()}</text>
-      </svg>`
-    )}`;
+    // 2️⃣ Custom high-quality favicons for known AI platforms
+    const customFavicons = {
+      'chat.openai.com': 'https://cdn.oaistatic.com/_next/static/media/apple-touch-icon.59f2e898.png',
+      'chatgpt.com': 'https://cdn.oaistatic.com/_next/static/media/apple-touch-icon.59f2e898.png',
+      'claude.ai': 'https://claude.ai/images/claude_app_icon.png',
+      'gemini.google.com': 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
+      'perplexity.ai': 'https://www.google.com/s2/favicons?domain=perplexity.ai&sz=128', // Use Google's service to avoid CORS
+      'x.com': 'https://abs.twimg.com/favicons/twitter.3.ico',
+      'twitter.com': 'https://abs.twimg.com/favicons/twitter.3.ico'
+    };
 
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=${s}`;
+    if (customFavicons[hostname]) {
+      return customFavicons[hostname];
+    }
+
+    // 3️⃣ Try multiple sources in order of quality
+    // We'll use Google's S2 service which aggregates from multiple sources
+    // and provides high-quality favicons with proper fallbacks
+    const googleS2 = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(u.hostname)}&sz=128`;
+
+    // For better quality, we prefer Google S2 with higher resolution
+    // It automatically tries: apple-touch-icon, favicon.ico, and other sources
+    return googleS2;
   } catch {
     return null;
   }

@@ -27,10 +27,14 @@
   gap: 20px;
   flex-shrink: 0;
   width: 100%;
-  padding: 16px 20px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 16px 32px;
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.5) 0%, rgba(30, 41, 59, 0.3) 100%);
   border-bottom: 1px solid rgba(139, 92, 246, 0.15);
   margin-bottom: 0;
+  position: relative;
+  z-index: 1002;
 }
 
 .header-left {
@@ -271,6 +275,9 @@
   flex-shrink: 0;
   position: relative;
   width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 32px;
   box-sizing: border-box;
 }
 
@@ -542,6 +549,29 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
+/* Compact/List View Styles */
+.cooldesk-workspace-card.compact {
+  height: auto;
+  max-height: none;
+  padding: 0;
+}
+
+.cooldesk-workspace-card.compact:hover {
+  transform: translateY(0);
+}
+
+/* Show pin and delete buttons on hover in list view */
+.cooldesk-workspace-card.compact:hover .workspace-pin-btn,
+.cooldesk-workspace-card.compact:hover .workspace-delete-btn {
+  opacity: 1 !important;
+}
+
+/* Show pin and delete buttons on hover in grid view */
+.cooldesk-workspace-card:hover .workspace-pin-btn,
+.cooldesk-workspace-card:hover .workspace-delete-btn {
+  opacity: 1 !important;
+}
+
 .workspace-card-header {
   display: flex;
   align-items: flex-start;
@@ -646,7 +676,7 @@
 .workspace-link-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   font-size: var(--font-md, 13px);
   color: #CBD5E1;
   padding: 6px 8px;
