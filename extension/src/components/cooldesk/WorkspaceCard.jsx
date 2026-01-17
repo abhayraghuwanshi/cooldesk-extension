@@ -107,7 +107,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
       if (domain === 'github.com' && pathParts.length > 0) {
         const owner = pathParts[0];
         // Filter out common non-user paths if needed, but usually 1st part is owner
-        if (!['pulls', 'issues', 'marketplace', 'explore', 'settings', 'topics'].includes(owner)) {
+        if (!['pulls', 'issues', 'marketplace', 'explore', 'settings', 'topics', 'notifications'].includes(owner)) {
           return {
             key: `github-${owner}`,
             label: owner,
@@ -127,7 +127,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
           domain: 'notion.so'
         };
       }
-      // Notion.so path based? (notion.so/workspace/...) - hard to rely on without ID check
 
       // Linear
       if (domain === 'linear.app' && pathParts.length > 0) {
@@ -139,24 +138,75 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
         };
       }
 
-      // Google Services
-      if (domain.endsWith('.google.com')) {
-        const service = domain.split('.')[0];
-        if (['docs', 'drive', 'sheets', 'slides', 'calendar', 'mail', 'meet'].includes(service)) {
-          return {
-            key: `google-${service}`,
-            label: service.charAt(0).toUpperCase() + service.slice(1),
-            subLabel: 'Google',
-            domain: domain
-          };
-        }
+      // Google Services (Catch-all for anything ending in google.com)
+      if (domain.endsWith('.google.com') || domain === 'google.com') {
+        // Extract service name from subdomain (e.g. "docs", "mail", "gemini")
+        // If it's just google.com, label as Google
+        const parts = domain.split('.');
+        let service = parts.length > 2 ? parts[parts.length - 3] : 'Google'; // maps.google.com -> maps
+
+        // Refine common service names
+        if (service === 'www') service = 'Google';
+
+        return {
+          key: `google-${service}`,
+          label: service.charAt(0).toUpperCase() + service.slice(1),
+          subLabel: 'Google',
+          domain: domain
+        };
+      }
+
+      // Dropbox (dropbox.com, paper.dropbox.com)
+      if (domain.endsWith('dropbox.com')) {
+        return {
+          key: 'dropbox',
+          label: 'Dropbox',
+          subLabel: 'Dropbox',
+          domain: 'dropbox.com'
+        };
+      }
+
+      // Telegram (t.me, telegram.org)
+      if (domain === 't.me' || domain.endsWith('telegram.org')) {
+        return {
+          key: 'telegram',
+          label: 'Telegram',
+          subLabel: 'Telegram',
+          domain: 'telegram.org'
+        };
+      }
+
+      // Amazon (amazon.com, aws.amazon.com)
+      if (domain.endsWith('amazon.com')) {
+        return {
+          key: 'amazon',
+          label: 'Amazon',
+          subLabel: 'Amazon',
+          domain: 'amazon.com'
+        };
+      }
+
+      // Microsoft (office.com, microsoft.com)
+      if (domain.endsWith('microsoft.com') || domain.endsWith('office.com') || domain.endsWith('sharepoint.com')) {
+        return {
+          key: 'microsoft',
+          label: 'Microsoft',
+          subLabel: 'Microsoft',
+          domain: 'microsoft.com'
+        };
       }
 
       // Default: Group by Domain
+      // Heuristic: If we can't identify the service, clear subLabel so it doesn't get grouped into "Other ..."
+      // Unless we want to group all unknown "example.com" links? 
+      // Current logic: entityGroups uses 'key' (domain). If >1, it groups.
+      // If 1 item, it falls back to 'subLabel' or 'domain' for misc bucket.
+      // So if we have 2 links to "random.com/a" and "random.com/b", key is "random.com", so they group.
+
       return {
         key: domain,
         label: formatDomainName(urlStr),
-        subLabel: null,
+        subLabel: null, // Let domain grouping handle it
         domain: domain
       };
 
