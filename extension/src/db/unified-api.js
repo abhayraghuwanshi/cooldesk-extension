@@ -91,7 +91,11 @@ export const listWorkspaces = withErrorHandling(async (options = {}) => {
         // Default to getting all and sorting by updatedAt
         const request = store.getAll()
         results = await new Promise((resolve, reject) => {
-            request.onsuccess = () => resolve(request.result || [])
+            request.onsuccess = () => {
+                const res = request.result || []
+                console.log(`[Unified API] listWorkspaces raw count: ${res.length}`)
+                resolve(res)
+            }
             request.onerror = () => reject(request.error)
         })
     }
@@ -160,8 +164,9 @@ export const saveWorkspace = withErrorHandling(async (workspaceData) => {
 
     const request = store.put(workspace)
 
+    // Use transaction events for more reliable persistence check
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => {
+        tx.oncomplete = () => {
             console.log(`[Unified API] Saved workspace: ${workspace.name} (${workspace.id})`)
 
             // Notify listeners
@@ -173,6 +178,8 @@ export const saveWorkspace = withErrorHandling(async (workspaceData) => {
 
             resolve(workspace)
         }
+
+        tx.onerror = () => reject(tx.error)
         request.onerror = () => reject(request.error)
     })
 }, {

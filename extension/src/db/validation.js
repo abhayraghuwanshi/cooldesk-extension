@@ -58,6 +58,10 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.ENUM]: ['ItemGrid', 'ProjectGrid']
         },
+        icon: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 100
+        },
         createdAt: {
             [ValidationRules.REQUIRED]: true,
             [ValidationRules.TYPE]: 'number',

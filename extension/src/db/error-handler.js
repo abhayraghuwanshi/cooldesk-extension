@@ -161,11 +161,11 @@ class ErrorTracker {
         try {
             const { db_errors = [] } = await chrome.storage.local.get(['db_errors'])
             const merged = [...db_errors, ...this.errors.slice(-50)] // Keep last 50
-            const unique = merged.filter((error, index, arr) => 
+            const unique = merged.filter((error, index, arr) =>
                 arr.findIndex(e => e.id === error.id) === index
             )
 
-            await chrome.storage.local.set({ 
+            await chrome.storage.local.set({
                 db_errors: unique.slice(-100) // Keep last 100 across restarts
             })
         } catch (error) {
@@ -279,9 +279,9 @@ export async function handleDatabaseError(error, options = {}) {
  */
 async function executeRetryStrategy(operation, error, options) {
     const { maxRetries, retryDelay, context } = options
-    
+
     console.log(`[DB Error Handler] Retrying operation '${operation}', attempts remaining: ${maxRetries}`)
-    
+
     if (maxRetries <= 0) {
         return { success: false, error, retriesExhausted: true }
     }
@@ -296,8 +296,8 @@ async function executeRetryStrategy(operation, error, options) {
         return { success: false, error, shouldRetry: true, remainingRetries: maxRetries - 1 }
     } catch (retryError) {
         return await executeRetryStrategy(
-            operation, 
-            retryError, 
+            operation,
+            retryError,
             { ...options, maxRetries: maxRetries - 1 }
         )
     }
@@ -314,10 +314,10 @@ async function attemptRecovery(error, context) {
             // Attempt to free up space
             const freed = await cleanupOldData()
             if (freed > 0) {
-                return { 
-                    success: true, 
-                    recovered: true, 
-                    message: `Freed up space by cleaning ${freed} old records` 
+                return {
+                    success: true,
+                    recovered: true,
+                    message: `Freed up space by cleaning ${freed} old records`
                 }
             }
         }
@@ -325,10 +325,10 @@ async function attemptRecovery(error, context) {
         if (error instanceof ConnectionError) {
             // Attempt to reconnect
             await new Promise(resolve => setTimeout(resolve, 2000))
-            return { 
-                success: true, 
-                recovered: true, 
-                message: 'Attempted database reconnection' 
+            return {
+                success: true,
+                recovered: true,
+                message: 'Attempted database reconnection'
             }
         }
 
@@ -344,7 +344,7 @@ async function attemptRecovery(error, context) {
  */
 async function notifyUser(error, customMessage = null) {
     const message = customMessage || getUserFriendlyMessage(error)
-    
+
     try {
         // Try to show notification via Chrome API
         if (chrome?.notifications?.create) {
@@ -370,19 +370,19 @@ function getUserFriendlyMessage(error) {
     if (error instanceof QuotaError) {
         return 'Database storage is full. Please consider clearing old data or increasing browser storage.'
     }
-    
+
     if (error instanceof ConnectionError) {
         return 'Database connection issue. Please refresh the page and try again.'
     }
-    
+
     if (error instanceof ValidationError) {
         return 'Invalid data detected. Please check your input and try again.'
     }
-    
+
     if (error instanceof MigrationError) {
         return 'Database update failed. Please restart the extension.'
     }
-    
+
     return 'A database error occurred. Please try again or contact support if the problem persists.'
 }
 
@@ -405,9 +405,17 @@ async function cleanupOldData() {
  * Wrapper for database operations with automatic error handling
  */
 export function withErrorHandling(operation, options = {}) {
-    return async function(...args) {
+    return async function (...args) {
         try {
             const result = await operation.apply(this, args)
+            // DEEP DEBUG for listWorkspaces
+            if (operation.name === 'listWorkspaces' || operation.name === 'operation') {
+                if (Array.isArray(result)) {
+                    console.log(`[DB Wrapper] ${operation.name || 'op'} returned ${result.length} items`);
+                } else {
+                    console.log(`[DB Wrapper] ${operation.name || 'op'} returned non-array:`, result);
+                }
+            }
             return { success: true, data: result }
         } catch (error) {
             return await handleDatabaseError(error, {
@@ -422,10 +430,10 @@ export function withErrorHandling(operation, options = {}) {
  * Decorator for database methods
  */
 export function handleErrors(options = {}) {
-    return function(target, propertyName, descriptor) {
+    return function (target, propertyName, descriptor) {
         const originalMethod = descriptor.value
-        
-        descriptor.value = async function(...args) {
+
+        descriptor.value = async function (...args) {
             try {
                 const result = await originalMethod.apply(this, args)
                 return { success: true, data: result }
@@ -437,7 +445,7 @@ export function handleErrors(options = {}) {
                 })
             }
         }
-        
+
         return descriptor
     }
 }

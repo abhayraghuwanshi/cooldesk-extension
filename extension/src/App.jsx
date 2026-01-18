@@ -40,7 +40,7 @@ library.add(
 
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 import categoryManager from './data/categories';
-import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
+import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspace, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
 import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
@@ -772,6 +772,117 @@ export default function App() {
           alert(`You've been invited to join "${joinTeamName}".\n\nPlease go to Settings > Teams > Join / Create and enter the Team Name and Secret Phrase provided to you.`);
         }, 500);
       }
+
+      // Handle Add Workspace (from Store/URL)
+      const action = params.get('action');
+      const dataParam = params.get('data');
+      if (action === 'add_workspace' && dataParam) {
+        setTimeout(async () => {
+          try {
+            // Decode Base64
+            const jsonString = atob(dataParam);
+            const workspaceData = JSON.parse(jsonString);
+
+            // Validate
+            if (!workspaceData.name || !Array.isArray(workspaceData.urls)) {
+              throw new Error('Invalid workspace data');
+            }
+
+            // Confirm with user
+            if (!confirm(`Do you want to add the workspace "${workspaceData.name}"?`)) {
+              return;
+            }
+
+            // Create Workspace
+            const newWorkspaceId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const newWorkspace = {
+              id: newWorkspaceId,
+              name: workspaceData.name,
+              description: workspaceData.description || `Imported from store`,
+              createdAt: Date.now(),
+              gridType: 'ItemGrid',
+              urls: workspaceData.urls || [], // Ensure URLs are included in the workspace object
+              icon: workspaceData.icon || 'globe' // Default icon
+            };
+
+            await saveWorkspace(newWorkspace);
+
+            // Add URLs
+            let addedCount = 0;
+            for (const item of workspaceData.urls) {
+              if (!item.url) continue;
+              try {
+                await addUrlToWorkspace(item.url, newWorkspaceId, {
+                  title: item.title || new URL(item.url).hostname,
+                  favicon: getFaviconUrl(item.url, 32),
+                  addedAt: Date.now()
+                });
+                addedCount++;
+              } catch (err) {
+                console.warn(`Failed to add URL ${item.url}:`, err);
+              }
+            }
+
+            // Clean URL first
+            window.history.replaceState({}, document.title, window.location.pathname);
+
+            // Refresh the workspace list manually
+            console.log('[App] Refreshing workspace list...');
+
+            // Short delay to ensure IDB consistency
+            await new Promise(r => setTimeout(r, 100));
+
+            // Force a large limit to bypass potential defaults
+            const refreshedResult = await listWorkspaces({ limit: 1000 });
+            console.log('[App] Refreshed result:', refreshedResult);
+
+            if (refreshedResult?.success) {
+              console.log('[App] Updating savedWorkspaces state with:', refreshedResult.data);
+              setSavedWorkspaces(refreshedResult.data);
+              setActiveTab('saved');
+
+              // Verification check
+              const found = refreshedResult.data.find(w => w.id === newWorkspaceId);
+              if (found) {
+                console.log('[App] Verified new workspace is in the list:', found);
+              } else {
+                console.error('[App] CRITICAL: New workspace NOT found in refreshed list!');
+                console.log('[App] New Workspace ID:', newWorkspaceId);
+                console.log('[App] List IDs:', refreshedResult.data.map(w => w.id));
+
+                // DEEP DEBUG: Check if it exists at all
+                try {
+                  const directCheck = await getWorkspace(newWorkspaceId);
+                  console.log('[App] Direct getWorkspace check:', directCheck);
+                  if (directCheck) {
+                    console.error('[App] It exists in DB but not in list! Sorting/Pagination issue?');
+                  } else {
+                    console.error('[App] It does NOT exist in DB! Write failed silently/rolled back.');
+                  }
+                } catch (e) {
+                  console.error('[App] Direct check failed:', e);
+                }
+              }
+            } else {
+              console.error('[App] Failed to refresh workspace list');
+            }
+
+            // Also reload dashboard data if needed
+            if (populate) {
+              console.log('[App] Repopulating dashboard data...');
+              populate();
+            }
+
+            // Show alert LAST so we don't block anything
+            alert(`Successfully added workspace "${workspaceData.name}" with ${addedCount} items.`);
+
+          } catch (err) {
+            console.error('Failed to add workspace from URL:', err);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            alert('Failed to add workspace. Invalid link or data.');
+          }
+        }, 500);
+      }
     } catch { }
   }, [])
 
@@ -1148,8 +1259,39 @@ export default function App() {
             });
           }
         }}
-        onCreateWorkspace={() => {
-          setShowCreateWorkspace(true);
+        onCreateWorkspace={async (workspaceData) => {
+          if (workspaceData && workspaceData.name) {
+            const newId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const newWorkspace = {
+              id: newId,
+              name: workspaceData.name,
+              icon: workspaceData.icon || 'globe',
+              description: '',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              urls: workspaceData.urls || [],
+              gridType: 'ItemGrid'
+            };
+
+            try {
+              await saveWorkspace(newWorkspace);
+              console.log('[App] Created workspace via GlobalAddButton:', newWorkspace);
+
+              // Refresh list
+              const refreshedResult = await listWorkspaces({ limit: 1000 });
+              if (refreshedResult?.success) {
+                setSavedWorkspaces(refreshedResult.data);
+                // Optionally switch to it
+                // setWorkspace(newWorkspace.name);
+              }
+            } catch (err) {
+              console.error('Failed to create workspace:', err);
+              alert('Failed to create workspace');
+            }
+          } else {
+            // Legacy or fallback behavior
+            setShowCreateWorkspace(true);
+          }
         }}
         onAddUrlToWorkspace={async (workspaceId, urlData) => {
           try {
