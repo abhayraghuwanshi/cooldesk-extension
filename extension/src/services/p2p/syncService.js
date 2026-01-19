@@ -15,6 +15,7 @@ class P2PSyncService {
         this.peerCounts = new Map(); // teamId -> number
         this.peerDetails = new Map(); // teamId -> Array of peer objects
         this.listeners = new Set();
+        this.pausedTeams = new Map(); // teamId -> { encryptionKey } for paused teams
     }
 
     subscribe(listener) {
@@ -154,6 +155,9 @@ class P2PSyncService {
                 signaling: [signalingUrl],
                 password: encryptionKey, // Enforces E2EE
                 awareness: awareness,
+                // Reduce signaling frequency
+                maxConns: 20,
+                filterBcConns: true, // Filter broadcast connections to reduce noise
                 // Add TURN servers for NAT traversal
                 peerOpts: {
                     config: {
@@ -222,44 +226,31 @@ class P2PSyncService {
 
             // Listen to awareness changes for peer details
             const processedMembers = new Set(); // Track members we've already added
+            let notifyTimeout = null;
 
-            awareness.on('change', ({ added, updated, removed }) => {
-                console.log(`[P2P Sync] Awareness change for team ${teamId}:`, {
-                    added: added.length,
-                    updated: updated.length,
-                    removed: removed.length
-                });
+            // Debounced notify to prevent excessive updates
+            const debouncedNotify = () => {
+                if (notifyTimeout) clearTimeout(notifyTimeout);
+                notifyTimeout = setTimeout(() => this.notify(), 500);
+            };
+
+            awareness.on('change', ({ added, removed }) => {
+                // Only process added peers (not updates - they cause too many events)
+                if (added.length === 0 && removed.length === 0) return;
 
                 this.peerDetails.set(teamId, this.getPeers(teamId));
 
-                // Only process added or updated peers
-                const peersToProcess = [...added, ...updated];
-
-                if (peersToProcess.length > 0) {
-                    console.log(`[P2P Sync] Processing ${peersToProcess.length} peer(s) for team ${teamId}`);
-                }
-
-                peersToProcess.forEach(clientId => {
+                added.forEach(clientId => {
                     if (clientId === awareness.clientID) return; // Skip self
 
                     const state = awareness.getStates().get(clientId);
-                    if (!state || !state.user) {
-                        console.warn(`[P2P Sync] Peer ${clientId} has no user state`);
-                        return;
-                    }
-
-                    console.log(`[P2P Sync] Processing peer ${clientId}:`, state.user);
+                    if (!state || !state.user) return;
 
                     const memberKey = `${teamId}-${clientId.toString()}`;
 
                     // Only add if we haven't processed this member yet
                     if (!processedMembers.has(memberKey)) {
-                        // Check if an admin already exists
                         const existingAdmin = p2pStorage.getTeamAdmin(teamId);
-
-                        // Only allow admin status if:
-                        // 1. They claim to be admin AND
-                        // 2. No admin exists yet
                         const shouldBeAdmin = state.user.isAdmin && !existingAdmin;
 
                         p2pStorage.addMemberToTeam(teamId, {
@@ -277,7 +268,7 @@ class P2PSyncService {
                     console.log(`[P2P Sync] ${removed.length} peer(s) left team ${teamId}`);
                 }
 
-                this.notify();
+                debouncedNotify();
             });
 
             // Set local user info
@@ -289,8 +280,7 @@ class P2PSyncService {
             awareness.setLocalStateField('user', {
                 name: username,
                 color: localUserColor,
-                isAdmin: isAdmin,
-                lastSeen: Date.now()
+                isAdmin: isAdmin
             });
 
             // Add self to members list
@@ -325,7 +315,7 @@ class P2PSyncService {
 
     /**
      * Stop syncing a team
-     * @param {string} teamId 
+     * @param {string} teamId
      */
     disconnectTeam(teamId) {
         const provider = this.providers.get(teamId);
@@ -333,14 +323,65 @@ class P2PSyncService {
             provider.destroy();
             this.providers.delete(teamId);
             this.peerCounts.delete(teamId);
+            this.pausedTeams.delete(teamId);
             this.notify();
             console.log(`[P2P Sync] Disconnected team ${teamId}`);
         }
     }
 
     /**
+     * Pause sync for a team (stops WebSocket but keeps data)
+     * @param {string} teamId
+     */
+    pauseSync(teamId) {
+        const provider = this.providers.get(teamId);
+        if (provider) {
+            // Store encryption key for reconnection
+            const team = teamManager.getTeam(teamId);
+            this.pausedTeams.set(teamId, { encryptionKey: team?.encryptionKey });
+
+            // Disconnect the WebRTC provider
+            provider.disconnect();
+            console.log(`[P2P Sync] Paused sync for team ${teamId}`);
+            this.notify();
+        }
+    }
+
+    /**
+     * Resume sync for a paused team
+     * @param {string} teamId
+     */
+    resumeSync(teamId) {
+        const provider = this.providers.get(teamId);
+        if (provider && this.pausedTeams.has(teamId)) {
+            provider.connect();
+            this.pausedTeams.delete(teamId);
+            console.log(`[P2P Sync] Resumed sync for team ${teamId}`);
+            this.notify();
+        }
+    }
+
+    /**
+     * Check if sync is paused for a team
+     * @param {string} teamId
+     * @returns {boolean}
+     */
+    isSyncPaused(teamId) {
+        return this.pausedTeams.has(teamId);
+    }
+
+    /**
+     * Check if team is connected (has active provider)
+     * @param {string} teamId
+     * @returns {boolean}
+     */
+    isConnected(teamId) {
+        return this.providers.has(teamId) && !this.pausedTeams.has(teamId);
+    }
+
+    /**
      * Get awareness instance for presence (avatars)
-     * @param {string} teamId 
+     * @param {string} teamId
      */
     getAwareness(teamId) {
         return this.providers.get(teamId)?.awareness;

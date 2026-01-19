@@ -1,7 +1,8 @@
-import { faBan, faBullseye, faCheck, faExclamationTriangle, faFire, faPen } from '@fortawesome/free-solid-svg-icons';
+import { faBan, faBullseye, faCheck, faExclamationTriangle, faFire, faPause, faPen, faPlay, faWifi } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
+import { p2pSyncService } from '../../services/p2p/syncService';
 
 export default function TeamContextPanel({ teamId }) {
     console.log('[TeamContext] Component rendered with teamId:', teamId);
@@ -13,6 +14,7 @@ export default function TeamContextPanel({ teamId }) {
         deploymentFreeze: false
     });
     const [isEditing, setIsEditing] = useState(false);
+    const [isSyncPaused, setIsSyncPaused] = useState(false);
 
     // Refs for holding Y.Map and observer
     const mapRef = useRef(null);
@@ -78,6 +80,28 @@ export default function TeamContextPanel({ teamId }) {
             mapRef.current.set('deploymentFreeze', newVal);
             // Optimistic update handled by observer, but good UX to feel instant
             setContext(prev => ({ ...prev, deploymentFreeze: newVal }));
+        }
+    };
+
+    // Check sync status on mount and subscribe to changes
+    useEffect(() => {
+        if (!teamId) return;
+        setIsSyncPaused(p2pSyncService.isSyncPaused(teamId));
+
+        const unsubscribe = p2pSyncService.subscribe(() => {
+            setIsSyncPaused(p2pSyncService.isSyncPaused(teamId));
+        });
+
+        return unsubscribe;
+    }, [teamId]);
+
+    const toggleSync = () => {
+        if (!teamId) return;
+
+        if (isSyncPaused) {
+            p2pSyncService.resumeSync(teamId);
+        } else {
+            p2pSyncService.pauseSync(teamId);
         }
     };
 
@@ -148,28 +172,53 @@ export default function TeamContextPanel({ teamId }) {
                     </div>
                 )}
 
-                <button
-                    onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-                    style={{
-                        background: isEditing
-                            ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                            : 'rgba(255, 255, 255, 0.06)',
-                        border: isEditing ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
-                        color: isEditing ? '#fff' : 'rgba(255,255,255,0.7)',
-                        cursor: 'pointer',
-                        fontSize: 'var(--font-sm)', fontWeight: 600,
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '6px 14px',
-                        borderRadius: 8,
-                        transition: 'all 0.2s',
-                        boxShadow: isEditing ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none'
-                    }}
-                    onMouseEnter={e => !isEditing && (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-                    onMouseLeave={e => !isEditing && (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                >
-                    <FontAwesomeIcon icon={isEditing ? faCheck : faPen} />
-                    {isEditing ? 'Save Changes' : 'Edit Context'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* Sync Toggle Button */}
+                    <button
+                        onClick={toggleSync}
+                        title={isSyncPaused ? 'Resume P2P Sync' : 'Pause P2P Sync'}
+                        style={{
+                            background: isSyncPaused
+                                ? 'rgba(239, 68, 68, 0.15)'
+                                : 'rgba(16, 185, 129, 0.15)',
+                            border: `1px solid ${isSyncPaused ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                            color: isSyncPaused ? '#fca5a5' : '#6ee7b7',
+                            cursor: 'pointer',
+                            fontSize: 'var(--font-sm)', fontWeight: 600,
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        <FontAwesomeIcon icon={isSyncPaused ? faPlay : faPause} style={{ fontSize: 'var(--font-xs)' }} />
+                        <FontAwesomeIcon icon={faWifi} />
+                        {isSyncPaused ? 'Resume' : 'Pause'}
+                    </button>
+
+                    <button
+                        onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                        style={{
+                            background: isEditing
+                                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                                : 'rgba(255, 255, 255, 0.06)',
+                            border: isEditing ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: isEditing ? '#fff' : 'rgba(255,255,255,0.7)',
+                            cursor: 'pointer',
+                            fontSize: 'var(--font-sm)', fontWeight: 600,
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '6px 14px',
+                            borderRadius: 8,
+                            transition: 'all 0.2s',
+                            boxShadow: isEditing ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none'
+                        }}
+                        onMouseEnter={e => !isEditing && (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                        onMouseLeave={e => !isEditing && (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                    >
+                        <FontAwesomeIcon icon={isEditing ? faCheck : faPen} />
+                        {isEditing ? 'Save Changes' : 'Edit Context'}
+                    </button>
+                </div>
             </div>
 
             {/* Content Grid */}

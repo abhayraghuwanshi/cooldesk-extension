@@ -1,4 +1,4 @@
-import { faLink, faPlus, faShare, faUserPlus, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faLink, faPencilAlt, faPlus, faShare, faTimes, faUserPlus, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
@@ -19,7 +19,10 @@ export default function TeamView({ team: propTeam }) {
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [isCreateTeamModalOpen, setIsCreateTeamModalOpen] = useState(false);
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [renameValue, setRenameValue] = useState('');
     const yArrayRef = useRef(null);
+    const renameInputRef = useRef(null);
 
     // Initial load of teams & active team
     useEffect(() => {
@@ -129,6 +132,32 @@ export default function TeamView({ team: propTeam }) {
 
     const activeTeam = teams.find(t => t.id === activeTeamId);
 
+    // Start renaming
+    const handleStartRename = () => {
+        if (activeTeam?.createdByMe) {
+            setRenameValue(activeTeam.name);
+            setIsRenaming(true);
+            setTimeout(() => renameInputRef.current?.focus(), 50);
+        }
+    };
+
+    // Save renamed team
+    const handleSaveRename = async () => {
+        if (!renameValue.trim() || !activeTeam) return;
+        try {
+            await teamManager.renameTeam(activeTeam.id, renameValue.trim());
+            setIsRenaming(false);
+        } catch (e) {
+            console.error('Failed to rename team:', e);
+        }
+    };
+
+    // Cancel renaming
+    const handleCancelRename = () => {
+        setIsRenaming(false);
+        setRenameValue('');
+    };
+
     // Helper to get member count text (assuming teamManager has this info)
     const getMemberCountText = (teamId) => {
         const team = teamManager.getTeams().find(t => t.id === teamId);
@@ -232,7 +261,76 @@ export default function TeamView({ team: propTeam }) {
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                         }}>
                             <div>
-                                <h1 style={{ margin: 0, fontSize: 'var(--font-4xl)', fontWeight: 700 }}>{activeTeam.name}</h1>
+                                {isRenaming ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <input
+                                            ref={renameInputRef}
+                                            type="text"
+                                            value={renameValue}
+                                            onChange={(e) => setRenameValue(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') handleSaveRename();
+                                                if (e.key === 'Escape') handleCancelRename();
+                                            }}
+                                            style={{
+                                                fontSize: 'var(--font-4xl)', fontWeight: 700,
+                                                background: 'rgba(255,255,255,0.1)',
+                                                border: '1px solid rgba(59, 130, 246, 0.5)',
+                                                borderRadius: 8, padding: '4px 12px',
+                                                color: '#fff', outline: 'none',
+                                                minWidth: 200
+                                            }}
+                                        />
+                                        <button
+                                            onClick={handleSaveRename}
+                                            style={{
+                                                width: 32, height: 32, borderRadius: 8, border: 'none',
+                                                background: 'rgba(34, 197, 94, 0.2)', color: '#4ade80',
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}
+                                            title="Save"
+                                        >
+                                            <FontAwesomeIcon icon={faCheck} />
+                                        </button>
+                                        <button
+                                            onClick={handleCancelRename}
+                                            style={{
+                                                width: 32, height: 32, borderRadius: 8, border: 'none',
+                                                background: 'rgba(239, 68, 68, 0.2)', color: '#f87171',
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}
+                                            title="Cancel"
+                                        >
+                                            <FontAwesomeIcon icon={faTimes} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                        <h1 style={{ margin: 0, fontSize: 'var(--font-4xl)', fontWeight: 700 }}>{activeTeam.name}</h1>
+                                        {activeTeam.createdByMe && (
+                                            <button
+                                                onClick={handleStartRename}
+                                                style={{
+                                                    width: 28, height: 28, borderRadius: 6, border: 'none',
+                                                    background: 'rgba(255,255,255,0.1)', color: '#9ca3af',
+                                                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                title="Rename team"
+                                                onMouseEnter={e => {
+                                                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                                                    e.currentTarget.style.color = '#60a5fa';
+                                                }}
+                                                onMouseLeave={e => {
+                                                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                                                    e.currentTarget.style.color = '#9ca3af';
+                                                }}
+                                            >
+                                                <FontAwesomeIcon icon={faPencilAlt} size="sm" />
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                                 <div style={{ fontSize: 'var(--font-sm)', opacity: 0.5, marginTop: 4 }}>
                                     {getMemberCountText(activeTeam.id)} • {peerCounts.get(activeTeam.id) || 0} active peers connected
                                 </div>

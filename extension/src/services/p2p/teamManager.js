@@ -81,6 +81,32 @@ class TeamManager {
         this._notifyListeners();
     }
 
+    /**
+     * Rename a team (admin only)
+     * @param {string} teamId - The team ID to rename
+     * @param {string} newName - The new name for the team
+     * @returns {Promise<Object>} The updated team object
+     */
+    async renameTeam(teamId, newName) {
+        if (!newName || !newName.trim()) {
+            throw new Error('Team name is required');
+        }
+
+        const team = this.teams.find(t => t.id === teamId);
+        if (!team) {
+            throw new Error('Team not found');
+        }
+
+        if (!team.createdByMe) {
+            throw new Error('Only team admins can rename the team');
+        }
+
+        team.name = newName.trim();
+        await this._saveTeams();
+        this._notifyListeners();
+        return team;
+    }
+
     async setActiveTeam(teamId) {
         this.activeTeamId = teamId;
         await chrome.storage.local.set({ [ACTIVE_TEAM_KEY]: teamId });
