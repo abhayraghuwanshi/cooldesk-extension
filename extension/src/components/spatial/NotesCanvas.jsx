@@ -24,6 +24,7 @@ import {
   saveUrlNote
 } from '../../db/index.js';
 import { defaultFontFamily } from '../../utils/fontUtils.js';
+import { getFaviconUrl } from '../../utils';
 
 export function NotesCanvas({ workspaceId }) {
   const [notes, setNotes] = useState([]);
@@ -107,6 +108,54 @@ export function NotesCanvas({ workspaceId }) {
     : notes
       .filter(note => activeFolder === 'All Notes' || note.folder === activeFolder)
       .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+
+  // Group notes by time period (Apple Notes style)
+  const groupNotesByDate = (notesToGroup) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const last7Days = new Date(today);
+    last7Days.setDate(last7Days.getDate() - 7);
+    const last30Days = new Date(today);
+    last30Days.setDate(last30Days.getDate() - 30);
+    const thisYear = new Date(now.getFullYear(), 0, 1);
+
+    const groups = {
+      'Pinned': [],
+      'Today': [],
+      'Yesterday': [],
+      'Previous 7 Days': [],
+      'Previous 30 Days': [],
+      'This Year': [],
+      'Older': []
+    };
+
+    notesToGroup.forEach(note => {
+      const noteDate = new Date(note.updatedAt || note.createdAt);
+
+      if (note.pinned) {
+        groups['Pinned'].push(note);
+      } else if (noteDate >= today) {
+        groups['Today'].push(note);
+      } else if (noteDate >= yesterday) {
+        groups['Yesterday'].push(note);
+      } else if (noteDate >= last7Days) {
+        groups['Previous 7 Days'].push(note);
+      } else if (noteDate >= last30Days) {
+        groups['Previous 30 Days'].push(note);
+      } else if (noteDate >= thisYear) {
+        groups['This Year'].push(note);
+      } else {
+        groups['Older'].push(note);
+      }
+    });
+
+    // Return only non-empty groups
+    return Object.entries(groups).filter(([_, notes]) => notes.length > 0);
+  };
+
+  const groupedNotes = groupNotesByDate(filteredNotes);
 
   // Auto-save note (workspace or URL note)
   const saveNote = useCallback(async (content, noteId = null) => {
@@ -683,7 +732,7 @@ export function NotesCanvas({ workspaceId }) {
               gap: '8px',
               minHeight: 0
             }}>
-              {filteredNotes.length === 0 ? (
+              {groupedNotes.length === 0 ? (
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -698,98 +747,185 @@ export function NotesCanvas({ workspaceId }) {
                   <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>Click + to create one</p>
                 </div>
               ) : (
-                filteredNotes.map((note) => (
-                  <div
-                    key={note.id}
-                    onClick={() => selectNote(note)}
-                    className={`notes-list-item ${activeNote?.id === note.id ? 'active' : ''}`}
-                    style={{
-                      padding: '12px',
-                      borderRadius: '10px',
-                      background: activeNote?.id === note.id ? 'var(--accent-blue-soft)' : 'var(--surface-2)',
-                      border: activeNote?.id === note.id ? '1px solid var(--accent-blue-border)' : '1px solid var(--border-secondary)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (activeNote?.id !== note.id) {
-                        e.currentTarget.style.background = 'var(--interactive-hover)';
-                        e.currentTarget.style.transform = 'translateX(2px)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (activeNote?.id !== note.id) {
-                        e.currentTarget.style.background = 'var(--surface-2)';
-                        e.currentTarget.style.transform = 'translateX(0)';
-                      }
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: '13px',
-                        color: 'var(--text)',
-                        lineHeight: '1.4',
-                        overflow: 'hidden',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 3,
-                        WebkitBoxOrient: 'vertical'
-                      }}
-                      dangerouslySetInnerHTML={{
-                        __html: note.text ?
-                          (note.text.length > 200 ? note.text.substring(0, 200) + '...' : note.text)
-                          : '<i style="color: var(--text-muted);">Empty note</i>'
-                      }}
-                    />
+                groupedNotes.map(([groupName, groupNotes]) => (
+                  <div key={groupName} style={{ marginBottom: '8px' }}>
+                    {/* Group Header */}
                     <div style={{
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: groupName === 'Pinned' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      padding: '8px 4px 6px',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '11px',
-                      color: 'var(--text-secondary)'
+                      gap: '6px'
                     }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <FontAwesomeIcon icon={faClock} />
-                        {new Date(note.updatedAt || note.createdAt).toLocaleDateString()}
+                      {groupName === 'Pinned' && <span>📌</span>}
+                      {groupName}
+                      <span style={{
+                        fontSize: '10px',
+                        padding: '1px 6px',
+                        borderRadius: '8px',
+                        background: 'var(--surface-3)',
+                        color: 'var(--text-muted)',
+                        fontWeight: 500
+                      }}>
+                        {groupNotes.length}
                       </span>
-                      {note.folder && (
-                        <span style={{
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          background: 'var(--surface-3)',
-                          fontSize: '10px'
-                        }}>
-                          {note.folder}
-                        </span>
-                      )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm('Delete this note?')) handleDeleteNote(note.id);
-                        }}
+                    </div>
+                    {/* Notes in this group */}
+                    {groupNotes.map((note) => (
+                      <div
+                        key={note.id}
+                        onClick={() => selectNote(note)}
+                        className={`notes-list-item ${activeNote?.id === note.id ? 'active' : ''}`}
                         style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--text-muted)',
+                          padding: '10px 12px',
+                          borderRadius: '10px',
+                          marginBottom: '4px',
+                          background: activeNote?.id === note.id ? 'var(--accent-blue-soft)' : 'var(--surface-2)',
+                          border: activeNote?.id === note.id ? '1px solid var(--accent-blue-border)' : '1px solid var(--border-secondary)',
                           cursor: 'pointer',
-                          padding: '4px',
-                          borderRadius: '4px',
-                          transition: 'all 0.2s ease'
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '4px',
+                          position: 'relative'
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.color = 'var(--accent-error)';
-                          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                          if (activeNote?.id !== note.id) {
+                            e.currentTarget.style.background = 'var(--interactive-hover)';
+                          }
+                          // Show hover elements
+                          const hoverEl = e.currentTarget.querySelector('.note-hover-meta');
+                          if (hoverEl) hoverEl.style.opacity = '1';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.color = 'var(--text-muted)';
-                          e.currentTarget.style.background = 'transparent';
+                          if (activeNote?.id !== note.id) {
+                            e.currentTarget.style.background = 'var(--surface-2)';
+                          }
+                          // Hide hover elements
+                          const hoverEl = e.currentTarget.querySelector('.note-hover-meta');
+                          if (hoverEl) hoverEl.style.opacity = '0';
                         }}
                       >
-                        <FontAwesomeIcon icon={faTrash} />
-                      </button>
-                    </div>
+                        {/* Note Title with Favicon for URL notes */}
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: 'var(--text)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          {note.url && (
+                            <img
+                              src={getFaviconUrl(note.url, 16)}
+                              alt=""
+                              style={{
+                                width: '16px',
+                                height: '16px',
+                                borderRadius: '3px',
+                                flexShrink: 0
+                              }}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                          )}
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {note.title || 'Untitled Note'}
+                          </span>
+                        </div>
+                        {/* Note Preview */}
+                        <div
+                          style={{
+                            fontSize: '12px',
+                            color: 'var(--text-secondary)',
+                            lineHeight: '1.3',
+                            overflow: 'hidden',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical'
+                          }}
+                          dangerouslySetInnerHTML={{
+                            __html: note.text ?
+                              (note.text.replace(/<[^>]*>/g, '').substring(0, 100) + (note.text.length > 100 ? '...' : ''))
+                              : '<i>Empty note</i>'
+                          }}
+                        />
+                        {/* Folder tag (always visible) */}
+                        {note.folder && (
+                          <span style={{
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: 'var(--surface-3)',
+                            fontSize: '9px',
+                            color: 'var(--text-muted)',
+                            alignSelf: 'flex-start',
+                            marginTop: '2px'
+                          }}>
+                            {note.folder}
+                          </span>
+                        )}
+                        {/* Hover Meta - Date and Delete (only visible on hover) */}
+                        <div
+                          className="note-hover-meta"
+                          style={{
+                            position: 'absolute',
+                            bottom: '8px',
+                            right: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            opacity: 0,
+                            transition: 'opacity 0.2s ease'
+                          }}
+                        >
+                          <span style={{
+                            fontSize: '10px',
+                            color: 'var(--text-muted)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <FontAwesomeIcon icon={faClock} style={{ fontSize: '9px' }} />
+                            {new Date(note.updatedAt || note.createdAt).toLocaleDateString()}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm('Delete this note?')) handleDeleteNote(note.id);
+                            }}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              border: 'none',
+                              color: '#f87171',
+                              cursor: 'pointer',
+                              padding: '4px 6px',
+                              borderRadius: '4px',
+                              transition: 'all 0.2s ease',
+                              fontSize: '10px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faTrash} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ))
               )}
