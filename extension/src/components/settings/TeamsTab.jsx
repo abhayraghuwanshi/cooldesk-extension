@@ -1,6 +1,7 @@
-import { faChevronDown, faChevronRight, faCrown, faPlus, faTrash, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faChevronRight, faCrown, faPlus, faTrash, faUserMinus, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
+import { p2pStorage } from '../../services/p2p/storageService';
 import { p2pSyncService } from '../../services/p2p/syncService';
 import { teamManager } from '../../services/p2p/teamManager';
 import { userProfileService } from '../../services/p2p/userProfileService';
@@ -112,10 +113,6 @@ export default function TeamsTab() {
         }
     };
 
-    const handleActivate = async (teamId) => {
-        await teamManager.setActiveTeam(teamId);
-    };
-
     // Helper to generate a random secret
     const generateSecret = () => {
         const words = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar', 'papa', 'quebec', 'romeo', 'sierra', 'tango', 'uniform', 'victor', 'whiskey', 'xray', 'yankee', 'zulu', 'nebula', 'cosmic', 'orbit', 'solar', 'lunar', 'star', 'comet', 'planet'];
@@ -143,6 +140,22 @@ export default function TeamsTab() {
             setIsEditingUsername(false);
         } catch (err) {
             setUsernameError(err.message);
+        }
+    };
+
+    const handleRemoveMember = (teamId, memberName) => {
+        const team = teams.find(t => t.id === teamId);
+        if (!team?.createdByMe) {
+            alert('Only team admins can remove members.');
+            return;
+        }
+
+        if (confirm(`Remove "${memberName}" from the team?\n\nThey can rejoin if they have the team secret.`)) {
+            const success = p2pStorage.removeMemberFromTeam(teamId, memberName);
+            if (success) {
+                // Force re-render by triggering a state update
+                setTeams([...teams]);
+            }
         }
     };
 
@@ -338,18 +351,6 @@ export default function TeamsTab() {
                                 </div>
 
                                 <div style={{ display: 'flex', gap: 8, marginLeft: 12 }}>
-                                    {activeTeamId !== team.id && (
-                                        <button
-                                            onClick={() => handleActivate(team.id)}
-                                            title="Switch to this team"
-                                            style={{
-                                                padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)',
-                                                background: 'transparent', color: '#fff', fontSize: 12, cursor: 'pointer'
-                                            }}
-                                        >
-                                            Activate
-                                        </button>
-                                    )}
                                     <button
                                         onClick={() => handleDelete(team.id)}
                                         title="Leave Team"
@@ -444,6 +445,40 @@ export default function TeamsTab() {
                                                         background: member.isOnline ? '#34d399' : 'rgba(255,255,255,0.2)',
                                                         boxShadow: member.isOnline ? '0 0 8px rgba(52, 211, 153, 0.5)' : 'none'
                                                     }} title={member.isOnline ? 'Online' : 'Offline'} />
+                                                    {/* Remove member button - only shown for admins (createdByMe) and for non-admin members */}
+                                                    {!member.isAdmin && (
+                                                        <button
+                                                            onClick={() => handleRemoveMember(team.id, member.name)}
+                                                            title={team.createdByMe ? "Remove member" : "Only admin can remove"}
+                                                            disabled={!team.createdByMe}
+                                                            style={{
+                                                                width: 24,
+                                                                height: 24,
+                                                                borderRadius: 4,
+                                                                border: 'none',
+                                                                background: 'rgba(239, 68, 68, 0.1)',
+                                                                color: '#f87171',
+                                                                cursor: team.createdByMe ? 'pointer' : 'not-allowed',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                opacity: team.createdByMe ? 0.6 : 0.2,
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                            onMouseEnter={e => {
+                                                                if (team.createdByMe) {
+                                                                    e.currentTarget.style.opacity = '1';
+                                                                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                                                                }
+                                                            }}
+                                                            onMouseLeave={e => {
+                                                                e.currentTarget.style.opacity = team.createdByMe ? '0.6' : '0.2';
+                                                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                                            }}
+                                                        >
+                                                            <FontAwesomeIcon icon={faUserMinus} size="xs" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>

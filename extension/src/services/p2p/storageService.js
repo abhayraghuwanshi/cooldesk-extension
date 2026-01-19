@@ -137,7 +137,7 @@ class P2PStorageService {
 
     /**
      * Get the admin of a team
-     * @param {string} teamId 
+     * @param {string} teamId
      * @returns {object|null} Admin member object or null
      */
     getTeamAdmin(teamId) {
@@ -151,6 +151,37 @@ class P2PStorageService {
         });
 
         return admin;
+    }
+
+    /**
+     * Remove a member from the team (admin only)
+     * @param {string} teamId
+     * @param {string} memberName - The username/key of the member to remove
+     * @returns {boolean} True if member was removed
+     */
+    removeMemberFromTeam(teamId, memberName) {
+        try {
+            const membersMap = this.getSharedMembers(teamId);
+            const member = membersMap.get(memberName);
+
+            if (!member) {
+                console.warn(`[P2P Storage] Member ${memberName} not found in team ${teamId}`);
+                return false;
+            }
+
+            // Don't allow removing the admin
+            if (member.isAdmin) {
+                console.warn(`[P2P Storage] Cannot remove admin ${memberName} from team ${teamId}`);
+                return false;
+            }
+
+            membersMap.delete(memberName);
+            console.log(`[P2P Storage] Removed member ${memberName} from team ${teamId}`);
+            return true;
+        } catch (error) {
+            console.error(`[P2P Storage] Error removing member from team ${teamId}:`, error);
+            return false;
+        }
     }
 
 
