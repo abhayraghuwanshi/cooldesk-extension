@@ -91,106 +91,106 @@ export function initContentInteractions() {
     }
   }
 
-  // Text selection tracking for daily notes (like Sider AI) - with debouncing
-  let lastSelectedText = '';
-  let selectionTimeout = null;
+  // // Text selection tracking for daily notes (like Sider AI) - with debouncing
+  // let lastSelectedText = '';
+  // let selectionTimeout = null;
 
-  try {
-    document.addEventListener('selectionchange', () => {
-      // Clear existing timeout
-      if (selectionTimeout) {
-        clearTimeout(selectionTimeout);
-      }
+  // try {
+  //   document.addEventListener('selectionchange', () => {
+  //     // Clear existing timeout
+  //     if (selectionTimeout) {
+  //       clearTimeout(selectionTimeout);
+  //     }
 
-      // Debounce selection changes to avoid capturing every character while dragging
-      selectionTimeout = setTimeout(() => {
-        try {
-          const selection = window.getSelection();
-          const selectedText = selection.toString().trim();
+  //     // Debounce selection changes to avoid capturing every character while dragging
+  //     selectionTimeout = setTimeout(() => {
+  //       try {
+  //         const selection = window.getSelection();
+  //         const selectedText = selection.toString().trim();
 
-          // Only process meaningful selections (>= 15 chars, different from last)
-          if (selectedText.length >= 15 && selectedText !== lastSelectedText) {
-            lastSelectedText = selectedText;
+  //         // Only process meaningful selections (>= 15 chars, different from last)
+  //         if (selectedText.length >= 15 && selectedText !== lastSelectedText) {
+  //           lastSelectedText = selectedText;
 
-            // Get selection context and position
-            const range = selection.getRangeAt(0);
-            const boundingRect = range.getBoundingClientRect();
+  //           // Get selection context and position
+  //           const range = selection.getRangeAt(0);
+  //           const boundingRect = range.getBoundingClientRect();
 
-            // Get surrounding context (50 chars before/after)
-            const beforeText = range.startContainer.textContent?.substring(
-              Math.max(0, range.startOffset - 50),
-              range.startOffset
-            ) || '';
-            const afterText = range.endContainer.textContent?.substring(
-              range.endOffset,
-              Math.min(range.endContainer.textContent.length, range.endOffset + 50)
-            ) || '';
+  //           // Get surrounding context (50 chars before/after)
+  //           const beforeText = range.startContainer.textContent?.substring(
+  //             Math.max(0, range.startOffset - 50),
+  //             range.startOffset
+  //           ) || '';
+  //           const afterText = range.endContainer.textContent?.substring(
+  //             range.endOffset,
+  //             Math.min(range.endContainer.textContent.length, range.endOffset + 50)
+  //           ) || '';
 
-            sendInteraction('textSelected', {
-              text: selectedText,
-              beforeText,
-              afterText,
-              position: {
-                x: boundingRect.x,
-                y: boundingRect.y,
-                width: boundingRect.width,
-                height: boundingRect.height
-              },
-              length: selectedText.length,
-              wordCount: selectedText.split(/\s+/).length
-            });
+  //           sendInteraction('textSelected', {
+  //             text: selectedText,
+  //             beforeText,
+  //             afterText,
+  //             position: {
+  //               x: boundingRect.x,
+  //               y: boundingRect.y,
+  //               width: boundingRect.width,
+  //               height: boundingRect.height
+  //             },
+  //             length: selectedText.length,
+  //             wordCount: selectedText.split(/\s+/).length
+  //           });
 
-            console.log('[ContentInteractions] Text selected:', selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''));
-          } else if (selectedText.length === 0 && lastSelectedText) {
-            // Selection cleared
-            lastSelectedText = '';
-            sendInteraction('textDeselected', { cleared: true });
-          }
-        } catch (e) {
-          console.warn('[ContentInteractions] Selection tracking error:', e);
-        }
-      }, 500); // Wait 500ms after selection stops changing
-    });
-  } catch { /* no-op */ }
+  //           console.log('[ContentInteractions] Text selected:', selectedText.substring(0, 100) + (selectedText.length > 100 ? '...' : ''));
+  //         } else if (selectedText.length === 0 && lastSelectedText) {
+  //           // Selection cleared
+  //           lastSelectedText = '';
+  //           sendInteraction('textDeselected', { cleared: true });
+  //         }
+  //       } catch (e) {
+  //         console.warn('[ContentInteractions] Selection tracking error:', e);
+  //       }
+  //     }, 500); // Wait 500ms after selection stops changing
+  //   });
+  // } catch { /* no-op */ }
 
   // Screenshot capture using html2canvas or similar approach
-  async function capturePageScreenshot() {
-    try {
-      // Use html2canvas if available, otherwise fallback to canvas approach
-      if (typeof html2canvas !== 'undefined') {
-        const canvas = await html2canvas(document.body, {
-          height: window.innerHeight,
-          width: window.innerWidth,
-          scrollX: 0,
-          scrollY: 0,
-          useCORS: true,
-          allowTaint: true,
-          scale: 0.5 // Reduce size for performance
-        });
-        return canvas.toDataURL('image/png', 0.5);
-      } else {
-        // Fallback: create a simple screenshot using canvas
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = window.innerWidth * 0.5;
-        canvas.height = window.innerHeight * 0.5;
+  // async function capturePageScreenshot() {
+  //   try {
+  //     // Use html2canvas if available, otherwise fallback to canvas approach
+  //     if (typeof html2canvas !== 'undefined') {
+  //       const canvas = await html2canvas(document.body, {
+  //         height: window.innerHeight,
+  //         width: window.innerWidth,
+  //         scrollX: 0,
+  //         scrollY: 0,
+  //         useCORS: true,
+  //         allowTaint: true,
+  //         scale: 0.5 // Reduce size for performance
+  //       });
+  //       return canvas.toDataURL('image/png', 0.5);
+  //     } else {
+  //       // Fallback: create a simple screenshot using canvas
+  //       const canvas = document.createElement('canvas');
+  //       const ctx = canvas.getContext('2d');
+  //       canvas.width = window.innerWidth * 0.5;
+  //       canvas.height = window.innerHeight * 0.5;
 
-        // Fill with page background
-        ctx.fillStyle = getComputedStyle(document.body).backgroundColor || '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+  //       // Fill with page background
+  //       ctx.fillStyle = getComputedStyle(document.body).backgroundColor || '#ffffff';
+  //       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Add page title as text overlay
-        ctx.fillStyle = '#000000';
-        ctx.font = '16px system-ui';
-        ctx.fillText(document.title || location.hostname, 20, 40);
+  //       // Add page title as text overlay
+  //       ctx.fillStyle = '#000000';
+  //       ctx.font = '16px system-ui';
+  //       ctx.fillText(document.title || location.hostname, 20, 40);
 
-        return canvas.toDataURL('image/png', 0.5);
-      }
-    } catch (e) {
-      console.warn('Screenshot capture failed:', e);
-      return null;
-    }
-  }
+  //       return canvas.toDataURL('image/png', 0.5);
+  //     }
+  //   } catch (e) {
+  //     console.warn('Screenshot capture failed:', e);
+  //     return null;
+  //   }
+  // }
 
   // Listen for preview collection and screenshot requests from extension UI
   try {

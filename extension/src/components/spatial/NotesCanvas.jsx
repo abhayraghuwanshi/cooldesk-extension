@@ -4,6 +4,7 @@
   faClock,
   faFolder,
   faFolderOpen,
+  faHighlighter,
   faItalic,
   faLink,
   faListUl,
@@ -23,12 +24,13 @@ import {
   listAllUrlNotes,
   saveUrlNote
 } from '../../db/index.js';
-import { defaultFontFamily } from '../../utils/fontUtils.js';
 import { getFaviconUrl } from '../../utils';
+import { defaultFontFamily } from '../../utils/fontUtils.js';
 
 export function NotesCanvas({ workspaceId }) {
   const [notes, setNotes] = useState([]);
   const [urlNotes, setUrlNotes] = useState([]);
+  const [highlights, setHighlights] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeNote, setActiveNote] = useState(null);
   const [noteContent, setNoteContent] = useState('');
@@ -52,10 +54,19 @@ export function NotesCanvas({ workspaceId }) {
       const allNotes = result?.data || result || [];
       const notesArray = Array.isArray(allNotes) ? allNotes : [];
 
-      // Exclude URL notes from regular notes - they appear in URL Notes folder
-      const regularNotes = notesArray.filter(note =>
-        !(note.url && typeof note.url === 'string' && note.url.length > 0)
-      );
+      // Exclude URL notes and highlights from regular notes - they appear in their own special folders
+      const regularNotes = notesArray.filter(note => {
+        // First check if it's a highlight (priority)
+        if (note.type === 'highlight' || note.isHighlight) {
+          return false; // Exclude - goes to Highlights folder
+        }
+        // Then check if it's a URL note (has URL and is not a highlight)
+        if (note.url && typeof note.url === 'string' && note.url.length > 0) {
+          return false; // Exclude - goes to URL Notes folder
+        }
+        // Otherwise it's a regular note
+        return true;
+      });
 
       setNotes(regularNotes);
     } catch (error) {
@@ -73,41 +84,129 @@ export function NotesCanvas({ workspaceId }) {
 
       // URL notes are stored in a separate url_notes store in IndexedDB
       const result = await listAllUrlNotes();
-      const urlNotesArray = result?.data || result || [];
+      const urlNotesArray = (result?.data || result || []).filter(note =>
+        !(note.type === 'highlight')
+      );
 
-      console.log('[NotesCanvas] Found', urlNotesArray.length, 'URL notes in url_notes store');
-      setUrlNotes(Array.isArray(urlNotesArray) ? urlNotesArray : []);
+      // Also check regular notes database for URL notes (that are not highlights)
+      const regularNotesResult = await dbListNotes();
+      const allRegularNotes = regularNotesResult?.data || regularNotesResult || [];
+      const urlNotesFromRegular = (Array.isArray(allRegularNotes) ? allRegularNotes : []).filter(note =>
+        note.url && typeof note.url === 'string' && note.url.length > 0 &&
+        !(note.type === 'highlight' || note.isHighlight)
+      );
+
+      // Combine both sources and deduplicate by ID
+      const combinedUrlNotes = [...urlNotesArray, ...urlNotesFromRegular];
+      const uniqueUrlNotes = Array.from(new Map(combinedUrlNotes.map(note => [note.id, note])).values());
+
+      console.log('[NotesCanvas] Found', uniqueUrlNotes.length, 'URL notes (', urlNotesArray.length, 'from url_notes store,', urlNotesFromRegular.length, 'from regular notes)');
+      setUrlNotes(uniqueUrlNotes);
     } catch (error) {
       console.error('[NotesCanvas] Error loading URL notes:', error);
       setUrlNotes([]);
     }
   }, []);
 
+  // Load highlights from daily notes
+  const loadHighlights = useCallback(async () => {
+    try {
+      console.log('[NotesCanvas] Loading highlights from daily notes...');
+      const response = await chrome.runtime.sendMessage({ type: 'getDailyNotes', limit: 30 });
+
+      const allHighlights = [];
+
+      if (response && response.ok && response.recentNotes) {
+        response.recentNotes.forEach(dailyNote => {
+          if (dailyNote.selections && Array.isArray(dailyNote.selections)) {
+            dailyNote.selections.forEach(sel => {
+              allHighlights.push({
+                id: sel.id,
+                text: sel.text,
+                title: sel.source && sel.source.title ? sel.source.title : (sel.source && sel.source.domain ? sel.source.domain : 'Unknown Source'),
+                folder: 'Highlights',
+                url: sel.source ? sel.source.url : '',
+                createdAt: sel.timestamp,
+                updatedAt: sel.timestamp,
+                type: 'highlight',
+                isHighlight: true
+              });
+            });
+          }
+        });
+      }
+
+      // Also check regular notes database for highlights
+      const regularNotesResult = await dbListNotes();
+      const allRegularNotes = regularNotesResult?.data || regularNotesResult || [];
+      const highlightsFromRegular = (Array.isArray(allRegularNotes) ? allRegularNotes : []).filter(note =>
+        note.type === 'highlight' || note.isHighlight
+      );
+
+      // Also check url_notes store for highlights (they might have been saved there)
+      const urlNotesResult = await listAllUrlNotes();
+      const allUrlNotes = urlNotesResult?.data || urlNotesResult || [];
+      const highlightsFromUrlNotes = (Array.isArray(allUrlNotes) ? allUrlNotes : []).filter(note =>
+        note.type === 'highlight' || note.isHighlight
+      );
+
+      // Combine all sources and deduplicate by ID
+      const combinedHighlights = [...allHighlights, ...highlightsFromRegular, ...highlightsFromUrlNotes];
+      const uniqueHighlights = Array.from(new Map(combinedHighlights.map(note => [note.id, note])).values());
+
+      console.log('[NotesCanvas] Found', uniqueHighlights.length, 'highlights (', allHighlights.length, 'from daily notes,', highlightsFromRegular.length, 'from regular notes,', highlightsFromUrlNotes.length, 'from url_notes store)');
+      setHighlights(uniqueHighlights);
+    } catch (error) {
+      console.error('[NotesCanvas] Error loading highlights:', error);
+      setHighlights([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadNotes();
     loadUrlNotes();
-  }, [loadNotes, loadUrlNotes]);
+    loadHighlights();
+  }, [loadNotes, loadUrlNotes, loadHighlights]);
 
-  // Derived folders list with URL Notes special folder
+  // Derived folders list with URL Notes and Highlights special folders
   const folders = [
     'All Notes',
     ...new Set(notes.map(n => n.folder).filter(Boolean).filter(f => f.trim() !== '')),
+    'Highlights',
     'URL Notes'
   ].sort((a, b) => {
-    // Keep "All Notes" first, "URL Notes" last, others alphabetically
+    // Keep "All Notes" first
     if (a === 'All Notes') return -1;
     if (b === 'All Notes') return 1;
-    if (a === 'URL Notes') return 1;
-    if (b === 'URL Notes') return -1;
+
+    // Keep "Highlights" and "URL Notes" at the bottom
+    const specialFolders = ['Highlights', 'URL Notes'];
+    const aSpecial = specialFolders.includes(a);
+    const bSpecial = specialFolders.includes(b);
+
+    if (aSpecial && !bSpecial) return 1;
+    if (!aSpecial && bSpecial) return -1;
+
+    if (aSpecial && bSpecial) {
+      // Sort special folders among themselves
+      return specialFolders.indexOf(a) - specialFolders.indexOf(b);
+    }
+
     return a.localeCompare(b);
   });
 
-  // Filtered notes - show URL notes when URL Notes folder is selected
-  const filteredNotes = activeFolder === 'URL Notes'
-    ? urlNotes.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-    : notes
+  // Filtered notes - show specific lists based on active folder
+  let filteredNotes = [];
+
+  if (activeFolder === 'URL Notes') {
+    filteredNotes = urlNotes.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  } else if (activeFolder === 'Highlights') {
+    filteredNotes = highlights.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  } else {
+    filteredNotes = notes
       .filter(note => activeFolder === 'All Notes' || note.folder === activeFolder)
       .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  }
 
   // Group notes by time period (Apple Notes style)
   const groupNotesByDate = (notesToGroup) => {
@@ -178,6 +277,8 @@ export function NotesCanvas({ workspaceId }) {
           url: currentUrl || activeNote?.url || '',
           text: content,
           title: currentTitle,
+          folder: 'URL Notes',
+          type: 'url',
           createdAt: noteId ? (urlNotes.find(n => n.id === noteId)?.createdAt || Date.now()) : Date.now(),
           updatedAt: Date.now()
         };
@@ -702,7 +803,7 @@ export function NotesCanvas({ workspaceId }) {
                     }
                   }}
                 >
-                  <FontAwesomeIcon icon={folder === 'URL Notes' ? faLink : (activeFolder === folder ? faFolderOpen : faFolder)} style={{ fontSize: '16px' }} />
+                  <FontAwesomeIcon icon={folder === 'URL Notes' ? faLink : folder === 'Highlights' ? faHighlighter : (activeFolder === folder ? faFolderOpen : faFolder)} style={{ fontSize: '16px' }} />
                   <span style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>{folder}</span>
                   <span className="notes-badge" style={{
                     padding: '2px 8px',
@@ -712,7 +813,7 @@ export function NotesCanvas({ workspaceId }) {
                     fontSize: '11px',
                     fontWeight: 600
                   }}>
-                    {folder === 'URL Notes' ? urlNotes.length : notes.filter(n => n.folder === folder).length}
+                    {folder === 'URL Notes' ? urlNotes.length : folder === 'Highlights' ? highlights.length : notes.filter(n => n.folder === folder).length}
                   </span>
                 </button>
               ))}
