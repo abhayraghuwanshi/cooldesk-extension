@@ -30,7 +30,8 @@
     "sidePanel",
     "search",
     "alarms",
-    "commands"
+    "commands",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "https://*/*"

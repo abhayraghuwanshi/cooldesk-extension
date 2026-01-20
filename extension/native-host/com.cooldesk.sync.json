@@ -1,0 +1,9 @@
+{
+  "name": "com.cooldesk.sync",
+  "description": "Cooldesk Native Bridge",
+  "path": "C:\\Users\\raghu\\CascadeProjects\\windsurf-project\\extension\\native-host\\host.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/"
+  ]
+}

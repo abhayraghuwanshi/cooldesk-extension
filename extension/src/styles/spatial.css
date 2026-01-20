@@ -20,8 +20,8 @@
 
 .workspace-faces {
   display: flex;
-  width: 600%;
-  /* 6 faces: chat, workspace, overview, tabs, team, notes */
+  width: 700%;
+  /* 7 faces: chat, workspace, overview, tabs, team, notes, apps */
   flex: 1;
   height: 100%;
   min-height: 0;
@@ -38,8 +38,8 @@
 }
 
 .workspace-face {
-  flex: 0 0 16.666667%;
-  width: 16.666667%;
+  flex: 0 0 14.285714%;
+  width: 14.285714%;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -51,7 +51,8 @@
 .workspace-face[data-face="chat"],
 .workspace-face[data-face="tabs"],
 .workspace-face[data-face="team"],
-.workspace-face[data-face="notes"] {
+.workspace-face[data-face="notes"],
+.workspace-face[data-face="apps"] {
   padding: 16px;
 }
 
@@ -167,8 +168,14 @@
 }
 
 /* Pink */
-.face-indicator[data-face='notes'] {
+/* Pink */
+.workspace-face[data-face="notes"] {
   --face-hue: 260;
+}
+
+/* Red */
+.face-indicator[data-face='apps'] {
+  --face-hue: 0;
 }
 
 /* Violet */

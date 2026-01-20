@@ -1,0 +1,2 @@
+@echo off
+"C:\Users\raghu\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe" -u "C:\Users\raghu\CascadeProjects\windsurf-project\extension\native-host\host.py" %*
