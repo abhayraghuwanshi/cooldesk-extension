@@ -81,7 +81,9 @@ export const getFaviconUrl = (url, size = 32, favIconUrl = null) => {
       'gemini.google.com': 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
       'perplexity.ai': 'https://www.google.com/s2/favicons?domain=perplexity.ai&sz=128', // Use Google's service to avoid CORS
       'x.com': 'https://abs.twimg.com/favicons/twitter.3.ico',
-      'twitter.com': 'https://abs.twimg.com/favicons/twitter.3.ico'
+      'twitter.com': 'https://abs.twimg.com/favicons/twitter.3.ico',
+      'web.whatsapp.com': 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/120px-WhatsApp.svg.png',
+      'mail.google.com': 'https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico',
     };
 
     if (customFavicons[hostname]) {

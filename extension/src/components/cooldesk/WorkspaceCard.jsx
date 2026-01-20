@@ -252,7 +252,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
           serviceMiscBuckets[serviceName] = {
             info: {
               key: `misc-${serviceName}`,
-              label: `Other ${serviceName}`,
+              label: serviceName, // Just "Google" or "GitHub", not "Other Google"
               subLabel: serviceName, // Keep original service name
               domain: group.info.domain
             },
