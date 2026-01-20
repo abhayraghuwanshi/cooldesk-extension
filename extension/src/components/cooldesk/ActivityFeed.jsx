@@ -216,12 +216,12 @@ export function ActivityFeed() {
     return (
         <div className="cooldesk-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {/* Header: Favorites */}
-            <div style={{ padding: '16px', borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
+            <div style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                 <div style={{
+                    padding: '16px 16px 12px 16px',
                     fontSize: '12px',
                     fontWeight: 600,
                     color: '#94A3B8',
-                    marginBottom: '12px',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
                     display: 'flex',
@@ -230,81 +230,76 @@ export function ActivityFeed() {
                 }}>
                     <FontAwesomeIcon icon={faBookmark} /> Favorites
                 </div>
-                {/* Wrapper to hide scrollbar */}
-                <div style={{
-                    overflow: 'hidden',
-                    margin: '0 -4px' // Compensate for inner padding
-                }}>
-                    <div
-                        className="favorites-scroll-container"
-                        style={{
-                            display: 'flex',
-                            gap: '8px',
-                            overflowX: 'auto',
-                            overflowY: 'hidden',
-                            padding: '0 4px 16px 4px', // Extra bottom padding to hide scrollbar
-                            margin: '0 0 -16px 0', // Negative margin to pull up and hide scrollbar
-                            WebkitOverflowScrolling: 'touch' // Smooth scrolling on iOS
-                        }}
-                    >
-                        {quickLinks.length > 0 ? quickLinks.map(link => (
-                            <div key={link.id}
-                                onClick={() => handleItemClick(link.url)}
-                                title={link.title}
+                {/* Scrollable Container */}
+                <div
+                    className="favorites-scroll-container"
+                    style={{
+                        display: 'flex',
+                        gap: '8px',
+                        overflowX: 'auto',
+                        padding: '0 16px 12px 16px', // Side padding + bottom padding
+                        scrollbarWidth: 'thin', // Firefox: show thin scrollbar
+                        scrollbarColor: 'rgba(148, 163, 184, 0.3) transparent', // Firefox
+                        WebkitOverflowScrolling: 'touch'
+                    }}
+                >
+                    {quickLinks.length > 0 ? quickLinks.map(link => (
+                        <div key={link.id}
+                            onClick={() => handleItemClick(link.url)}
+                            title={link.title}
+                            style={{
+                                width: '44px',
+                                height: '44px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'rgba(59, 130, 246, 0.12)',
+                                border: '1.5px solid rgba(59, 130, 246, 0.25)',
+                                borderRadius: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                                flexShrink: 0,
+                                position: 'relative',
+                                overflow: 'hidden'
+                            }}
+                            onMouseEnter={e => {
+                                e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)';
+                                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+                                e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)';
+                                e.currentTarget.style.boxShadow = '0 8px 20px rgba(59, 130, 246, 0.3)';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)';
+                                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.25)';
+                                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                                e.currentTarget.style.boxShadow = 'none';
+                            }}
+                        >
+                            <img
+                                src={getFaviconUrl(link.url, 24)}
+                                onError={e => {
+                                    e.target.style.display = 'none';
+                                    e.target.nextSibling.style.display = 'flex';
+                                }}
                                 style={{
-                                    width: '44px',
-                                    height: '44px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    background: 'rgba(59, 130, 246, 0.12)',
-                                    border: '1.5px solid rgba(59, 130, 246, 0.25)',
-                                    borderRadius: '12px',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    flexShrink: 0,
-                                    position: 'relative',
-                                    overflow: 'hidden'
+                                    width: '22px',
+                                    height: '22px',
+                                    borderRadius: '4px',
+                                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
                                 }}
-                                onMouseEnter={e => {
-                                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)';
-                                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
-                                    e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)';
-                                    e.currentTarget.style.boxShadow = '0 8px 20px rgba(59, 130, 246, 0.3)';
+                            />
+                            <FontAwesomeIcon
+                                icon={faLink}
+                                style={{
+                                    display: 'none',
+                                    fontSize: '18px',
+                                    color: 'rgba(96, 165, 250, 0.8)'
                                 }}
-                                onMouseLeave={e => {
-                                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)';
-                                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.25)';
-                                    e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                                    e.currentTarget.style.boxShadow = 'none';
-                                }}
-                            >
-                                <img
-                                    src={getFaviconUrl(link.url, 24)}
-                                    onError={e => {
-                                        e.target.style.display = 'none';
-                                        e.target.nextSibling.style.display = 'flex';
-                                    }}
-                                    style={{
-                                        width: '22px',
-                                        height: '22px',
-                                        borderRadius: '4px',
-                                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
-                                    }}
-                                />
-                                <FontAwesomeIcon
-                                    icon={faLink}
-                                    style={{
-                                        display: 'none',
-                                        fontSize: '18px',
-                                        color: 'rgba(96, 165, 250, 0.8)'
-                                    }}
-                                />
-                            </div>
-                        )) : (
-                            <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
-                        )}
-                    </div>
+                            />
+                        </div>
+                    )) : (
+                        <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
+                    )}
                 </div>
             </div>
 
@@ -508,12 +503,22 @@ export function ActivityFeed() {
                 </div>
             </div>
 
-            {/* Hide scrollbar for webkit browsers */}
+            {/* Custom scrollbar for favorites */}
             <style>{`
                 .favorites-scroll-container::-webkit-scrollbar {
-                    display: none;
+                    height: 6px;
+                }
+                .favorites-scroll-container::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .favorites-scroll-container::-webkit-scrollbar-thumb {
+                    background-color: rgba(148, 163, 184, 0.3);
+                    border-radius: 3px;
+                }
+                .favorites-scroll-container::-webkit-scrollbar-thumb:hover {
+                    background-color: rgba(148, 163, 184, 0.5);
                 }
             `}</style>
-        </div>
+        </div >
     );
 }
