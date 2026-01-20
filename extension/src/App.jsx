@@ -117,9 +117,10 @@ export default function App() {
   const [wallpaperEnabled, setWallpaperEnabled] = useState(() => {
     try {
       const saved = localStorage.getItem('wallpaperEnabled');
-      return saved === 'true';
+      // Default to true unless explicitly disabled
+      return saved !== 'false';
     } catch {
-      return false;
+      return true;
     }
   });
   const [wallpaperUrl, setWallpaperUrl] = useState(() => {

@@ -179,14 +179,51 @@ export function CoolDeskContainer({
     }
   }, [pinnedTabs]);
 
+  // Click outside to close expanded workspace
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      // If clicking inside a workspace card, do nothing (let internal handler work)
+      if (e.target.closest('.workspace-card') || e.target.closest('.workspace-popup-menu')) {
+        return;
+      }
+      // If clicking outside, close
+      if (expandedWorkspace) {
+        setExpandedWorkspace(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleGlobalClick);
+    return () => document.removeEventListener('mousedown', handleGlobalClick);
+  }, [expandedWorkspace]);
+
   const handleWorkspaceClick = (workspace) => {
+    // Toggle logic: if already expanded, close it; else open it
+    if (expandedWorkspace?.id === workspace.id) {
+      setExpandedWorkspace(null);
+    } else {
+      setExpandedWorkspace(workspace);
+    }
+    // Only set current workspace if not just closing the menu?
+    // User intent might be to just view the menu, or switch. 
+    // Usually clicking a card switches to it. 
+    // If the card expands on click, that's one thing. 
+    // Assuming clicking the main card switches, and there's a menu button?
+    // Based on user query "how do i close this", it seems clicking opens it.
+
+    // Keeping existing logic for now, just robust toggle.
+    setCurrentWorkspace(workspace);
+    onOpenWorkspace?.(workspace);
+  };
+
+  const handleOverviewClick = (workspace) => {
+    // Toggle expansion logic
     if (expandedWorkspace?.id === workspace.id) {
       setExpandedWorkspace(null);
     } else {
       setExpandedWorkspace(workspace);
     }
     setCurrentWorkspace(workspace);
-    onOpenWorkspace?.(workspace);
+    // Explicitly NO navigation (setActiveFace) here to keep user in Overview
   };
 
   const handleCreateWorkspace = () => {
@@ -278,9 +315,9 @@ export function CoolDeskContainer({
         <Face index="workspace">
           <WorkspaceList
             savedWorkspaces={savedWorkspaces}
-            onWorkspaceClick={(ws) => setCurrentWorkspace(ws)}
+            onWorkspaceClick={handleWorkspaceClick}
             activeWorkspaceId={currentWorkspace?.id}
-            expandedWorkspaceId={expandedWorkspace}
+            expandedWorkspaceId={expandedWorkspace?.id}
             pinnedWorkspaces={pinnedWorkspaces}
             onTogglePin={onTogglePin}
           />
@@ -290,12 +327,9 @@ export function CoolDeskContainer({
         <Face index="overview">
           <OverviewDashboard
             savedWorkspaces={savedWorkspaces}
-            onWorkspaceClick={(ws) => {
-              setCurrentWorkspace(ws);
-              setActiveFace('workspace');
-            }}
+            onWorkspaceClick={handleOverviewClick}
             activeWorkspaceId={currentWorkspace?.id}
-            expandedWorkspaceId={expandedWorkspace}
+            expandedWorkspaceId={expandedWorkspace?.id}
             onAddNote={onAddNote}
             pinnedWorkspaces={pinnedWorkspaces}
           />

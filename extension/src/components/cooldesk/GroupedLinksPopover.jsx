@@ -1,4 +1,4 @@
-import { faExternalLinkAlt, faLink } from '@fortawesome/free-solid-svg-icons';
+import { faExternalLinkAlt, faLink, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -69,7 +69,8 @@ export function GroupedLinksPopover({ group, onClose, triggerRect }) {
                 background: 'rgba(255, 255, 255, 0.02)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px'
+                gap: '12px',
+                position: 'relative' // For absolute close button if needed, or flex
             }}>
                 {/* Header Icon */}
                 <div style={{
@@ -120,6 +121,36 @@ export function GroupedLinksPopover({ group, onClose, triggerRect }) {
                             <span>{group.urls.length} items</span>
                         </div>
                     )}
+                </div>
+
+                {/* Close Button */}
+                <div
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onClose();
+                    }}
+                    style={{
+                        width: '24px',
+                        height: '24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        color: '#94A3B8',
+                        transition: 'all 0.2s',
+                        background: 'rgba(255,255,255,0.05)'
+                    }}
+                    onMouseEnter={e => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                        e.currentTarget.style.color = '#F1F5F9';
+                    }}
+                    onMouseLeave={e => {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                        e.currentTarget.style.color = '#94A3B8';
+                    }}
+                >
+                    <FontAwesomeIcon icon={faTimes} size="sm" />
                 </div>
             </div>
 

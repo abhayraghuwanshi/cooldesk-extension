@@ -1,6 +1,9 @@
 import { faStickyNote } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useEffect, useState } from 'react';
+import { getUrlAnalytics } from '../../db/index.js';
 import '../../styles/cooldesk.css';
+import { sortWorkspacesByActivity } from '../../utils/ranking.js';
 import { ActivityFeed } from './ActivityFeed';
 import { NotesWidget } from './NotesWidget';
 import { WorkspaceCard } from './WorkspaceCard';
@@ -11,16 +14,75 @@ export function OverviewDashboard({
     activeWorkspaceId,
     expandedWorkspaceId,
     onAddNote,
-    pinnedWorkspaces = [] // New prop
+    pinnedWorkspaces = [] // still passed if needed for visual pin state
 }) {
-    // Prioritize pinned workspaces, then recent ones
-    // Max 2 workspaces shown
-    const pinned = savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name));
-    const unpinned = savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name));
+    const [recentWorkspaces, setRecentWorkspaces] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Sort logic? Usually just recent order from savedWorkspaces is fine.
-    // If user pins something, show it first.
-    const displayedWorkspaces = [...pinned, ...unpinned].slice(0, 2);
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadRecentWorkspaces = async () => {
+            if (!savedWorkspaces || savedWorkspaces.length === 0) {
+                if (isMounted) {
+                    setRecentWorkspaces([]);
+                    setIsLoading(false);
+                }
+                return;
+            }
+
+            try {
+                // Helper to fetch aggregated analytics for a single workspace
+                const getAnalytics = async (ws) => {
+                    let totalVisits = 0;
+                    let totalTime = 0;
+                    let lastActive = 0; // Pure usage data, no fallbacks here
+
+                    if (ws.urls && ws.urls.length > 0) {
+                        try {
+                            const statsPromises = ws.urls.map(u => getUrlAnalytics(u.url));
+                            const statsResults = await Promise.all(statsPromises);
+
+                            statsResults.forEach(res => {
+                                if (res?.success && res.data) {
+                                    totalVisits += (res.data.totalVisits || 0);
+                                    totalTime += (res.data.totalTime || 0);
+                                    if (res.data.lastVisit) {
+                                        lastActive = Math.max(lastActive, res.data.lastVisit);
+                                    }
+                                }
+                            });
+                        } catch (e) {
+                            console.warn('Failed to fetch analytics for workspace:', ws.name);
+                        }
+                    }
+                    return { totalVisits, totalTime, lastActive };
+                };
+
+                // Use the Activity Score algorithm to sort
+                const sorted = await sortWorkspacesByActivity(savedWorkspaces, getAnalytics);
+
+                if (isMounted) {
+                    setRecentWorkspaces(sorted.slice(0, 4));
+                    setIsLoading(false);
+                }
+            } catch (error) {
+                console.error('Error sorting workspaces:', error);
+                if (isMounted) {
+                    // Fallback to default order
+                    setRecentWorkspaces(savedWorkspaces.slice(0, 4));
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        loadRecentWorkspaces();
+
+        return () => { isMounted = false; };
+    }, [savedWorkspaces]);
+
+    // Use recent workspaces if loaded, otherwise fallback or empty
+    const displayedWorkspaces = recentWorkspaces;
 
     return (
         <div style={{
@@ -28,9 +90,7 @@ export function OverviewDashboard({
             gridTemplateColumns: '1.5fr 1fr', // Left column wider for workspaces
             gap: '24px',
             height: '100%',
-            overflow: 'hidden', // Parent handles scroll if needed, but here we want inner scroll or fit? 
-            // The user wants a dashboard, likely fitting screen or scrolling together. 
-            // Let's make it scrollable if content overflows.
+            overflow: 'hidden',
             overflowY: 'auto',
             paddingRight: '4px'
         }}>
@@ -51,12 +111,16 @@ export function OverviewDashboard({
                     }}>
                         Recent Workspaces
                     </h3>
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                        gap: '16px'
+                    <div className="cooldesk-list-view" style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
                     }}>
-                        {displayedWorkspaces.length > 0 ? (
+                        {isLoading ? (
+                            <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
+                                Loading recent activity...
+                            </div>
+                        ) : displayedWorkspaces.length > 0 ? (
                             displayedWorkspaces.map(workspace => (
                                 <WorkspaceCard
                                     key={workspace.id}
@@ -64,7 +128,8 @@ export function OverviewDashboard({
                                     onClick={onWorkspaceClick}
                                     isExpanded={expandedWorkspaceId === workspace.id}
                                     isActive={activeWorkspaceId === workspace.id}
-                                    compact={false}
+                                    compact={true}
+                                    isPinned={pinnedWorkspaces.includes(workspace.name)}
                                 />
                             ))
                         ) : (
