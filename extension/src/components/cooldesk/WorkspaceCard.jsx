@@ -18,7 +18,7 @@ import {
   faUtensils
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { memo, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFaviconUrl } from '../../utils.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
@@ -94,6 +94,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
 
   const [groupPopoverState, setGroupPopoverState] = useState({ group: null, rect: null });
+  const [visibleCount, setVisibleCount] = useState(8);
+  const iconsContainerRef = useRef(null);
 
   // Advanced Grouping Logic
   const getGroupingInfo = (urlStr) => {
@@ -287,6 +289,54 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     });
   }, [urls, compact]);
 
+  // Calculate how many items can fit in the available width
+  const calculateVisibleItems = useCallback(() => {
+    if (!iconsContainerRef.current || !compact) return;
+
+    const container = iconsContainerRef.current;
+    const containerWidth = container.offsetWidth;
+
+    // Approximate widths: single icon ~44px (38px + 6px gap), group ~86px (80px + 6px gap)
+    // Reserve ~45px for the "+N more" button
+    const reservedWidth = 45;
+    const availableWidth = containerWidth - reservedWidth;
+
+    let usedWidth = 0;
+    let count = 0;
+
+    for (let i = 0; i < groupedItems.length; i++) {
+      const item = groupedItems[i];
+      const itemWidth = item.type === 'group' ? 86 : 44;
+
+      if (usedWidth + itemWidth <= availableWidth) {
+        usedWidth += itemWidth;
+        count++;
+      } else {
+        break;
+      }
+    }
+
+    // Show at least 1 item, max 8
+    setVisibleCount(Math.max(1, Math.min(count, 8)));
+  }, [groupedItems, compact]);
+
+  // Recalculate on mount and resize
+  useEffect(() => {
+    if (!compact) return;
+
+    calculateVisibleItems();
+
+    const resizeObserver = new ResizeObserver(() => {
+      calculateVisibleItems();
+    });
+
+    if (iconsContainerRef.current) {
+      resizeObserver.observe(iconsContainerRef.current);
+    }
+
+    return () => resizeObserver.disconnect();
+  }, [calculateVisibleItems, compact]);
+
   const handleCardClick = () => {
     onClick?.(workspace);
   };
@@ -302,65 +352,25 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
       style={{ position: 'relative' }}
     >
       {compact ? (
-        /* macOS Dock-Style List View */
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          padding: '12px 16px',
-          width: '100%'
-        }}>
+        /* macOS Dock-Style List View - Using CSS Classes */
+        <div className="compact-card-inner">
           {/* Workspace Icon on Left */}
-          <div className={`workspace-icon ${colorClass}`} style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '20px',
-            flexShrink: 0
-          }}>
+          <div className={`compact-workspace-icon workspace-icon ${colorClass}`}>
             <FontAwesomeIcon icon={iconToUse} />
           </div>
 
           {/* Workspace Info */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: '120px',
-            flexShrink: 0
-          }}>
-            <div style={{
-              fontSize: '14px',
-              fontWeight: 600,
-              color: '#F1F5F9',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              {name}
-            </div>
-            <div style={{
-              fontSize: '11px',
-              color: '#94A3B8',
-              whiteSpace: 'nowrap'
-            }}>
+          <div className="compact-workspace-info">
+            <div className="compact-workspace-name">{name}</div>
+            <div className="compact-workspace-count">
               {urlCount} URL{urlCount !== 1 ? 's' : ''}
             </div>
           </div>
 
           {/* URL Favicons - Grouped */}
           {groupedItems.length > 0 && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              flex: 1,
-              overflow: 'hidden',
-              paddingLeft: '12px'
-            }}>
-              {groupedItems.slice(0, 8).map((item, idx) => {
+            <div ref={iconsContainerRef} className="compact-icons-container">
+              {groupedItems.slice(0, visibleCount).map((item, idx) => {
                 const isGroup = item.type === 'group';
                 const url = isGroup ? item.primaryUrl : item.url;
                 const faviconUrl = getFaviconUrl(url, 20);
@@ -368,6 +378,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 return (
                   <div
                     key={idx}
+                    className={isGroup ? 'compact-url-group' : 'compact-url-icon'}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isGroup) {
@@ -377,85 +388,29 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         window.open(item.url, '_blank');
                       }
                     }}
-                    style={{
-                      width: isGroup ? 'auto' : '45px',
-                      minWidth: isGroup ? '90px' : '0',
-                      maxWidth: isGroup ? '140px' : 'none',
-                      height: '45px',
-                      borderRadius: isGroup ? '12px' : '8px',
-                      background: isGroup ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.08)',
-                      border: isGroup ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(59, 130, 246, 0.15)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: isGroup ? 'flex-start' : 'center',
-                      padding: isGroup ? '0 10px 0 6px' : '0',
-                      gap: isGroup ? '8px' : '0',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      flexShrink: 0,
-                      position: 'relative'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
-                      e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = isGroup ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.08)';
-                      e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                    }}
                     title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : (item.title || formatDomainName(item.url))}
                   >
                     {faviconUrl ? (
                       <img
                         src={faviconUrl}
                         alt=""
-                        style={{
-                          width: isGroup ? '24px' : '40px',
-                          height: isGroup ? '24px' : '40px',
-                          borderRadius: '4px',
-                          objectFit: 'cover',
-                          opacity: isGroup ? 1 : 1
-                        }}
                         onError={(e) => {
                           e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'inline';
+                          e.target.nextSibling.style.display = 'flex';
                         }}
                       />
                     ) : null}
                     <FontAwesomeIcon
                       icon={faLink}
-                      style={{ display: faviconUrl ? 'none' : 'inline', fontSize: isGroup ? '14px' : '14px', color: '#60a5fa' }}
+                      className="fallback-icon"
+                      style={{ display: faviconUrl ? 'none' : 'flex' }}
                     />
 
                     {/* Pill Text Content */}
                     {isGroup && (
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        overflow: 'hidden',
-                        justifyContent: 'center'
-                      }}>
-                        <div style={{
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          color: '#F1F5F9',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          lineHeight: '1.2'
-                        }}>
-                          {item.label}
-                        </div>
-                        <div style={{
-                          fontSize: '9px',
-                          color: '#94A3B8',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          lineHeight: '1.2'
-                        }}>
-                          {item.urls.length} items
-                        </div>
+                      <div className="compact-group-text">
+                        <div className="compact-group-label">{item.label}</div>
+                        <div className="compact-group-count">{item.urls.length}</div>
                       </div>
                     )}
                   </div>
@@ -463,29 +418,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               })}
 
               {/* +N More Indicator */}
-              {groupedItems.length > 5 && (
+              {groupedItems.length > visibleCount && (
                 <div
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    background: 'rgba(148, 163, 184, 0.1)',
-                    border: '1px solid rgba(148, 163, 184, 0.2)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#94A3B8',
-                    cursor: 'pointer',
-                    flexShrink: 0
-                  }}
+                  className="compact-more-btn"
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Open a popover with the remaining items
                     const rect = e.currentTarget.getBoundingClientRect();
-                    const remainingItems = groupedItems.slice(5);
-
-                    // Flatten remaining items if they include groups, for the simple list view
-                    // Or keep them as groups? GroupedLinksPopover expects a 'group' object with 'urls'.
-                    // We need to construct a flat list of simple url objects for the standard popover view
-
+                    const remainingItems = groupedItems.slice(visibleCount);
                     const flatUrls = [];
                     remainingItems.forEach(item => {
                       if (item.type === 'group') {
@@ -494,17 +433,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         flatUrls.push(item);
                       }
                     });
-
                     setGroupPopoverState({
-                      group: {
-                        domain: 'More Links',
-                        urls: flatUrls
-                      },
+                      group: { domain: 'More Links', urls: flatUrls },
                       rect
                     });
                   }}
                 >
-                  +{groupedItems.length - 5}
+                  +{groupedItems.length - visibleCount}
                 </div>
               )}
             </div>
@@ -519,68 +454,29 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             />
           )}
 
-          {/* Pin Button - Show on Hover */}
+          {/* Pin Button */}
           {onPin && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onPin(workspace);
               }}
-              className={`workspace-pin-btn ${isPinned ? 'pinned' : ''}`}
+              className={`compact-action-btn pin-btn ${isPinned ? 'pinned' : ''}`}
               title={isPinned ? "Unpin Workspace" : "Pin Workspace"}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: isPinned ? '#FDE047' : 'rgba(148, 163, 184, 0.4)',
-                cursor: 'pointer',
-                padding: '8px',
-                marginLeft: 'auto',
-                transition: 'all 0.2s ease',
-                opacity: 0,
-                fontSize: '14px',
-                flexShrink: 0
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#FDE047';
-                e.currentTarget.style.opacity = '1';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = isPinned ? '#FDE047' : 'rgba(148, 163, 184, 0.4)';
-                e.currentTarget.style.opacity = '0';
-              }}
             >
               <FontAwesomeIcon icon={faThumbtack} transform={isPinned ? "" : { rotate: 45 }} />
             </button>
           )}
 
-          {/* Delete Button - Show on Hover */}
+          {/* Delete Button */}
           {onDelete && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onDelete(workspace);
               }}
-              className="workspace-delete-btn"
+              className="compact-action-btn delete-btn"
               title="Delete Workspace"
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'rgba(239, 68, 68, 0.4)',
-                cursor: 'pointer',
-                padding: '8px',
-                transition: 'all 0.2s ease',
-                opacity: 0,
-                fontSize: '14px',
-                flexShrink: 0
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#EF4444';
-                e.currentTarget.style.opacity = '1';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = 'rgba(239, 68, 68, 0.4)';
-                e.currentTarget.style.opacity = '0';
-              }}
             >
               <FontAwesomeIcon icon={faTrash} />
             </button>

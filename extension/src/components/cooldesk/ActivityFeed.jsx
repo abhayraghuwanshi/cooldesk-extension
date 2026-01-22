@@ -4,7 +4,7 @@ import {
     faLink
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { getFaviconUrl } from '../../utils.js';
@@ -36,6 +36,8 @@ export function ActivityFeed() {
     const [feedItems, setFeedItems] = useState([]);
     const [activeTab, setActiveTab] = useState('all');
     const [isLoading, setIsLoading] = useState(true);
+    const [visibleFavCount, setVisibleFavCount] = useState(8);
+    const favContainerRef = useRef(null);
 
     // Load Most Visited (Quick Access) - memoized
     const loadQuickLinks = useCallback(async () => {
@@ -181,6 +183,38 @@ export function ActivityFeed() {
         }
     }, [loadQuickLinks, loadFeed, debouncedUpdate]);
 
+    // Calculate how many favorite icons can fit in the available width
+    const calculateVisibleFavorites = useCallback(() => {
+        if (!favContainerRef.current) return;
+
+        const container = favContainerRef.current;
+        const containerWidth = container.offsetWidth;
+
+        // Each icon is ~52px (44px width + 8px gap), reserve ~50px for "+N more" button
+        const iconWidth = 52;
+        const reservedWidth = 50;
+        const availableWidth = containerWidth - reservedWidth;
+
+        const count = Math.floor(availableWidth / iconWidth);
+
+        // Show at least 1 item, max 8
+        setVisibleFavCount(Math.max(1, Math.min(count, 8)));
+    }, []);
+
+    // Recalculate on mount and resize
+    useEffect(() => {
+        calculateVisibleFavorites();
+
+        const resizeObserver = new ResizeObserver(() => {
+            calculateVisibleFavorites();
+        });
+
+        if (favContainerRef.current) {
+            resizeObserver.observe(favContainerRef.current);
+        }
+
+        return () => resizeObserver.disconnect();
+    }, [calculateVisibleFavorites, quickLinks]);
 
     const handleItemClick = async (url) => {
         if (!url) return;
@@ -230,20 +264,19 @@ export function ActivityFeed() {
                 }}>
                     <FontAwesomeIcon icon={faBookmark} /> Favorites
                 </div>
-                {/* Scrollable Container */}
+                {/* Favorites Container */}
                 <div
+                    ref={favContainerRef}
                     className="favorites-scroll-container"
                     style={{
                         display: 'flex',
                         gap: '8px',
-                        overflowX: 'auto',
-                        padding: '0 16px 12px 16px', // Side padding + bottom padding
-                        scrollbarWidth: 'thin', // Firefox: show thin scrollbar
-                        scrollbarColor: 'rgba(148, 163, 184, 0.3) transparent', // Firefox
-                        WebkitOverflowScrolling: 'touch'
+                        overflow: 'hidden',
+                        padding: '0 16px 12px 16px',
+                        alignItems: 'center'
                     }}
                 >
-                    {quickLinks.length > 0 ? quickLinks.map(link => (
+                    {quickLinks.length > 0 ? quickLinks.slice(0, visibleFavCount).map(link => (
                         <div key={link.id}
                             onClick={() => handleItemClick(link.url)}
                             title={link.title}
@@ -299,6 +332,39 @@ export function ActivityFeed() {
                         </div>
                     )) : (
                         <div style={{ color: '#64748B', fontSize: '12px' }}>No favorites yet</div>
+                    )}
+
+                    {/* +N More Indicator */}
+                    {quickLinks.length > visibleFavCount && (
+                        <div
+                            style={{
+                                width: '44px',
+                                height: '44px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'rgba(148, 163, 184, 0.15)',
+                                border: '1.5px solid rgba(148, 163, 184, 0.25)',
+                                borderRadius: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                                flexShrink: 0,
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                color: '#94A3B8'
+                            }}
+                            title={`${quickLinks.length - visibleFavCount} more favorites`}
+                            onMouseEnter={e => {
+                                e.currentTarget.style.background = 'rgba(148, 163, 184, 0.25)';
+                                e.currentTarget.style.color = '#E5E7EB';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.background = 'rgba(148, 163, 184, 0.15)';
+                                e.currentTarget.style.color = '#94A3B8';
+                            }}
+                        >
+                            +{quickLinks.length - visibleFavCount}
+                        </div>
                     )}
                 </div>
             </div>

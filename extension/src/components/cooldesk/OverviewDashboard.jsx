@@ -85,21 +85,9 @@ export function OverviewDashboard({
     const displayedWorkspaces = recentWorkspaces;
 
     return (
-        <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1.5fr 1fr', // Left column wider for workspaces
-            gap: '24px',
-            height: '100%',
-            overflow: 'hidden',
-            overflowY: 'auto',
-            paddingRight: '4px'
-        }}>
-            {/* Left Column: 2 Workspaces + Notes */}
-            <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px'
-            }}>
+        <div className="overview-dashboard-grid">
+            {/* Left Column: Workspaces + Notes */}
+            <div className="overview-left-column">
                 {/* Workspaces Section */}
                 <div>
                     <h3 style={{
@@ -114,7 +102,8 @@ export function OverviewDashboard({
                     <div className="cooldesk-list-view" style={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '8px'
+                        gap: '6px',
+                        overflow: 'visible'
                     }}>
                         {isLoading ? (
                             <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
@@ -148,7 +137,7 @@ export function OverviewDashboard({
                 </div>
 
                 {/* Notes Widget Section */}
-                <div style={{ flex: 1, minHeight: '300px' }}>
+                <div className="overview-notes-section">
                     <h3 style={{
                         fontSize: 'var(--font-xl, 16px)',
                         fontWeight: 600,
@@ -158,12 +147,7 @@ export function OverviewDashboard({
                     }}>
                         Quick Notes
                     </h3>
-                    <div className="cooldesk-workspace-card" style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        height: '100%',
-                        minHeight: '300px'
-                    }}>
+                    <div className="cooldesk-workspace-card overview-notes-card">
                         <div className="workspace-card-header">
                             <div className="workspace-icon purple">
                                 <FontAwesomeIcon icon={faStickyNote} />
@@ -187,13 +171,7 @@ export function OverviewDashboard({
             </div>
 
             {/* Right Column: Unified Activity Feed */}
-            <div style={{
-                height: '100%',
-                overflow: 'hidden',
-                borderRadius: '16px',
-                border: '1px solid rgba(148, 163, 184, 0.1)',
-                background: 'rgba(15, 23, 42, 0.3)'
-            }}>
+            <div className="overview-activity-column">
                 <ActivityFeed />
             </div>
         </div>

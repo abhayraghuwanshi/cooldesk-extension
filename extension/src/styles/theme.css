@@ -314,18 +314,18 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--surface-2);
+  background: var(--surface-2, rgba(15, 23, 42, 0.3));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--interactive-hover);
+  background: var(--interactive-hover, var(--primary-color, rgba(139, 92, 246, 0.3)));
   border-radius: 4px;
   transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--interactive-active);
+  background: var(--interactive-active, var(--secondary-color, rgba(139, 92, 246, 0.5)));
 }
 
 /* Modal Overlay */
