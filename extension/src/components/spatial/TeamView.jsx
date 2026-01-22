@@ -195,7 +195,14 @@ export default function TeamView({ team: propTeam }) {
         }
     };
 
+    // Helper: Check if I am admin of current team
+    const isOwner = teams.find(t => t.id === activeTeamId)?.createdByMe || false;
+
     const deleteItem = (index) => {
+        if (!isOwner) {
+            console.warn('Only the owner can delete items');
+            return;
+        }
         if (yArrayRef.current) yArrayRef.current.delete(index, 1);
     };
 
@@ -435,31 +442,33 @@ export default function TeamView({ team: propTeam }) {
                                     {getMemberCountText(activeTeam.id)} • {peerCounts.get(activeTeam.id) || 0} active peers connected
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                                <button
-                                    onClick={() => setIsInviteModalOpen(true)}
-                                    style={{
-                                        padding: '8px 16px', borderRadius: 8, border: 'none',
-                                        background: 'rgba(255, 255, 255, 0.1)', color: '#fff', fontWeight: 600,
-                                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
-                                    }}
-                                >
-                                    <FontAwesomeIcon icon={faUserPlus} />
-                                    Invite
-                                </button>
-                                <button
-                                    onClick={() => setIsShareModalOpen(true)}
-                                    style={{
-                                        padding: '8px 16px', borderRadius: 8, border: 'none',
-                                        background: '#3b82f6', color: '#fff', fontWeight: 600,
-                                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                                        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
-                                    }}
-                                >
-                                    <FontAwesomeIcon icon={faShare} />
-                                    Share
-                                </button>
-                            </div>
+                            {isOwner && (
+                                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                    <button
+                                        onClick={() => setIsInviteModalOpen(true)}
+                                        style={{
+                                            padding: '8px 16px', borderRadius: 8, border: 'none',
+                                            background: 'rgba(255, 255, 255, 0.1)', color: '#fff', fontWeight: 600,
+                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
+                                        }}
+                                    >
+                                        <FontAwesomeIcon icon={faUserPlus} />
+                                        Invite
+                                    </button>
+                                    <button
+                                        onClick={() => setIsShareModalOpen(true)}
+                                        style={{
+                                            padding: '8px 16px', borderRadius: 8, border: 'none',
+                                            background: '#3b82f6', color: '#fff', fontWeight: 600,
+                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                                            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                                        }}
+                                    >
+                                        <FontAwesomeIcon icon={faShare} />
+                                        Share
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Scrollable Content Area */}
@@ -533,20 +542,22 @@ export default function TeamView({ team: propTeam }) {
                                                                 {item.meta?.workspaceName || item.title || 'Untitled'}
                                                             </div>
                                                         </div>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                deleteItem(index);
-                                                            }}
-                                                            style={{
-                                                                width: 24, height: 24, borderRadius: 12, border: 'none',
-                                                                background: 'rgba(255,255,255,0.1)', color: '#fff',
-                                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                opacity: 0.6
-                                                            }}
-                                                        >
-                                                            <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
-                                                        </button>
+                                                        {isOwner && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    deleteItem(index);
+                                                                }}
+                                                                style={{
+                                                                    width: 24, height: 24, borderRadius: 12, border: 'none',
+                                                                    background: 'rgba(255,255,255,0.1)', color: '#fff',
+                                                                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    opacity: 0.6
+                                                                }}
+                                                            >
+                                                                <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
+                                                            </button>
+                                                        )}
                                                     </div>
                                                     <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
                                                         <div style={{ fontSize: 'var(--font-sm)', color: '#a78bfa', background: 'rgba(139, 92, 246, 0.1)', padding: '4px 8px', borderRadius: 6 }}>
@@ -607,21 +618,23 @@ export default function TeamView({ team: propTeam }) {
                                                             {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            deleteItem(index);
-                                                        }}
-                                                        style={{
-                                                            width: 24, height: 24, borderRadius: 12, border: 'none',
-                                                            background: 'rgba(255,255,255,0.1)', color: '#fff',
-                                                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                            opacity: 0.6
-                                                        }}
-                                                    >
-                                                        <span style={{ fontSize: 'var(--font-xl)', lineHeight: 1 }}>×</span>
-                                                    </button>
+                                                    {isOwner && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                deleteItem(index);
+                                                            }}
+                                                            style={{
+                                                                width: 24, height: 24, borderRadius: 12, border: 'none',
+                                                                background: 'rgba(255,255,255,0.1)', color: '#fff',
+                                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                opacity: 0.6
+                                                            }}
+                                                        >
+                                                            <span style={{ fontSize: 'var(--font-xl)', lineHeight: 1 }}>×</span>
+                                                        </button>
+                                                    )}
                                                 </div>
                                                 <div style={{ fontSize: 'var(--font-base)', fontWeight: 500, lineHeight: 1.4, height: 40, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                                                     {item.title || item.url || 'Untitled Link'}

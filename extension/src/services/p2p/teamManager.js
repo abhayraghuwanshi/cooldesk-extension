@@ -28,7 +28,9 @@ class TeamManager {
 
             if (!hasDefaultTeam) {
                 console.log('[Team Manager] Creating default Cooldesk team');
-                await this.addTeam(defaultTeamName, defaultTeamSecret);
+                // Create as Read-Only for normal users (createdByMe: false)
+                // If you are the admin, you should manually update this value in storage or use a dev flag
+                await this.addTeam(defaultTeamName, defaultTeamSecret, { createdByMe: false });
 
                 // Add default resources to the new team (This requires p2pStorage which is imported in TeamView, 
                 // so we might need a better way to seed data, but for now just creating the team is the first step.
@@ -49,7 +51,7 @@ class TeamManager {
      * @param {string} secretPhrase - The 4-word secret
      * @returns {Promise<Object>} The created team object
      */
-    async addTeam(name, secretPhrase) {
+    async addTeam(name, secretPhrase, options = {}) {
         if (!name || !secretPhrase) {
             throw new Error('Name and secret phrase are required');
         }
@@ -61,17 +63,16 @@ class TeamManager {
         const existingTeam = this.teams.find(t => t.id === roomId);
         if (existingTeam) {
             // If team exists but wasn't created by this user, just return it
-            // This happens when joining an existing team
             return existingTeam;
         }
 
         const newTeam = {
             id: roomId, // The derived Room ID acts as the unique Team ID
             name,
-            secretPhrase, // We store this locally for convenience (could be optional for higher security)
+            secretPhrase, // We store this locally for convenience
             encryptionKey, // Derived and cached
             createdAt: Date.now(),
-            createdByMe: true, // Mark that this user created the team (makes them admin)
+            createdByMe: options.createdByMe !== undefined ? options.createdByMe : true, // Default to true unless specified
             lastSync: null
         };
 

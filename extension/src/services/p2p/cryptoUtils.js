@@ -1,6 +1,58 @@
 import CryptoJS from 'crypto-js';
+import { ec as EC } from 'elliptic';
+
+const ec = new EC('secp256k1');
 
 class P2PCryptoUtils {
+    /**
+     * Generate a Public/Private key pair for Admin authentication
+     * @returns {Object} { privateKey, publicKey } (Hex strings)
+     */
+    generateAdminKeys() {
+        const key = ec.genKeyPair();
+        return {
+            privateKey: key.getPrivate('hex'),
+            publicKey: key.getPublic('hex') // Compact hex usually, or uncompressed
+        };
+    }
+
+    /**
+     * Sign a message (or stringified payload) with a Private Key
+     * @param {string} message 
+     * @param {string} privateKeyHex 
+     * @returns {string} Hex signature
+     */
+    sign(message, privateKeyHex) {
+        try {
+            const key = ec.keyFromPrivate(privateKeyHex);
+            // We hash the message first to ensure it fits in the curve
+            const msgHash = CryptoJS.SHA256(message).toString();
+            const signature = key.sign(msgHash);
+            return signature.toDER('hex');
+        } catch (e) {
+            console.error('[P2P Crypto] Signing failed:', e);
+            return null;
+        }
+    }
+
+    /**
+     * Verify a signature against a message and Public Key
+     * @param {string} message 
+     * @param {string} signatureHex 
+     * @param {string} publicKeyHex 
+     * @returns {boolean}
+     */
+    verify(message, signatureHex, publicKeyHex) {
+        try {
+            const key = ec.keyFromPublic(publicKeyHex, 'hex');
+            const msgHash = CryptoJS.SHA256(message).toString();
+            return key.verify(msgHash, signatureHex);
+        } catch (e) {
+            console.error('[P2P Crypto] Verification failed:', e);
+            return false;
+        }
+    }
+
     /**
      * Derive the Room ID (Discovery Key) and Encryption Key from a secret phrase
      * @param {string} secretPhrase - The user-provided 4-word secret
