@@ -395,9 +395,10 @@ export default function NoticeBoard({ teamId }) {
                                 }}>
                                     <span className="notice-date" style={{
                                         fontSize: 'var(--font-sm)',
-
-                                        color: '#1e293b',
-                                        letterSpacing: '0.01em',
+                                        color: '#0f172a', // Darker slate for better contrast
+                                        fontWeight: 700,  // Bolder text
+                                        opacity: 0.9,
+                                        letterSpacing: '0.02em',
                                         textTransform: 'uppercase'
                                     }}>
                                         {new Date(note.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
@@ -437,16 +438,13 @@ style.textContent = `
         from { opacity: 0; transform: translateY(-10px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    .notice-date {
-        color: #1e293b !important;
+    /* Force high specificity for date color */
+    .notice-card .notice-date {
+        color: #0f172a !important;
         opacity: 1 !important;
-        font-weight: 600 !important;
-    }
-    .sticky-board-root span {
-        color: inherit;
-    }
-    .sticky-board-root .notice-date {
-        color: #1e293b !important;
+        font-weight: 700 !important;
+        text-shadow: none !important;
+        -webkit-text-fill-color: #0f172a !important;
     }
 `;
 document.head.appendChild(style);

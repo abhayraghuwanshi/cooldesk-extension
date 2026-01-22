@@ -204,7 +204,7 @@ export function GroupedLinksPopover({ group, onClose, triggerRect }) {
                                 borderRadius: '6px'
                             }}>
                                 {faviconUrl ? (
-                                    <img src={faviconUrl} alt="" style={{ width: '12px', height: '12px', borderRadius: '2px' }} />
+                                    <img src={faviconUrl} alt="" style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }} />
                                 ) : (
                                     <FontAwesomeIcon icon={faLink} size="xs" color="#64748B" />
                                 )}

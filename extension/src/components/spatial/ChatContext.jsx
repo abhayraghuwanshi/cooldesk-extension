@@ -22,6 +22,11 @@ const PLATFORM_CONFIG = {
   'Perplexity': { url: 'https://www.perplexity.ai', emoji: '🔍', gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05))', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#A7F3D0', accentColor: '#10b981' },
   'AI Studio': { url: 'https://aistudio.google.com', emoji: '🧪', gradient: 'linear-gradient(135deg, rgba(66, 133, 244, 0.2), rgba(66, 133, 244, 0.05))', borderColor: 'rgba(66, 133, 244, 0.3)', textColor: '#8AB4F8', accentColor: '#4285F4' },
   'Lovable': { url: 'https://lovable.dev', emoji: '💜', gradient: 'linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(167, 139, 250, 0.05))', borderColor: 'rgba(167, 139, 250, 0.3)', textColor: '#C4B5FD', accentColor: '#8b5cf6' },
+  'ElevenLabs': { url: 'https://elevenlabs.io', emoji: '🗣️', gradient: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))', borderColor: 'rgba(255, 255, 255, 0.2)', textColor: '#F3F4F6', accentColor: '#ffffff' },
+  'Suno': { url: 'https://suno.com', emoji: '🎵', gradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(236, 72, 153, 0.05))', borderColor: 'rgba(236, 72, 153, 0.3)', textColor: '#F9A8D4', accentColor: '#ec4899' },
+  'Runway': { url: 'https://runwayml.com', emoji: '🎬', gradient: 'linear-gradient(135deg, rgba(250, 204, 21, 0.2), rgba(250, 204, 21, 0.05))', borderColor: 'rgba(250, 204, 21, 0.3)', textColor: '#FDE047', accentColor: '#facc15' },
+  'Luma Dream Machine': { url: 'https://lumalabs.ai/dream-machine', emoji: '🎥', gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05))', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#6EE7B7', accentColor: '#10b981' },
+  'Pika': { url: 'https://pika.art', emoji: '🐇', gradient: 'linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(167, 139, 250, 0.05))', borderColor: 'rgba(167, 139, 250, 0.3)', textColor: '#C4B5FD', accentColor: '#8b5cf6' },
 };
 
 const WORKSPACE_PROMPTS = [

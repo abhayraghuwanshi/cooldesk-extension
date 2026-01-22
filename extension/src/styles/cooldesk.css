@@ -735,8 +735,8 @@
 }
 
 .link-favicon {
-  width: 16px;
-  height: 16px;
+  width: var(--font-5xl);
+  height: var(--font-5xl);
   border-radius: 4px;
   object-fit: cover;
   transition: all 0.2s ease;
@@ -752,11 +752,6 @@
     width: 24px;
   }
 
-  .link-favicon {
-    width: 20px;
-    height: 20px;
-  }
-
   .link-fallback-icon {
     font-size: 14px;
   }
@@ -768,8 +763,8 @@
   }
 
   .link-favicon {
-    width: 24px;
-    height: 24px;
+    width: var(--font-5xl);
+    height: var(--font-5xl);
     border-radius: 6px;
   }
 

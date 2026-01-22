@@ -280,7 +280,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
           className={`face-dot ${currentFace === 'workspace' ? 'active' : ''}`}
           onClick={() => navigateToFace('workspace')}
           onMouseEnter={() => setHoveredFace('workspace')}
-          title="Workspace (Ctrl + 2)"
+          title="Collections (Ctrl + 2)"
         >
           <FontAwesomeIcon icon={faFolder} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
         </button>
@@ -304,7 +304,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
           className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
           onClick={() => navigateToFace('team')}
           onMouseEnter={() => setHoveredFace('team')}
-          title="Team (Ctrl + 5)"
+          title="Spaces (Ctrl + 5)"
         >
           <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
         </button>

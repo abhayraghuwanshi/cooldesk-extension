@@ -63,6 +63,8 @@ export default function TeamView({ team: propTeam }) {
         return unsub;
     }, [teams]);
 
+    const seedingRef = useRef(new Set()); // Track seeded teams in this session
+
     // Load items for the SELECTED team
     useEffect(() => {
         console.log('[TeamView] Active Team changed:', activeTeamId);
@@ -86,6 +88,79 @@ export default function TeamView({ team: propTeam }) {
             console.log('[TeamView] Loaded items:', currentItems);
             setItems(currentItems);
 
+            // SEED DEFAULT DATA for "Cooldesk Community"
+            const activeTeamName = teams.find(t => t.id === activeTeamId)?.name;
+
+            // Only attempt seed if we haven't done it this session for this team
+            if (activeTeamName === 'Cooldesk Community' && !seedingRef.current.has(activeTeamId)) {
+                seedingRef.current.add(activeTeamId);
+
+                // Wait a moment to ensure everything is loaded/synced
+                setTimeout(() => {
+                    if (!yArrayRef.current) return;
+
+                    const pArray = yArrayRef.current;
+                    const allItems = pArray.toArray();
+
+                    // 1. CLEANUP DUPLICATES
+                    const uniqueMap = new Map(); // NormalizedURL -> index to keep
+                    const toDelete = [];
+
+                    for (let i = 0; i < allItems.length; i++) {
+                        const item = allItems[i];
+                        if (item.type !== 'link') continue;
+
+                        const url = item.url ? (item.url.endsWith('/') ? item.url.slice(0, -1) : item.url) : '';
+                        if (!url) continue;
+
+                        if (uniqueMap.has(url)) {
+                            // This is a duplicate!
+                            toDelete.push(i);
+                        } else {
+                            uniqueMap.set(url, i);
+                        }
+                    }
+
+                    // Delete duplicates (backwards to preserve indexes)
+                    if (toDelete.length > 0) {
+                        console.log('[TeamView] Removing duplicate items:', toDelete.length);
+                        // Sort descending to safely remove by index
+                        toDelete.sort((a, b) => b - a);
+
+                        p2pStorage.getDoc(activeTeamId).transact(() => {
+                            toDelete.forEach(idx => {
+                                pArray.delete(idx, 1);
+                            });
+                        });
+                    }
+
+                    // 2. SEED IF MISSING
+                    // Check AFTER cleanup
+                    // (We need to re-fetch array because we might have deleted items)
+                    const currentItemsAfterCleanup = pArray.toArray();
+                    const existingUrls = new Set(currentItemsAfterCleanup.map(item => {
+                        const url = item.url || '';
+                        return url.endsWith('/') ? url.slice(0, -1) : url;
+                    }));
+
+                    const defaultLinks = [
+                        { id: 'link-default-1', url: 'https://cool-desk.com/', title: 'Cooldesk Home', addedBy: 'System', addedAt: Date.now(), type: 'link' },
+                        { id: 'link-default-2', url: 'https://cool-desk.com/search', title: 'Resources', addedBy: 'System', addedAt: Date.now(), type: 'link' },
+                        { id: 'link-default-3', url: 'https://chromewebstore.google.com/detail/cooldesk/ioggffobciopdddacpclplkeodllhjko', title: 'Chrome Web Store', addedBy: 'System', addedAt: Date.now(), type: 'link' }
+                    ];
+
+                    const linksToAdd = defaultLinks.filter(link => {
+                        const normalizedLinkUrl = link.url.endsWith('/') ? link.url.slice(0, -1) : link.url;
+                        return !existingUrls.has(normalizedLinkUrl);
+                    });
+
+                    if (linksToAdd.length > 0) {
+                        console.log('[TeamView] Seeding missing default links:', linksToAdd.length);
+                        pArray.push(linksToAdd);
+                    }
+                }, 1000); // 1 second delay
+            }
+
             observer = () => {
                 const updated = pArray.toArray();
                 console.log('[TeamView] Observer fired. New items:', updated);
@@ -99,7 +174,7 @@ export default function TeamView({ team: propTeam }) {
             if (pArray && observer) pArray.unobserve(observer);
             yArrayRef.current = null;
         };
-    }, [activeTeamId]);
+    }, [activeTeamId, teams]);
 
     const handleAddItem = () => {
         if (typeof chrome !== 'undefined' && chrome.tabs && yArrayRef.current) {
@@ -182,7 +257,7 @@ export default function TeamView({ team: propTeam }) {
                 transition: 'width 0.3s ease'
             }}>
                 <div className="sidebar-header" style={{ padding: '16px', fontSize: 'var(--font-sm)', fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    <span className="sidebar-text">Your Teams</span>
+                    <span className="sidebar-text">Your Spaces</span>
                     <span className="sidebar-icon-only">
                         <FontAwesomeIcon icon={faUsers} />
                     </span>
@@ -206,8 +281,23 @@ export default function TeamView({ team: propTeam }) {
                                 }}
                                 title={team.name}
                             >
-                                <div style={{ fontSize: 14, fontWeight: 500, color: isActive ? '#fff' : '#ccc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {team.name.substring(0, 2).toUpperCase()} <span className="sidebar-text" style={{ marginLeft: 4, fontWeight: 'normal' }}>{team.name.substring(2)}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <div style={{
+                                        width: 24, height: 24, borderRadius: 6,
+                                        background: isActive ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: 10, fontWeight: 700, flexShrink: 0,
+                                        color: isActive ? '#fff' : '#9ca3af'
+                                    }}>
+                                        {team.name.substring(0, 2).toUpperCase()}
+                                    </div>
+                                    <div className="sidebar-text" style={{
+                                        fontSize: 14, fontWeight: 500,
+                                        color: isActive ? '#fff' : '#ccc',
+                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                                    }}>
+                                        {team.name}
+                                    </div>
                                 </div>
                                 <div className="sidebar-text" style={{ fontSize: 11, color: isActive ? '#93c5fd' : '#6b7280', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <span style={{
@@ -249,7 +339,7 @@ export default function TeamView({ team: propTeam }) {
                         title="Create Team"
                     >
                         <FontAwesomeIcon icon={faPlus} />
-                        <span className="sidebar-text">Create Team</span>
+                        <span className="sidebar-text">Create Space</span>
                     </button>
                 </div>
             </div>
@@ -259,7 +349,7 @@ export default function TeamView({ team: propTeam }) {
                 {!activeTeam ? (
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5, flexDirection: 'column', gap: 16 }}>
                         <FontAwesomeIcon icon={faUsers} size="3x" />
-                        <div>Select a team to view shared items</div>
+                        <div>Select a space or join a space</div>
                     </div>
                 ) : (
                     <>

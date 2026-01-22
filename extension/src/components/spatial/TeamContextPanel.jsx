@@ -153,7 +153,7 @@ export default function TeamContextPanel({ teamId }) {
                             background: context.deploymentFreeze ? '#ef4444' : '#10b981',
                             boxShadow: context.deploymentFreeze ? '0 0 8px #ef4444' : '0 0 8px #10b981'
                         }} />
-                        Team Context
+                        Space Context
                     </div>
                 </div>
 

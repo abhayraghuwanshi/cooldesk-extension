@@ -484,7 +484,7 @@ export function ActivityFeed() {
                                                 <img
                                                     src={item.favIconUrl || getFaviconUrl(item.url, 32)}
                                                     alt=""
-                                                    style={{ width: '18px', height: '18px', objectFit: 'contain' }}
+                                                    style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
                                                     onError={e => {
                                                         e.target.style.display = 'none';
                                                         // Show fallback icon if image fails
@@ -499,7 +499,7 @@ export function ActivityFeed() {
                                             {/* Info */}
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{
-                                                    fontSize: '13px',
+                                                    fontSize: 'var(--font-base)',
                                                     color: 'var(--text-primary, #F1F5F9)',
                                                     fontWeight: 500,
                                                     whiteSpace: 'nowrap',

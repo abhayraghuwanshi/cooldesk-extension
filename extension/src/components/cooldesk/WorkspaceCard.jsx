@@ -394,6 +394,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                       <img
                         src={faviconUrl}
                         alt=""
+                        style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
                         onError={(e) => {
                           e.target.style.display = 'none';
                           e.target.nextSibling.style.display = 'flex';

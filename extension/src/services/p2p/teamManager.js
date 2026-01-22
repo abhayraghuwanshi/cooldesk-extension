@@ -18,6 +18,23 @@ class TeamManager {
             const result = await chrome.storage.local.get([TEAMS_STORAGE_KEY, ACTIVE_TEAM_KEY]);
             this.teams = result[TEAMS_STORAGE_KEY] || [];
             this.activeTeamId = result[ACTIVE_TEAM_KEY] || null;
+
+            // Check if default Cooldesk team exists, if not create it
+            const defaultTeamName = 'Cooldesk Community';
+            const defaultTeamSecret = 'cooldesk-community-default-secret';
+            const { roomId: defaultTeamId } = cryptoUtils.deriveKeys(defaultTeamSecret);
+
+            const hasDefaultTeam = this.teams.some(t => t.id === defaultTeamId);
+
+            if (!hasDefaultTeam) {
+                console.log('[Team Manager] Creating default Cooldesk team');
+                await this.addTeam(defaultTeamName, defaultTeamSecret);
+
+                // Add default resources to the new team (This requires p2pStorage which is imported in TeamView, 
+                // so we might need a better way to seed data, but for now just creating the team is the first step.
+                // The actual resource seeding might need to happen where p2pStorage is available or by extending this manager)
+            }
+
             this.initialized = true;
             console.log('[Team Manager] Initialized with teams:', this.teams.length);
         } catch (e) {

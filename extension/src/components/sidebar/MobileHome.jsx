@@ -1,5 +1,5 @@
-import { faChartPie, faComments, faCompass, faPlus, faStickyNote, faTh } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faGithub, faYoutube } from '@fortawesome/free-brands-svg-icons';
+import { faBolt, faChartPie, faComments, faCompass, faMusic, faPlus, faStickyNote, faTh, faVideo } from '@fortawesome/free-solid-svg-icons';
 
 /**
  * MobileHome - "App Drawer" View
@@ -47,11 +47,21 @@ export function MobileHome({ onOpenApp, onSearch }) {
     }, []);
 
     const APPS = [
+        // System Apps
         { id: 'chat', label: 'AI Chat', icon: faComments, color: '#3b82f6', gradient: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%)' },
         { id: 'notes', label: 'Notes', icon: faStickyNote, color: '#eab308', gradient: 'linear-gradient(135deg, #facc15 0%, #eab308 100%)' },
         { id: 'dashboard', label: 'Overview', icon: faChartPie, color: '#a855f7', gradient: 'linear-gradient(135deg, #c084fc 0%, #a855f7 100%)' },
         { id: 'tabs', label: 'Tabs', icon: faTh, color: '#10b981', gradient: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)' },
         { id: 'create', label: 'New space', icon: faPlus, color: '#ef4444', gradient: 'linear-gradient(135deg, #f87171 0%, #ef4444 100%)' },
+
+        // Productive Apps
+        { id: 'meet', label: 'Meet', icon: faVideo, url: 'https://meet.google.com', color: '#facc15', gradient: 'linear-gradient(135deg, #fde047 0%, #eab308 100%)' },
+        { id: 'github', label: 'GitHub', icon: faGithub, url: 'https://github.com', color: '#1f2937', gradient: 'linear-gradient(135deg, #374151 0%, #111827 100%)' },
+        { id: 'linear', label: 'Linear', icon: faBolt, url: 'https://linear.app', color: '#6366f1', gradient: 'linear-gradient(135deg, #818cf8 0%, #6366f1 100%)' },
+
+        // Media Apps
+        { id: 'youtube', label: 'YouTube', icon: faYoutube, url: 'https://youtube.com', color: '#ef4444', gradient: 'linear-gradient(135deg, #f87171 0%, #ef4444 100%)' },
+        { id: 'spotify', label: 'Spotify', icon: faMusic, url: 'https://open.spotify.com', color: '#22c55e', gradient: 'linear-gradient(135deg, #4ade80 0%, #22c55e 100%)' },
     ];
 
     return (
@@ -156,7 +166,7 @@ export function MobileHome({ onOpenApp, onSearch }) {
                     {APPS.map(app => (
                         <button
                             key={app.id}
-                            onClick={() => onOpenApp(app.id)}
+                            onClick={() => app.url ? window.open(app.url, '_blank') : onOpenApp(app.id)}
                             style={{
                                 background: 'transparent',
                                 border: 'none',
