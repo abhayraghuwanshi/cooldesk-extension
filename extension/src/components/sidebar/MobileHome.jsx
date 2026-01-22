@@ -1,5 +1,6 @@
 import { faGithub, faYoutube } from '@fortawesome/free-brands-svg-icons';
 import { faBolt, faChartPie, faComments, faCompass, faMusic, faPlus, faStickyNote, faTh, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 /**
  * MobileHome - "App Drawer" View
