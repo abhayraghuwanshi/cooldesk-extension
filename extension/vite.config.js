@@ -1,7 +1,11 @@
-import { crx } from '@crxjs/vite-plugin'
-import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
-import manifest from './manifest.json'
+import { crx } from '@crxjs/vite-plugin';
+import react from '@vitejs/plugin-react';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { defineConfig } from 'vite';
+import manifest from './manifest.json';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Switch between Chrome Extension (default) and Electron builds using env TARGET=electron
 export default defineConfig(({ mode }) => {
@@ -37,11 +41,12 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         input: {
-          index: 'index.html'
+          main: resolve(__dirname, 'index.html'),
+          sidebar: resolve(__dirname, 'sidebar.html'),
         }
       }
     },
-    esbuild: { drop: ['console', 'debugger'] },
+    // esbuild: { drop: ['console', 'debugger'] },
     define: {
       'global': 'window',
     },

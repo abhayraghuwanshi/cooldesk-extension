@@ -589,12 +589,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         <img
                           src={faviconUrl}
                           alt=""
-                          style={{
-                            width: '16px',
-                            height: '16px',
-                            borderRadius: '3px',
-                            objectFit: 'cover'
-                          }}
+                          className="link-favicon"
                           onError={(e) => {
                             e.target.style.display = 'none';
                             e.target.nextSibling.style.display = 'inline';
@@ -603,7 +598,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                       ) : null}
                       <FontAwesomeIcon
                         icon={faLink}
-                        style={{ display: faviconUrl ? 'none' : 'inline', fontSize: '12px' }}
+                        className="link-fallback-icon"
+                        style={{ display: faviconUrl ? 'none' : 'inline' }}
                       />
                     </span>
                     <span className="workspace-link-text" title={urlObj.url}>

@@ -1,4 +1,4 @@
-import { faArrowRight, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faExternalLinkAlt, faLink, faSync } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
@@ -228,106 +228,86 @@ export function ChatContext({ workspaceId, workspaceName }) {
         </div> */}
 
         {/* Quick access platforms */}
-        <div>
+        <div style={{
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(16px)',
+          borderRadius: '16px',
+          border: '1px solid var(--border-primary)',
+          padding: '16px',
+          marginBottom: '20px'
+        }}>
           <div style={{
             fontSize: '12px',
             fontWeight: 600,
             color: 'var(--text-secondary)',
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
-            marginBottom: '16px',
+            marginBottom: '12px',
             paddingLeft: '4px'
           }}>
             Quick Access
           </div>
-          <div style={{
+          <ul className="workspace-links" style={{
+            maxHeight: 'none',
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-            gap: '14px'
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: '12px'
           }}>
             {Object.entries(PLATFORM_CONFIG).map(([name, config]) => {
               const faviconUrl = getFaviconUrl(config.url, 32);
               return (
-                <button
+                <li
                   key={name}
+                  className="workspace-link-item"
                   onClick={() => window.open(config.url, '_blank')}
-                  style={{
-                    padding: '18px 20px',
-                    borderRadius: '16px',
-                    background: `linear-gradient(135deg, ${config.accentColor}15, ${config.accentColor}05)`,
-                    backdropFilter: 'blur(12px)',
-                    border: `1.5px solid ${config.borderColor}`,
-                    color: config.textColor,
-                    cursor: 'pointer',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '14px',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-3px)';
-                    e.currentTarget.style.boxShadow = `0 12px 32px ${config.accentColor}35, 0 0 0 1px ${config.accentColor}30`;
-                    e.currentTarget.style.background = `linear-gradient(135deg, ${config.accentColor}25, ${config.accentColor}10)`;
-                    e.currentTarget.style.borderColor = config.accentColor;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.background = `linear-gradient(135deg, ${config.accentColor}15, ${config.accentColor}05)`;
-                    e.currentTarget.style.borderColor = config.borderColor;
-                  }}
+                  style={{ cursor: 'pointer', padding: '10px' }}
                 >
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '12px',
-                    background: `linear-gradient(135deg, ${config.accentColor}30, ${config.accentColor}15)`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    border: `1px solid ${config.accentColor}40`,
-                    transition: 'all 0.3s ease'
-                  }}>
-                    {faviconUrl && (
+                  <span className="workspace-link-icon">
+                    {faviconUrl ? (
                       <img
                         src={faviconUrl}
                         alt={name}
-                        style={{
-                          width: '28px',
-                          height: '28px',
-                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
-                        }}
+                        className="link-favicon"
                         onError={(e) => {
                           e.target.style.display = 'none';
-                          e.target.parentElement.textContent = config.emoji;
-                          e.target.parentElement.style.fontSize = '22px';
+                          e.target.nextSibling.style.display = 'inline';
                         }}
                       />
-                    )}
-                  </div>
-                  <span style={{
-                    flex: 1,
-                    letterSpacing: '0.01em'
-                  }}>{name}</span>
-                </button>
+                    ) : null}
+                    <FontAwesomeIcon
+                      icon={faLink}
+                      className="link-fallback-icon"
+                      style={{ display: faviconUrl ? 'none' : 'inline' }}
+                    />
+                  </span>
+                  <span className="workspace-link-text">{name}</span>
+                  <FontAwesomeIcon
+                    icon={faExternalLinkAlt}
+                    className="workspace-link-external"
+                  />
+                </li>
               );
             })}
-          </div>
+          </ul>
         </div>
 
 
-        <div style={{ paddingBottom: '20px' }}>
+        <div style={{
+          background: 'var(--glass-bg)',
+          backdropFilter: 'blur(16px)',
+          borderRadius: '16px',
+          border: '1px solid var(--border-primary)',
+          padding: '16px',
+          paddingBottom: '20px'
+        }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: '12px',
-            paddingRight: '4px'
+            paddingRight: '4px',
+            flexWrap: 'wrap',
+            gap: '8px'
           }}>
             <div style={{
               fontSize: '12px',
@@ -347,15 +327,15 @@ export function ChatContext({ workspaceId, workspaceName }) {
                 background: 'var(--surface-2)',
                 border: '1px solid var(--border-primary)',
                 color: 'var(--text)',
-                fontSize: '12px',
-                padding: '4px 8px',
+                fontSize: '11px',
+                padding: '2px 6px',
                 borderRadius: '6px',
                 outline: 'none',
                 cursor: 'pointer',
-                maxWidth: '120px'
+                maxWidth: '100px'
               }}
             >
-              <option value="All" style={{ background: '#1e1e1e', color: '#ffffff' }}>All Platforms</option>
+              <option value="All" style={{ background: '#1e1e1e', color: '#ffffff' }}>All</option>
               {Object.keys(PLATFORM_CONFIG).map(platform => (
                 <option key={platform} value={platform} style={{ background: '#1e1e1e', color: '#ffffff' }}>{platform}</option>
               ))}
@@ -368,12 +348,12 @@ export function ChatContext({ workspaceId, workspaceName }) {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '60px 20px',
+              padding: '40px 20px',
               color: 'var(--text-secondary)',
-              gap: '12px'
+              gap: '8px'
             }}>
-              <FontAwesomeIcon icon={faSync} spin style={{ fontSize: '28px' }} />
-              <span>Loading chats...</span>
+              <FontAwesomeIcon icon={faSync} spin style={{ fontSize: '20px' }} />
+              <span style={{ fontSize: '12px' }}>Loading...</span>
             </div>
           ) : chats.length === 0 ? (
             <div style={{
@@ -381,106 +361,66 @@ export function ChatContext({ workspaceId, workspaceName }) {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '60px 20px',
+              padding: '40px 20px',
               textAlign: 'center',
-              gap: '12px'
+              gap: '8px'
             }}>
-              <div style={{ fontSize: '48px', opacity: 0.3 }}>💬</div>
-              <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text)' }}>
-                {filter === 'All' ? 'No AI chats yet' : `No ${filter} chats`}
-              </div>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '300px' }}>
-                Visit AI platforms to start tracking your conversations
+              <div style={{ fontSize: '32px', opacity: 0.3 }}>💬</div>
+              <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>
+                {filter === 'All' ? 'No chats' : `No ${filter} chats`}
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <ul className="workspace-links" style={{
+              maxHeight: 'none',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '12px'
+            }}>
               {chats.map((chat, index) => {
                 const platform = PLATFORM_CONFIG[chat.platform] || {};
-                const faviconUrl = platform.url ? getFaviconUrl(platform.url, 20) : null;
+                const faviconUrl = platform.url ? getFaviconUrl(platform.url, 32) : null;
 
                 return (
-                  <div
+                  <li
                     key={chat.id || index}
+                    className="workspace-link-item"
                     onClick={() => handleChatClick(chat)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '14px 16px',
-                      borderRadius: '12px',
-                      background: 'var(--glass-bg)',
-                      border: '1px solid var(--border-primary)',
-                      borderLeft: `3px solid ${platform.accentColor || 'var(--accent-blue)'}`,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      animation: `fadeSlideIn 0.3s ease ${index * 0.05}s backwards`
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                      e.currentTarget.style.borderColor = 'var(--border-accent)';
-                      e.currentTarget.style.transform = 'translateX(4px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'var(--glass-bg)';
-                      e.currentTarget.style.borderColor = 'var(--border-primary)';
-                      e.currentTarget.style.transform = 'translateX(0)';
-                    }}
+                    style={{ cursor: 'pointer', padding: '10px' }}
                   >
-                    <div style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '10px',
-                      background: platform.gradient || 'var(--glass-bg)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      fontSize: '20px'
-                    }}>
+                    <span className="workspace-link-icon">
                       {faviconUrl ? (
                         <img
                           src={faviconUrl}
-                          alt={chat.platform || 'Chat'}
-                          style={{ width: '20px', height: '20px' }}
+                          alt={chat.platform}
+                          className="link-favicon"
                           onError={(e) => {
                             e.target.style.display = 'none';
-                            e.target.parentElement.textContent = platform.emoji || '💬';
+                            e.target.nextSibling.style.display = 'inline';
                           }}
                         />
-                      ) : (
-                        platform.emoji || '💬'
-                      )}
-                    </div>
-                    <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <div style={{
-                        fontSize: '14px',
-                        fontWeight: 500,
-                        color: 'var(--text)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        marginBottom: '4px'
-                      }}>
-                        {chat.title || 'Untitled Chat'}
-                      </div>
-                      <div style={{
-                        fontSize: '12px',
-                        color: 'var(--text-secondary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}>
-                        <span>{chat.platform}</span>
-                        <span>•</span>
-                        <span>{formatTime(chat.scrapedAt || chat.lastVisitTime)}</span>
-                      </div>
-                    </div>
-                    <FontAwesomeIcon icon={faArrowRight} style={{ color: 'var(--text-muted)', fontSize: '14px' }} />
-                  </div>
+                      ) : null}
+                      <span
+                        className="link-fallback-icon"
+                        style={{ display: faviconUrl ? 'none' : 'inline', fontSize: '14px' }}
+                      >
+                        {platform.emoji || '💬'}
+                      </span>
+                    </span>
+                    <span className="workspace-link-text">
+                      {chat.title || 'Untitled Chat'}
+                      <span style={{ opacity: 0.5, marginLeft: '6px', fontSize: '11px' }}>
+                        • {formatTime(chat.scrapedAt || chat.lastVisitTime)}
+                      </span>
+                    </span>
+                    <FontAwesomeIcon
+                      icon={faExternalLinkAlt}
+                      className="workspace-link-external"
+                    />
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
         </div>
       </div>

@@ -6,7 +6,7 @@
     "default_title": "Open CoolDesk Sidebar"
   },
   "side_panel": {
-    "default_path": "index.html"
+    "default_path": "sidebar.html"
   },
   "options_page": "index.html",
   "chrome_url_overrides": {
@@ -42,14 +42,15 @@
     {
       "resources": [
         "assets/*",
-        "index.html",
-        "logo-2.png",
+        "dist/*",
         "src/footerBar.js",
         "src/contentInteractions.js",
-        "dist/*"
+        "src/chatScraper.js",
+        "logo-2.png",
+        "index.html"
       ],
       "matches": [
-        "https://*/*"
+        "<all_urls>"
       ]
     }
   ],

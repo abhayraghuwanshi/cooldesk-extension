@@ -118,17 +118,21 @@ try {
   });
 } catch { }
 
-// Modular bootstrap (MV3-safe dynamic imports)
-(() => {
-  try {
-    // Content interactions (analytics, preview collection)
-    import(/* @vite-ignore */ chrome.runtime.getURL('src/contentInteractions.js'))
-      .then(mod => { try { mod.initContentInteractions?.(); console.debug('[CoolDesk] contentInteractions loaded'); } catch (e) { console.warn('[CoolDesk] contentInteractions init failed', e); } })
-      .catch((e) => { console.warn('[CoolDesk] Failed to import contentInteractions.js', e); });
+import { initContentInteractions } from './contentInteractions.js';
+import { injectFooterBar } from './footerBar.js';
 
-    // Footer bar injection (tabs control UI)
-    import(/* @vite-ignore */ chrome.runtime.getURL('src/footerBar.js'))
-      .then(mod => { try { mod.injectFooterBar?.(); console.debug('[CoolDesk] footerBar loaded'); } catch (e) { console.warn('[CoolDesk] footerBar init failed', e); } })
-      .catch((e) => { console.warn('[CoolDesk] Failed to import footerBar.js', e); });
-  } catch { /* ignore */ }
-})();
+// Initialize content interactions (analytics, preview collection)
+try {
+  initContentInteractions();
+  console.debug('[CoolDesk] contentInteractions initialized');
+} catch (e) {
+  console.warn('[CoolDesk] contentInteractions init failed', e);
+}
+
+// Initialize footer bar (floating button)
+try {
+  injectFooterBar();
+  console.debug('[CoolDesk] footerBar initialized');
+} catch (e) {
+  console.warn('[CoolDesk] footerBar init failed', e);
+}

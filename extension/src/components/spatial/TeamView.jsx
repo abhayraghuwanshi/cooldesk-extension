@@ -174,14 +174,18 @@ export default function TeamView({ team: propTeam }) {
             background: 'rgba(0,0,0,0.2)' // consistent background
         }}>
             {/* Sidebar */}
-            <div style={{
-                width: 200, flexShrink: 0,
+            <div className="team-view-sidebar" style={{
+                flexShrink: 0,
                 borderRight: '1px solid rgba(255,255,255,0.1)',
                 display: 'flex', flexDirection: 'column',
-                background: 'rgba(0,0,0,0.2)'
+                background: 'rgba(0,0,0,0.2)',
+                transition: 'width 0.3s ease'
             }}>
-                <div style={{ padding: '16px', fontSize: 'var(--font-sm)', fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Your Teams
+                <div className="sidebar-header" style={{ padding: '16px', fontSize: 'var(--font-sm)', fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <span className="sidebar-text">Your Teams</span>
+                    <span className="sidebar-icon-only">
+                        <FontAwesomeIcon icon={faUsers} />
+                    </span>
                 </div>
                 <div style={{ overflowY: 'auto', flex: 1 }}>
                     {teams.map(team => {
@@ -196,13 +200,16 @@ export default function TeamView({ team: propTeam }) {
                                     background: isActive ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
                                     borderLeft: `3px solid ${isActive ? '#60a5fa' : 'transparent'}`,
                                     cursor: 'pointer',
-                                    transition: 'all 0.2s'
+                                    transition: 'all 0.2s',
+                                    display: 'flex', flexDirection: 'column', gap: 2,
+                                    overflow: 'hidden'
                                 }}
+                                title={team.name}
                             >
-                                <div style={{ fontSize: 14, fontWeight: 500, color: isActive ? '#fff' : '#ccc' }}>
-                                    {team.name}
+                                <div style={{ fontSize: 14, fontWeight: 500, color: isActive ? '#fff' : '#ccc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {team.name.substring(0, 2).toUpperCase()} <span className="sidebar-text" style={{ marginLeft: 4, fontWeight: 'normal' }}>{team.name.substring(2)}</span>
                                 </div>
-                                <div style={{ fontSize: 11, color: isActive ? '#93c5fd' : '#6b7280', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div className="sidebar-text" style={{ fontSize: 11, color: isActive ? '#93c5fd' : '#6b7280', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <span style={{
                                         width: 6, height: 6, borderRadius: '50%',
                                         background: count > 0 ? '#4ade80' : '#4b5563',
@@ -215,7 +222,7 @@ export default function TeamView({ team: propTeam }) {
                     })}
                     {teams.length === 0 && (
                         <div style={{ padding: 16, fontSize: 'var(--font-sm)', opacity: 0.5 }}>
-                            No teams yet. Create one in Settings.
+                            <span className="sidebar-text">No teams yet. Create one in Settings.</span>
                         </div>
                     )}
                 </div>
@@ -228,7 +235,8 @@ export default function TeamView({ team: propTeam }) {
                             background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)',
                             color: '#60a5fa', fontSize: 'var(--font-sm)', fontWeight: 600,
                             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                            transition: 'all 0.2s'
+                            transition: 'all 0.2s',
+                            whiteSpace: 'nowrap', overflow: 'hidden'
                         }}
                         onMouseEnter={e => {
                             e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
@@ -238,9 +246,10 @@ export default function TeamView({ team: propTeam }) {
                             e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
                             e.currentTarget.style.transform = 'none';
                         }}
+                        title="Create Team"
                     >
                         <FontAwesomeIcon icon={faPlus} />
-                        Create Team
+                        <span className="sidebar-text">Create Team</span>
                     </button>
                 </div>
             </div>
@@ -256,9 +265,10 @@ export default function TeamView({ team: propTeam }) {
                     <>
                         {/* Team Header */}
                         <div style={{
-                            padding: '20px 32px',
+                            padding: '16px 20px',
                             borderBottom: '1px solid rgba(255,255,255,0.06)',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            flexWrap: 'wrap', gap: '12px'
                         }}>
                             <div>
                                 {isRenaming ? (
@@ -273,12 +283,12 @@ export default function TeamView({ team: propTeam }) {
                                                 if (e.key === 'Escape') handleCancelRename();
                                             }}
                                             style={{
-                                                fontSize: 'var(--font-4xl)', fontWeight: 700,
+                                                fontSize: 'var(--font-2xl)', fontWeight: 700,
                                                 background: 'rgba(255,255,255,0.1)',
                                                 border: '1px solid rgba(59, 130, 246, 0.5)',
                                                 borderRadius: 8, padding: '4px 12px',
                                                 color: '#fff', outline: 'none',
-                                                minWidth: 200
+                                                minWidth: 150, width: '100%'
                                             }}
                                         />
                                         <button
@@ -306,7 +316,7 @@ export default function TeamView({ team: propTeam }) {
                                     </div>
                                 ) : (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                        <h1 style={{ margin: 0, fontSize: 'var(--font-4xl)', fontWeight: 700 }}>{activeTeam.name}</h1>
+                                        <h1 style={{ margin: 0, fontSize: 'var(--font-3xl)', fontWeight: 700 }}>{activeTeam.name}</h1>
                                         {activeTeam.createdByMe && (
                                             <button
                                                 onClick={handleStartRename}
@@ -376,7 +386,7 @@ export default function TeamView({ team: propTeam }) {
                             </div>
 
                             {/* Items Grid */}
-                            <div style={{ padding: '0 32px' }}>
+                            <div style={{ padding: '0 20px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                                     <FontAwesomeIcon icon={faLink} style={{ color: '#60a5fa', opacity: 0.8 }} />
                                     <h2 style={{ fontSize: 'var(--font-xl)', fontWeight: 600, margin: 0, color: '#e5e7eb' }}>
@@ -384,7 +394,7 @@ export default function TeamView({ team: propTeam }) {
                                     </h2>
                                     <div style={{ height: 1, flex: 1, background: 'rgba(255,255,255,0.06)' }} />
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
                                     {items.map((item, index) => {
                                         if (!item) return null;
 
@@ -572,3 +582,35 @@ export default function TeamView({ team: propTeam }) {
         </div >
     );
 }
+
+const style = document.createElement('style');
+style.textContent = `
+    .team-view-sidebar {
+        width: 200px;
+    }
+    .sidebar-icon-only {
+        display: none;
+    }
+    .sidebar-text {
+        display: inline;
+    }
+    
+    @media (max-width: 800px) {
+        .team-view-sidebar {
+            width: 72px;
+        }
+        .sidebar-text {
+            display: none !important;
+        }
+        .sidebar-icon-only {
+            display: block;
+            text-align: center;
+        }
+        /* Center icons when collapsed */
+        .team-view-sidebar .sidebar-header {
+            text-align: center;
+            padding: 16px 0 !important;
+        }
+    }
+`;
+document.head.appendChild(style);

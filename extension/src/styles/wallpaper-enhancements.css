@@ -480,10 +480,11 @@
 
 /* === GLASS ELEMENTS === */
 .wallpaper-enabled [style*="glass-bg"],
-.wallpaper-enabled .glass-bg {
+.wallpaper-enabled .glass-bg,
+.wallpaper-enabled .glass-card {
     background: linear-gradient(135deg,
-            rgba(15, 15, 20, 0.76) 0%,
-            rgba(10, 10, 15, 0.7) 100%) !important;
+            rgba(15, 15, 20, 0.85) 0%,
+            rgba(10, 10, 15, 0.8) 100%) !important;
     backdrop-filter: blur(120px) saturate(120%) brightness(1.08);
     -webkit-backdrop-filter: blur(120px) saturate(120%) brightness(1.08);
     border: 1px solid rgba(255, 255, 255, 0.1);

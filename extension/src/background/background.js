@@ -1,3 +1,40 @@
+// Initialize side panel options on install
+chrome.runtime.onInstalled.addListener(() => {
+  if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  }
+  if (chrome.sidePanel && chrome.sidePanel.setOptions) {
+    chrome.sidePanel.setOptions({ path: 'sidebar.html', enabled: true });
+  }
+});
+
+// Enforce sidebar.html on every tab activation to override any tab-specific settings
+if (chrome.tabs && chrome.tabs.onActivated) {
+  chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    if (chrome.sidePanel && chrome.sidePanel.setOptions) {
+      try {
+        await chrome.sidePanel.setOptions({ path: 'sidebar.html', enabled: true }); // Global
+        // also try tab specific just in case? No, global should be enough if we don't set specific.
+        // But to be safe against previous specific settings:
+        await chrome.sidePanel.setOptions({ tabId: activeInfo.tabId, path: 'sidebar.html', enabled: true });
+      } catch (e) {
+        console.warn('[Background] Failed to enforce side panel path:', e);
+      }
+    }
+  });
+}
+
+// Enforce on window focus change as well
+if (chrome.windows && chrome.windows.onFocusChanged) {
+  chrome.windows.onFocusChanged.addListener(async (windowId) => {
+    if (windowId !== chrome.windows.WINDOW_ID_NONE && chrome.sidePanel && chrome.sidePanel.setOptions) {
+      try {
+        await chrome.sidePanel.setOptions({ path: 'sidebar.html', enabled: true });
+      } catch (e) { }
+    }
+  });
+}
+
 // MV3 background service worker (type: module)
 
 // Polyfill for libraries that check for document (but don't actually use it)
@@ -1416,7 +1453,7 @@ async function main() {
           if (chrome?.sidePanel?.open && windowId) {
             try {
               console.log('[Background] Attempting to open side panel for window:', windowId);
-              console.log('[Background] Side panel path:', chrome.runtime.getURL('index.html'));
+              console.log('[Background] Side panel path:', chrome.runtime.getURL('sidebar.html'));
               // ✅ This simple direct call works - DO NOT MODIFY
               await chrome.sidePanel.open({ windowId });
               console.log('[Background] ✅ Side panel opened successfully!');
@@ -1744,7 +1781,7 @@ async function main() {
           const windowId = tab?.windowId;
 
           if (chrome?.sidePanel?.setOptions) {
-            await chrome.sidePanel.setOptions({ path: 'index.html', enabled: true });
+            await chrome.sidePanel.setOptions({ path: 'sidebar.html', enabled: true });
           }
 
           if (chrome?.sidePanel?.open && windowId) {

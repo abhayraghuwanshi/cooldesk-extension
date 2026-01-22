@@ -107,7 +107,7 @@ export default function TeamContextPanel({ teamId }) {
 
     return (
         <div style={{
-            margin: '20px 32px 24px 32px',
+            margin: '16px',
             background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.4) 100%)',
             borderRadius: 20,
             border: context.deploymentFreeze
@@ -130,7 +130,7 @@ export default function TeamContextPanel({ teamId }) {
 
             {/* Header Status Bar */}
             <div style={{
-                padding: '16px 24px',
+                padding: '16px 20px',
                 background: context.deploymentFreeze
                     ? 'linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)'
                     : 'rgba(255,255,255,0.02)',
@@ -138,6 +138,7 @@ export default function TeamContextPanel({ teamId }) {
                     ? '1px solid rgba(239, 68, 68, 0.2)'
                     : '1px solid rgba(255,255,255,0.06)',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                flexWrap: 'wrap', gap: '12px',
                 position: 'relative', zIndex: 1
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -165,10 +166,12 @@ export default function TeamContextPanel({ teamId }) {
                         borderRadius: 20,
                         boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)',
                         animation: 'pulse-freeze 2s infinite',
-                        letterSpacing: '0.02em'
+                        letterSpacing: '0.02em',
+                        whiteSpace: 'nowrap',
+                        zIndex: 10
                     }}>
                         <FontAwesomeIcon icon={faBan} />
-                        DEPLOYMENT FREEZE ACTIVE
+                        FREEZE
                     </div>
                 )}
 
@@ -193,7 +196,9 @@ export default function TeamContextPanel({ teamId }) {
                     >
                         <FontAwesomeIcon icon={isSyncPaused ? faPlay : faPause} style={{ fontSize: 'var(--font-xs)' }} />
                         <FontAwesomeIcon icon={faWifi} />
-                        {isSyncPaused ? 'Resume' : 'Pause'}
+                        <span style={{ display: 'none', '@media (min-width: 500px)': { display: 'inline' } }}>
+                            {isSyncPaused ? 'Resume' : 'Pause'}
+                        </span>
                     </button>
 
                     <button
@@ -216,13 +221,20 @@ export default function TeamContextPanel({ teamId }) {
                         onMouseLeave={e => !isEditing && (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
                     >
                         <FontAwesomeIcon icon={isEditing ? faCheck : faPen} />
-                        {isEditing ? 'Save Changes' : 'Edit Context'}
+                        {isEditing ? 'Save' : 'Edit'}
                     </button>
                 </div>
             </div>
 
             {/* Content Grid */}
-            <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, position: 'relative', zIndex: 1 }}>
+            <div style={{
+                padding: '20px',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
+                gap: 16,
+                position: 'relative',
+                zIndex: 1
+            }}>
 
                 {/* Sprint Goal Card */}
                 <div style={{

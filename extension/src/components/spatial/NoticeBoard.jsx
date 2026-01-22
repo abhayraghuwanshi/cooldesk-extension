@@ -130,7 +130,9 @@ export default function NoticeBoard({ teamId }) {
             {/* Header Section */}
             <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '0 32px 20px 32px',
+                padding: '0 20px 16px 20px',
+                flexWrap: 'wrap',
+                gap: '12px'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <div style={{
@@ -181,7 +183,7 @@ export default function NoticeBoard({ teamId }) {
                 <div
                     onPaste={handlePaste}
                     style={{
-                        margin: '0 32px 24px 32px',
+                        margin: '0 16px 24px 16px',
                         padding: 24,
                         background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.8) 0%, rgba(30, 41, 59, 0.6) 100%)',
                         border: '1px solid rgba(255,255,255,0.1)',
@@ -207,14 +209,14 @@ export default function NoticeBoard({ teamId }) {
                             }}
                             autoFocus
                         />
-                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                             <input
                                 type="text"
                                 value={newNoteImage}
                                 onChange={e => setNewNoteImage(e.target.value)}
                                 placeholder="Paste image or URL..."
                                 style={{
-                                    flex: 1,
+                                    flex: 1, minWidth: '200px',
                                     background: 'rgba(0,0,0,0.2)',
                                     border: '1px solid rgba(255,255,255,0.1)',
                                     borderRadius: 10, padding: '0 16px', height: 44,
@@ -235,7 +237,7 @@ export default function NoticeBoard({ teamId }) {
                                     transition: 'all 0.2s'
                                 }}
                             >
-                                Post to Board
+                                Post
                             </button>
                         </div>
                     </div>
@@ -246,15 +248,16 @@ export default function NoticeBoard({ teamId }) {
             <div style={{
                 position: 'relative',
                 minHeight: 280,
-                margin: '0 32px',
-                padding: 32,
+                margin: '0 16px',
+                padding: '20px',
                 background: 'rgba(255,255,255,0.02)',
                 borderRadius: 24,
                 border: '1px solid rgba(255,255,255,0.05)',
                 display: 'flex',
                 flexWrap: 'wrap',
-                gap: 24,
+                gap: 16,
                 alignContent: 'flex-start',
+                justifyContent: 'center', // Center cards if they wrap weirdly
                 transition: 'all 0.3s'
             }}>
                 {/* Board Texture Overlay */}
@@ -300,7 +303,9 @@ export default function NoticeBoard({ teamId }) {
                                 key={note.id || index}
                                 className="notice-card"
                                 style={{
-                                    width: 300,
+                                    width: '100%',
+                                    maxWidth: 300,
+                                    flex: '1 1 250px', // Allow grow/shrink, basis 250px
                                     marginBottom: 16,
                                     background: style.bg,
                                     borderRadius: 4, // More realistic sticky note corners

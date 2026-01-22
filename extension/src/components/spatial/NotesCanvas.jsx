@@ -500,6 +500,11 @@ export function NotesCanvas({ workspaceId }) {
     setNoteUrl(note.url || '');
     setAutoSaveStatus('idle');
     setIsEditing(true);
+
+    // Auto-close sidebar on small screens
+    if (window.innerWidth < 800) {
+      setShowSidebar(false);
+    }
   };
 
   // Create new note
@@ -572,8 +577,7 @@ export function NotesCanvas({ workspaceId }) {
       }}>
         {/* Sidebar */}
         {showSidebar && !isFullScreen && (
-          <div style={{
-            width: '280px',
+          <div className="notes-sidebar" style={{
             display: 'flex',
             flexDirection: 'column',
             gap: '16px',
@@ -597,14 +601,14 @@ export function NotesCanvas({ workspaceId }) {
                 gap: '4px',
                 overflowY: 'auto'
               }}>
-                <div style={{
+                <div className="sidebar-header" style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '0 0 4px', // Adjusted padding since container has padding
                   marginBottom: '4px'
                 }}>
-                  <span style={{
+                  <span className="folder-text" style={{
                     fontSize: '11px',
                     fontWeight: 600,
                     color: 'var(--text-secondary)',
@@ -670,8 +674,8 @@ export function NotesCanvas({ workspaceId }) {
                   }}
                 >
                   <FontAwesomeIcon icon={activeFolder === 'All Notes' ? faFolderOpen : faFolder} style={{ fontSize: '16px' }} />
-                  <span style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>All Notes</span>
-                  <span className="notes-badge" style={{
+                  <span className="folder-text" style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>All Notes</span>
+                  <span className="notes-badge folder-text" style={{
                     padding: '2px 8px',
                     borderRadius: '8px',
                     background: activeFolder === 'All Notes' ? 'var(--accent-blue)' : 'var(--surface-3)',
@@ -713,8 +717,8 @@ export function NotesCanvas({ workspaceId }) {
                     }}
                   >
                     <FontAwesomeIcon icon={folder === 'URL Notes' ? faLink : folder === 'Highlights' ? faHighlighter : (activeFolder === folder ? faFolderOpen : faFolder)} style={{ fontSize: '16px' }} />
-                    <span style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>{folder}</span>
-                    <span className="notes-badge" style={{
+                    <span className="folder-text" style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>{folder}</span>
+                    <span className="notes-badge folder-text" style={{
                       padding: '2px 8px',
                       borderRadius: '8px',
                       background: activeFolder === folder ? 'var(--accent-blue)' : 'var(--surface-3)',
@@ -828,7 +832,7 @@ export function NotesCanvas({ workspaceId }) {
                           }}
                         >
                           {/* Note Title with Favicon for URL notes */}
-                          <div style={{
+                          < div style={{
                             fontSize: '13px',
                             fontWeight: 600,
                             color: 'var(--text)',
@@ -839,27 +843,29 @@ export function NotesCanvas({ workspaceId }) {
                             alignItems: 'center',
                             gap: '8px'
                           }}>
-                            {note.url && (
-                              <img
-                                src={getFaviconUrl(note.url, 16)}
-                                alt=""
-                                style={{
-                                  width: '16px',
-                                  height: '16px',
-                                  borderRadius: '3px',
-                                  flexShrink: 0
-                                }}
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                }}
-                              />
-                            )}
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {
+                              note.url && (
+                                <img
+                                  src={getFaviconUrl(note.url, 16)}
+                                  alt=""
+                                  style={{
+                                    width: '16px',
+                                    height: '16px',
+                                    borderRadius: '3px',
+                                    flexShrink: 0
+                                  }}
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              )
+                            }
+                            < span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {note.title || 'Untitled Note'}
-                            </span>
-                          </div>
+                            </span >
+                          </div >
                           {/* Note Preview */}
-                          <div
+                          < div
                             style={{
                               fontSize: '12px',
                               color: 'var(--text-secondary)',
@@ -876,19 +882,21 @@ export function NotesCanvas({ workspaceId }) {
                             }}
                           />
                           {/* Folder tag (always visible) */}
-                          {note.folder && (
-                            <span style={{
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              background: 'var(--surface-3)',
-                              fontSize: '9px',
-                              color: 'var(--text-muted)',
-                              alignSelf: 'flex-start',
-                              marginTop: '2px'
-                            }}>
-                              {note.folder}
-                            </span>
-                          )}
+                          {
+                            note.folder && (
+                              <span style={{
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                background: 'var(--surface-3)',
+                                fontSize: '9px',
+                                color: 'var(--text-muted)',
+                                alignSelf: 'flex-start',
+                                marginTop: '2px'
+                              }}>
+                                {note.folder}
+                              </span>
+                            )
+                          }
                           {/* Hover Meta - Date and Delete (only visible on hover) */}
                           <div
                             className="note-hover-meta"
@@ -941,14 +949,14 @@ export function NotesCanvas({ workspaceId }) {
                               <FontAwesomeIcon icon={faTrash} />
                             </button>
                           </div>
-                        </div>
+                        </div >
                       ))}
-                    </div>
+                    </div >
                   ))
                 )}
-              </div>
-            </div>
-          </div>
+              </div >
+            </div >
+          </div >
         )}
 
         {/* Editor Area */}
@@ -1027,6 +1035,36 @@ export function NotesCanvas({ workspaceId }) {
 
               {/* Title and Folder Inputs - Same Line */}
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexShrink: 0 }}>
+                {/* Sidebar Toggle */}
+                <button
+                  onClick={() => setShowSidebar(!showSidebar)}
+                  title={showSidebar ? "Hide Sidebar" : "Show Sidebar"}
+                  style={{
+                    padding: '10px',
+                    borderRadius: '10px',
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border-primary)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                    height: '40px',
+                    width: '40px'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--surface-3)';
+                    e.currentTarget.style.color = 'var(--text)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--surface-2)';
+                    e.currentTarget.style.color = 'var(--text-secondary)';
+                  }}
+                >
+                  <FontAwesomeIcon icon={faListUl} />
+                </button>
+
                 {/* Folder Input */}
                 <div style={{ position: 'relative', flex: '0 0 200px' }}>
                   <FontAwesomeIcon
@@ -1334,7 +1372,7 @@ export function NotesCanvas({ workspaceId }) {
             </div>
           )}
         </div>
-      </div>
+      </div >
 
       <style>{`
         @keyframes pulse {
@@ -1359,6 +1397,52 @@ export function NotesCanvas({ workspaceId }) {
           background: var(--text-secondary);
         }
       `}</style>
-    </div>
+    </div >
   );
 }
+
+// Responsive styles
+const style = document.createElement('style');
+style.textContent = `
+    .notes-sidebar {
+        width: 280px;
+        transition: transform 0.3s ease;
+    }
+    .folder-text {
+        display: inline;
+        opacity: 1;
+        transition: opacity 0.2s;
+    }
+    
+    @media (max-width: 800px) {
+        .notes-sidebar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 280px;
+            z-index: 100;
+            background: var(--surface-1);
+            border-right: 1px solid var(--border-primary);
+            box-shadow: 4px 0 24px rgba(0,0,0,0.3);
+            /* Ensure it sits above everything */
+        }
+        
+        /* When we want to hide it, we rely on React unmounting it (showSidebar), 
+           so we don't need a hidden class. mounting/unmounting is handled by JS. */
+           
+        .folder-text {
+            display: inline !important;
+            opacity: 1 !important;
+        }
+        .notes-sidebar-btn {
+            justify-content: flex-start !important;
+            padding: 12px !important;
+        }
+        .sidebar-header {
+            justify-content: space-between !important;
+            padding: 0 0 4px !important;
+        }
+    }
+`;
+document.head.appendChild(style);

@@ -91,10 +91,10 @@ export function OverviewDashboard({
                 {/* Workspaces Section */}
                 <div>
                     <h3 style={{
-                        fontSize: 'var(--font-xl, 16px)',
+                        fontSize: 'var(--font-2xl, 20px)',
                         fontWeight: 600,
                         color: 'var(--text-primary, #F1F5F9)',
-                        marginBottom: '12px',
+                        marginBottom: '16px',
                         marginTop: 0
                     }}>
                         Recent Workspaces
@@ -139,10 +139,10 @@ export function OverviewDashboard({
                 {/* Notes Widget Section */}
                 <div className="overview-notes-section">
                     <h3 style={{
-                        fontSize: 'var(--font-xl, 16px)',
+                        fontSize: 'var(--font-2xl, 20px)',
                         fontWeight: 600,
                         color: 'var(--text-primary, #F1F5F9)',
-                        marginBottom: '12px',
+                        marginBottom: '16px',
                         marginTop: 0
                     }}>
                         Quick Notes

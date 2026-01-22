@@ -472,20 +472,30 @@ async function scrapeNewChats() {
     const seenIds = new Set();
     const currentScrapeTime = Date.now();
 
-    chatElements.forEach((element) => {
+    chatElements.forEach((element, index) => {
       try {
         // Handle both link-based (ChatGPT, Claude) and container-based (Gemini, Grok) items
         const href = element.getAttribute('href');
         let url, chatId;
+        let extractionMethod = 'unknown';
 
         if (href) {
+          extractionMethod = 'link';
           // Link-based chat item (ChatGPT, Claude) - element IS the link
           url = href.startsWith('http') ? href : `${window.location.origin}${href}`;
           chatId = config.extractChatId(href);
+          console.debug(`[ChatScraper] #${index} Link extraction: href="${href}" -> chatId="${chatId}"`);
         } else {
+          extractionMethod = 'container';
           // Container-based chat item (Gemini, Grok) - element is a container
           chatId = config.extractChatId(element);
-          if (!chatId) return;
+          console.debug(`[ChatScraper] #${index} Container extraction: chatId="${chatId}"`);
+
+          if (!chatId) {
+            console.debug(`[ChatScraper] #${index} Failed to extract ID from container`);
+            // console.debug(element.outerHTML.substring(0, 200)); // Careful with PII
+            return;
+          }
 
           // For Grok, find the link inside the container
           const link = element.querySelector('a[href*="/c/"]');
@@ -498,16 +508,25 @@ async function scrapeNewChats() {
           }
         }
 
-        if (!chatId || seenIds.has(chatId)) return;
+        if (!chatId) {
+          console.debug(`[ChatScraper] #${index} Skipped: No chatId found (method: ${extractionMethod})`);
+          return;
+        }
+
+        if (seenIds.has(chatId)) {
+          // console.debug(`[ChatScraper] #${index} Skipped: Duplicate chatId "${chatId}"`);
+          return;
+        }
 
         seenIds.add(chatId);
 
         // Extract title
         const title = extractTitle(element, config);
+        console.debug(`[ChatScraper] #${index} Extracted title: "${title}"`);
 
         // Skip generic titles
         if (title === 'New Chat' || title === 'Untitled' || title.length < 3) {
-          console.log(`[ChatScraper] Skipping generic title: "${title}"`);
+          console.debug(`[ChatScraper] #${index} Skipped: Generic title "${title}"`);
           return;
         }
 
@@ -525,18 +544,18 @@ async function scrapeNewChats() {
         // Otherwise, we'll let the background check against existing DB entries
         if (lastScrapeTime === 0) {
           newChats.push(chat);
-          console.log(`[ChatScraper] ✓ NEW: ${title.substring(0, 50)}...`);
+          console.log(`[ChatScraper] ✓ NEW: ${title.substring(0, 50)}... (${chatId})`);
         } else {
           // Send all chats to background, it will check against DB
           newChats.push(chat);
-          console.log(`[ChatScraper] 📋 ${title.substring(0, 50)}...`);
+          console.log(`[ChatScraper] 📋 FOUND: ${title.substring(0, 50)}... (${chatId})`);
         }
       } catch (err) {
-        console.warn('[ChatScraper] Error processing chat element:', err);
+        console.warn(`[ChatScraper] Error processing chat element #${index}:`, err);
       }
     });
 
-    console.log(`[ChatScraper] ✅ Found ${allChats.length} total chats`);
+    console.log(`[ChatScraper] ✅ Analysis complete: Found ${allChats.length} valid chats, ${newChats.length} passed to background`);
 
     return {
       success: true,
@@ -646,17 +665,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Auto-scrape when content script loads
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
+    // Prevent running in iframes or service worker helpers
+    if (window.self !== window.top || window.location.pathname.includes('sw_iframe')) {
+      return;
+    }
     console.log('[ChatScraper] Content script loaded and ready');
-    autoScrape();
+    try {
+      autoScrape();
+    } catch (e) {
+      console.warn('[ChatScraper] Auto-scrape failed:', e);
+    }
   });
 } else {
-  console.log('[ChatScraper] Content script loaded and ready');
-  autoScrape();
+  // Prevent running in iframes or service worker helpers
+  if (window.self !== window.top || window.location.pathname.includes('sw_iframe')) {
+    // console.debug('[ChatScraper] Skipping execution in iframe/sw_iframe'); 
+  } else {
+    console.log('[ChatScraper] Content script loaded and ready');
+    try {
+      autoScrape();
+    } catch (e) {
+      console.warn('[ChatScraper] Auto-scrape failed:', e);
+    }
+  }
 }
 
 // Also auto-scrape when URL changes (for SPAs)
 let lastUrl = location.href;
 new MutationObserver(() => {
+  if (window.self !== window.top) return;
+
   const currentUrl = location.href;
   if (currentUrl !== lastUrl) {
     lastUrl = currentUrl;
