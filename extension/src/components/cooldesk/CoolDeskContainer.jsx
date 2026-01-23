@@ -241,35 +241,19 @@ export function CoolDeskContainer({
 
   return (
     <div className={`cooldesk-container ${themeClass}`}>
-      {/* Wallpaper Background */}
+      {/* Wallpaper Background Overlay (Blur) handled by React, Image handled by Body CSS */}
       {wallpaperEnabled && wallpaperUrl && (
-        <>
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundImage: `url(${wallpaperUrl})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            opacity: wallpaperOpacity,
-            zIndex: -2,
-            pointerEvents: 'none'
-          }} />
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            zIndex: -1,
-            pointerEvents: 'none'
-          }} />
-        </>
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          zIndex: -1,
+          pointerEvents: 'none'
+        }} />
       )}
 
       {/* Header with Logo and Settings - Unified Top Bar */}
@@ -358,6 +342,6 @@ export function CoolDeskContainer({
         onAddUrlToWorkspace={onAddUrlToWorkspace}
         onAddNote={onAddNote}
       />
-    </div>
+    </div >
   );
 }

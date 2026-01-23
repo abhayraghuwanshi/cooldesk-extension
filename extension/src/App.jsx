@@ -633,14 +633,20 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem('wallpaperUrl', wallpaperUrl);
+      if (wallpaperEnabled) {
+        document.body.style.setProperty('--wallpaper-url', `url("${wallpaperUrl}")`);
+      }
     } catch { }
-  }, [wallpaperUrl]);
+  }, [wallpaperUrl, wallpaperEnabled]);
 
   useEffect(() => {
     try {
       localStorage.setItem('wallpaperOpacity', String(wallpaperOpacity));
+      if (wallpaperEnabled) {
+        document.body.style.setProperty('--wallpaper-opacity', String(wallpaperOpacity));
+      }
     } catch { }
-  }, [wallpaperOpacity]);
+  }, [wallpaperOpacity, wallpaperEnabled]);
 
   useEffect(() => {
     if (!activePinnedWorkspace) return;

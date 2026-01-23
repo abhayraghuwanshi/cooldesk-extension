@@ -20,9 +20,54 @@
   <link rel="stylesheet" href="src/styles/themes/white-cred.css">
   <link rel="stylesheet" href="src/styles/themes/orange-warm.css">
   <link rel="stylesheet" href="src/styles/themes/brown-earth.css">
+  <style>
+    body.wallpaper-enabled {
+      background: #000 !important;
+    }
+
+    body.wallpaper-enabled::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-image: var(--wallpaper-url);
+      background-size: cover;
+      background-position: center;
+      opacity: var(--wallpaper-opacity, 0.3);
+      z-index: -2;
+      pointer-events: none;
+    }
+  </style>
+  <style>
+    .popup-wrap.wallpaper-enabled,
+    body.wallpaper-enabled .cooldesk-container {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+  </style>
 </head>
 
 <body class="bg-ai-midnight-nebula">
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('wallpaperEnabled');
+        if (saved !== 'false') {
+          document.body.classList.add('wallpaper-enabled');
+          var url = localStorage.getItem('wallpaperUrl');
+          if (url) {
+            document.body.style.setProperty('--wallpaper-url', 'url("' + url + '")');
+          }
+          var opacity = localStorage.getItem('wallpaperOpacity');
+          if (opacity) {
+            document.body.style.setProperty('--wallpaper-opacity', opacity);
+          }
+        }
+      } catch (e) { }
+    })();
+  </script>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
