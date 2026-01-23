@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { p2pSyncService } from '../../services/p2p/syncService';
 
-export default function TeamContextPanel({ teamId }) {
+export default function TeamContextPanel({ teamId, canWrite }) {
     console.log('[TeamContext] Component rendered with teamId:', teamId);
 
     const [context, setContext] = useState({
@@ -201,28 +201,30 @@ export default function TeamContextPanel({ teamId }) {
                         </span>
                     </button>
 
-                    <button
-                        onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-                        style={{
-                            background: isEditing
-                                ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                                : 'rgba(255, 255, 255, 0.06)',
-                            border: isEditing ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
-                            color: isEditing ? '#fff' : 'rgba(255,255,255,0.7)',
-                            cursor: 'pointer',
-                            fontSize: 'var(--font-sm)', fontWeight: 600,
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            padding: '6px 14px',
-                            borderRadius: 8,
-                            transition: 'all 0.2s',
-                            boxShadow: isEditing ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none'
-                        }}
-                        onMouseEnter={e => !isEditing && (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-                        onMouseLeave={e => !isEditing && (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                    >
-                        <FontAwesomeIcon icon={isEditing ? faCheck : faPen} />
-                        {isEditing ? 'Save' : 'Edit'}
-                    </button>
+                    {canWrite && (
+                        <button
+                            onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                            style={{
+                                background: isEditing
+                                    ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                                    : 'rgba(255, 255, 255, 0.06)',
+                                border: isEditing ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
+                                color: isEditing ? '#fff' : 'rgba(255,255,255,0.7)',
+                                cursor: 'pointer',
+                                fontSize: 'var(--font-sm)', fontWeight: 600,
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                padding: '6px 14px',
+                                borderRadius: 8,
+                                transition: 'all 0.2s',
+                                boxShadow: isEditing ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none'
+                            }}
+                            onMouseEnter={e => !isEditing && (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                            onMouseLeave={e => !isEditing && (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                        >
+                            <FontAwesomeIcon icon={isEditing ? faCheck : faPen} />
+                            {isEditing ? 'Save' : 'Edit'}
+                        </button>
+                    )}
                 </div>
             </div>
 

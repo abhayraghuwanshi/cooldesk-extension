@@ -21,7 +21,7 @@ const PAPER_STYLES = [
     { bg: '#ffffff', shadow: 'rgba(0, 0, 0, 0.05)' },     // White
 ];
 
-export default function NoticeBoard({ teamId }) {
+export default function NoticeBoard({ teamId, canWrite }) {
     console.log('[NoticeBoard] Component rendered with teamId:', teamId);
 
     const [notices, setNotices] = useState([]);
@@ -153,33 +153,35 @@ export default function NoticeBoard({ teamId }) {
                     </div>
                 </div>
 
-                <button
-                    onClick={() => setIsAdding(!isAdding)}
-                    style={{
-                        background: isAdding ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.1)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: 10, padding: '8px 16px',
-                        color: '#fff', fontWeight: 600, fontSize: 'var(--font-sm)',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                        transition: 'all 0.2s',
-                        backdropFilter: 'blur(10px)'
-                    }}
-                    onMouseEnter={e => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={e => {
-                        e.currentTarget.style.background = isAdding ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.1)';
-                        e.currentTarget.style.transform = 'none';
-                    }}
-                >
-                    <FontAwesomeIcon icon={isAdding ? faTimes : faPlus} />
-                    {isAdding ? 'Close' : 'Add Note'}
-                </button>
+                {canWrite && (
+                    <button
+                        onClick={() => setIsAdding(!isAdding)}
+                        style={{
+                            background: isAdding ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.1)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: 10, padding: '8px 16px',
+                            color: '#fff', fontWeight: 600, fontSize: 'var(--font-sm)',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                            transition: 'all 0.2s',
+                            backdropFilter: 'blur(10px)'
+                        }}
+                        onMouseEnter={e => {
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                        }}
+                        onMouseLeave={e => {
+                            e.currentTarget.style.background = isAdding ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.1)';
+                            e.currentTarget.style.transform = 'none';
+                        }}
+                    >
+                        <FontAwesomeIcon icon={isAdding ? faTimes : faPlus} />
+                        {isAdding ? 'Close' : 'Add Note'}
+                    </button>
+                )}
             </div>
 
             {/* Add Note Form */}
-            {isAdding && (
+            {isAdding && canWrite && (
                 <div
                     onPaste={handlePaste}
                     style={{
@@ -283,15 +285,17 @@ export default function NoticeBoard({ teamId }) {
                             <FontAwesomeIcon icon={faMapPin} size="lg" />
                         </div>
                         <div style={{ fontSize: 'var(--font-lg)', fontWeight: 500 }}>The board is empty</div>
-                        <button
-                            onClick={() => setIsAdding(true)}
-                            style={{
-                                background: 'transparent', border: 'none',
-                                color: '#3b82f6', cursor: 'pointer', fontSize: 'var(--font-md)'
-                            }}
-                        >
-                            Create the first note
-                        </button>
+                        {canWrite && (
+                            <button
+                                onClick={() => setIsAdding(true)}
+                                style={{
+                                    background: 'transparent', border: 'none',
+                                    color: '#3b82f6', cursor: 'pointer', fontSize: 'var(--font-md)'
+                                }}
+                            >
+                                Create the first note
+                            </button>
+                        )}
                     </div>
                 ) : (
                     notices.map((note, index) => {
@@ -403,25 +407,27 @@ export default function NoticeBoard({ teamId }) {
                                     }}>
                                         {new Date(note.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                     </span>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            deleteNote(index);
-                                        }}
-                                        className="delete-btn"
-                                        style={{
-                                            border: 'none', background: 'rgba(0,0,0,0.05)',
-                                            color: '#ef4444', cursor: 'pointer',
-                                            padding: 6, borderRadius: 6,
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            transition: 'all 0.2s',
-                                        }}
-                                        title="Remove note"
-                                        onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
-                                    >
-                                        <FontAwesomeIcon icon={faTimes} size="sm" />
-                                    </button>
+                                    {canWrite && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteNote(index);
+                                            }}
+                                            className="delete-btn"
+                                            style={{
+                                                border: 'none', background: 'rgba(0,0,0,0.05)',
+                                                color: '#ef4444', cursor: 'pointer',
+                                                padding: 6, borderRadius: 6,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                transition: 'all 0.2s',
+                                            }}
+                                            title="Remove note"
+                                            onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+                                        >
+                                            <FontAwesomeIcon icon={faTimes} size="sm" />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         );

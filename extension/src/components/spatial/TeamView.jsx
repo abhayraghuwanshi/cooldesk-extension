@@ -567,12 +567,12 @@ export default function TeamView({ team: propTeam }) {
 
                             {/* Context Panel */}
                             <div style={{ padding: '0 0 24px 0' }}>
-                                <TeamContextPanel teamId={activeTeam.id} />
+                                <TeamContextPanel teamId={activeTeam.id} canWrite={hasWriteAccess} />
                             </div>
 
                             {/* Notice Board */}
                             <div style={{ paddingBottom: 0 }}>
-                                <NoticeBoard teamId={activeTeam.id} />
+                                <NoticeBoard teamId={activeTeam.id} canWrite={hasWriteAccess} />
                             </div>
 
                             {/* Items Grid */}
