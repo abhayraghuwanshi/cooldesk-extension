@@ -39,10 +39,27 @@ export default defineConfig(({ mode }) => {
       react(),
     ],
     build: {
+      chunkSizeWarningLimit: 1000,
       rollupOptions: {
         input: {
           main: resolve(__dirname, 'index.html'),
           sidebar: resolve(__dirname, 'sidebar.html'),
+        },
+        output: {
+          manualChunks: (id) => {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom')) {
+                return 'vendor-react';
+              }
+              if (id.includes('fontawesome')) {
+                return 'vendor-fontawesome';
+              }
+              if (id.includes('lodash') || id.includes('date-fns')) {
+                return 'vendor-utils'; // Common utilities if present
+              }
+              return 'vendor'; // All other node_modules
+            }
+          }
         }
       }
     },

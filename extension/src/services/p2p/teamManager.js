@@ -1,5 +1,3 @@
-import { cryptoUtils } from './cryptoUtils';
-
 const TEAMS_STORAGE_KEY = 'cooldesk_teams';
 const ACTIVE_TEAM_KEY = 'cooldesk_active_team_id';
 
@@ -22,6 +20,9 @@ class TeamManager {
             // Check if default Cooldesk team exists, if not create it
             const defaultTeamName = 'Cooldesk Community';
             const defaultTeamSecret = 'cooldesk-community-default-secret';
+
+            // Lazy load cryptoUtils
+            const { cryptoUtils } = await import('./cryptoUtils');
             const { roomId: defaultTeamId } = cryptoUtils.deriveKeys(defaultTeamSecret);
 
             const hasDefaultTeam = this.teams.some(t => t.id === defaultTeamId);
@@ -55,6 +56,9 @@ class TeamManager {
         if (!name || !secretPhrase) {
             throw new Error('Name and secret phrase are required');
         }
+
+        // Lazy load cryptoUtils
+        const { cryptoUtils } = await import('./cryptoUtils');
 
         // Derive keys
         const { roomId, encryptionKey } = cryptoUtils.deriveKeys(secretPhrase);

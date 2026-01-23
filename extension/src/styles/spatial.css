@@ -25,7 +25,7 @@
   flex: 1;
   height: 100%;
   min-height: 0;
-  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
   transform: translateZ(0);
   /* Force GPU acceleration */

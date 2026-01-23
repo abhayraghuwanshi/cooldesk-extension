@@ -2,7 +2,6 @@ import { faCheckCircle, faCopy, faExclamationTriangle, faLink, faLock, faShieldA
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { cryptoUtils } from '../../services/p2p/cryptoUtils';
 
 export function InviteUserModal({ isOpen, onClose, team }) {
     const [mode, setMode] = useState('protected'); // 'safe' | 'protected'
@@ -12,13 +11,16 @@ export function InviteUserModal({ isOpen, onClose, team }) {
 
     if (!isOpen || !team) return null;
 
-    const handleGenerateProtected = () => {
+    const handleGenerateProtected = async () => {
         if (!pin || pin.length < 4) {
             alert('Please enter a PIN with at least 4 characters.');
             return;
         }
 
         try {
+            // Dynamically import cryptoUtils to avoid bundling it with the main chunk
+            const { cryptoUtils } = await import('../../services/p2p/cryptoUtils');
+
             const payload = {
                 name: team.name,
                 secret: team.secretPhrase

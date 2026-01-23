@@ -15,9 +15,7 @@ import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspa
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
 import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
-import { cryptoUtils } from './services/p2p/cryptoUtils';
 import { p2pSyncService } from './services/p2p/syncService';
-import { teamManager } from './services/p2p/teamManager';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
 import { getFaviconUrl } from './utils';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
@@ -741,9 +739,13 @@ export default function App() {
         // Delay slightly to ensure app is ready
         setTimeout(async () => {
           try {
-            // Ask for PIN
+            // Ask for PIN first to avoid unnecessary imports if user cancels
             const pin = window.prompt('Enter the PIN to unlock this team invite:');
             if (!pin) return; // User cancelled
+
+            // Dynamically import dependencies only when needed
+            const { cryptoUtils } = await import('./services/p2p/cryptoUtils');
+            const { teamManager } = await import('./services/p2p/teamManager');
 
             // Decrypt
             const payload = cryptoUtils.decryptWithPin(inviteParam, pin);
