@@ -1,20 +1,22 @@
 import { faGear } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
 import '../../styles/cooldesk.css';
 import '../../styles/global-add.css';
 import '../../styles/spatial.css';
 import '../../styles/tabCard.css';
-import { ChatContext } from '../spatial/ChatContext';
-import { NotesCanvas } from '../spatial/NotesCanvas';
-import TeamView from '../spatial/TeamView';
 import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
 import { CoolSearch } from './CoolSearch';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
-import { TabManagement } from './TabManagement';
 import { WorkspaceList } from './WorkspaceList';
+
+// Lazy load heavy components
+const ChatContext = lazy(() => import('../spatial/ChatContext').then(m => ({ default: m.ChatContext })));
+const NotesCanvas = lazy(() => import('../spatial/NotesCanvas').then(m => ({ default: m.NotesCanvas })));
+const TeamView = lazy(() => import('../spatial/TeamView')); // Default export
+const TabManagement = lazy(() => import('./TabManagement').then(m => ({ default: m.TabManagement })));
 
 console.log('[CoolDesk] Module loaded. OverviewDashboard:', OverviewDashboard);
 
@@ -289,10 +291,12 @@ export function CoolDeskContainer({
       <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange}>
         {/* Face 1: Chat (Far Left) */}
         <Face index="chat">
-          <ChatContext
-            workspaceId={currentWorkspace?.id}
-            workspaceName={currentWorkspace?.name || 'All Workspaces'}
-          />
+          <Suspense fallback={null}>
+            <ChatContext
+              workspaceId={currentWorkspace?.id}
+              workspaceName={currentWorkspace?.name || 'All Workspaces'}
+            />
+          </Suspense>
         </Face>
 
         {/* Face 2: Workspace Details (Left) - Shows ALL Workspaces */}
@@ -321,17 +325,23 @@ export function CoolDeskContainer({
 
         {/* Face 4: Tabs (Right) */}
         <Face index="tabs">
-          <TabManagement />
+          <Suspense fallback={null}>
+            <TabManagement />
+          </Suspense>
         </Face>
 
         {/* Face 5: Team (Further Right) */}
         <Face index="team">
-          <TeamView />
+          <Suspense fallback={null}>
+            <TeamView />
+          </Suspense>
         </Face>
 
         {/* Face 6: Notes (Far Right) */}
         <Face index="notes">
-          <NotesCanvas workspaceId={currentWorkspace?.id} />
+          <Suspense fallback={null}>
+            <NotesCanvas workspaceId={currentWorkspace?.id} />
+          </Suspense>
         </Face>
       </WorkspaceShell>
 

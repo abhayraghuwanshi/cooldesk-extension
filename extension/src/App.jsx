@@ -1,21 +1,5 @@
-import { library } from '@fortawesome/fontawesome-svg-core';
-import {
-  faBroom,
-  faClone,
-  faGear,
-  faGlobe,
-  faHistory,
-  faPlus,
-  faRotateRight,
-  faThumbtack,
-  faTrash,
-  faTriangleExclamation,
-  faUndo
-} from '@fortawesome/free-solid-svg-icons';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './App.css'; // MUST BE LAST to override theme backgrounds
-import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
-import { SettingsModal } from './components/popups/SettingsModal';
 import './search.css';
 import './styles/bento-layout.css';
 import './styles/components.css';
@@ -24,6 +8,22 @@ import './styles/themes/components-vars.css';
 import './styles/wallpaper-enhancements.css';
 
 // Add icons to the library
+import { library } from '@fortawesome/fontawesome-svg-core';
+import { faBroom, faClone, faGear, faGlobe, faHistory, faPlus, faRotateRight, faThumbtack, faTrash, faTriangleExclamation, faUndo } from '@fortawesome/free-solid-svg-icons';
+import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
+import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspace, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
+import { useDashboardData } from './hooks/useDashboardData';
+import { useOnboarding } from './hooks/useOnboarding';
+import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
+import { cryptoUtils } from './services/p2p/cryptoUtils';
+import { p2pSyncService } from './services/p2p/syncService';
+import { teamManager } from './services/p2p/teamManager';
+import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
+import { getFaviconUrl } from './utils';
+import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
+import GenericUrlParser from './utils/GenericUrlParser';
+import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
+
 library.add(
   faPlus,
   faTrash,
@@ -37,21 +37,10 @@ library.add(
   faThumbtack,
   faUndo
 );
+// Lazy load non-critical components
+const SettingsModal = React.lazy(() => import('./components/popups/SettingsModal').then(module => ({ default: module.SettingsModal })));
+const OnboardingTour = React.lazy(() => import('./components/onboarding/OnboardingTour').then(module => ({ default: module.OnboardingTour })));
 
-import { OnboardingTour } from './components/onboarding/OnboardingTour';
-import categoryManager from './data/categories';
-import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspace, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
-import { useDashboardData } from './hooks/useDashboardData';
-import { useOnboarding } from './hooks/useOnboarding';
-import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
-import { cryptoUtils } from './services/p2p/cryptoUtils';
-import { p2pSyncService } from './services/p2p/syncService';
-import { teamManager } from './services/p2p/teamManager';
-import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
-import { getFaviconUrl } from './utils';
-import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
-import GenericUrlParser from './utils/GenericUrlParser';
-import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
 
 // Simple error boundary to prevent entire app crash due to child errors
 class ErrorBoundary extends React.Component {
@@ -551,8 +540,15 @@ export default function App() {
     };
 
     // Run on mount and when data changes
-    const timeoutId = setTimeout(autoCreatePlatformWorkspaces, 3000);
-    return () => clearTimeout(timeoutId);
+    const defer = window.requestIdleCallback || ((cb) => setTimeout(cb, 5000));
+    const handle = defer(() => {
+      autoCreatePlatformWorkspaces();
+    }, { timeout: 10000 });
+
+    return () => {
+      if (window.cancelIdleCallback) window.cancelIdleCallback(handle);
+      else clearTimeout(handle);
+    };
   }, [data]);
 
 
@@ -1341,29 +1337,33 @@ export default function App() {
         onTogglePin={togglePinWorkspace}
       />
 
-      <SettingsModal
-        show={showSettings}
-        onClose={() => setShowSettings(false)}
-        settings={settings}
-        onSave={saveSettings}
-        fontSize={fontSize}
-        onFontSizeChange={handleFontSizeChange}
-        onStartOnboarding={startOnboarding}
-        wallpaperEnabled={wallpaperEnabled}
-        wallpaperUrl={wallpaperUrl}
-        wallpaperOpacity={wallpaperOpacity}
-        onWallpaperEnabledChange={setWallpaperEnabled}
-        onWallpaperUrlChange={setWallpaperUrl}
-        onWallpaperOpacityChange={setWallpaperOpacity}
-      />
+      <React.Suspense fallback={null}>
+        <SettingsModal
+          show={showSettings}
+          onClose={() => setShowSettings(false)}
+          settings={settings}
+          onSave={saveSettings}
+          fontSize={fontSize}
+          onFontSizeChange={handleFontSizeChange}
+          onStartOnboarding={startOnboarding}
+          wallpaperEnabled={wallpaperEnabled}
+          wallpaperUrl={wallpaperUrl}
+          wallpaperOpacity={wallpaperOpacity}
+          onWallpaperEnabledChange={setWallpaperEnabled}
+          onWallpaperUrlChange={setWallpaperUrl}
+          onWallpaperOpacityChange={setWallpaperOpacity}
+        />
+      </React.Suspense>
 
       {/* Onboarding Tour */}
-      {shouldShowOnboarding && (
-        <OnboardingTour
-          onComplete={completeOnboarding}
-          onSkip={skipOnboarding}
-        />
-      )}
+      <React.Suspense fallback={null}>
+        {shouldShowOnboarding && (
+          <OnboardingTour
+            onComplete={completeOnboarding}
+            onSkip={skipOnboarding}
+          />
+        )}
+      </React.Suspense>
     </div>
   )
 }
