@@ -75,24 +75,17 @@ const PLATFORM_CONFIGS = {
   'gemini.google.com': {
     name: 'Gemini',
     selectors: {
-      // Gemini uses div elements with data-test-id="conversation" instead of links
-      chatItems: 'div[data-test-id="conversation"]',
+      // Gemini uses <a> elements with data-test-id="conversation"
+      chatItems: 'a[data-test-id="conversation"]',
       titleElement: '.conversation-title',
-      titleAttribute: null, // Title is in text content, not attribute
+      titleAttribute: null,
       waitFor: '.conversation-items-container, [role="navigation"], nav',
     },
-    extractChatId: (element) => {
-      // Gemini chat IDs are in the jslog attribute
-      // Format: jslog="...BardVeMetadataKey:[...["c_9c0a297b5fef96b7",...]]..."
-      const jslog = element.getAttribute('jslog');
-      if (jslog) {
-        // Extract ID from jslog - the ID is after "c_"
-        const match = jslog.match(/["']c_([a-f0-9]+)["']/);
-        if (match) return match[1]; // Return just the hex ID without "c_" prefix
-      }
-      // Fallback: use a hash of the title as ID
-      const title = element.querySelector('.conversation-title')?.textContent?.trim();
-      return title ? `gemini_${title.replace(/\s+/g, '_').substring(0, 30)}` : null;
+    extractChatId: (href) => {
+      // Extract ID from /app/ae75e5427dbb3832
+      // Support both full URL and relative path
+      const match = href.match(/\/app\/([a-f0-9]+)/);
+      return match ? match[1] : null;
     },
   },
 
@@ -535,7 +528,7 @@ async function scrapeNewChats() {
           chatId,
           title,
           platform: config.name,
-          scrapedAt: currentScrapeTime,
+          scrapedAt: currentScrapeTime - index,
         };
 
         allChats.push(chat);

@@ -968,45 +968,25 @@ async function main() {
 
             console.log(`[Background] Step 6: Found ${existingChats.length} existing chats for ${result.platform}`);
 
-            // Create a map of existing chat IDs
-            const existingChatIds = new Set(existingChats.map(chat => chat.chatId));
+            // Store ALL chats to update timestamps and ensure order matches current view
+            console.log(`[Background] Step 7: Storing/Updating ${result.chats.length} chats...`);
 
-            // Filter out chats that already exist
-            const newChats = result.chats.filter(chat => !existingChatIds.has(chat.chatId));
-
-            console.log(`[Background] Step 7: After deduplication: ${newChats.length} new chats (${result.chats.length - newChats.length} duplicates)`);
-
-            if (newChats.length === 0) {
-              console.log(`[Background] ℹ️ No new chats to store (all ${result.chats.length} already exist)`);
-              return;
-            }
-
-            console.log(`[Background] Step 8: Storing ${newChats.length} new chats...`);
-
-            // Store only new chats in IndexedDB
+            // Store in IndexedDB
             const writeTx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS, DB_CONFIG.STORES.UI_STATE], 'readwrite');
             const writeStore = writeTx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
 
-            for (const chat of newChats) {
-              await new Promise((resolve, reject) => {
-                const request = writeStore.put(chat);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-              });
+            for (const chat of result.chats) {
+              writeStore.put(chat);
             }
 
             // Update last scrape time in UI_STATE
             const uiStateStore = writeTx.objectStore(DB_CONFIG.STORES.UI_STATE);
             const stateKey = `lastScrape_${result.platform}`;
-            await new Promise((resolve, reject) => {
-              const request = uiStateStore.put({
-                id: stateKey,
-                timestamp: result.scrapedAt,
-                platform: result.platform,
-                updatedAt: Date.now()
-              });
-              request.onsuccess = () => resolve();
-              request.onerror = () => reject(request.error);
+            uiStateStore.put({
+              id: stateKey,
+              timestamp: result.scrapedAt,
+              platform: result.platform,
+              updatedAt: Date.now()
             });
 
             await new Promise((resolve, reject) => {
@@ -1014,7 +994,9 @@ async function main() {
               writeTx.onerror = () => reject(writeTx.error);
             });
 
-            console.log(`[Background] ✅ Auto-stored ${newChats.length} new ${result.platform} chats (${result.chats.length - newChats.length} duplicates skipped)`);
+
+
+            console.log(`[Background] ✅ Auto-stored/updated ${result.chats.length} ${result.platform} chats`);
           }
         } catch (error) {
           console.error('[Background] Error handling auto-scraped chats:', error);
