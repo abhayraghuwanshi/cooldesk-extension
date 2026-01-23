@@ -10,7 +10,8 @@ import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
 import { CoolSearch } from './CoolSearch';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
-import { WorkspaceList } from './WorkspaceList';
+// Lazy load WorkspaceList (Face 2)
+const WorkspaceList = lazy(() => import('./WorkspaceList').then(m => ({ default: m.WorkspaceList })));
 
 // Lazy load heavy components
 const ChatContext = lazy(() => import('../spatial/ChatContext').then(m => ({ default: m.ChatContext })));
@@ -301,14 +302,16 @@ export function CoolDeskContainer({
 
         {/* Face 2: Workspace Details (Left) - Shows ALL Workspaces */}
         <Face index="workspace">
-          <WorkspaceList
-            savedWorkspaces={savedWorkspaces}
-            onWorkspaceClick={handleWorkspaceClick}
-            activeWorkspaceId={currentWorkspace?.id}
-            expandedWorkspaceId={expandedWorkspace?.id}
-            pinnedWorkspaces={pinnedWorkspaces}
-            onTogglePin={onTogglePin}
-          />
+          <Suspense fallback={<div style={{ padding: 20, color: '#64748B', textAlign: 'center' }}>Loading...</div>}>
+            <WorkspaceList
+              savedWorkspaces={savedWorkspaces}
+              onWorkspaceClick={handleWorkspaceClick}
+              activeWorkspaceId={currentWorkspace?.id}
+              expandedWorkspaceId={expandedWorkspace?.id}
+              pinnedWorkspaces={pinnedWorkspaces}
+              onTogglePin={onTogglePin}
+            />
+          </Suspense>
         </Face>
 
         {/* Face 3: Overview (Center) */}

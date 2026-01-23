@@ -1,12 +1,51 @@
 import { faStickyNote } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { sortWorkspacesByActivity } from '../../utils/ranking.js';
-import { ActivityFeed } from './ActivityFeed';
 import { NotesWidget } from './NotesWidget';
 import { WorkspaceCard } from './WorkspaceCard';
+
+// Lazy load ActivityFeed as it's not critical for LCP (Largest Contentful Paint)
+const ActivityFeed = lazy(() => import('./ActivityFeed').then(m => ({ default: m.ActivityFeed })));
+
+// Memoized Helper for analytics to avoid recreating it
+const getAnalytics = async (ws) => {
+    let totalVisits = 0;
+    let totalTime = 0;
+    let lastActive = 0;
+
+    if (ws.urls && ws.urls.length > 0) {
+        try {
+            // Optimization: If workspace has metadata, use it first to avoid DB hits
+            // This assumes the DB updates workspace metadata on activity
+            if (ws.lastActive && ws.totalVisits) {
+                return {
+                    totalVisits: ws.totalVisits,
+                    totalTime: ws.totalTime || 0,
+                    lastActive: ws.lastActive
+                };
+            }
+
+            const statsPromises = ws.urls.map(u => getUrlAnalytics(u.url));
+            const statsResults = await Promise.all(statsPromises);
+
+            statsResults.forEach(res => {
+                if (res?.success && res.data) {
+                    totalVisits += (res.data.totalVisits || 0);
+                    totalTime += (res.data.totalTime || 0);
+                    if (res.data.lastVisit) {
+                        lastActive = Math.max(lastActive, res.data.lastVisit);
+                    }
+                }
+            });
+        } catch (e) {
+            console.warn('Failed to fetch analytics for workspace:', ws.name);
+        }
+    }
+    return { totalVisits, totalTime, lastActive };
+};
 
 export function OverviewDashboard({
     savedWorkspaces = [],
@@ -14,13 +53,28 @@ export function OverviewDashboard({
     activeWorkspaceId,
     expandedWorkspaceId,
     onAddNote,
-    pinnedWorkspaces = [] // still passed if needed for visual pin state
+    pinnedWorkspaces = []
 }) {
-    const [recentWorkspaces, setRecentWorkspaces] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [recentWorkspaces, setRecentWorkspaces] = useState(() => {
+        // Hydrate from local storage cache for instant render
+        try {
+            const cached = localStorage.getItem('cooldesk_recent_workspaces');
+            return cached ? JSON.parse(cached) : [];
+        } catch {
+            return [];
+        }
+    });
+    const [isLoading, setIsLoading] = useState(recentWorkspaces.length === 0);
+
+    // Compute a stable hash of the input workspaces to detect changes
+    const workspacesHash = useMemo(() => {
+        return savedWorkspaces.map(w => w.id + (w.urls?.length || 0)).join(',');
+    }, [savedWorkspaces]);
 
     useEffect(() => {
         let isMounted = true;
+        const cacheKey = 'cooldesk_recent_workspaces';
+        const cacheHashKey = 'cooldesk_recent_workspaces_hash';
 
         const loadRecentWorkspaces = async () => {
             if (!savedWorkspaces || savedWorkspaces.length === 0) {
@@ -31,40 +85,25 @@ export function OverviewDashboard({
                 return;
             }
 
+            // Check if our cache is still valid
+            const lastHash = localStorage.getItem(cacheHashKey);
+            if (lastHash === workspacesHash && recentWorkspaces.length > 0) {
+                // Cache is valid, no need to re-sort (DB expensive)
+                setIsLoading(false);
+                return;
+            }
+
             try {
-                // Helper to fetch aggregated analytics for a single workspace
-                const getAnalytics = async (ws) => {
-                    let totalVisits = 0;
-                    let totalTime = 0;
-                    let lastActive = 0; // Pure usage data, no fallbacks here
-
-                    if (ws.urls && ws.urls.length > 0) {
-                        try {
-                            const statsPromises = ws.urls.map(u => getUrlAnalytics(u.url));
-                            const statsResults = await Promise.all(statsPromises);
-
-                            statsResults.forEach(res => {
-                                if (res?.success && res.data) {
-                                    totalVisits += (res.data.totalVisits || 0);
-                                    totalTime += (res.data.totalTime || 0);
-                                    if (res.data.lastVisit) {
-                                        lastActive = Math.max(lastActive, res.data.lastVisit);
-                                    }
-                                }
-                            });
-                        } catch (e) {
-                            console.warn('Failed to fetch analytics for workspace:', ws.name);
-                        }
-                    }
-                    return { totalVisits, totalTime, lastActive };
-                };
-
                 // Use the Activity Score algorithm to sort
                 const sorted = await sortWorkspacesByActivity(savedWorkspaces, getAnalytics);
 
+                const top4 = sorted.slice(0, 4);
                 if (isMounted) {
-                    setRecentWorkspaces(sorted.slice(0, 4));
+                    setRecentWorkspaces(top4);
                     setIsLoading(false);
+                    // Update cache
+                    localStorage.setItem(cacheKey, JSON.stringify(top4));
+                    localStorage.setItem(cacheHashKey, workspacesHash);
                 }
             } catch (error) {
                 console.error('Error sorting workspaces:', error);
@@ -76,13 +115,19 @@ export function OverviewDashboard({
             }
         };
 
-        loadRecentWorkspaces();
+        // Defer this heavy task to avoid blocking transition animations if this component mounts during a slide
+        // Uses requestIdleCallback if available, or a small timeout
+        if (window.requestIdleCallback) {
+            window.requestIdleCallback(() => loadRecentWorkspaces(), { timeout: 2000 });
+        } else {
+            setTimeout(loadRecentWorkspaces, 100);
+        }
 
         return () => { isMounted = false; };
-    }, [savedWorkspaces]);
+    }, [workspacesHash]); // Depend on hash, not array reference, to avoid loops if array is recreated but identical
 
     // Use recent workspaces if loaded, otherwise fallback or empty
-    const displayedWorkspaces = recentWorkspaces;
+    const displayedWorkspaces = recentWorkspaces.length > 0 ? recentWorkspaces : (isLoading ? [] : savedWorkspaces.slice(0, 4));
 
     return (
         <div className="overview-dashboard-grid">
@@ -103,9 +148,10 @@ export function OverviewDashboard({
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '6px',
-                        overflow: 'visible'
+                        overflow: 'visible',
+                        minHeight: '200px' // Optimization: Reserve space to prevent layout shift
                     }}>
-                        {isLoading ? (
+                        {isLoading && displayedWorkspaces.length === 0 ? (
                             <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
                                 Loading recent activity...
                             </div>
@@ -173,7 +219,9 @@ export function OverviewDashboard({
             {/* Right Column: Unified Activity Feed + Calendar */}
             <div className="overview-activity-column" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                    <ActivityFeed />
+                    <Suspense fallback={<div style={{ padding: 20, color: '#64748B' }}>Loading feed...</div>}>
+                        <ActivityFeed />
+                    </Suspense>
                 </div>
             </div>
         </div>

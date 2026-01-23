@@ -1,6 +1,6 @@
 import { faComments, faFolder, faHome, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { teamManager } from '../../services/p2p/teamManager';
 import '../../styles/spatial.css';
 
@@ -28,9 +28,11 @@ function debounce(func, wait) {
  * - Team (further right) - P2P shared items
  * - Notes (far right) - deep focus writing
  */
+// Create context for face state management to avoid prop drilling
+const WorkspaceFaceContext = React.createContext({ currentFace: 'overview' });
+
 export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange, onSearch }) {
   const [currentFace, setCurrentFace] = useState(() => {
-    // Try to recover state from localStorage
     const savedFace = localStorage.getItem('cooldesk-active-face');
     return savedFace || activeFace;
   });
@@ -43,19 +45,16 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   // Track active browser tab title
   useEffect(() => {
     if (typeof chrome !== 'undefined' && chrome.tabs) {
-      // Initial fetch
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]) setActiveTabTitle(tabs[0].title);
       });
 
-      // Listen for updates (URL/Title changes)
       const handleTabUpdate = (tabId, changeInfo, tab) => {
         if (tab.active && changeInfo.title) {
           setActiveTabTitle(changeInfo.title);
         }
       };
 
-      // Listen for tab switching
       const handleTabActivated = (activeInfo) => {
         chrome.tabs.get(activeInfo.tabId, (tab) => {
           if (tab) setActiveTabTitle(tab.title);
@@ -72,7 +71,6 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     }
   }, []);
 
-  // Debounced localStorage save
   const debouncedSave = useMemo(
     () =>
       debounce((face) => {
@@ -81,7 +79,6 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     []
   );
 
-  // Load active team on mount
   useEffect(() => {
     teamManager.init().then(() => {
       const team = teamManager.getTeam(teamManager.activeTeamId);
@@ -94,52 +91,59 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     });
   }, []);
 
-  // Persist state to localStorage (debounced)
   useEffect(() => {
     debouncedSave(currentFace);
   }, [currentFace, debouncedSave]);
 
-  // Update when parent changes active face
   useEffect(() => {
     if (activeFace && activeFace !== 'overview') {
       setCurrentFace(activeFace);
     }
   }, [activeFace]);
 
-  // Navigate to a specific face (memoized)
   const navigateToFace = useCallback((face) => {
     if (face === currentFace || isTransitioning) return;
+
+    // Smart Travel: Dynamic duration based on distance
+    const faces = ['chat', 'workspace', 'overview', 'tabs', 'team', 'notes'];
+    const currentIndex = faces.indexOf(currentFace);
+    const targetIndex = faces.indexOf(face);
+    const distance = Math.abs(targetIndex - currentIndex);
+
+    // Aggressive optimization for "seamless" feel
+    // < 1 hop: smooth 600ms
+    // > 1 hop: super fast 300ms (whoosh effect)
+    const duration = distance > 1 ? 350 : 600;
+
+    const container = document.querySelector('.workspace-faces');
+    if (container) {
+      // Use efficient bezier for seamless landing
+      container.style.transition = `transform ${duration}ms cubic-bezier(0.2, 1, 0.4, 1)`;
+    }
 
     setIsTransitioning(true);
     setCurrentFace(face);
 
-    // Notify parent
     if (onFaceChange) {
       onFaceChange(face);
     }
 
-    // Reset transition lock after animation completes (reduced to 200ms)
     if (transitionTimeoutRef.current) {
       clearTimeout(transitionTimeoutRef.current);
     }
     transitionTimeoutRef.current = setTimeout(() => {
       setIsTransitioning(false);
-    }, 200);
+    }, duration);
   }, [currentFace, isTransitioning, onFaceChange]);
 
-  // Keyboard navigation (supports both Ctrl for Windows and Cmd for Mac)
   useEffect(() => {
     const handleKeyboard = (e) => {
-      // Check for modifier key (Ctrl on Windows/Linux, Cmd on Mac)
       const modifierPressed = e.ctrlKey || e.metaKey;
 
-      // Arrow keys with modifier
       if (modifierPressed && (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
         e.preventDefault();
-
         switch (e.key) {
           case 'ArrowLeft':
-            // Navigate left through faces
             if (currentFace === 'overview') navigateToFace('workspace');
             else if (currentFace === 'workspace') navigateToFace('chat');
             else if (currentFace === 'tabs') navigateToFace('overview');
@@ -147,7 +151,6 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             else if (currentFace === 'notes') navigateToFace('team');
             break;
           case 'ArrowRight':
-            // Navigate right through faces
             if (currentFace === 'overview') navigateToFace('tabs');
             else if (currentFace === 'tabs') navigateToFace('team');
             else if (currentFace === 'team') navigateToFace('notes');
@@ -163,21 +166,14 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         }
       }
 
-      // Number keys with modifier (1-6 for direct navigation)
       if (modifierPressed && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
         e.preventDefault();
         const faceMap = {
-          '1': 'chat',
-          '2': 'workspace',
-          '3': 'overview',
-          '4': 'tabs',
-          '5': 'team',
-          '6': 'notes'
+          '1': 'chat', '2': 'workspace', '3': 'overview', '4': 'tabs', '5': 'team', '6': 'notes'
         };
         navigateToFace(faceMap[e.key]);
       }
 
-      // Escape key
       if (e.key === 'Escape') {
         e.preventDefault();
         navigateToFace('overview');
@@ -188,7 +184,6 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     return () => window.removeEventListener('keydown', handleKeyboard);
   }, [navigateToFace, currentFace]);
 
-  // Horizontal scroll navigation
   useEffect(() => {
     let scrollTimeout;
     let scrollDelta = 0;
@@ -202,23 +197,19 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
 
       scrollTimeout = setTimeout(() => {
         const threshold = 50;
-
         if (scrollDelta > threshold) {
-          // Scroll right
           if (currentFace === 'chat') navigateToFace('workspace');
           else if (currentFace === 'workspace') navigateToFace('overview');
           else if (currentFace === 'overview') navigateToFace('tabs');
           else if (currentFace === 'tabs') navigateToFace('team');
           else if (currentFace === 'team') navigateToFace('notes');
         } else if (scrollDelta < -threshold) {
-          // Scroll left
           if (currentFace === 'notes') navigateToFace('team');
           else if (currentFace === 'team') navigateToFace('tabs');
           else if (currentFace === 'tabs') navigateToFace('overview');
           else if (currentFace === 'overview') navigateToFace('workspace');
           else if (currentFace === 'workspace') navigateToFace('chat');
         }
-
         scrollDelta = 0;
       }, 100);
     };
@@ -236,7 +227,6 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     };
   }, [navigateToFace, currentFace]);
 
-  // Memoized transform calculation
   const transform = useMemo(() => {
     const transforms = {
       'chat': 'translateX(0)',
@@ -250,112 +240,94 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   }, [currentFace]);
 
   return (
-    <div className="workspace-shell">
-      {/* Global Search Bar */}
-      {/* Global Search Bar - REPLACED by merged header in CoolDeskContainer */}
-      {/* <div style={{ padding: '0 24px 16px 24px', flexShrink: 0, zIndex: 101 }}>
-        <CoolSearch onSearch={onSearch} />
-      </div> */}
-
-      {/* Face indicator dots */}
-      <div
-        className="face-indicator"
-        data-face={currentFace}
-        onMouseLeave={() => setHoveredFace(null)}
-      >
-        <div className="face-label">
-          {hoveredFace
-            ? hoveredFace.charAt(0).toUpperCase() + hoveredFace.slice(1)
-            : (activeTabTitle || currentFace.charAt(0).toUpperCase() + currentFace.slice(1))}
+    <WorkspaceFaceContext.Provider value={{ currentFace }}>
+      <div className="workspace-shell">
+        <div
+          className="face-indicator"
+          data-face={currentFace}
+          onMouseLeave={() => setHoveredFace(null)}
+        >
+          <div className="face-label">
+            {hoveredFace
+              ? hoveredFace.charAt(0).toUpperCase() + hoveredFace.slice(1)
+              : (activeTabTitle || currentFace.charAt(0).toUpperCase() + currentFace.slice(1))}
+          </div>
+          <button
+            className={`face-dot ${currentFace === 'chat' ? 'active' : ''}`}
+            onClick={() => navigateToFace('chat')}
+            onMouseEnter={() => setHoveredFace('chat')}
+            title="Chat (Ctrl + 1)"
+          >
+            <FontAwesomeIcon icon={faComments} className="face-icon" />
+          </button>
+          <button
+            className={`face-dot ${currentFace === 'workspace' ? 'active' : ''}`}
+            onClick={() => navigateToFace('workspace')}
+            onMouseEnter={() => setHoveredFace('workspace')}
+            title="Collections (Ctrl + 2)"
+          >
+            <FontAwesomeIcon icon={faFolder} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
+          </button>
+          <button
+            className={`face-dot ${currentFace === 'overview' ? 'active' : ''}`}
+            onClick={() => navigateToFace('overview')}
+            onMouseEnter={() => setHoveredFace('overview')}
+            title="Overview (Ctrl + 3)"
+          >
+            <FontAwesomeIcon icon={faHome} className="face-icon" />
+          </button>
+          <button
+            className={`face-dot ${currentFace === 'tabs' ? 'active' : ''}`}
+            onClick={() => navigateToFace('tabs')}
+            onMouseEnter={() => setHoveredFace('tabs')}
+            title="Tabs (Ctrl + 4)"
+          >
+            <FontAwesomeIcon icon={faTh} className="face-icon" />
+          </button>
+          <button
+            className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
+            onClick={() => navigateToFace('team')}
+            onMouseEnter={() => setHoveredFace('team')}
+            title="Spaces (Ctrl + 5)"
+          >
+            <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
+          </button>
+          <button
+            className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`}
+            onClick={() => navigateToFace('notes')}
+            onMouseEnter={() => setHoveredFace('notes')}
+            title="Notes (Ctrl + 6)"
+          >
+            <FontAwesomeIcon icon={faStickyNote} className="face-icon" />
+          </button>
         </div>
-        <button
-          className={`face-dot ${currentFace === 'chat' ? 'active' : ''}`}
-          onClick={() => navigateToFace('chat')}
-          onMouseEnter={() => setHoveredFace('chat')}
-          title="Chat (Ctrl + 1)"
-        >
-          <FontAwesomeIcon icon={faComments} className="face-icon" />
-        </button>
-        <button
-          className={`face-dot ${currentFace === 'workspace' ? 'active' : ''}`}
-          onClick={() => navigateToFace('workspace')}
-          onMouseEnter={() => setHoveredFace('workspace')}
-          title="Collections (Ctrl + 2)"
-        >
-          <FontAwesomeIcon icon={faFolder} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
-        </button>
-        <button
-          className={`face-dot ${currentFace === 'overview' ? 'active' : ''}`}
-          onClick={() => navigateToFace('overview')}
-          onMouseEnter={() => setHoveredFace('overview')}
-          title="Overview (Ctrl + 3)"
-        >
-          <FontAwesomeIcon icon={faHome} className="face-icon" />
-        </button>
-        <button
-          className={`face-dot ${currentFace === 'tabs' ? 'active' : ''}`}
-          onClick={() => navigateToFace('tabs')}
-          onMouseEnter={() => setHoveredFace('tabs')}
-          title="Tabs (Ctrl + 4)"
-        >
-          <FontAwesomeIcon icon={faTh} className="face-icon" />
-        </button>
-        <button
-          className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
-          onClick={() => navigateToFace('team')}
-          onMouseEnter={() => setHoveredFace('team')}
-          title="Spaces (Ctrl + 5)"
-        >
-          <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
-        </button>
-        <button
-          className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`}
-          onClick={() => navigateToFace('notes')}
-          onMouseEnter={() => setHoveredFace('notes')}
-          title="Notes (Ctrl + 6)"
-        >
-          <FontAwesomeIcon icon={faStickyNote} className="face-icon" />
-        </button>
+
+        <div className={`workspace-faces ${isTransitioning ? 'transitioning' : ''}`} style={{ transform, willChange: 'transform' }}>
+          {children}
+        </div>
       </div>
-
-      {/* Sliding container */}
-      <div className={`workspace-faces ${isTransitioning ? 'transitioning' : ''}`} style={{ transform, willChange: 'transform' }}>
-        {/* We assume 'children' are passed in a specific order or we construct them here if they are static faces */}
-        {/* But wait, 'children' was used before. Let's see how App.jsx passes them. */}
-        {/* Assuming children contains the 3 existing faces: Chat, Workspace, Overview. Notes was hardcoded? No, notes logic was missing in view? */}
-        {/* Actually, let's look at how children are rendered. Using <Face> components? */}
-        {/* The original code just rendered {children}. */}
-        {/* We need to inject the TeamView component into the children or as a new Face */}
-        {/* If children is an array, we can insert into it. */}
-
-        {/* But simply rendering {children} implies the parent (App.jsx) controls the content. */}
-        {/* I should check App.jsx again to see what it passes to WorkspaceShell. */}
-
-        {/* HOWEVER, for now I will render {children} AND my new faces? */}
-        {/* No, standard pattern is to update App.jsx to pass the new face. */}
-        {/* But I can also inject it here if I want to encapsulate it. */}
-
-        {/* Best practice: Update App.jsx to pass the TeamView face. */}
-        {/* BUT I will try to support it here to minimize App.jsx edits if possible. */}
-
-        {/* Let's render children, but ensure we have slots for our new faces? */}
-        {/* If I change App.jsx, I have to be careful. */}
-
-        {children}
-        {/* I'll need to modify App.jsx to include TeamView in the children list */}
-      </div>
-
-
-    </div>
+    </WorkspaceFaceContext.Provider>
   );
 }
 
-
-
 export function Face({ index, children, className = '' }) {
+  // Consume context to check if this face is active
+  const { currentFace } = React.useContext(WorkspaceFaceContext);
+  const isActive = currentFace === index;
+
   return (
-    <div className={`workspace-face ${className}`} data-face={index}>
-      {children}
+    <div
+      className={`workspace-face ${className} ${isActive ? 'active' : 'inactive'}`}
+      data-face={index}
+    >
+      {/* Optimization: While blurred/inactive, we can also hint browser to deprioritize hit testing */}
+      <div style={{
+        height: '100%',
+        pointerEvents: isActive ? 'auto' : 'none',
+        transition: 'opacity 0.4s ease' // Smooth internal fade
+      }}>
+        {children}
+      </div>
     </div>
   );
 }

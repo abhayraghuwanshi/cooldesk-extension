@@ -107,34 +107,68 @@ export function WorkspaceList({
     }, []);
 
 
-    // Debounced activity score loader
+    // Compute hash for workspaces to detect meaningful changes
+    const workspacesHash = useMemo(() => {
+        return unpinned.map(w => w.id + (w.urls?.length || 0)).join(',');
+    }, [unpinned]);
+
+    // Debounced activity score loader with Cache
     const loadActivityScores = useMemo(
         () => debounce(async () => {
             if (!isSortingByActivity || unpinned.length === 0) return;
 
+            const cacheKey = 'cooldesk_workspace_scores';
+            const cacheHashKey = 'cooldesk_workspace_scores_hash';
+
+            // Check cache
+            const lastHash = localStorage.getItem(cacheHashKey);
+            if (lastHash === workspacesHash) {
+                try {
+                    const cachedScores = JSON.parse(localStorage.getItem(cacheKey));
+                    if (cachedScores) {
+                        setWorkspaceScores(new Map(cachedScores));
+                        return;
+                    }
+                } catch { /* ignore */ }
+            }
+
             setIsCalculatingScores(true);
-            const scores = new Map();
+            const scoresMap = new Map();
+            const scoresArray = []; // For serialization
 
             // Calculate scores for all unpinned workspaces
             await Promise.all(
                 unpinned.map(async (workspace) => {
                     const score = await calculateWorkspaceScore(workspace);
-                    scores.set(workspace.id, score);
+                    scoresMap.set(workspace.id, score);
+                    scoresArray.push([workspace.id, score]);
                 })
             );
 
-            setWorkspaceScores(scores);
+            setWorkspaceScores(scoresMap);
             setIsCalculatingScores(false);
+
+            // Update Cache
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify(scoresArray));
+                localStorage.setItem(cacheHashKey, workspacesHash);
+            } catch { /* ignore */ }
+
         }, 500),
-        [unpinned, isSortingByActivity, calculateWorkspaceScore]
+        [unpinned, isSortingByActivity, calculateWorkspaceScore, workspacesHash]
     );
 
     // Load activity scores only when sorting is enabled
     useEffect(() => {
         if (isSortingByActivity) {
-            loadActivityScores();
+            // Use requestIdleCallback if available for smoother UI
+            if (window.requestIdleCallback) {
+                window.requestIdleCallback(() => loadActivityScores(), { timeout: 2000 });
+            } else {
+                loadActivityScores();
+            }
         }
-    }, [isSortingByActivity, savedWorkspaces, pinnedWorkspaces, loadActivityScores]);
+    }, [isSortingByActivity, workspacesHash, loadActivityScores]);
 
 
     // Sort unpinned workspaces by activity score (memoized)

@@ -138,7 +138,8 @@
   transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
   opacity: 0.95;
   overflow: visible;
-  animation: barPulse 4s infinite ease-in-out;
+  /* animation: barPulse 4s infinite ease-in-out; */
+  /* Optimization: Disable infinite animation to save CPU */
 }
 
 /* Face-specific hues */
@@ -1701,6 +1702,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 /* ========== Team Header Buttons ========== */
 
 .team-header-actions {
@@ -1768,4 +1770,20 @@
   border-color: rgba(239, 68, 68, 0.4);
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
   color: #fca5a5;
+}
+/* Optimization: Skip rendering work for off-screen faces */
+.workspace-face {
+  content-visibility: auto;
+  contain-intrinsic-size: 100vh; /* Estimate height to prevent scrollbar jumping */
+}
+/* Smooth focus transition for faces */
+.workspace-face {
+  transition: filter 0.4s ease, opacity 0.4s ease;
+  filter: blur(5px) grayscale(0.5);
+  opacity: 0.3;
+}
+
+.workspace-face.active {
+  filter: none;
+  opacity: 1;
 }
