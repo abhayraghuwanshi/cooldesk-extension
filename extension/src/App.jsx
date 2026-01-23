@@ -12,7 +12,7 @@ import {
   faTriangleExclamation,
   faUndo
 } from '@fortawesome/free-solid-svg-icons';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './App.css'; // MUST BE LAST to override theme backgrounds
 import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
 import { SettingsModal } from './components/popups/SettingsModal';
@@ -616,7 +616,7 @@ export default function App() {
   }, [showFeedSection]);
 
   // Persist wallpaper settings and toggle body class
-  useEffect(() => {
+  useLayoutEffect(() => {
     try {
       console.log('[App] Wallpaper enabled changed to:', wallpaperEnabled);
       localStorage.setItem('wallpaperEnabled', String(wallpaperEnabled));
