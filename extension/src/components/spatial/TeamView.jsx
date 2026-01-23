@@ -493,27 +493,19 @@ export default function TeamView({ team: propTeam }) {
                                     {getMemberCountText(activeTeam.id)} • {peerCounts.get(activeTeam.id) || 0} active peers connected
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                            <div className="team-header-actions">
                                 {isOwner && (
                                     <>
                                         <button
                                             onClick={() => setIsInviteModalOpen(true)}
-                                            style={{
-                                                padding: '8px 16px', borderRadius: 8, border: 'none',
-                                                background: 'rgba(255, 255, 255, 0.1)', color: '#fff', fontWeight: 600,
-                                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
-                                            }}
+                                            className="header-button"
                                         >
                                             <FontAwesomeIcon icon={faUserPlus} />
                                             Invite
                                         </button>
                                         <button
                                             onClick={() => setIsMembersModalOpen(true)}
-                                            style={{
-                                                padding: '8px 16px', borderRadius: 8, border: 'none',
-                                                background: 'rgba(255, 255, 255, 0.1)', color: '#fff', fontWeight: 600,
-                                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
-                                            }}
+                                            className="header-button icon-only"
                                             title="Manage Members"
                                         >
                                             <FontAwesomeIcon icon={faUsers} />
@@ -523,12 +515,7 @@ export default function TeamView({ team: propTeam }) {
                                 {hasWriteAccess && (
                                     <button
                                         onClick={() => setIsShareModalOpen(true)}
-                                        style={{
-                                            padding: '8px 16px', borderRadius: 8, border: 'none',
-                                            background: '#3b82f6', color: '#fff', fontWeight: 600,
-                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                                            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
-                                        }}
+                                        className="header-button primary"
                                     >
                                         <FontAwesomeIcon icon={faShare} />
                                         Share
@@ -547,12 +534,7 @@ export default function TeamView({ team: propTeam }) {
                                                 }
                                             }
                                         }}
-                                        style={{
-                                            padding: '8px 12px', borderRadius: 8, border: 'none',
-                                            background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontWeight: 600,
-                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                                            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.1)'
-                                        }}
+                                        className="header-button danger"
                                         title="Clear All Items"
                                     >
                                         <FontAwesomeIcon icon={faTimes} />
