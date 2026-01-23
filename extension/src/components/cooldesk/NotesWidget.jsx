@@ -102,10 +102,12 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
           minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          border: `1px solid ${isListening ? '#ef4444' : 'rgba(148, 163, 184, 0.2)'}`,
-          borderRadius: '12px',
+          border: `1px solid ${isListening ? '#ef4444' : 'rgba(148, 163, 184, 0.4)'}`,
+          borderRadius: '16px', // Slightly more rounded
           overflow: 'hidden',
-          transition: 'all 0.2s ease',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          background: 'rgba(15, 23, 42, 0.3)', // Slight background tint
+          boxShadow: isListening ? '0 0 0 2px rgba(239, 68, 68, 0.2)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
         }}>
 
           {/* Action Bar (Top of card) */}
@@ -161,8 +163,8 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
                     ? 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)'
                     : 'rgba(148, 163, 184, 0.1)',
                   color: newNoteText.trim() ? 'white' : '#64748B',
-                  border: 'none',
-                  borderRadius: '8px',
+                  border: newNoteText.trim() ? '1px solid rgba(167, 139, 250, 0.5)' : '1px solid rgba(148, 163, 184, 0.2)',
+                  borderRadius: '10px',
                   padding: '0 16px',
                   height: '32px',
                   display: 'flex',

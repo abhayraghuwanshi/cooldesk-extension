@@ -418,6 +418,8 @@
 
 /* Active/Listening state */
 .cooldesk-voice-btn.listening {
+  width: auto;
+  padding: 0 12px;
   background: linear-gradient(135deg, rgba(52, 199, 89, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%);
   border-color: var(--accent-color, #34C759);
   color: var(--accent-color, #34C759);
