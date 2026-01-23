@@ -2,20 +2,23 @@
 
 /* ========== TabCard ========== */
 
+
 .cooldesk-tab-card {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+  background: var(--glass-bg, rgba(30, 41, 59, 0.6));
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 16px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  padding: 12px;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
-  min-height: 100px;
+  min-height: 72px;
+  /* Reduced specific height */
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
+  /* Center content vertically */
 }
 
 .cooldesk-tab-card::before {
@@ -26,18 +29,20 @@
   right: 0;
   height: 2px;
   background: linear-gradient(90deg,
-    transparent,
-    rgba(59, 130, 246, 0.5) 50%,
-    transparent
-  );
+      transparent,
+      var(--border-color, rgba(255, 255, 255, 0.3)) 50%,
+      transparent);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
 .cooldesk-tab-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
-  border-color: rgba(59, 130, 246, 0.4);
+  transform: translateY(-2px);
+  /* Subtle lift */
+  background: var(--interactive-bg, rgba(30, 41, 59, 0.8));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  border-color: var(--border-hover, rgba(255, 255, 255, 0.2));
+  z-index: 10;
 }
 
 .cooldesk-tab-card:hover::before {
@@ -45,32 +50,33 @@
 }
 
 .cooldesk-tab-card.active {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(30, 41, 59, 0.9) 100%);
-  border-color: rgba(59, 130, 246, 0.6);
-  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.2);
+  background: var(--active-item-bg, rgba(255, 255, 255, 0.1));
+  border-color: var(--active-border, rgba(255, 255, 255, 0.3));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
 .cooldesk-tab-card.pinned {
-  background: linear-gradient(135deg, rgba(255, 204, 0, 0.15) 0%, rgba(30, 41, 59, 0.9) 100%);
-  border-color: rgba(255, 204, 0, 0.3);
+  background: linear-gradient(135deg, rgba(255, 204, 0, 0.1) 0%, var(--glass-bg, rgba(30, 41, 59, 0.9)) 100%);
+  border-color: rgba(255, 204, 0, 0.2);
 }
 
 /* Pinned badge */
 .tab-pinned-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 6px;
+  right: 6px;
   background: linear-gradient(135deg, rgba(255, 204, 0, 0.9), rgba(255, 149, 0, 0.85));
   color: white;
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 8px;
   box-shadow: 0 2px 8px rgba(255, 204, 0, 0.3);
   border: 1.5px solid rgba(255, 255, 255, 0.2);
+  z-index: 5;
 }
 
 /* Tab card header */
@@ -78,17 +84,19 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
+  /* Removed margin */
+  width: 100%;
 }
 
 .tab-icon {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 16px;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -128,34 +136,57 @@
 .tab-info {
   flex: 1;
   min-width: 0;
+  padding-right: 4px;
+  /* Default padding */
+  transition: padding-right 0.2s ease;
+}
+
+/* When actions are visible, minimize text width */
+.cooldesk-tab-card:hover .tab-info {
+  mask-image: linear-gradient(to right, black 70%, transparent 95%);
+  -webkit-mask-image: linear-gradient(to right, black 70%, transparent 95%);
 }
 
 .tab-title {
-  font-size: var(--font-base, 12px);
-  font-weight: 600;
+  font-size: var(--font-base, 13px);
+  font-weight: 500;
   color: var(--text-primary, #F1F5F9);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .tab-hostname {
-  font-size: var(--font-xs, 9px);
-  color: var(--text-secondary, #64748B);
-  font-weight: 500;
+  font-size: var(--font-xs, 10px);
+  color: var(--text-secondary, #94A3B8);
+  font-weight: 400;
 }
 
-/* Tab actions */
+/* Tab actions - Absolute Positioning Overlay */
 .tab-actions {
   display: flex;
   gap: 6px;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%) translateX(10px);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  border-radius: 8px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 20;
+  pointer-events: none;
 }
 
 .cooldesk-tab-card:hover .tab-actions {
   opacity: 1;
+  transform: translateY(-50%) translateX(0);
+  pointer-events: auto;
 }
 
 .tab-action-btn {
