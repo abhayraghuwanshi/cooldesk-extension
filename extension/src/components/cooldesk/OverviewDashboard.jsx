@@ -170,9 +170,11 @@ export function OverviewDashboard({
                 </div>
             </div>
 
-            {/* Right Column: Unified Activity Feed */}
-            <div className="overview-activity-column">
-                <ActivityFeed />
+            {/* Right Column: Unified Activity Feed + Calendar */}
+            <div className="overview-activity-column" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ flex: 1, minHeight: 0 }}>
+                    <ActivityFeed />
+                </div>
             </div>
         </div>
     );

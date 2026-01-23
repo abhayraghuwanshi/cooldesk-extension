@@ -116,7 +116,7 @@ class P2PStorageService {
             // Update existing member with new clientID and last seen time
             membersMap.set(memberKey, {
                 ...existingMember,
-                id: member.id, // Update to latest clientID
+                id: member.id || existingMember.id, // Update to latest clientID if provided
                 color: member.color || existingMember.color,
                 lastSeen: Date.now(),
                 isAdmin: member.isAdmin !== undefined ? member.isAdmin : existingMember.isAdmin
@@ -180,6 +180,48 @@ class P2PStorageService {
             return true;
         } catch (error) {
             console.error(`[P2P Storage] Error removing member from team ${teamId}:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Toggle writer status for a member (admin only)
+     * @param {string} teamId
+     * @param {string} memberName
+     */
+    /**
+     * Toggle writer status for a member (admin only)
+     * @param {string} teamId
+     * @param {string} memberName
+     * @param {object} adminKeys - { privateKey, publicKey } optional, required for signing
+     */
+    async toggleMemberWriterStatus(teamId, memberName, adminKeys) {
+        try {
+            const membersMap = this.getSharedMembers(teamId);
+            const member = membersMap.get(memberName);
+
+            if (member && !member.isAdmin) {
+                const newStatus = !member.isWriter;
+                let signature = null;
+
+                // If granting writer status, sign it
+                if (newStatus && adminKeys?.privateKey) {
+                    const { cryptoUtils } = await import('./cryptoUtils');
+                    // Sign the statement: "memberName is allowed to write"
+                    signature = cryptoUtils.sign(`WRITER:${memberName}`, adminKeys.privateKey);
+                }
+
+                membersMap.set(memberName, {
+                    ...member,
+                    isWriter: newStatus,
+                    writerSignature: signature
+                });
+                console.log(`[P2P Storage] Toggled writer status to ${newStatus} for ${memberName}`);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error(`[P2P Storage] Error toggling writer status:`, error);
             return false;
         }
     }
@@ -343,6 +385,35 @@ class P2PStorageService {
         const yArray = this.getSharedItems(teamId);
         yArray.push([item]);
         console.log(`[P2P Storage] Added item to team ${teamId}:`, item);
+    }
+
+    /**
+     * Write the Admin Public Key to shared metadata (One-time setup for Admins)
+     * @param {string} teamId 
+     * @param {string} publicKey 
+     */
+    ensureTeamMetadata(teamId, publicKey) {
+        if (!publicKey) return;
+        const doc = this.getDoc(teamId);
+        if (!doc) return;
+
+        const metadata = doc.getMap('team-metadata');
+        if (!metadata.get('adminPublicKey')) {
+            console.log(`[P2P Storage] Publishing Admin Public Key for team ${teamId}`);
+            metadata.set('adminPublicKey', publicKey);
+        }
+    }
+
+    /**
+     * Get the shared Admin Public Key
+     * @param {string} teamId 
+     * @returns {string|null}
+     */
+    getTeamPublicKey(teamId) {
+        const doc = this.getDoc(teamId);
+        if (!doc) return null;
+        const metadata = doc.getMap('team-metadata');
+        return metadata.get('adminPublicKey');
     }
 }
 

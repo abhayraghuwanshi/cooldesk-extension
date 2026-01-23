@@ -36,7 +36,7 @@
     "https://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' wss://signaling-server.raghuwanshi-abhay405.workers.dev"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' wss://signaling-server.raghuwanshi-abhay405.workers.dev; frame-src https://calendar.google.com https://www.google.com"
   },
   "web_accessible_resources": [
     {

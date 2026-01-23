@@ -749,9 +749,13 @@ export default function App() {
               throw new Error('Invalid invite data');
             }
 
-            // Join Team
-            await teamManager.init();
-            await teamManager.addTeam(payload.name, payload.secret);
+            // Join Team as Viewer/Member (createdByMe: false)
+            // SECURITY NOTE: This flag is enforced client-side.
+            // In a P2P system with a Shared Secret, anyone with the Secret Phrase technically has cryptographic read/write access.
+            // Strict role enforcement would require asymmetric keys (Public/Private) and signed updates.
+            // For now, we rely on 'Social Trust' - having the secret implies trust.
+            // Malicious users could modify this code to set createdByMe: true locally.
+            await teamManager.addTeam(payload.name, payload.secret, { createdByMe: false });
 
             alert(`Successfully joined team: ${payload.name}`);
 

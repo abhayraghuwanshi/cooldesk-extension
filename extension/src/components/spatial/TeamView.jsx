@@ -7,9 +7,12 @@ import { teamManager } from '../../services/p2p/teamManager';
 import { getFaviconUrl } from '../../utils';
 import { CreateTeamModal } from '../popups/CreateTeamModal';
 import { InviteUserModal } from '../popups/InviteUserModal';
+import { ManageMembersModal } from '../popups/ManageMembersModal';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import NoticeBoard from './NoticeBoard';
 import TeamContextPanel from './TeamContextPanel';
+
+import { userProfileService } from '../../services/p2p/userProfileService';
 
 export default function TeamView({ team: propTeam }) {
     const [activeTeamId, setActiveTeamId] = useState(propTeam?.id || null);
@@ -18,11 +21,14 @@ export default function TeamView({ team: propTeam }) {
     const [peerCounts, setPeerCounts] = useState(new Map());
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+    const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
     const [isCreateTeamModalOpen, setIsCreateTeamModalOpen] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
     const [renameValue, setRenameValue] = useState('');
+    const [canWrite, setCanWrite] = useState(false); // State for non-admin writers
     const yArrayRef = useRef(null);
     const renameInputRef = useRef(null);
+    const memberObserverRef = useRef(null);
 
     // Initial load of teams & active team
     useEffect(() => {
@@ -65,11 +71,13 @@ export default function TeamView({ team: propTeam }) {
 
     const seedingRef = useRef(new Set()); // Track seeded teams in this session
 
-    // Load items for the SELECTED team
+    // Load items and permissions for the SELECTED team
     useEffect(() => {
         console.log('[TeamView] Active Team changed:', activeTeamId);
+        // Reset state
         if (!activeTeamId) {
             setItems([]);
+            setCanWrite(false);
             return;
         }
 
@@ -81,6 +89,7 @@ export default function TeamView({ team: propTeam }) {
             // We assume storage is initialized (or we init it now)
             await p2pStorage.initializeTeamStorage(activeTeamId);
 
+            // 1. Data Loading
             pArray = p2pStorage.getSharedItems(activeTeamId);
             yArrayRef.current = pArray;
 
@@ -88,85 +97,98 @@ export default function TeamView({ team: propTeam }) {
             console.log('[TeamView] Loaded items:', currentItems);
             setItems(currentItems);
 
-            // SEED DEFAULT DATA for "Cooldesk Community"
-            const activeTeamName = teams.find(t => t.id === activeTeamId)?.name;
+            // 2. Permission Loading
+            const username = await userProfileService.getUsername();
+            try {
+                const members = p2pStorage.getSharedMembers(activeTeamId);
+                const checkPrivileges = async () => {
+                    const me = members?.get(username);
+                    if (!me) return;
 
-            // Only attempt seed if we haven't done it this session for this team
-            if (activeTeamName === 'Cooldesk Community' && !seedingRef.current.has(activeTeamId)) {
-                seedingRef.current.add(activeTeamId);
+                    // 1. If I am Admin (locally validated), I can write
+                    const currentTeam = teams.find(t => t.id === activeTeamId);
+                    if (currentTeam?.createdByMe) {
+                        setCanWrite(true);
+                        // Self-healing: Ensure shared state matches
+                        if (!me.isAdmin) {
+                            console.log('[TeamView] Self-repairing Admin status');
+                            p2pStorage.addMemberToTeam(activeTeamId, { name: username, isAdmin: true });
+                        }
+                        return;
+                    }
 
-                // Wait a moment to ensure everything is loaded/synced
-                setTimeout(() => {
-                    if (!yArrayRef.current) return;
-
-                    const pArray = yArrayRef.current;
-                    const allItems = pArray.toArray();
-
-                    // 1. CLEANUP DUPLICATES
-                    const uniqueMap = new Map(); // NormalizedURL -> index to keep
-                    const toDelete = [];
-
-                    for (let i = 0; i < allItems.length; i++) {
-                        const item = allItems[i];
-                        if (item.type !== 'link') continue;
-
-                        const url = item.url ? (item.url.endsWith('/') ? item.url.slice(0, -1) : item.url) : '';
-                        if (!url) continue;
-
-                        if (uniqueMap.has(url)) {
-                            // This is a duplicate!
-                            toDelete.push(i);
-                        } else {
-                            uniqueMap.set(url, i);
+                    // 2. If I have Writer Status, VERIFY SIGNATURE
+                    if (me.isWriter && me.writerSignature) {
+                        const publicKey = p2pStorage.getTeamPublicKey(activeTeamId);
+                        if (publicKey) {
+                            const { cryptoUtils } = await import('../../services/p2p/cryptoUtils');
+                            const isValid = cryptoUtils.verify(`WRITER:${username}`, me.writerSignature, publicKey);
+                            if (isValid) {
+                                setCanWrite(true);
+                                return;
+                            } else {
+                                console.warn('[TeamView] Writer signature invalid! Revoking write access.');
+                            }
                         }
                     }
 
-                    // Delete duplicates (backwards to preserve indexes)
-                    if (toDelete.length > 0) {
-                        console.log('[TeamView] Removing duplicate items:', toDelete.length);
-                        // Sort descending to safely remove by index
-                        toDelete.sort((a, b) => b - a);
+                    // Default to false
+                    setCanWrite(false);
+                };
+                checkPrivileges();
 
-                        p2pStorage.getDoc(activeTeamId).transact(() => {
-                            toDelete.forEach(idx => {
-                                pArray.delete(idx, 1);
-                            });
-                        });
-                    }
-
-                    // 2. SEED IF MISSING
-                    // Check AFTER cleanup
-                    // (We need to re-fetch array because we might have deleted items)
-                    const currentItemsAfterCleanup = pArray.toArray();
-                    const existingUrls = new Set(currentItemsAfterCleanup.map(item => {
-                        const url = item.url || '';
-                        return url.endsWith('/') ? url.slice(0, -1) : url;
-                    }));
-
-                    const defaultLinks = [
-                        { id: 'link-default-1', url: 'https://cool-desk.com/', title: 'Cooldesk Home', addedBy: 'System', addedAt: Date.now(), type: 'link' },
-                        { id: 'link-default-2', url: 'https://cool-desk.com/search', title: 'Resources', addedBy: 'System', addedAt: Date.now(), type: 'link' },
-                        { id: 'link-default-3', url: 'https://chromewebstore.google.com/detail/cooldesk/ioggffobciopdddacpclplkeodllhjko', title: 'Chrome Web Store', addedBy: 'System', addedAt: Date.now(), type: 'link' }
-                    ];
-
-                    const linksToAdd = defaultLinks.filter(link => {
-                        const normalizedLinkUrl = link.url.endsWith('/') ? link.url.slice(0, -1) : link.url;
-                        return !existingUrls.has(normalizedLinkUrl);
-                    });
-
-                    if (linksToAdd.length > 0) {
-                        console.log('[TeamView] Seeding missing default links:', linksToAdd.length);
-                        pArray.push(linksToAdd);
-                    }
-                }, 1000); // 1 second delay
+                // Observe member changes (for role updates)
+                // We use a simplified observer since we just want to know if *our* role changed
+                // (Optimally this should be scoped, but observing the map is fine for now)
+                members.observe(() => checkPrivileges());
+            } catch (e) {
+                console.warn('Failed to load permissions:', e);
             }
 
+
+            // Observer for Data Changes & Deduping
             observer = () => {
                 const updated = pArray.toArray();
-                console.log('[TeamView] Observer fired. New items:', updated);
+                console.log('[TeamView] Observer fired. New items:', updated.length);
+
+                // DATA CONSISTENCY CHECK (Deduping)
+                // Identify duplicates by URL
+                const uniqueMap = new Map();
+                const toDelete = [];
+
+                for (let i = 0; i < updated.length; i++) {
+                    const item = updated[i];
+                    if (item.type !== 'link' || !item.url) continue;
+
+                    const normalized = item.url.endsWith('/') ? item.url.slice(0, -1) : item.url;
+
+                    if (uniqueMap.has(normalized)) {
+                        toDelete.push(i); // Mark this index for deletion
+                    } else {
+                        uniqueMap.set(normalized, i);
+                    }
+                }
+
+                if (toDelete.length > 0) {
+                    console.log('[TeamView] Auto-cleaning duplicates:', toDelete.length);
+                    // Sort descending to remove effectively
+                    toDelete.sort((a, b) => b - a);
+
+                    // We must transact to avoid infinite loops, though observer might fire again
+                    pArray.doc.transact(() => {
+                        toDelete.forEach(idx => pArray.delete(idx, 1));
+                    });
+                    // Logic ends here; observer will fire again with clean list
+                    return;
+                }
+
                 setItems(updated);
             };
+
             pArray.observe(observer);
+
+            // Initial load manual trigger
+            observer();
         };
         load();
 
@@ -176,7 +198,12 @@ export default function TeamView({ team: propTeam }) {
         };
     }, [activeTeamId, teams]);
 
+
     const handleAddItem = () => {
+        if (!hasWriteAccess) {
+            console.warn('Access denied: You need write permissions to add items.');
+            return;
+        }
         if (typeof chrome !== 'undefined' && chrome.tabs && yArrayRef.current) {
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                 const tab = tabs[0];
@@ -197,10 +224,12 @@ export default function TeamView({ team: propTeam }) {
 
     // Helper: Check if I am admin of current team
     const isOwner = teams.find(t => t.id === activeTeamId)?.createdByMe || false;
+    // Helper: Check if I have write access (Admin OR Writer)
+    const hasWriteAccess = isOwner || canWrite;
 
     const deleteItem = (index) => {
-        if (!isOwner) {
-            console.warn('Only the owner can delete items');
+        if (!hasWriteAccess) {
+            console.warn('Access denied: You need write permissions to delete items.');
             return;
         }
         if (yArrayRef.current) yArrayRef.current.delete(index, 1);
@@ -415,26 +444,48 @@ export default function TeamView({ team: propTeam }) {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                         <h1 style={{ margin: 0, fontSize: 'var(--font-3xl)', fontWeight: 700 }}>{activeTeam.name}</h1>
                                         {activeTeam.createdByMe && (
-                                            <button
-                                                onClick={handleStartRename}
-                                                style={{
-                                                    width: 28, height: 28, borderRadius: 6, border: 'none',
-                                                    background: 'rgba(255,255,255,0.1)', color: '#9ca3af',
-                                                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    transition: 'all 0.2s'
-                                                }}
-                                                title="Rename team"
-                                                onMouseEnter={e => {
-                                                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
-                                                    e.currentTarget.style.color = '#60a5fa';
-                                                }}
-                                                onMouseLeave={e => {
-                                                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                                                    e.currentTarget.style.color = '#9ca3af';
-                                                }}
-                                            >
-                                                <FontAwesomeIcon icon={faPencilAlt} size="sm" />
-                                            </button>
+                                            <>
+                                                <div style={{
+                                                    fontSize: 'var(--font-xs)', fontWeight: 800,
+                                                    background: '#ef4444', color: '#fff',
+                                                    padding: '4px 8px', borderRadius: 4,
+                                                    letterSpacing: '0.05em', textTransform: 'uppercase'
+                                                }}>
+                                                    ADMIN
+                                                </div>
+                                                <button
+                                                    onClick={handleStartRename}
+                                                    style={{
+                                                        width: 28, height: 28, borderRadius: 6, border: 'none',
+                                                        background: 'rgba(255,255,255,0.1)', color: '#9ca3af',
+                                                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    title="Rename team"
+                                                    onMouseEnter={e => {
+                                                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                                                        e.currentTarget.style.color = '#60a5fa';
+                                                    }}
+                                                    onMouseLeave={e => {
+                                                        e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                                                        e.currentTarget.style.color = '#9ca3af';
+                                                    }}
+                                                >
+                                                    <FontAwesomeIcon icon={faPencilAlt} size="sm" />
+                                                </button>
+                                            </>
+                                        )}
+                                        {((!activeTeam.createdByMe && canWrite) || (!activeTeam.createdByMe && !canWrite)) && (
+                                            <div style={{
+                                                fontSize: 'var(--font-xs)', fontWeight: 800,
+                                                background: canWrite ? '#10b981' : 'rgba(148, 163, 184, 0.2)',
+                                                color: canWrite ? '#fff' : '#94a3b8',
+                                                border: canWrite ? 'none' : '1px solid rgba(148, 163, 184, 0.2)',
+                                                padding: '4px 8px', borderRadius: 4,
+                                                letterSpacing: '0.05em', textTransform: 'uppercase'
+                                            }}>
+                                                {canWrite ? 'WRITER' : 'VIEWER'}
+                                            </div>
                                         )}
                                     </div>
                                 )}
@@ -442,19 +493,34 @@ export default function TeamView({ team: propTeam }) {
                                     {getMemberCountText(activeTeam.id)} • {peerCounts.get(activeTeam.id) || 0} active peers connected
                                 </div>
                             </div>
-                            {isOwner && (
-                                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                                    <button
-                                        onClick={() => setIsInviteModalOpen(true)}
-                                        style={{
-                                            padding: '8px 16px', borderRadius: 8, border: 'none',
-                                            background: 'rgba(255, 255, 255, 0.1)', color: '#fff', fontWeight: 600,
-                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
-                                        }}
-                                    >
-                                        <FontAwesomeIcon icon={faUserPlus} />
-                                        Invite
-                                    </button>
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                {isOwner && (
+                                    <>
+                                        <button
+                                            onClick={() => setIsInviteModalOpen(true)}
+                                            style={{
+                                                padding: '8px 16px', borderRadius: 8, border: 'none',
+                                                background: 'rgba(255, 255, 255, 0.1)', color: '#fff', fontWeight: 600,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
+                                            }}
+                                        >
+                                            <FontAwesomeIcon icon={faUserPlus} />
+                                            Invite
+                                        </button>
+                                        <button
+                                            onClick={() => setIsMembersModalOpen(true)}
+                                            style={{
+                                                padding: '8px 16px', borderRadius: 8, border: 'none',
+                                                background: 'rgba(255, 255, 255, 0.1)', color: '#fff', fontWeight: 600,
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
+                                            }}
+                                            title="Manage Members"
+                                        >
+                                            <FontAwesomeIcon icon={faUsers} />
+                                        </button>
+                                    </>
+                                )}
+                                {hasWriteAccess && (
                                     <button
                                         onClick={() => setIsShareModalOpen(true)}
                                         style={{
@@ -467,8 +533,33 @@ export default function TeamView({ team: propTeam }) {
                                         <FontAwesomeIcon icon={faShare} />
                                         Share
                                     </button>
-                                </div>
-                            )}
+                                )}
+                                {isOwner && items.length > 0 && (
+                                    <button
+                                        onClick={() => {
+                                            if (confirm('Are you sure you want to clear ALL shared links/workspaces from this team? This cannot be undone.')) {
+                                                const doc = p2pStorage.getDoc(activeTeamId);
+                                                if (doc) {
+                                                    const array = doc.getArray('shared-items');
+                                                    doc.transact(() => {
+                                                        array.delete(0, array.length);
+                                                    });
+                                                }
+                                            }
+                                        }}
+                                        style={{
+                                            padding: '8px 12px', borderRadius: 8, border: 'none',
+                                            background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontWeight: 600,
+                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                                            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.1)'
+                                        }}
+                                        title="Clear All Items"
+                                    >
+                                        <FontAwesomeIcon icon={faTimes} />
+                                        Clear Space
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         {/* Scrollable Content Area */}
@@ -494,57 +585,145 @@ export default function TeamView({ team: propTeam }) {
                                     <div style={{ height: 1, flex: 1, background: 'rgba(255,255,255,0.06)' }} />
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-                                    {items.map((item, index) => {
-                                        if (!item) return null;
+                                    {(() => {
+                                        // RENDER-TIME DEDUPLICATION
+                                        const seenUrls = new Set();
 
-                                        // Handle Workspace Reference
-                                        if (item.type === 'workspace_ref') {
+                                        return items.map((item, index) => {
+                                            if (!item) return null;
+
+                                            // Dedup Logic
+                                            if (item.type === 'link' && item.url) {
+                                                const normalized = item.url.endsWith('/') ? item.url.slice(0, -1) : item.url;
+                                                if (seenUrls.has(normalized)) return null;
+                                                seenUrls.add(normalized);
+                                            }
+
+                                            // Handle Workspace Reference
+                                            if (item.type === 'workspace_ref') {
+                                                return (
+                                                    <div
+                                                        key={item.id || index}
+                                                        style={{
+                                                            background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%)',
+                                                            borderRadius: 16, padding: 16,
+                                                            border: '1px solid rgba(139, 92, 246, 0.2)',
+                                                            position: 'relative', overflow: 'hidden',
+                                                            cursor: 'pointer', transition: 'all 0.2s'
+                                                        }}
+                                                        onClick={() => {
+                                                            console.log('Opening workspace:', item.meta);
+                                                            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                                                                chrome.runtime.sendMessage({
+                                                                    action: 'OPEN_WORKSPACE',
+                                                                    workspaceId: item.meta?.workspaceId
+                                                                });
+                                                            }
+                                                        }}
+                                                        onMouseEnter={e => {
+                                                            e.currentTarget.style.transform = 'translateY(-2px)';
+                                                            e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+                                                        }}
+                                                        onMouseLeave={e => {
+                                                            e.currentTarget.style.transform = 'none';
+                                                            e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.2)';
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                                                            <div style={{
+                                                                fontSize: 'var(--font-4xl)', width: 40, height: 40, borderRadius: 10,
+                                                                background: 'rgba(139, 92, 246, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                            }}>
+                                                                {item.meta?.icon || '📁'}
+                                                            </div>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ color: '#a78bfa', fontSize: 'var(--font-xs)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
+                                                                    SHARED WORKSPACE
+                                                                </div>
+                                                                <div style={{ fontSize: 'var(--font-lg)', fontWeight: 600, color: '#fff' }}>
+                                                                    {item.meta?.workspaceName || item.title || 'Untitled'}
+                                                                </div>
+                                                            </div>
+                                                            {hasWriteAccess && (
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        deleteItem(index);
+                                                                    }}
+                                                                    style={{
+                                                                        width: 24, height: 24, borderRadius: 12, border: 'none',
+                                                                        background: 'rgba(255,255,255,0.1)', color: '#fff',
+                                                                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                        opacity: 0.6
+                                                                    }}
+                                                                >
+                                                                    <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+                                                            <div style={{ fontSize: 'var(--font-sm)', color: '#a78bfa', background: 'rgba(139, 92, 246, 0.1)', padding: '4px 8px', borderRadius: 6 }}>
+                                                                Click to Open
+                                                            </div>
+                                                            <div style={{ fontSize: 'var(--font-xs)', opacity: 0.4 }}>
+                                                                Shared by {item.addedBy || 'Unknown'} • {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            // Handle Regular Link
+                                            let hostname = 'unknown';
+                                            try {
+                                                if (item.url) hostname = new URL(item.url).hostname;
+                                            } catch (e) { console.warn('Invalid URL:', item.url); }
+
                                             return (
-                                                <div
+                                                <a
                                                     key={item.id || index}
+                                                    href={item.url || '#'}
+                                                    target="_blank"
+                                                    rel="noreferrer"
                                                     style={{
-                                                        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%)',
-                                                        borderRadius: 16, padding: 16,
-                                                        border: '1px solid rgba(139, 92, 246, 0.2)',
-                                                        position: 'relative', overflow: 'hidden',
-                                                        cursor: 'pointer', transition: 'all 0.2s'
-                                                    }}
-                                                    onClick={() => {
-                                                        console.log('Opening workspace:', item.meta);
-                                                        if (typeof chrome !== 'undefined' && chrome.runtime) {
-                                                            chrome.runtime.sendMessage({
-                                                                action: 'OPEN_WORKSPACE',
-                                                                workspaceId: item.meta?.workspaceId
-                                                            });
-                                                        }
+                                                        display: 'block', textDecoration: 'none', color: 'inherit',
+                                                        background: 'rgba(255,255,255,0.03)', borderRadius: 16,
+                                                        padding: 16, border: '1px solid rgba(255,255,255,0.05)',
+                                                        transition: 'all 0.2s', position: 'relative'
                                                     }}
                                                     onMouseEnter={e => {
+                                                        e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
                                                         e.currentTarget.style.transform = 'translateY(-2px)';
-                                                        e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
                                                     }}
                                                     onMouseLeave={e => {
+                                                        e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
                                                         e.currentTarget.style.transform = 'none';
-                                                        e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.2)';
                                                     }}
                                                 >
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                                                         <div style={{
-                                                            fontSize: 'var(--font-4xl)', width: 40, height: 40, borderRadius: 10,
-                                                            background: 'rgba(139, 92, 246, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                                            width: 32, height: 32, borderRadius: 8, overflow: 'hidden',
+                                                            background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center'
                                                         }}>
-                                                            {item.meta?.icon || '📁'}
+                                                            <img
+                                                                src={getFaviconUrl(item.url)}
+                                                                alt=""
+                                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                                onError={(e) => { e.target.style.display = 'none'; }}
+                                                            />
                                                         </div>
-                                                        <div style={{ flex: 1 }}>
-                                                            <div style={{ color: '#a78bfa', fontSize: 'var(--font-xs)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>
-                                                                SHARED WORKSPACE
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <div style={{ fontSize: 12, opacity: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                {hostname}
                                                             </div>
-                                                            <div style={{ fontSize: 'var(--font-lg)', fontWeight: 600, color: '#fff' }}>
-                                                                {item.meta?.workspaceName || item.title || 'Untitled'}
+                                                            <div style={{ fontSize: 11, opacity: 0.3 }}>
+                                                                {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
                                                             </div>
                                                         </div>
-                                                        {isOwner && (
+                                                        {hasWriteAccess && (
                                                             <button
                                                                 onClick={(e) => {
+                                                                    e.preventDefault();
                                                                     e.stopPropagation();
                                                                     deleteItem(index);
                                                                 }}
@@ -555,93 +734,17 @@ export default function TeamView({ team: propTeam }) {
                                                                     opacity: 0.6
                                                                 }}
                                                             >
-                                                                <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
+                                                                <span style={{ fontSize: 'var(--font-xl)', lineHeight: 1 }}>×</span>
                                                             </button>
                                                         )}
                                                     </div>
-                                                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
-                                                        <div style={{ fontSize: 'var(--font-sm)', color: '#a78bfa', background: 'rgba(139, 92, 246, 0.1)', padding: '4px 8px', borderRadius: 6 }}>
-                                                            Click to Open
-                                                        </div>
-                                                        <div style={{ fontSize: 'var(--font-xs)', opacity: 0.4 }}>
-                                                            Shared by {item.addedBy || 'Unknown'} • {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
-                                                        </div>
+                                                    <div style={{ fontSize: 'var(--font-base)', fontWeight: 500, lineHeight: 1.4, height: 40, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                                        {item.title || item.url || 'Untitled Link'}
                                                     </div>
-                                                </div>
+                                                </a>
                                             );
-                                        }
-
-                                        // Handle Regular Link
-                                        let hostname = 'unknown';
-                                        try {
-                                            if (item.url) hostname = new URL(item.url).hostname;
-                                        } catch (e) { console.warn('Invalid URL:', item.url); }
-
-                                        return (
-                                            <a
-                                                key={item.id || index}
-                                                href={item.url || '#'}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                style={{
-                                                    display: 'block', textDecoration: 'none', color: 'inherit',
-                                                    background: 'rgba(255,255,255,0.03)', borderRadius: 16,
-                                                    padding: 16, border: '1px solid rgba(255,255,255,0.05)',
-                                                    transition: 'all 0.2s', position: 'relative'
-                                                }}
-                                                onMouseEnter={e => {
-                                                    e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                                                    e.currentTarget.style.transform = 'translateY(-2px)';
-                                                }}
-                                                onMouseLeave={e => {
-                                                    e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                                                    e.currentTarget.style.transform = 'none';
-                                                }}
-                                            >
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                                                    <div style={{
-                                                        width: 32, height: 32, borderRadius: 8, overflow: 'hidden',
-                                                        background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                                    }}>
-                                                        <img
-                                                            src={getFaviconUrl(item.url)}
-                                                            alt=""
-                                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                                            onError={(e) => { e.target.style.display = 'none'; }}
-                                                        />
-                                                    </div>
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ fontSize: 12, opacity: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                            {hostname}
-                                                        </div>
-                                                        <div style={{ fontSize: 11, opacity: 0.3 }}>
-                                                            {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
-                                                        </div>
-                                                    </div>
-                                                    {isOwner && (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                deleteItem(index);
-                                                            }}
-                                                            style={{
-                                                                width: 24, height: 24, borderRadius: 12, border: 'none',
-                                                                background: 'rgba(255,255,255,0.1)', color: '#fff',
-                                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                opacity: 0.6
-                                                            }}
-                                                        >
-                                                            <span style={{ fontSize: 'var(--font-xl)', lineHeight: 1 }}>×</span>
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <div style={{ fontSize: 'var(--font-base)', fontWeight: 500, lineHeight: 1.4, height: 40, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                                    {item.title || item.url || 'Untitled Link'}
-                                                </div>
-                                            </a>
-                                        );
-                                    })}
+                                        });
+                                    })()}
                                 </div>
 
                                 {items.length === 0 && (
@@ -664,56 +767,62 @@ export default function TeamView({ team: propTeam }) {
                         </div>
                     </>
                 )}
+                {/* Share Modal */}
+                <ShareToTeamModal
+                    isOpen={isShareModalOpen}
+                    onClose={() => setIsShareModalOpen(false)}
+                    initialTeamId={activeTeamId}
+                />
+                {/* Invite Modal */}
+                <InviteUserModal
+                    isOpen={isInviteModalOpen}
+                    onClose={() => setIsInviteModalOpen(false)}
+                    team={activeTeam ? { name: activeTeam.name, secretPhrase: activeTeam.secretPhrase } : null}
+                />
+                {/* Create Team Modal */}
+                <CreateTeamModal
+                    isOpen={isCreateTeamModalOpen}
+                    onClose={() => setIsCreateTeamModalOpen(false)}
+                />
+                {/* Manage Members Modal */}
+                <ManageMembersModal
+                    isOpen={isMembersModalOpen}
+                    onClose={() => setIsMembersModalOpen(false)}
+                    teamId={activeTeamId}
+                />
             </div>
-            {/* Share Modal */}
-            <ShareToTeamModal
-                isOpen={isShareModalOpen}
-                onClose={() => setIsShareModalOpen(false)}
-                initialTeamId={activeTeamId}
-            />
-            {/* Invite Modal */}
-            <InviteUserModal
-                isOpen={isInviteModalOpen}
-                onClose={() => setIsInviteModalOpen(false)}
-                team={activeTeam ? { name: activeTeam.name, secretPhrase: activeTeam.secretPhrase } : null}
-            />
-            {/* Create Team Modal */}
-            <CreateTeamModal
-                isOpen={isCreateTeamModalOpen}
-                onClose={() => setIsCreateTeamModalOpen(false)}
-            />
-        </div >
+        </div>
     );
 }
 
 const style = document.createElement('style');
 style.textContent = `
-    .team-view-sidebar {
-        width: 200px;
+            .team-view-sidebar {
+                width: 200px;
     }
-    .sidebar-icon-only {
-        display: none;
+            .sidebar-icon-only {
+                display: none;
     }
-    .sidebar-text {
-        display: inline;
+            .sidebar-text {
+                display: inline;
     }
-    
-    @media (max-width: 800px) {
-        .team-view-sidebar {
-            width: 72px;
+
+            @media (max-width: 800px) {
+        .team - view - sidebar {
+                width: 72px;
         }
-        .sidebar-text {
-            display: none !important;
+            .sidebar-text {
+                display: none !important;
         }
-        .sidebar-icon-only {
-            display: block;
+            .sidebar-icon-only {
+                display: block;
             text-align: center;
         }
-        /* Center icons when collapsed */
-        .team-view-sidebar .sidebar-header {
-            text-align: center;
+            /* Center icons when collapsed */
+            .team-view-sidebar .sidebar-header {
+                text - align: center;
             padding: 16px 0 !important;
         }
     }
-`;
+            `;
 document.head.appendChild(style);

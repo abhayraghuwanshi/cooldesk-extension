@@ -10,7 +10,7 @@
 
 const SIM_THRESHOLD = 0.75;     // similarity cutoff to accept category from embeddings
 const TOP_K = 3;               // number of nearest neighbors to inspect
-@
+
 // Allowed categories (consistent with your mapping)
 const ALLOWED_CATEGORIES = [
     "finance", "health", "education", "sports", "social", "travel", "reading",

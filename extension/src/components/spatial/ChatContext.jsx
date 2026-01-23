@@ -372,7 +372,14 @@ export function ChatContext({ workspaceId, workspaceName }) {
             }}>
               <div style={{ fontSize: '32px', opacity: 0.3 }}>💬</div>
               <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>
-                {filter === 'All' ? 'No chats' : `No ${filter} chats`}
+                {filter === 'All' ? 'No chats yet' : `No ${filter} chats`}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.5 }}>
+                Visit AI platforms to start tracking your conversations.
+                <br />
+                <span style={{ opacity: 0.7, fontStyle: 'italic' }}>
+                  (Note: Some platforms require visiting specific chat URLs to track)
+                </span>
               </div>
             </div>
           ) : (

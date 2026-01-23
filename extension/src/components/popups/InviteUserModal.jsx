@@ -105,50 +105,55 @@ export function InviteUserModal({ isOpen, onClose, team }) {
                         <button
                             onClick={() => { setMode('protected'); setGeneratedLink(''); }}
                             style={{
-                                flex: 1, padding: '8px', borderRadius: 8,
-                                background: mode === 'protected' ? 'rgba(255,255,255,0.1)' : 'transparent',
-                                color: mode === 'protected' ? '#fff' : '#94a3b8',
-                                border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                                transition: 'all 0.2s'
+                                flex: 1, padding: '10px', borderRadius: 8,
+                                background: mode === 'protected' ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                                color: mode === 'protected' ? '#60a5fa' : '#94a3b8',
+                                border: '1px solid',
+                                borderColor: mode === 'protected' ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center'
                             }}
                         >
                             <FontAwesomeIcon icon={faShieldAlt} style={{ marginRight: 8 }} />
-                            Protected Link
+                            Secure PIN Invite
                         </button>
                         <button
                             onClick={() => { setMode('safe'); setGeneratedLink(''); }}
                             style={{
-                                flex: 1, padding: '8px', borderRadius: 8,
+                                flex: 1, padding: '10px', borderRadius: 8,
                                 background: mode === 'safe' ? 'rgba(255,255,255,0.1)' : 'transparent',
                                 color: mode === 'safe' ? '#fff' : '#94a3b8',
-                                border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                                transition: 'all 0.2s'
+                                border: '1px solid',
+                                borderColor: mode === 'safe' ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center'
                             }}
                         >
                             <FontAwesomeIcon icon={faLink} style={{ marginRight: 8 }} />
-                            Safe Link
+                            Copy Link Only
                         </button>
                     </div>
 
                     {mode === 'protected' ? (
                         <div style={{ animation: 'fadeIn 0.3s ease' }}>
                             <div style={{
-                                background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)',
+                                background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)',
                                 borderRadius: 12, padding: 16, marginBottom: 20
                             }}>
-                                <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#34d399', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <FontAwesomeIcon icon={faLock} />
-                                    Secure & Convenient
+                                    Encrypted Invitation (Recommended)
                                 </h4>
-                                <p style={{ margin: 0, fontSize: 12, color: '#d1fae5', lineHeight: 1.5 }}>
-                                    Create a link encrypted with a temporary PIN. <br />
-                                    <strong>Share the Link and the PIN separately.</strong>
+                                <p style={{ margin: 0, fontSize: 13, color: '#bfdbfe', lineHeight: 1.5 }}>
+                                    This creates a secure link that contains your team credentials, encrypted with a short PIN.
+                                    <br />
+                                    <strong>The recipient only needs the Link + PIN to join.</strong>
                                 </p>
                             </div>
 
                             <div style={{ marginBottom: 20 }}>
-                                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 8, fontWeight: 600 }}>
-                                    SET A TEMPORARY PIN
+                                <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    Create a Temporary PIN
                                 </label>
                                 <div style={{ display: 'flex', gap: 12 }}>
                                     <input
@@ -156,23 +161,30 @@ export function InviteUserModal({ isOpen, onClose, team }) {
                                         value={pin}
                                         onChange={e => setPin(e.target.value)}
                                         placeholder="e.g. 1234"
+                                        maxLength={6}
                                         style={{
-                                            flex: 1, padding: '12px 16px', borderRadius: 10,
-                                            background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
-                                            color: '#fff', fontSize: 16, outline: 'none', letterSpacing: '2px', textAlign: 'center'
+                                            width: 120, padding: '12px 16px', borderRadius: 10,
+                                            background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff', fontSize: 18, outline: 'none', letterSpacing: '4px', textAlign: 'center',
+                                            fontWeight: 700
                                         }}
                                     />
                                     <button
                                         onClick={handleGenerateProtected}
                                         disabled={!pin || pin.length < 4}
                                         style={{
+                                            flex: 1,
                                             padding: '0 24px', borderRadius: 10,
-                                            background: '#3b82f6', border: 'none', color: '#fff',
-                                            fontWeight: 600, cursor: 'pointer',
-                                            opacity: (!pin || pin.length < 4) ? 0.5 : 1
+                                            background: (!pin || pin.length < 4) ? 'rgba(255,255,255,0.1)' : '#3b82f6',
+                                            border: 'none',
+                                            color: (!pin || pin.length < 4) ? 'rgba(255,255,255,0.3)' : '#fff',
+                                            fontWeight: 600, cursor: (!pin || pin.length < 4) ? 'not-allowed' : 'pointer',
+                                            transition: 'all 0.2s',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
                                         }}
                                     >
-                                        Generate
+                                        <FontAwesomeIcon icon={faLink} />
+                                        Generate Invite Link
                                     </button>
                                 </div>
                             </div>
@@ -180,16 +192,17 @@ export function InviteUserModal({ isOpen, onClose, team }) {
                     ) : (
                         <div style={{ animation: 'fadeIn 0.3s ease' }}>
                             <div style={{
-                                background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)',
+                                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
                                 borderRadius: 12, padding: 16, marginBottom: 20
                             }}>
-                                <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <FontAwesomeIcon icon={faExclamationTriangle} />
-                                    Manual Key Required
+                                <h4 style={{ margin: '0 0 8px 0', fontSize: 14, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <FontAwesomeIcon icon={faExclamationTriangle} style={{ color: '#fbbf24' }} />
+                                    Manual Entry Required
                                 </h4>
-                                <p style={{ margin: 0, fontSize: 12, color: '#fef3c7', lineHeight: 1.5 }}>
-                                    This link only identifies the team. <br />
-                                    <strong>You must send the Secret Phrase separately.</strong>
+                                <p style={{ margin: 0, fontSize: 13, color: '#cbd5e1', lineHeight: 1.5 }}>
+                                    This simply links to your team login page.
+                                    <br />
+                                    <strong>You must separately share the exact "Secret Phrase" with your team member.</strong>
                                 </p>
                             </div>
 
@@ -197,12 +210,15 @@ export function InviteUserModal({ isOpen, onClose, team }) {
                                 onClick={handleGenerateSafe}
                                 style={{
                                     width: '100%', padding: '14px', borderRadius: 10,
-                                    background: '#3b82f6', border: 'none', color: '#fff',
-                                    fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                                    background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff',
+                                    fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                    transition: 'all 0.2s'
                                 }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
                             >
                                 <FontAwesomeIcon icon={faCopy} />
-                                Copy Safe Link
+                                Copy Team URL
                             </button>
                         </div>
                     )}

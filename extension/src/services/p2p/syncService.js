@@ -234,53 +234,89 @@ class P2PSyncService {
                 notifyTimeout = setTimeout(() => this.notify(), 500);
             };
 
-            awareness.on('change', ({ added, removed }) => {
+            // Fetch team object first
+            const team = teamManager.getTeam(teamId);
+
+            // 1. Publish Public Key if we are Admin (One-time)
+            if (team?.createdByMe && team?.adminPublicKey) {
+                p2pStorage.ensureTeamMetadata(teamId, team.adminPublicKey);
+            }
+
+            // 2. Set local user info with Signature if Admin
+            const username = await userProfileService.getUsername();
+            const localUserColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+            const isAdmin = team?.createdByMe && !!team?.adminPrivateKey;
+            let adminSignature = null;
+
+            if (isAdmin) {
+                // Sign our Client ID to prove we own this session
+                const { cryptoUtils } = await import('./cryptoUtils');
+                adminSignature = cryptoUtils.sign(awareness.clientID.toString(), team.adminPrivateKey);
+            }
+
+            awareness.setLocalStateField('user', {
+                name: username,
+                color: localUserColor,
+                isAdmin: isAdmin,
+                adminSignature: adminSignature
+            });
+
+            awareness.on('change', async ({ added, removed }) => {
                 // Only process added peers (not updates - they cause too many events)
                 if (added.length === 0 && removed.length === 0) return;
 
                 this.peerDetails.set(teamId, this.getPeers(teamId));
 
-                added.forEach(clientId => {
-                    if (clientId === awareness.clientID) return; // Skip self
+                for (const clientId of added) {
+                    if (clientId === awareness.clientID) continue; // Skip self
 
                     const state = awareness.getStates().get(clientId);
-                    if (!state || !state.user) return;
+                    if (!state || !state.user) continue;
 
                     const memberKey = `${teamId}-${clientId.toString()}`;
 
                     // Only add if we haven't processed this member yet
                     if (!processedMembers.has(memberKey)) {
-                        const existingAdmin = p2pStorage.getTeamAdmin(teamId);
-                        const shouldBeAdmin = state.user.isAdmin && !existingAdmin;
+                        let validatedIsAdmin = false;
+
+                        // Verify Admin Claim
+                        if (state.user.isAdmin && state.user.adminSignature) {
+                            const publicKey = p2pStorage.getTeamPublicKey(teamId);
+                            if (publicKey) {
+                                const { cryptoUtils } = await import('./cryptoUtils');
+                                const isValid = cryptoUtils.verify(clientId.toString(), state.user.adminSignature, publicKey);
+                                if (isValid) {
+                                    validatedIsAdmin = true;
+                                    console.log(`[P2P Sync] Verified Admin signature for ${state.user.name}`);
+                                } else {
+                                    console.warn(`[P2P Sync] ⚠️ FAILED Admin verification for ${state.user.name}. Demoting to member.`);
+                                }
+                            } else {
+                                // If no public key is on record yet, we can't verify.
+                                // For safety, we treat as false unless we trust the "Trust On First Use" model, 
+                                // but here we default to strict fail-safe.
+                                // Exception: If we are not the admin ourselves, maybe we trust them? 
+                                // No, strict security means no verify = no admin.
+                                console.warn(`[P2P Sync] No Public Key found to verify Admin claim for ${state.user.name}`);
+                            }
+                        }
 
                         p2pStorage.addMemberToTeam(teamId, {
                             id: clientId.toString(),
                             name: state.user.name,
                             color: state.user.color,
-                            isAdmin: shouldBeAdmin
+                            isAdmin: validatedIsAdmin
                         });
                         processedMembers.add(memberKey);
                         console.log(`[P2P Sync] Added member ${state.user.name} to team ${teamId}`);
                     }
-                });
+                }
 
                 if (removed.length > 0) {
                     console.log(`[P2P Sync] ${removed.length} peer(s) left team ${teamId}`);
                 }
 
                 debouncedNotify();
-            });
-
-            // Set local user info
-            const username = await userProfileService.getUsername();
-            const localUserColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
-            const team = teamManager.getTeam(teamId);
-            const isAdmin = team?.createdByMe || false;
-
-            awareness.setLocalStateField('user', {
-                name: username,
-                color: localUserColor,
-                isAdmin: isAdmin
             });
 
             // Add self to members list
@@ -298,8 +334,9 @@ class P2PSyncService {
             // Clean up any duplicate members that may exist
             p2pStorage.cleanupDuplicateMembers(teamId);
 
-            // Fix admin status to ensure only one admin exists
-            p2pStorage.fixAdminStatus(teamId);
+            // fixAdminStatus removed: it causes issues by demoting the actual creator if timestamps are misaligned
+            // Admin status is now handled authoritatively by addMemberToTeam based on local team.createdByMe
+            // p2pStorage.fixAdminStatus(teamId);
 
             this.notify();
 

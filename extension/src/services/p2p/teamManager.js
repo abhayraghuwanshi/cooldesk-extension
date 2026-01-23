@@ -73,8 +73,26 @@ class TeamManager {
             encryptionKey, // Derived and cached
             createdAt: Date.now(),
             createdByMe: options.createdByMe !== undefined ? options.createdByMe : true, // Default to true unless specified
-            lastSync: null
+            lastSync: null,
+            adminPrivateKey: null,
+            adminPublicKey: null
         };
+
+        // SECURITY: Admin Keys
+        // If we created this team OR are importing a recovery kit, we set the keys.
+        if (options.importedKeys) {
+            // Restore from Recovery Kit
+            newTeam.adminPrivateKey = options.importedKeys.privateKey;
+            newTeam.adminPublicKey = options.importedKeys.publicKey;
+            newTeam.createdByMe = true; // Implicitly true if we have keys
+            console.log('[TeamManager] Restored Admin Keys from import');
+        } else if (newTeam.createdByMe) {
+            // New Team Creation
+            const keys = cryptoUtils.generateAdminKeys();
+            newTeam.adminPrivateKey = keys.privateKey;
+            newTeam.adminPublicKey = keys.publicKey;
+            console.log('[TeamManager] Generated Admin Keys for new team');
+        }
 
         this.teams.push(newTeam);
         await this._saveTeams();
@@ -84,7 +102,6 @@ class TeamManager {
             await this.setActiveTeam(newTeam.id);
         }
 
-        this._notifyListeners();
         return newTeam;
     }
 

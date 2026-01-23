@@ -1,4 +1,4 @@
-import { faChevronDown, faChevronRight, faCrown, faPlus, faTrash, faUserMinus, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faChevronRight, faCrown, faEye, faKey, faPen, faPlus, faTrash, faUpload, faUserMinus, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
@@ -7,6 +7,7 @@ import { teamManager } from '../../services/p2p/teamManager';
 import { userProfileService } from '../../services/p2p/userProfileService';
 
 export default function TeamsTab() {
+    // ... [existing state code] ...
     const [teams, setTeams] = useState([]);
     const [activeTeamId, setActiveTeamId] = useState(null);
     const [peerCounts, setPeerCounts] = useState(new Map());
@@ -23,6 +24,7 @@ export default function TeamsTab() {
     const [secretPhrase, setSecretPhrase] = useState('');
     const [error, setError] = useState('');
 
+    // ... [existing useEffects] ...
     useEffect(() => {
         // Initial load
         teamManager.init().then(() => {
@@ -58,6 +60,7 @@ export default function TeamsTab() {
         };
     }, []);
 
+    // ... [existing handlers] ...
     const handleCreateJoin = async (e) => {
         e.preventDefault();
         setError('');
@@ -157,6 +160,55 @@ export default function TeamsTab() {
                 setTeams([...teams]);
             }
         }
+    };
+
+    const handleToggleWriter = (teamId, memberName) => {
+        const team = teams.find(t => t.id === teamId);
+        if (!team?.createdByMe) return;
+
+        const success = p2pStorage.toggleMemberWriterStatus(teamId, memberName);
+        if (success) {
+            setTeams([...teams]); // Trigger re-render
+        }
+    };
+
+    const handleExportRecoveryKit = (teamId) => {
+        const team = teams.find(t => t.id === teamId);
+        if (!team || !team.createdByMe) return;
+
+        const confirmMsg =
+            '⚠️ SENSITIVE DATA WARNING ⚠️\n\n' +
+            'You are about to export the "Admin Recovery Kit" for this team.\n' +
+            'This file contains the PRIVATE KEY that controls this team.\n\n' +
+            'Anyone with this file can impersonate you and take control of the team.\n\n' +
+            'Do you want to proceed and download the file?';
+
+        if (!confirm(confirmMsg)) return;
+
+        const recoveryData = {
+            type: 'cooldesk-team-recovery',
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            team: {
+                id: team.id,
+                name: team.name,
+                secretPhrase: team.secretPhrase, // Crucial for re-joining
+                adminKeys: {
+                    privateKey: team.adminPrivateKey, // Crucial for Admin status
+                    publicKey: team.adminPublicKey
+                }
+            }
+        };
+
+        const blob = new Blob([JSON.stringify(recoveryData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cooldesk-recovery-${team.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     return (
@@ -284,6 +336,54 @@ export default function TeamsTab() {
                                 Cancel
                             </button>
                         </div>
+
+                        <div style={{ position: 'relative', marginTop: 8, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                            <label style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                width: '100%', padding: '8px', borderRadius: 8,
+                                border: '1px dashed rgba(255,255,255,0.2)',
+                                background: 'rgba(255,255,255,0.02)', color: '#94a3b8',
+                                fontSize: 12, cursor: 'pointer', transition: 'all 0.2s'
+                            }}
+                                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#fff'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; e.currentTarget.style.color = '#94a3b8'; }}
+                            >
+                                <input
+                                    type="file"
+                                    accept=".json"
+                                    style={{ display: 'none' }}
+                                    onChange={async (e) => {
+                                        const file = e.target.files[0];
+                                        if (!file) return;
+                                        setError('');
+                                        try {
+                                            const text = await file.text();
+                                            const data = JSON.parse(text);
+
+                                            if (data.type !== 'cooldesk-team-recovery' || !data.team?.adminKeys?.privateKey) {
+                                                throw new Error('Invalid Recovery Kit file.');
+                                            }
+
+                                            if (confirm(`Restore team "${data.team.name}" with ADMIN Access?`)) {
+                                                await teamManager.addTeam(data.team.name, data.team.secretPhrase, {
+                                                    importedKeys: data.team.adminKeys
+                                                });
+                                                setTeamName('');
+                                                setSecretPhrase('');
+                                                setIsCreating(false);
+                                            }
+                                        } catch (err) {
+                                            console.error(err);
+                                            setError('Import Failed: ' + err.message);
+                                        } finally {
+                                            e.target.value = ''; // Reset
+                                        }
+                                    }}
+                                />
+                                <FontAwesomeIcon icon={faUpload} />
+                                Restore from Recovery Kit (.json)
+                            </label>
+                        </div>
                     </form>
                 </div>
             )}
@@ -351,9 +451,24 @@ export default function TeamsTab() {
                                 </div>
 
                                 <div style={{ display: 'flex', gap: 8, marginLeft: 12 }}>
+                                    {/* Admin Recovery Kit */}
+                                    {team.createdByMe && (
+                                        <button
+                                            onClick={() => handleExportRecoveryKit(team.id)}
+                                            title="Export Recovery Kit (Admin Keys) - KEEP SAFE!"
+                                            style={{
+                                                width: 32, height: 32, borderRadius: 6, border: 'none',
+                                                background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24',
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}
+                                        >
+                                            <FontAwesomeIcon icon={faKey} size="sm" />
+                                        </button>
+                                    )}
+
                                     <button
                                         onClick={() => handleDelete(team.id)}
-                                        title="Leave Team"
+                                        title={team.createdByMe ? "Delete Team" : "Leave Team"}
                                         style={{
                                             width: 32, height: 32, borderRadius: 6, border: 'none',
                                             background: 'rgba(239, 68, 68, 0.1)', color: '#f87171',
@@ -432,6 +547,44 @@ export default function TeamsTab() {
                                                                     Admin
                                                                 </span>
                                                             )}
+                                                            {member.isWriter && !member.isAdmin && (
+                                                                <span style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 4,
+                                                                    padding: '2px 6px',
+                                                                    borderRadius: 4,
+                                                                    background: 'rgba(16, 185, 129, 0.2)',
+                                                                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                                                                    fontSize: 9,
+                                                                    fontWeight: 700,
+                                                                    color: '#34d399',
+                                                                    textTransform: 'uppercase',
+                                                                    letterSpacing: '0.5px'
+                                                                }}>
+                                                                    <FontAwesomeIcon icon={faPen} size="xs" />
+                                                                    Writer
+                                                                </span>
+                                                            )}
+                                                            {!member.isAdmin && !member.isWriter && (
+                                                                <span style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 4,
+                                                                    padding: '2px 6px',
+                                                                    borderRadius: 4,
+                                                                    background: 'rgba(148, 163, 184, 0.1)',
+                                                                    border: '1px solid rgba(148, 163, 184, 0.2)',
+                                                                    fontSize: 9,
+                                                                    fontWeight: 700,
+                                                                    color: '#94a3b8',
+                                                                    textTransform: 'uppercase',
+                                                                    letterSpacing: '0.5px'
+                                                                }}>
+                                                                    <FontAwesomeIcon icon={faEye} size="xs" />
+                                                                    Viewer
+                                                                </span>
+                                                            )}
                                                             {member.isOnline && <span style={{ marginLeft: 6, fontSize: 9, color: '#34d399', fontWeight: 600 }}>● Online</span>}
                                                         </div>
                                                         <div style={{ fontSize: 10, opacity: 0.4, fontFamily: 'monospace' }}>
@@ -445,39 +598,60 @@ export default function TeamsTab() {
                                                         background: member.isOnline ? '#34d399' : 'rgba(255,255,255,0.2)',
                                                         boxShadow: member.isOnline ? '0 0 8px rgba(52, 211, 153, 0.5)' : 'none'
                                                     }} title={member.isOnline ? 'Online' : 'Offline'} />
-                                                    {/* Remove member button - only shown for admins (createdByMe) and for non-admin members */}
-                                                    {!member.isAdmin && (
-                                                        <button
-                                                            onClick={() => handleRemoveMember(team.id, member.name)}
-                                                            title={team.createdByMe ? "Remove member" : "Only admin can remove"}
-                                                            disabled={!team.createdByMe}
-                                                            style={{
-                                                                width: 24,
-                                                                height: 24,
-                                                                borderRadius: 4,
-                                                                border: 'none',
-                                                                background: 'rgba(239, 68, 68, 0.1)',
-                                                                color: '#f87171',
-                                                                cursor: team.createdByMe ? 'pointer' : 'not-allowed',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                opacity: team.createdByMe ? 0.6 : 0.2,
-                                                                transition: 'all 0.2s'
-                                                            }}
-                                                            onMouseEnter={e => {
-                                                                if (team.createdByMe) {
+
+                                                    {/* Admin Controls */}
+                                                    {team.createdByMe && !member.isAdmin && (
+                                                        <div style={{ display: 'flex', gap: 4 }}>
+                                                            {/* Toggle Writer */}
+                                                            <button
+                                                                onClick={() => handleToggleWriter(team.id, member.name)}
+                                                                title={member.isWriter ? "Revoke Write Access" : "Grant Write Access"}
+                                                                style={{
+                                                                    width: 24,
+                                                                    height: 24,
+                                                                    borderRadius: 4,
+                                                                    border: 'none',
+                                                                    background: member.isWriter ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.1)',
+                                                                    color: member.isWriter ? '#34d399' : '#fff',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    transition: 'all 0.2s'
+                                                                }}
+                                                            >
+                                                                <FontAwesomeIcon icon={faPen} size="xs" />
+                                                            </button>
+
+                                                            {/* Remove Member */}
+                                                            <button
+                                                                onClick={() => handleRemoveMember(team.id, member.name)}
+                                                                title="Remove member"
+                                                                style={{
+                                                                    width: 24,
+                                                                    height: 24,
+                                                                    borderRadius: 4,
+                                                                    border: 'none',
+                                                                    background: 'rgba(239, 68, 68, 0.1)',
+                                                                    color: '#f87171',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    transition: 'all 0.2s'
+                                                                }}
+                                                                onMouseEnter={e => {
                                                                     e.currentTarget.style.opacity = '1';
                                                                     e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                                                                }
-                                                            }}
-                                                            onMouseLeave={e => {
-                                                                e.currentTarget.style.opacity = team.createdByMe ? '0.6' : '0.2';
-                                                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                                                            }}
-                                                        >
-                                                            <FontAwesomeIcon icon={faUserMinus} size="xs" />
-                                                        </button>
+                                                                }}
+                                                                onMouseLeave={e => {
+                                                                    e.currentTarget.style.opacity = '1';
+                                                                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                                                                }}
+                                                            >
+                                                                <FontAwesomeIcon icon={faUserMinus} size="xs" />
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </div>
                                             ))}
