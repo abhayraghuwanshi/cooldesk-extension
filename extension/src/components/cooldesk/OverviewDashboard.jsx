@@ -53,7 +53,8 @@ export function OverviewDashboard({
     activeWorkspaceId,
     expandedWorkspaceId,
     onAddNote,
-    pinnedWorkspaces = []
+    pinnedWorkspaces = [],
+    onAddUrl
 }) {
     const [recentWorkspaces, setRecentWorkspaces] = useState(() => {
         // Hydrate from local storage cache for instant render
@@ -165,6 +166,7 @@ export function OverviewDashboard({
                                     isActive={activeWorkspaceId === workspace.id}
                                     compact={true}
                                     isPinned={pinnedWorkspaces.includes(workspace.name)}
+                                    onAddUrl={onAddUrl}
                                 />
                             ))
                         ) : (

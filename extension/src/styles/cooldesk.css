@@ -307,10 +307,10 @@
 
 .cooldesk-search-box {
   width: 100%;
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--glass-bg, rgba(15, 23, 42, 0.6));
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid var(--border-color, rgba(59, 130, 246, 0.3));
   border-radius: 12px;
   /* Boxier terminal look */
   display: flex;
@@ -318,20 +318,20 @@
   gap: 12px;
   padding: 8px 12px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .cooldesk-search-box:hover {
-  background: rgba(10, 15, 25, 0.95);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 130, 246, 0.1) inset;
+  background: var(--interactive-bg, rgba(30, 41, 59, 0.8));
+  border-color: var(--border-hover, rgba(59, 130, 246, 0.5));
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   transform: translateY(-1px);
 }
 
 .cooldesk-search-box:focus-within {
-  background: rgba(5, 5, 10, 0.98);
+  background: var(--active-item-bg, rgba(5, 5, 10, 0.98));
   border-color: var(--accent-color, #34C759);
-  box-shadow: 0 8px 30px rgba(52, 199, 89, 0.15), 0 0 0 1px var(--accent-color, #34C759) inset;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--accent-color, #34C759) inset;
   transform: translateY(-1px);
 }
 
@@ -340,14 +340,13 @@
   background: transparent !important;
   border: none !important;
   outline: none !important;
-  color: #F8FAFC;
+  color: var(--text-primary, #F8FAFC);
   font-size: 15px;
   font-weight: 500;
   min-width: 0;
   height: 100%;
   padding: 8px 0;
-  font-family: 'Fira Code', 'Roboto Mono', monospace;
-  /* Monospace for terminal feel */
+  font-family: inherit;
   letter-spacing: -0.01em;
   box-shadow: none !important;
   -webkit-appearance: none;
@@ -359,13 +358,13 @@
 .cooldesk-search-input:-webkit-autofill:hover,
 .cooldesk-search-input:-webkit-autofill:focus,
 .cooldesk-search-input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px #0F172A inset !important;
-  -webkit-text-fill-color: #F8FAFC !important;
+  -webkit-box-shadow: 0 0 0 30px var(--glass-bg, #0F172A) inset !important;
+  -webkit-text-fill-color: var(--text-primary, #F8FAFC) !important;
   transition: background-color 5000s ease-in-out 0s;
 }
 
 .cooldesk-search-input::placeholder {
-  color: #475569;
+  color: var(--text-secondary, #64748B);
   font-weight: 400;
   font-style: italic;
   font-family: inherit;
@@ -584,15 +583,17 @@
   transform: translateY(0);
 }
 
-/* Show pin and delete buttons on hover in list view */
+/* Show pin, add, and delete buttons on hover in list view */
 .cooldesk-workspace-card.compact:hover .workspace-pin-btn,
-.cooldesk-workspace-card.compact:hover .workspace-delete-btn {
+.cooldesk-workspace-card.compact:hover .workspace-delete-btn,
+.cooldesk-workspace-card.compact:hover .workspace-add-btn {
   opacity: 1 !important;
 }
 
-/* Show pin and delete buttons on hover in grid view */
+/* Show pin, add, and delete buttons on hover in grid view */
 .cooldesk-workspace-card:hover .workspace-pin-btn,
-.cooldesk-workspace-card:hover .workspace-delete-btn {
+.cooldesk-workspace-card:hover .workspace-delete-btn,
+.cooldesk-workspace-card:hover .workspace-add-btn {
   opacity: 1 !important;
 }
 

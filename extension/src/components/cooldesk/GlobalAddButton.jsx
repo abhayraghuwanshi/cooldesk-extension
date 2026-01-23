@@ -15,8 +15,20 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 
-export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlToWorkspace, onAddNote }) {
-  const [isOpen, setIsOpen] = useState(false);
+export function GlobalAddButton({
+  workspaces = [],
+  onCreateWorkspace,
+  onAddUrlToWorkspace,
+  onAddNote,
+  isOpen: externalIsOpen,
+  onOpen: externalOnOpen,
+  onClose: externalOnClose,
+  initialWorkspace
+}) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isControlled = externalIsOpen !== undefined;
+  const isOpen = isControlled ? externalIsOpen : internalIsOpen;
+
   const [mode, setMode] = useState('url'); // 'url', 'workspace', 'note'
   const [browseMode, setBrowseMode] = useState('tabs'); // 'tabs', 'history', 'bookmarks'
 
@@ -79,12 +91,16 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
     }
   }, [isOpen, mode]);
 
-  // Auto-select first workspace if available
+  // Auto-select workspace logic
   useEffect(() => {
-    if (isOpen && mode === 'url' && !selectedWorkspace && workspaces.length > 0) {
-      setSelectedWorkspace(workspaces[0]);
+    if (isOpen && mode === 'url') {
+      if (initialWorkspace) {
+        setSelectedWorkspace(initialWorkspace);
+      } else if (!selectedWorkspace && workspaces.length > 0) {
+        setSelectedWorkspace(workspaces[0]);
+      }
     }
-  }, [isOpen, mode, workspaces]);
+  }, [isOpen, mode, workspaces, initialWorkspace]);
 
   const resetForm = () => {
     setUrlInput('');
@@ -98,13 +114,21 @@ export function GlobalAddButton({ workspaces = [], onCreateWorkspace, onAddUrlTo
   };
 
   const handleOpen = () => {
-    setIsOpen(true);
-    setMode('url');
-    resetForm();
+    if (isControlled) {
+      externalOnOpen?.();
+    } else {
+      setInternalIsOpen(true);
+      setMode('url');
+      resetForm();
+    }
   };
 
   const handleClose = () => {
-    setIsOpen(false);
+    if (isControlled) {
+      externalOnClose?.();
+    } else {
+      setInternalIsOpen(false);
+    }
     resetForm();
   };
 

@@ -42,6 +42,23 @@ export function CoolDeskContainer({
   const [workspacePage, setWorkspacePage] = useState(0);
   const [activeFace, setActiveFace] = useState('overview');
 
+  // Add Modal State
+  const [addModalState, setAddModalState] = useState({
+    isOpen: false,
+    initialWorkspace: null
+  });
+
+  const handleOpenAddModal = (workspace = null) => {
+    setAddModalState({
+      isOpen: true,
+      initialWorkspace: workspace
+    });
+  };
+
+  const handleCloseAddModal = () => {
+    setAddModalState(prev => ({ ...prev, isOpen: false }));
+  };
+
   // Tab management state
   const [tabs, setTabs] = useState([]);
   const [tabsLoading, setTabsLoading] = useState(true);
@@ -310,6 +327,7 @@ export function CoolDeskContainer({
               expandedWorkspaceId={expandedWorkspace?.id}
               pinnedWorkspaces={pinnedWorkspaces}
               onTogglePin={onTogglePin}
+              onAddUrl={handleOpenAddModal}
             />
           </Suspense>
         </Face>
@@ -323,6 +341,7 @@ export function CoolDeskContainer({
             expandedWorkspaceId={expandedWorkspace?.id}
             onAddNote={onAddNote}
             pinnedWorkspaces={pinnedWorkspaces}
+            onAddUrl={handleOpenAddModal}
           />
         </Face>
 
@@ -354,6 +373,10 @@ export function CoolDeskContainer({
         onCreateWorkspace={onCreateWorkspace}
         onAddUrlToWorkspace={onAddUrlToWorkspace}
         onAddNote={onAddNote}
+        isOpen={addModalState.isOpen}
+        onOpen={() => handleOpenAddModal(null)}
+        onClose={handleCloseAddModal}
+        initialWorkspace={addModalState.initialWorkspace}
       />
     </div >
   );

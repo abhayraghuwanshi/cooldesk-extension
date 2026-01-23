@@ -25,7 +25,8 @@ export function WorkspaceList({
     activeWorkspaceId,
     expandedWorkspaceId,
     pinnedWorkspaces = [], // New prop
-    onTogglePin            // New prop
+    onTogglePin,            // New prop
+    onAddUrl               // New prop
 }) {
     // Load view mode from localStorage, default to 'list'
     const [viewMode, setViewMode] = useState(() => {
@@ -375,6 +376,7 @@ export function WorkspaceList({
                                             isPinned={true}
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
                                             onDelete={handleDeleteWorkspace}
+                                            onAddUrl={onAddUrl}
                                         />
                                     ))}
                                 </div>
@@ -417,6 +419,7 @@ export function WorkspaceList({
                                             isPinned={false}
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
                                             onDelete={handleDeleteWorkspace}
+                                            onAddUrl={onAddUrl}
                                         />
                                     ))}
                                 </div>

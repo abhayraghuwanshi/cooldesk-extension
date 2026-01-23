@@ -62,6 +62,13 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
       };
 
       await dbUpsertNote(note);
+
+      // Dispatch event to notify other components (like NotesList) to refresh
+      window.dispatchEvent(new CustomEvent('notes-updated', { detail: { note } }));
+
+      // Also invoke callback if provided (for parent container refresh)
+      // if (onNoteAdded) onNoteAdded(note);
+
       setNewNoteText('');
     } catch (error) {
       console.error('[NotesWidget] Error adding note:', error);

@@ -138,15 +138,31 @@ export function SettingsModal({
 
   const handleApplyTheme = (themeId, fontSizeId, fontFamilyId) => {
     const body = document.body;
-    // Remove old classes
-    themes.forEach(t => body.classList.remove(`bg-${t.id}`));
+    const html = document.documentElement;
+
+    // Remove old theme classes from both body and html to be safe
+    themes.forEach(t => {
+      body.classList.remove(`bg-${t.id}`);
+      html.classList.remove(`bg-${t.id}`);
+    });
+
+    // Add new theme class
     body.classList.add(`bg-${themeId}`);
+    html.classList.add(`bg-${themeId}`); // Some styles might rely on root class
+
+    // Force a repaint for any stubborn elements (rare but happens with glassmorphism)
+    html.style.display = 'none';
+    // eslint-disable-next-line no-unused-expressions
+    html.offsetHeight;
+    html.style.display = '';
 
     if (fontSizeId) setAndSaveFontSize(fontSizeId);
     if (fontFamilyId) setAndSaveFontFamily(fontFamilyId);
 
     try {
       localStorage.setItem('cooldesk-theme', themeId);
+      // Dispatch event for components that might need manual update
+      window.dispatchEvent(new CustomEvent('cooldesk-theme-changed', { detail: { themeId } }));
     } catch (e) { }
   };
 
