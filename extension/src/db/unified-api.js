@@ -257,21 +257,25 @@ export const addUrlToWorkspace = withErrorHandling(async (url, workspaceId, meta
         title: metadata.title || '',
         favicon: metadata.favicon || '',
         workspaceIds: [workspaceId],
-        addedAt: Date.now(),
+        addedAt: metadata.addedAt || Date.now(),
         extra: metadata.extra || {}
     }, 'workspaceUrl')
 
     const db = await getUnifiedDB()
-    const tx = db.transaction(DB_CONFIG.STORES.WORKSPACE_URLS, 'readwrite')
-    const store = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_URLS)
+    const tx = db.transaction([DB_CONFIG.STORES.WORKSPACE_URLS, DB_CONFIG.STORES.WORKSPACES], 'readwrite')
+    const urlStore = tx.objectStore(DB_CONFIG.STORES.WORKSPACE_URLS)
+    const workspaceStore = tx.objectStore(DB_CONFIG.STORES.WORKSPACES)
 
     // Get existing URL or create new
-    const getReq = store.get(url)
+    const getUrlReq = urlStore.get(url)
+    const getWorkspaceReq = workspaceStore.get(workspaceId)
 
     return new Promise((resolve, reject) => {
-        getReq.onsuccess = () => {
-            const existing = getReq.result
-            let urlDoc
+        let urlDoc
+        let workspace
+
+        getUrlReq.onsuccess = () => {
+            const existing = getUrlReq.result
 
             if (existing) {
                 // Add workspace ID if not already present
@@ -286,12 +290,56 @@ export const addUrlToWorkspace = withErrorHandling(async (url, workspaceId, meta
                 urlDoc = urlData
             }
 
-            const putReq = store.put(urlDoc)
-            putReq.onsuccess = () => resolve(urlDoc)
-            putReq.onerror = () => reject(putReq.error)
+            // Update workspace_urls store
+            urlStore.put(urlDoc)
         }
 
-        getReq.onerror = () => reject(getReq.error)
+        getWorkspaceReq.onsuccess = () => {
+            workspace = getWorkspaceReq.result
+
+            if (workspace) {
+                // Ensure urls array exists
+                if (!Array.isArray(workspace.urls)) {
+                    workspace.urls = []
+                }
+
+                // Check if URL already exists in workspace
+                const existingIndex = workspace.urls.findIndex(u => u.url === url)
+
+                const urlEntry = {
+                    url,
+                    title: metadata.title || url,
+                    addedAt: metadata.addedAt || Date.now(),
+                    favicon: metadata.favicon || `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`
+                }
+
+                if (existingIndex >= 0) {
+                    // Update existing entry
+                    workspace.urls[existingIndex] = {
+                        ...workspace.urls[existingIndex],
+                        ...urlEntry
+                    }
+                } else {
+                    // Add new entry
+                    workspace.urls.push(urlEntry)
+                }
+
+                // Update workspace's updatedAt timestamp
+                workspace.updatedAt = Date.now()
+
+                // Save updated workspace
+                workspaceStore.put(workspace)
+            }
+        }
+
+        tx.oncomplete = () => {
+            console.log(`[Unified API] Added URL to workspace: ${url} -> ${workspaceId}`)
+            resolve(urlDoc)
+        }
+
+        tx.onerror = () => reject(tx.error)
+        getUrlReq.onerror = () => reject(getUrlReq.error)
+        getWorkspaceReq.onerror = () => reject(getWorkspaceReq.error)
     })
 }, {
     operation: 'addUrlToWorkspace',

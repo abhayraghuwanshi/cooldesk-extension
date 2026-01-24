@@ -22,7 +22,25 @@ class URLCategory {
 
   matchesUrl(url) {
     // Direct URL match
-    if (this.urls.some(categoryUrl => url.includes(categoryUrl))) {
+    if (this.urls.some(categoryUrl => {
+      // If category entry has a path (e.g. "google.com/drive"), use simple inclusion
+      if (categoryUrl.includes('/')) {
+        return url.includes(categoryUrl);
+      }
+
+      // For pure domains, use strict hostname matching to avoid partial matches
+      // e.g. "x.com" should not match "netflix.com"
+      try {
+        const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+        const hostname = urlObj.hostname.toLowerCase();
+        const target = categoryUrl.toLowerCase();
+
+        return hostname === target || hostname.endsWith('.' + target);
+      } catch (e) {
+        // Fallback for invalid URLs
+        return url.includes(categoryUrl);
+      }
+    })) {
       return true;
     }
 
@@ -117,5 +135,5 @@ class CategoryManager {
 // Export singleton instance
 const categoryManager = new CategoryManager();
 
-export { URLCategory, CategoryManager, categoryManager };
+export { CategoryManager, URLCategory, categoryManager };
 export default categoryManager;

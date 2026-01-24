@@ -19,6 +19,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getUrlAnalytics } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
@@ -92,6 +93,85 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     }
   };
 
+
+  // State for sorted URLs based on usage
+  const [sortedUrls, setSortedUrls] = useState(urls);
+  const [isSorting, setIsSorting] = useState(false);
+
+  // Effect to sort URLs by usage
+  useEffect(() => {
+    let isMounted = true;
+
+    const sortUrlsByUsage = async () => {
+      if (!urls || urls.length === 0) {
+        if (isMounted) setSortedUrls([]);
+        return;
+      }
+
+      setIsSorting(true);
+      try {
+        // Fetch analytics for all URLs in parallel
+        const analyticsPromises = urls.map(async (urlObj) => {
+          try {
+            const response = await getUrlAnalytics(urlObj.url);
+            const stats = response?.success ? response.data : null;
+            return {
+              ...urlObj,
+              stats: stats || { totalVisits: 0, totalTime: 0, lastVisit: 0 }
+            };
+          } catch (error) {
+            // console.error(`[WorkspaceCard] Error getting stats for "${urlObj.url}":`, error);
+            return {
+              ...urlObj,
+              stats: { totalVisits: 0, totalTime: 0, lastVisit: 0 }
+            };
+          }
+        });
+
+        const urlsWithStats = await Promise.all(analyticsPromises);
+
+        if (!isMounted) return;
+
+        // Calculate scores and sort
+        const sorted = urlsWithStats.sort((a, b) => {
+          const scoreA = calculateUrlScore(a.stats);
+          const scoreB = calculateUrlScore(b.stats);
+          return scoreB - scoreA; // Descending order
+        });
+
+        if (isMounted) {
+          setSortedUrls(sorted);
+        }
+      } catch (error) {
+        console.error('[WorkspaceCard] Error sorting URLs:', error);
+        // Fallback to original order
+        if (isMounted) setSortedUrls(urls);
+      } finally {
+        if (isMounted) setIsSorting(false);
+      }
+    };
+
+    // Score calculation helper
+    const calculateUrlScore = (stats) => {
+      const totalVisits = stats.totalVisits || 0;
+      const timeInHours = (stats.totalTime || 0) / (1000 * 60 * 60);
+      const mostRecentVisit = stats.lastVisit || 0;
+
+      const recencyBonus = mostRecentVisit > 0
+        ? Math.max(0, 100 - (Date.now() - mostRecentVisit) / (1000 * 60 * 60 * 24)) // Decay over days
+        : 0;
+
+      return (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
+    };
+
+    // Debounce/Delay slightly to avoid blocking UI on mount
+    const timeoutId = setTimeout(sortUrlsByUsage, 100);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [urls]); // Re-run if URLs change
 
   const [groupPopoverState, setGroupPopoverState] = useState({ group: null, rect: null });
   const [visibleCount, setVisibleCount] = useState(8);
@@ -223,7 +303,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
     // 1. Bucket by specific Entity (Owner/Workspace)
     const entityGroups = {};
-    urls.forEach(urlObj => {
+    // Use sortedUrls instead of urls
+    sortedUrls.forEach(urlObj => {
       const info = getGroupingInfo(urlObj.url);
       if (!entityGroups[info.key]) {
         entityGroups[info.key] = {
@@ -285,9 +366,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
       // Optional: Sort groups before singles?
       if (a.type === 'group' && b.type !== 'group') return -1;
       if (a.type !== 'group' && b.type === 'group') return 1;
+
+      // Secondary sort by "primaryUrl" usage (which is already sorted implicitly by order of insertion if sortedUrls is sorted)
+      // But groups insert order depends on first occurrence. 
+
       return 0;
     });
-  }, [urls, compact]);
+  }, [sortedUrls, compact]); // Depend on sortedUrls
 
   // Calculate how many items can fit in the available width
   const calculateVisibleItems = useCallback(() => {
@@ -342,8 +427,9 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   };
 
   // Show fewer links in compact mode, unless expanded
-  const linkLimit = showAll ? urls.length : (compact ? 3 : 5);
-  const displayLinks = urls.slice(0, linkLimit);
+  // Use sortedUrls for display
+  const linkLimit = showAll ? sortedUrls.length : (compact ? 3 : 5);
+  const displayLinks = sortedUrls.slice(0, linkLimit);
 
   return (
     <div
@@ -706,7 +792,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   </li>
                 );
               })}
-              {urls.length > (compact ? 3 : 5) && !showAll && (
+              {sortedUrls.length > (compact ? 3 : 5) && !showAll && (
                 <li
                   className="workspace-link-item"
                   style={{ opacity: 0.6, fontStyle: 'italic', cursor: 'pointer' }}
@@ -716,11 +802,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   }}
                 >
                   <span className="workspace-link-text">
-                    +{urls.length - (compact ? 3 : 5)} more...
+                    +{sortedUrls.length - (compact ? 3 : 5)} more...
                   </span>
                 </li>
               )}
-              {showAll && urls.length > (compact ? 3 : 5) && (
+              {showAll && sortedUrls.length > (compact ? 3 : 5) && (
                 <li
                   className="workspace-link-item"
                   style={{ opacity: 0.6, fontStyle: 'italic', cursor: 'pointer', justifyContent: 'center' }}

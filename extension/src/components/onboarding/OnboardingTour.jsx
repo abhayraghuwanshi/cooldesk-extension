@@ -57,6 +57,18 @@ export function OnboardingTour({ onComplete, onSkip }) {
   const isLastStep = currentStep === ONBOARDING_STEPS.length - 1;
   const isFirstStep = currentStep === 0;
 
+
+
+  // Trigger chat scrape when onboarding starts
+  useEffect(() => {
+    if (chrome?.runtime?.id) {
+      console.log('[Onboarding] Triggering background chat scrape...');
+      chrome.runtime.sendMessage({ type: 'TRIGGER_MANUAL_CHATS_SCRAPE' }, (response) => {
+        console.log('[Onboarding] Chat scrape triggered:', response);
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (!step.target) return;
 

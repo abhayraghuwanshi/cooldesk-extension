@@ -685,6 +685,23 @@ export class GenericUrlParser {
   }
 
   /**
+   * Placeholder for AI-based enrichment
+   * Can be injected with a real AI service later
+   * @param {string} url - URL to enrich
+   * @param {string} [content] - Optional page content
+   * @returns {Promise<Object>} - Enriched metadata
+   */
+  static async enrichWithAI(url, content = null) {
+    // Future implementation: Call local LLM or API
+    return {
+      category: null,
+      tags: [],
+      summary: null
+    };
+  }
+
+
+  /**
    * Check if URL should be excluded globally
    * @param {string} url - URL to check
    * @returns {boolean} - Whether URL should be excluded
@@ -692,14 +709,37 @@ export class GenericUrlParser {
   static shouldExclude(url) {
     if (!url) return true;
 
+    // fast-match common internal protocols
+    if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || url.startsWith('about:') || url.startsWith('edge://') || url.startsWith('file://')) {
+      return true;
+    }
+
+    let hostname = '';
+    try {
+      hostname = new URL(url).hostname;
+    } catch {
+      return true; // invalid url
+    }
+
+    // Fast-path: Check exact hostnames before regex
+    const blockedHosts = new Set([
+      'localhost', '127.0.0.1', 'accounts.google.com', 'login.microsoftonline.com',
+      'github.com', 'facebook.com', 'twitter.com', 'linkedin.com', 'slack.com' // partial fast path for known heavy auth sites, regex will refine
+    ]);
+
+    // If it's a known heavy auth/api domain, we might still want to parse it if it's NOT an auth path.
+    // So we use this mainly for purely internal/system hosts from the original list
+    if (hostname.endsWith('.local') || hostname === 'localhost') return true;
+
+
     const excludePatterns = [
-      // Browser internal URLs
+      // Browser internal URLs - covered by fast path but kept for safety
       /chrome:\/\//,
       /chrome-extension:\/\//,
       /moz-extension:\/\//,
       /edge:\/\//,
       /about:/,
-      
+
       // OAuth and authentication URLs
       /\/o\/oauth2\//,
       /\/oauth\//,
@@ -712,7 +752,7 @@ export class GenericUrlParser {
       /facebook\.com\/v\d+\.\d+\/dialog\/oauth/,
       /twitter\.com\/oauth/,
       /linkedin\.com\/oauth/,
-      
+
       // Login, logout, signup pages
       /\/login\/?(\?.*)?$/,
       /\/logout\/?(\?.*)?$/,
@@ -721,7 +761,7 @@ export class GenericUrlParser {
       /\/signout\/?(\?.*)?$/,
       /\/register\/?(\?.*)?$/,
       /\/auth\/.*$/,
-      
+
       // Settings and configuration pages
       /\/settings\//,
       /\/config\//,
@@ -731,14 +771,14 @@ export class GenericUrlParser {
       /\/billing\//,
       /\/profile\//,
       /\/user\//,
-      
+
       // API endpoints and callbacks
       /\/api\//,
       /\/callback/,
       /\/redirect/,
       /\/return/,
       /\/finish_.*_sso/,
-      
+
       // Marketing and tracking URLs
       /utm_source=/,
       /utm_medium=/,
@@ -748,7 +788,7 @@ export class GenericUrlParser {
       /fbclid=/,
       /gclid=/,
       /msclkid=/,
-      
+
       // Temporary and session URLs
       /storagerelay:/,
       /\/tmp\//,
@@ -757,14 +797,14 @@ export class GenericUrlParser {
       /session_token=/,
       /access_token=/,
       /refresh_token=/,
-      
+
       // Privacy and legal pages
       /\/privacy/,
       /\/terms/,
       /\/cookies/,
       /\/legal/,
       /\/policy/,
-      
+
       // Development and testing
       /localhost/,
       /127\.0\.0\.1/,
@@ -773,7 +813,7 @@ export class GenericUrlParser {
       /staging\./,
       /test\./,
       /dev\./,
-      
+
       // File downloads and resources
       /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|tar|gz)(\?|#|$)/i,
       /\/download/,
@@ -781,14 +821,14 @@ export class GenericUrlParser {
       /\/assets\//,
       /\/static\//,
       /\/media\//,
-      
+
       // Error and status pages
       /\/404/,
       /\/500/,
       /\/error/,
       /\/maintenance/,
       /\/status/,
-      
+
       // Specific known problematic patterns from Claude
       /claude\.ai\/login/,
       /claude\.ai\/oauth/,
@@ -796,12 +836,12 @@ export class GenericUrlParser {
       /claude\.ai\/recents/,
       /claude\.ai\/new$/,
       /claude\.ai\/upgrade/,
-      
+
       // ChatGPT URLs with unnecessary parameters
       /chatgpt\.com\/\?model=/,
       /chatgpt\.com\/\?q=undefined/,
       /chat\.openai\.com\/\?model=/,
-      
+
       // GitHub auxiliary URLs that are not useful for workspaces
       /github\.com\/.*\/tree\//,
       /github\.com\/.*\/blob\//,
@@ -848,27 +888,27 @@ export class GenericUrlParser {
       /github\.com\/.*\?.*q=/,            // Search query parameters
       /#start-of-content$/,
       /#readme$/,
-      
+
       // Generic OAuth providers
       /auth0\.com/,
       /okta\.com/,
       /\.auth\./,
       /sso\./,
-      
+
       // Session and state parameters (these are usually temporary URLs)
       /state=/,
       /code=/,
       /token=/,
       /nonce=/,
       /session=/,
-      
+
       // Notion view parameters that create duplicates
       /notion\.so\/.*\?pvs=/,           // Private view parameters like ?pvs=12
       /notion\.so\/.*\?showMoveTo=/,    // Move dialog parameters
       /notion\.so\/.*\?.*&pvs=/,        // pvs in combination with other params
       /notion\.so\/.*\?.*&showMoveTo=/, // showMoveTo in combination
       /notion\.so\/.*showMoveTo=/,      // showMoveTo anywhere in query string
-      
+
       // Figma view parameters that create duplicates
       /figma\.com\/.*\?node-id=/,       // Node selection parameters
       /figma\.com\/.*\?t=/,             // View/frame parameters 

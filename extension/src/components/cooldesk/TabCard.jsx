@@ -1,8 +1,8 @@
+
 import { faExternalLinkAlt, faGlobe, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo } from 'react';
 import { getFaviconUrl } from '../../utils.js';
-
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
 /**

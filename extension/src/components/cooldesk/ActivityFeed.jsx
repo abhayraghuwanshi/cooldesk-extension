@@ -1,5 +1,6 @@
 import {
     faBookmark,
+    faCalendarAlt,
     faGlobe,
     faLink
 } from '@fortawesome/free-solid-svg-icons';
@@ -34,10 +35,44 @@ const PLATFORM_CONFIG = {
 export function ActivityFeed() {
     const [quickLinks, setQuickLinks] = useState([]);
     const [feedItems, setFeedItems] = useState([]);
+    const [calendarEvents, setCalendarEvents] = useState([]);
     const [activeTab, setActiveTab] = useState('all');
     const [isLoading, setIsLoading] = useState(true);
     const [visibleFavCount, setVisibleFavCount] = useState(8);
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [region, setRegion] = useState('');
     const favContainerRef = useRef(null);
+
+    // Clock and region detection
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        try {
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const regionName = timeZone.split('/')[1] || timeZone;
+            setRegion(regionName.replace(/_/g, ' '));
+        } catch (e) {
+            setRegion('Local Time');
+        }
+        return () => clearInterval(timer);
+    }, []);
+
+    // Load calendar events
+    const loadCalendarEvents = useCallback(async () => {
+        try {
+            const result = await chrome.storage.local.get(['calendar_events']);
+            if (result.calendar_events) {
+                setCalendarEvents(result.calendar_events);
+            }
+        } catch (e) {
+            console.error('Failed to load calendar events:', e);
+        }
+    }, []);
+
+    const triggerCalendarScrape = () => {
+        chrome.runtime.sendMessage({ type: 'TRIGGER_CALENDAR_SCRAPE' }, () => {
+            setTimeout(loadCalendarEvents, 5000);
+        });
+    };
 
     // Load Most Visited (Quick Access) - memoized
     const loadQuickLinks = useCallback(async () => {
@@ -152,7 +187,7 @@ export function ActivityFeed() {
     useEffect(() => {
         const loadAll = async () => {
             setIsLoading(true);
-            const [links, feed] = await Promise.all([loadQuickLinks(), loadFeed()]);
+            const [links, feed] = await Promise.all([loadQuickLinks(), loadFeed(), loadCalendarEvents()]);
             setQuickLinks(links);
             setFeedItems(feed);
             setIsLoading(false);
@@ -167,21 +202,27 @@ export function ActivityFeed() {
             chrome.tabs.onUpdated.addListener(debouncedUpdate);
             chrome.tabs.onActivated.addListener(debouncedUpdate);
 
-            // Listen to storage changes for chat updates
-            chrome.storage.onChanged.addListener(debouncedUpdate);
+            // Listen to storage changes for chat and calendar updates
+            const storageListener = (changes) => {
+                if (changes.calendar_events) {
+                    setCalendarEvents(changes.calendar_events.newValue || []);
+                }
+                debouncedUpdate();
+            };
+            chrome.storage.onChanged.addListener(storageListener);
 
             return () => {
                 chrome.tabs.onCreated.removeListener(debouncedUpdate);
                 chrome.tabs.onRemoved.removeListener(debouncedUpdate);
                 chrome.tabs.onUpdated.removeListener(debouncedUpdate);
                 chrome.tabs.onActivated.removeListener(debouncedUpdate);
-                chrome.storage.onChanged.removeListener(debouncedUpdate);
+                chrome.storage.onChanged.removeListener(storageListener);
             };
         } catch (error) {
             console.warn('[ActivityFeed] Failed to setup event listeners', error);
             return () => { };
         }
-    }, [loadQuickLinks, loadFeed, debouncedUpdate]);
+    }, [loadQuickLinks, loadFeed, loadCalendarEvents, debouncedUpdate]);
 
     // Calculate how many favorite icons can fit in the available width
     const calculateVisibleFavorites = useCallback(() => {
@@ -390,12 +431,12 @@ export function ActivityFeed() {
                         gap: '4px',
                         position: 'relative'
                     }}>
-                        {['all', 'chats', 'tabs'].map(tab => (
+                        {['all', 'calendar', 'chats', 'tabs'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 style={{
-                                    padding: '8px 20px',
+                                    padding: '8px 16px',
                                     background: activeTab === tab
                                         ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.25), rgba(59, 130, 246, 0.15))'
                                         : 'transparent',
@@ -404,7 +445,7 @@ export function ActivityFeed() {
                                         : '1px solid transparent',
                                     borderRadius: '10px',
                                     color: activeTab === tab ? '#60A5FA' : '#94A3B8',
-                                    fontSize: '13px',
+                                    fontSize: '12px',
                                     fontWeight: activeTab === tab ? 600 : 500,
                                     cursor: 'pointer',
                                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -441,7 +482,157 @@ export function ActivityFeed() {
                     overflowX: 'hidden',
                     minHeight: 0 // Important for flex children with overflow
                 }}>
-                    {isLoading && feedItems.length === 0 ? (
+                    {/* Calendar Tab Content */}
+                    {activeTab === 'calendar' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            {/* Clock Header */}
+                            <div style={{
+                                padding: '16px',
+                                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(30, 41, 59, 0.4))',
+                                borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <div>
+                                    <div style={{
+                                        fontSize: '28px',
+                                        fontWeight: 700,
+                                        color: '#F8FAFC',
+                                        fontFamily: 'monospace',
+                                        lineHeight: '1',
+                                        letterSpacing: '-1px'
+                                    }}>
+                                        {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </div>
+                                    <div style={{
+                                        fontSize: '12px',
+                                        color: '#94A3B8',
+                                        marginTop: '4px',
+                                        fontWeight: 500
+                                    }}>
+                                        {currentTime.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{
+                                        padding: '4px 8px',
+                                        background: 'rgba(255, 255, 255, 0.05)',
+                                        borderRadius: '8px',
+                                        fontSize: '11px',
+                                        color: '#CBD5E1'
+                                    }}>
+                                        {region}
+                                    </span>
+                                    <button
+                                        onClick={triggerCalendarScrape}
+                                        title="Sync Calendar"
+                                        style={{
+                                            border: 'none',
+                                            background: 'rgba(59, 130, 246, 0.15)',
+                                            color: '#60A5FA',
+                                            padding: '6px 10px',
+                                            borderRadius: '8px',
+                                            cursor: 'pointer',
+                                            fontSize: '12px',
+                                            fontWeight: 500
+                                        }}
+                                    >
+                                        ↻ Sync
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Calendar Events List */}
+                            {calendarEvents.length === 0 ? (
+                                <div style={{
+                                    padding: '40px 20px',
+                                    textAlign: 'center',
+                                    color: '#64748B'
+                                }}>
+                                    <div style={{ fontSize: '24px', marginBottom: '8px', opacity: 0.5 }}>☕</div>
+                                    <div style={{ fontSize: '13px' }}>No upcoming meetings</div>
+                                    <div style={{ fontSize: '11px', marginTop: '8px', color: '#475569' }}>
+                                        Open Google Calendar to sync events
+                                    </div>
+                                </div>
+                            ) : (
+                                calendarEvents.map((evt, idx) => {
+                                    const isAllDayEvent = evt.time && (evt.time.toLowerCase().includes('all day') || evt.time.toLowerCase().includes('unknown'));
+                                    return (
+                                        <div
+                                            key={idx}
+                                            onClick={() => evt.link && window.open(evt.link, '_blank')}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                padding: '12px 16px',
+                                                cursor: evt.link ? 'pointer' : 'default',
+                                                borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
+                                                transition: 'background 0.2s',
+                                                position: 'relative'
+                                            }}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                        >
+                                            {/* Calendar Icon */}
+                                            <div style={{
+                                                width: '36px',
+                                                height: '36px',
+                                                borderRadius: '10px',
+                                                background: isAllDayEvent ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                                                border: `1px solid ${isAllDayEvent ? 'rgba(16, 185, 129, 0.25)' : 'rgba(59, 130, 246, 0.25)'}`,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                flexShrink: 0,
+                                                color: isAllDayEvent ? '#10B981' : '#60A5FA'
+                                            }}>
+                                                <FontAwesomeIcon icon={faCalendarAlt} style={{ fontSize: '16px' }} />
+                                            </div>
+
+                                            {/* Event Info */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    fontSize: 'var(--font-base)',
+                                                    color: '#E2E8F0',
+                                                    fontWeight: 500,
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    marginBottom: '2px'
+                                                }}>
+                                                    {evt.title}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: '11px',
+                                                    color: '#94A3B8'
+                                                }}>
+                                                    {isAllDayEvent ? 'All Day' : evt.time || 'Time TBA'}
+                                                </div>
+                                            </div>
+
+                                            {/* Join Button */}
+                                            {evt.link && (
+                                                <div style={{
+                                                    fontSize: '10px',
+                                                    fontWeight: 600,
+                                                    color: '#60A5FA',
+                                                    background: 'rgba(59, 130, 246, 0.1)',
+                                                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                                                    padding: '4px 10px',
+                                                    borderRadius: '6px'
+                                                }}>
+                                                    Join
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    ) : isLoading && feedItems.length === 0 ? (
                         <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>Loading feed...</div>
                     ) : feedItems.filter(item => activeTab === 'all' || item.type === (activeTab === 'chats' ? 'chat' : 'tab')).length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>

@@ -157,12 +157,13 @@ function hasMinimumEngagement(data) {
     );
 }
 
-// Helper to identify audio streaming sites
+// Helper to identify audio streaming sites - DEPRECATED (Using generic heartbeat)
 function isAudioStreamingSite(url) {
+    // Legacy fallback list
     const audioSites = [
         'spotify.com', 'music.youtube.com', 'soundcloud.com', 'pandora.com',
         'apple.com/music', 'tidal.com', 'deezer.com', 'bandcamp.com',
-        'last.fm', 'mixcloud.com', 'tunein.com'
+        'last.fm', 'mixcloud.com', 'tunein.com', 'youtube.com', 'twitch.tv', 'vimeo.com'
     ];
     return audioSites.some(site => url.includes(site));
 }
@@ -436,16 +437,19 @@ async function accumulateTime(url, now = Date.now()) {
     // Smart time tracking logic
     const isCurrentlyActive = currentActive.url === url;
     const sessionEvent = sessionEvents.get(cleaned);
+
+    // Check for audio activity (from generic heartbeats or legacy whitelist)
     const isAudioSite = isAudioStreamingSite(cleaned);
-    const hasAudioActivity = sessionEvent?.hasAudio || false;
+    const hasAudioActivity = sessionEvent ? sessionEvent.hasAudio : false;
 
     // Track time if:
     // 1. Currently active tab (visual engagement)
-    // 2. Audio site with detected audio activity (background music)
-    const shouldTrackTime = isCurrentlyActive || (isAudioSite && hasAudioActivity);
+    // 2. Audio is PLAYING (detected via heartbeat) - Generic Support
+    // 3. Audio site fallback (legacy)
+    const shouldTrackTime = isCurrentlyActive || (hasAudioActivity === true);
 
     if (shouldTrackTime) {
-        // Simplified time weighting - less complex logic
+        // Simplified time weighting
         const timeWeight = isCurrentlyActive ? 1.0 : 0.5; // Reduced from 0.3 to 0.5 for background audio
         const weightedDelta = Math.floor(delta * timeWeight);
 
@@ -816,9 +820,28 @@ export function handleActivityMessage(msg, sender) {
                 sessionEvent.lastSeen = Date.now();
                 console.log('[Activity Debug] Incremented forms for', cleaned, 'to', activityData[cleaned].forms);
                 break;
-            case 'audioDetected':
-                sessionEvent.hasAudio = true;
+            case 'audioDetected': // Legacy Event
+            case 'audioHeartbeat': // Generic Event
+                sessionEvent.hasAudio = msg.playing !== false;
                 sessionEvent.lastSeen = Date.now();
+
+                // If Playing audio in background, we need to accumulate time explicitly
+                // because accumulateTime() normally only runs for currentActive.url unless triggered here
+                if (sessionEvent.hasAudio && currentActive.url !== sender.tab.url) {
+                    // Force accumulation for this background tab
+                    // timeWeight will be determined by activity logic (0.5 for background)
+                    const fakeNow = Date.now();
+                    // Delta is roughly the heartbeat interval (5000ms) or calc from last seen
+                    accumulateTime(sender.tab.url, fakeNow, true); // Add force flag if needed, or just call it
+                }
+                break;
+            case 'navigation':
+                // SPA Navigation (History API)
+                if (cleaned && activityData[cleaned]) {
+                    // Just update last seen to keep session alive
+                    sessionEvent.lastSeen = Date.now();
+                    console.log('[Activity Debug] SPA Navigation detected for', cleaned);
+                }
                 break;
             case 'visibility':
                 if (typeof msg.visible === 'boolean' && currentActive.url === msg.url) {

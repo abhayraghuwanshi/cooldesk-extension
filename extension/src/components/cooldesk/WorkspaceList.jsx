@@ -362,7 +362,7 @@ export function WorkspaceList({
                                     } : {
                                         display: 'flex',
                                         flexDirection: 'column',
-                                        gap: '8px'
+                                        gap: '4px'
                                     }}
                                 >
                                     {pinned.map((workspace) => (
@@ -405,7 +405,7 @@ export function WorkspaceList({
                                     } : {
                                         display: 'flex',
                                         flexDirection: 'column',
-                                        gap: '8px'
+                                        gap: '4px'
                                     }}
                                 >
                                     {sortedUnpinned.slice(0, workspaceLimit).map((workspace) => (
@@ -443,7 +443,7 @@ export function WorkspaceList({
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            gap: '8px'
+                                            gap: '4px'
                                         }}
                                         onMouseEnter={(e) => {
                                             e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
@@ -561,7 +561,7 @@ export function WorkspaceList({
                                         <div style={{
                                             display: 'flex',
                                             flexDirection: 'column',
-                                            gap: '8px',
+                                            gap: '4px',
                                             maxHeight: '400px',
                                             overflowY: 'auto'
                                         }}>
@@ -728,7 +728,7 @@ export function WorkspaceList({
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
-                                                        gap: '8px',
+                                                        gap: '4px',
                                                         marginBottom: '10px'
                                                     }}
                                                     onMouseEnter={(e) => {

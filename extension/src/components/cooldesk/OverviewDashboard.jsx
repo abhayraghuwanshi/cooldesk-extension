@@ -148,7 +148,7 @@ export function OverviewDashboard({
                     <div className="cooldesk-list-view" style={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '6px',
+                        gap: '2px',
                         overflow: 'visible',
                         minHeight: '200px' // Optimization: Reserve space to prevent layout shift
                     }}>
@@ -218,13 +218,11 @@ export function OverviewDashboard({
                 </div>
             </div>
 
-            {/* Right Column: Unified Activity Feed + Calendar */}
-            <div className="overview-activity-column" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <div style={{ flex: 1, minHeight: 0 }}>
-                    <Suspense fallback={<div style={{ padding: 20, color: '#64748B' }}>Loading feed...</div>}>
-                        <ActivityFeed />
-                    </Suspense>
-                </div>
+            {/* Right Column: Unified Activity Feed (includes Calendar tab) */}
+            <div className="overview-activity-column">
+                <Suspense fallback={<div style={{ padding: 20, color: '#64748B' }}>Loading feed...</div>}>
+                    <ActivityFeed />
+                </Suspense>
             </div>
         </div>
     );

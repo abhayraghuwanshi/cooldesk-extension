@@ -107,16 +107,21 @@
     background: linear-gradient(135deg,
             rgba(20, 20, 25, 0.6) 0%,
             rgba(15, 15, 20, 0.5) 100%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    box-shadow: none;
+}
+
+.wallpaper-enabled .notes-list-item:hover {
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .wallpaper-enabled .notes-list-item.active {
     background: linear-gradient(135deg,
             rgba(30, 30, 35, 0.8) 0%,
             rgba(25, 25, 30, 0.7) 100%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.3) !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    box-shadow: none;
 }
 
 .wallpaper-enabled .notes-sidebar-btn {
@@ -200,7 +205,40 @@
 
 .wallpaper-enabled .notes-new-btn:hover {
     background: rgba(255, 255, 255, 0.2) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Notes Sidebar - reduced shadows and borders */
+.wallpaper-enabled .notes-sidebar {
+    box-shadow: none !important;
+    gap: 8px !important;
+}
+
+.wallpaper-enabled .notes-sidebar > div {
+    box-shadow: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    background: linear-gradient(135deg,
+            rgba(20, 20, 28, 0.5) 0%,
+            rgba(15, 15, 22, 0.45) 100%) !important;
+    border-radius: 12px !important;
+}
+
+/* Reduce gap between folder/note items */
+.wallpaper-enabled .notes-sidebar .custom-scrollbar {
+    gap: 2px !important;
+    padding: 8px !important;
+}
+
+/* Notes list items in sidebar - remove margins creating gaps */
+.wallpaper-enabled .notes-list-item {
+    margin-bottom: 2px !important;
+    border-radius: 8px !important;
+}
+
+/* Sidebar buttons - tighter spacing and matching radius */
+.wallpaper-enabled .notes-sidebar-btn {
+    margin-bottom: 0 !important;
+    border-radius: 8px !important;
 }
 
 .wallpaper-enabled .cooldesk-search-box:hover,
@@ -243,6 +281,42 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Compact/List view cards - lighter shadows for tighter spacing */
+.wallpaper-enabled .cooldesk-workspace-card.compact {
+    box-shadow: none;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: linear-gradient(135deg,
+            rgba(20, 20, 28, 0.65) 0%,
+            rgba(15, 15, 22, 0.6) 100%) !important;
+}
+
+.wallpaper-enabled .cooldesk-workspace-card.compact:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: none;
+}
+
+/* Notes Widget in Overview - lighter styling */
+.wallpaper-enabled .notes-widget,
+.wallpaper-enabled .overview-notes-card {
+    box-shadow: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: linear-gradient(135deg,
+            rgba(20, 20, 28, 0.65) 0%,
+            rgba(15, 15, 22, 0.6) 100%) !important;
+}
+
+.wallpaper-enabled .notes-widget textarea,
+.wallpaper-enabled .overview-notes-card textarea {
+    box-shadow: none !important;
+}
+
+/* Notes input card within widget */
+.wallpaper-enabled .notes-widget > div > div {
+    box-shadow: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
 .wallpaper-enabled .cooldesk-workspace-card:hover {
     background: linear-gradient(135deg,
             rgba(25, 25, 30, 0.85) 0%,
@@ -277,30 +351,42 @@
 
 /* === TAB CARDS === */
 .wallpaper-enabled .tab-card,
-.wallpaper-enabled .tab-group-card {
+.wallpaper-enabled .tab-group-card,
+.wallpaper-enabled .cooldesk-tab-card,
+.wallpaper-enabled .cooldesk-tab-group-card {
     background: linear-gradient(135deg,
             rgba(15, 15, 20, 0.74) 0%,
             rgba(10, 10, 15, 0.7) 100%) !important;
     backdrop-filter: blur(110px) saturate(120%) brightness(1.08);
     -webkit-backdrop-filter: blur(110px) saturate(120%) brightness(1.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
     box-shadow:
         0 12px 48px rgba(0, 0, 0, 0.3),
         0 2px 0 rgba(255, 255, 255, 0.05) inset;
 }
 
 .wallpaper-enabled .tab-card:hover,
-.wallpaper-enabled .tab-group-card:hover {
+.wallpaper-enabled .tab-group-card:hover,
+.wallpaper-enabled .cooldesk-tab-card:hover,
+.wallpaper-enabled .cooldesk-tab-group-card:hover {
     background: linear-gradient(135deg,
             rgba(25, 25, 30, 0.82) 0%,
             rgba(15, 15, 20, 0.76) 100%) !important;
     backdrop-filter: blur(130px) saturate(130%) brightness(1.12);
     -webkit-backdrop-filter: blur(130px) saturate(130%) brightness(1.12);
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.2) !important;
     box-shadow:
         0 16px 64px rgba(0, 0, 0, 0.35),
         0 2px 0 rgba(255, 255, 255, 0.08) inset;
     transform: translateY(-2px);
+}
+
+/* Active tab card state */
+.wallpaper-enabled .cooldesk-tab-card.active {
+    background: linear-gradient(135deg,
+            rgba(30, 30, 35, 0.8) 0%,
+            rgba(20, 20, 25, 0.75) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
 /* === BUTTONS === */
@@ -439,7 +525,6 @@
         0 8px 32px rgba(0, 0, 0, 0.5),
         0 0 0 2px rgba(255, 255, 255, 0.1),
         0 2px 0 rgba(255, 255, 255, 0.1) inset;
-    filter: grayscale(1) brightness(1.2);
 }
 
 /* === GLOBAL ADD BUTTON === */
@@ -571,57 +656,113 @@
 /* ==========================================================================
    TabManagement Widget Enhancements (Obsidian Theme)
    ========================================================================== */
+
+/* Cooldesk Tab Cards - Main styling for wallpaper mode */
+.wallpaper-enabled .cooldesk-tab-card {
+    background: linear-gradient(135deg,
+            rgba(15, 15, 20, 0.75) 0%,
+            rgba(10, 10, 15, 0.7) 100%) !important;
+    backdrop-filter: blur(100px) saturate(120%) brightness(1.08) !important;
+    -webkit-backdrop-filter: blur(100px) saturate(120%) brightness(1.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25) !important;
+}
+
+.wallpaper-enabled .cooldesk-tab-card:hover {
+    background: linear-gradient(135deg,
+            rgba(25, 25, 30, 0.82) 0%,
+            rgba(15, 15, 20, 0.76) 100%) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35) !important;
+}
+
+.wallpaper-enabled .cooldesk-tab-card.active {
+    background: linear-gradient(135deg,
+            rgba(30, 30, 35, 0.85) 0%,
+            rgba(20, 20, 25, 0.8) 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+}
+
+.wallpaper-enabled .cooldesk-tab-card.pinned {
+    background: linear-gradient(135deg,
+            rgba(25, 23, 15, 0.75) 0%,
+            rgba(15, 15, 20, 0.7) 100%) !important;
+    border-color: rgba(255, 204, 0, 0.2) !important;
+}
+
+/* Tab Group Cards */
+.wallpaper-enabled .cooldesk-tab-group-card {
+    background: linear-gradient(135deg,
+            rgba(15, 15, 20, 0.78) 0%,
+            rgba(10, 10, 15, 0.72) 100%) !important;
+    backdrop-filter: blur(100px) saturate(120%) brightness(1.08) !important;
+    -webkit-backdrop-filter: blur(100px) saturate(120%) brightness(1.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25) !important;
+}
+
+.wallpaper-enabled .cooldesk-tab-group-card:hover {
+    background: linear-gradient(135deg,
+            rgba(25, 25, 30, 0.85) 0%,
+            rgba(15, 15, 20, 0.78) 100%) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4) !important;
+}
+
+.wallpaper-enabled .cooldesk-tab-group-card.expanded {
+    background: linear-gradient(135deg,
+            rgba(30, 25, 35, 0.82) 0%,
+            rgba(20, 18, 25, 0.78) 100%) !important;
+    border-color: rgba(139, 92, 246, 0.3) !important;
+}
+
+/* Tab actions overlay */
+.wallpaper-enabled .tab-actions {
+    background: rgba(10, 10, 15, 0.9) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Tab group items */
+.wallpaper-enabled .tab-group-item {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.wallpaper-enabled .tab-group-item:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Browser tab cards (legacy/alternate) */
 .wallpaper-enabled .browser-tab-card {
     background: linear-gradient(135deg, rgba(20, 20, 25, 0.6) 0%, rgba(15, 15, 20, 0.5) 100%) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
-    /* Override colorful left border */
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
     backdrop-filter: blur(12px) !important;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .wallpaper-enabled .browser-tab-card[data-active="true"] {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
     border: 1px solid rgba(255, 255, 255, 0.3) !important;
-    border-left: 3px solid rgba(255, 255, 255, 0.6) !important;
-    /* Active indicator */
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
-}
-
-/* Fallback for when wallpaper allows default styles but we want them cleaner */
-.browser-tab-card {
-    border: 1px solid rgba(128, 128, 128, 0.2);
-    border-left: 1px solid rgba(128, 128, 128, 0.2);
-    /* Use the variable if we want accent, but default to neutral */
-}
-
-.browser-tab-card[data-active="true"] {
-    /* This matches the variable we passed */
-    border-left: 3px solid var(--domain-color, #3B82F6);
-    background: rgba(255, 255, 255, 0.05);
 }
 
 .wallpaper-enabled .browser-tab-card:hover {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%) !important;
     border-color: rgba(255, 255, 255, 0.2) !important;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
-    transform: translateY(-1px);
 }
 
 .wallpaper-enabled .browser-tab-refresh-btn {
     background: rgba(255, 255, 255, 0.05) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
     color: rgba(255, 255, 255, 0.8) !important;
-    border-radius: 6px;
-    padding: 6px 12px;
-    transition: all 0.2s ease;
 }
 
 .wallpaper-enabled .browser-tab-refresh-btn:hover {
     background: rgba(255, 255, 255, 0.15) !important;
     color: #fff !important;
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
 }
 
 .wallpaper-enabled .browser-tab-group-header {

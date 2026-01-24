@@ -63,7 +63,7 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
-    esbuild: { drop: ['console', 'debugger'] },
+    // esbuild: { drop: ['console', 'debugger'] },
     define: {
       'global': 'window',
     },

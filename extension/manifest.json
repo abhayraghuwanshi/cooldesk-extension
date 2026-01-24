@@ -46,6 +46,7 @@
         "src/footerBar.js",
         "src/contentInteractions.js",
         "src/chatScraper.js",
+        "src/calendarScraper.js",
         "logo-2.png",
         "index.html"
       ],
@@ -78,6 +79,15 @@
       ],
       "js": [
         "src/chatScraper.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://calendar.google.com/*"
+      ],
+      "js": [
+        "src/calendarScraper.js"
       ],
       "run_at": "document_idle"
     }

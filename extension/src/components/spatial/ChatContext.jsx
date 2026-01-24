@@ -193,6 +193,18 @@ export function ChatContext({ workspaceId, workspaceName }) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const triggerScrape = () => {
+    setLoading(true);
+    // Use the new manual trigger that opens tabs if needed
+    chrome.runtime.sendMessage({ type: 'TRIGGER_MANUAL_CHATS_SCRAPE' }, (response) => {
+      // Re-fetch after delays to allow scrape to start/finish
+      // The background script now opens tabs, so it might take a bit longer
+      setTimeout(loadChats, 3000);
+      setTimeout(loadChats, 8000);
+      setTimeout(loadChats, 15000);
+    });
+  };
+
   return (
     <div style={{
       display: 'flex',
@@ -844,6 +856,36 @@ export function ChatContext({ workspaceId, workspaceName }) {
                   (Note: Some platforms require visiting specific chat URLs to track)
                 </span>
               </div>
+
+              <button
+                onClick={triggerScrape}
+                style={{
+                  marginTop: '12px',
+                  background: 'rgba(59, 130, 246, 0.1)',
+                  color: '#60A5FA',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
+                  e.currentTarget.style.transform = 'none';
+                }}
+              >
+                <FontAwesomeIcon icon={faSync} />
+                Fetch Chats
+              </button>
             </div>
           ) : (
             <>

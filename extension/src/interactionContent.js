@@ -67,6 +67,75 @@ addEventListener('visibilitychange', () => {
   sendInteraction('visibility', { visible: !document.hidden });
 });
 
+// Generic Audio/Video Detection (YouTube, Twitch, Pandora, etc.)
+let activeMediaCount = 0;
+let audioHeartbeatInterval = null;
+
+function updateAudioHeartbeat() {
+  if (activeMediaCount > 0) {
+    if (!audioHeartbeatInterval) {
+      // Start heartbeat - send every 5 seconds
+      sendInteraction('audioHeartbeat', { playing: true }); // Send immediately
+      audioHeartbeatInterval = setInterval(() => {
+        sendInteraction('audioHeartbeat', { playing: true });
+      }, 5000);
+    }
+  } else {
+    if (audioHeartbeatInterval) {
+      clearInterval(audioHeartbeatInterval);
+      audioHeartbeatInterval = null;
+      sendInteraction('audioHeartbeat', { playing: false });
+    }
+  }
+}
+
+// Use capture phase to detect play/pause on any media element
+try {
+  window.addEventListener('play', (e) => {
+    if (e.target instanceof HTMLMediaElement) {
+      activeMediaCount++;
+      updateAudioHeartbeat();
+    }
+  }, true);
+
+  window.addEventListener('pause', (e) => {
+    if (e.target instanceof HTMLMediaElement) {
+      activeMediaCount = Math.max(0, activeMediaCount - 1);
+      updateAudioHeartbeat();
+    }
+  }, true);
+
+  window.addEventListener('ended', (e) => {
+    if (e.target instanceof HTMLMediaElement) {
+      activeMediaCount = Math.max(0, activeMediaCount - 1);
+      updateAudioHeartbeat();
+    }
+  }, true);
+} catch { /* no-op */ }
+
+// SPA Navigation Detection (History API) for X.com, YouTube, etc.
+try {
+  // Only patch if not already patched (check simply)
+  if (!history.pushState.patched) {
+    const originalPushState = history.pushState;
+    history.pushState = function (...args) {
+      originalPushState.apply(this, args);
+      sendInteraction('navigation', { url: location.href });
+    };
+    history.pushState.patched = true;
+
+    const originalReplaceState = history.replaceState;
+    history.replaceState = function (...args) {
+      originalReplaceState.apply(this, args);
+      sendInteraction('navigation', { url: location.href });
+    };
+
+    window.addEventListener('popstate', () => {
+      sendInteraction('navigation', { url: location.href });
+    });
+  }
+} catch { /* no-op */ }
+
 // Text selection tracking (like Sider AI) - with debouncing to avoid excessive captures
 
 

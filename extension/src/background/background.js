@@ -153,8 +153,10 @@ import {
 } from './activity.js';
 import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
+import '../utils/realTimeCategorizor.js'; // Auto-starts real-time categorization
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
+
 
 
 
@@ -703,8 +705,8 @@ async function main() {
     }
 
     // Handle activity tracking messages from content scripts
-    // Skip activity handling for chat scraping messages
-    if (msg.type && sender.tab && msg.type !== 'AUTO_SCRAPED_CHATS') {
+    // Skip activity handling for chat scraping messages and calendar triggers
+    if (msg.type && sender.tab && msg.type !== 'AUTO_SCRAPED_CHATS' && msg.type !== 'TRIGGER_CALENDAR_SCRAPE' && msg.type !== 'CALENDAR_EVENTS_SCRAPED' && msg.type !== 'TRIGGER_MANUAL_CHATS_SCRAPE' && msg.type !== 'TRIGGER_ALL_CHATS_SCRAPE') {
       console.log('[Background Debug] Potential activity message:', { type: msg.type, url: sender.tab?.url });
 
       const activityHandled = handleActivityContentScriptMessage(msg, sender);
@@ -787,7 +789,6 @@ async function main() {
           const { date, limit = 7 } = msg;
 
           if (date) {
-            // Get notes for specific date
             const storageKey = `dailyNotes_${date}`;
             const result = await chrome.storage.local.get([storageKey]);
             const dailyData = result[storageKey] || {
@@ -798,51 +799,82 @@ async function main() {
             };
             return {
               ok: true,
-              dailyNotes: dailyData,
-              date
+              data: dailyData
             };
           } else {
-            // Get recent daily notes from last N days
-            const recentNotes = [];
+            // Get recent days
+            const keys = [];
             const today = new Date();
-
             for (let i = 0; i < limit; i++) {
-              const checkDate = new Date(today);
-              checkDate.setDate(today.getDate() - i);
-              const dateStr = checkDate.toISOString().split('T')[0];
-
-              const storageKey = `dailyNotes_${dateStr}`;
-              const result = await chrome.storage.local.get([storageKey]);
-              const dailyData = result[storageKey];
-
-              if (dailyData && (dailyData.selections?.length > 0 || dailyData.content?.trim())) {
-                recentNotes.push(dailyData);
-              }
+              const d = new Date(today);
+              d.setDate(d.getDate() - i);
+              keys.push(`dailyNotes_${d.toISOString().split('T')[0]}`);
             }
+
+            const result = await chrome.storage.local.get(keys);
+            const notes = Object.values(result).sort((a, b) =>
+              new Date(b.date).getTime() - new Date(a.date).getTime()
+            );
 
             return {
               ok: true,
-              recentNotes,
-              count: recentNotes.length
+              data: notes
             };
           }
-        } catch (error) {
-          console.error('[Background] Error in handleGetDailyNotes:', error);
-          throw error;
+        } catch (e) {
+          console.error('[Background] Error getting daily notes:', e);
+          return { ok: false, error: e.message };
         }
       };
 
-      handleGetDailyNotes()
-        .then(response => {
-          console.log('[Background] Sending getDailyNotes response:', response);
-          sendResponse(response);
-        })
-        .catch(error => {
-          console.error('[Background] Error getting daily notes:', error);
-          sendResponse({ ok: false, error: error?.message || 'Failed to get daily notes' });
-        });
+      handleGetDailyNotes().then(response => {
+        sendResponse(response);
+      });
 
-      return true; // Keep message channel open for async response
+      return true;
+    }
+
+    // Handle calendar scraped events
+    if (msg?.type === 'CALENDAR_EVENTS_SCRAPED') {
+      console.log('[Background:Calendar] 📩 Received calendar events message:', msg);
+
+      (async () => {
+        try {
+          if (msg.success && msg.events) {
+            // Store events
+            console.log(`[Background:Calendar] Saving ${msg.events.length} events to storage...`);
+            await chrome.storage.local.set({
+              calendar_events: msg.events,
+              calendar_last_updated: Date.now()
+            });
+            console.log('[Background:Calendar] ✅ Saved calendar events to storage');
+          } else {
+            console.warn('[Background:Calendar] ⚠️ Calendar scrape failed or empty:', msg.error);
+          }
+
+          // If this came from a scraping tab (checked via sender tab url params or just assumption), close it
+          if (sender.tab && sender.tab.url.includes('scraping=true')) {
+            console.log('[Background:Calendar] Closing scraping tab:', sender.tab.id);
+            await chrome.tabs.remove(sender.tab.id);
+          } else {
+            console.log('[Background:Calendar] Not closing tab (passive scrape or manual):', sender.tab?.url);
+          }
+        } catch (e) {
+          console.error('[Background:Calendar] ❌ Error handling calendar events:', e);
+        }
+      })();
+
+      // Don't need to send response to content script really
+      sendResponse({ received: true });
+      return false;
+    }
+
+    // Trigger manual scrape (for testing or user request)
+    if (msg?.type === 'TRIGGER_CALENDAR_SCRAPE') {
+      console.log('[Background] Manual trigger for calendar scrape');
+      triggerCalendarScrape();
+      sendResponse({ started: true });
+      return false;
     }
 
 
@@ -865,15 +897,13 @@ async function main() {
           const store = tx.objectStore(DB_CONFIG.STORES.UI_STATE);
           const stateKey = `lastScrape_${platform}`;
 
-          const state = await new Promise((resolve, reject) => {
+          const data = await new Promise((resolve, reject) => {
             const request = store.get(stateKey);
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
           });
 
-          const timestamp = state?.timestamp || 0;
-          console.log(`[Background] Last scrape time for ${platform}: ${timestamp ? new Date(timestamp).toLocaleString() : 'Never'}`);
-          sendResponse({ timestamp });
+          sendResponse({ timestamp: data ? data.timestamp : 0 });
         } catch (error) {
           console.error('[Background] Error getting last scrape time:', error);
           sendResponse({ timestamp: 0 });
@@ -997,12 +1027,31 @@ async function main() {
 
 
             console.log(`[Background] ✅ Auto-stored/updated ${result.chats.length} ${result.platform} chats`);
+
+            // CHECK IF WE SHOULD CLOSE THE TAB (Calendar-style auto-scrape)
+            if (sender.tab && sender.tab.url.includes('scraping=true')) {
+              console.log('[Background] Closing chat scraping tab:', sender.tab.id);
+              // Small delay to ensure DB write is fully done/synced?
+              setTimeout(() => {
+                chrome.tabs.remove(sender.tab.id).catch(e => console.warn('Failed to close tab:', e));
+              }, 1000);
+            }
+
+            sendResponse({ success: true, count: result.chats.length });
+          } else {
+            // Even if no new chats, if it was a scraping tab, close it
+            if (sender.tab && sender.tab.url.includes('scraping=true')) {
+              console.log('[Background] No new chats, closing scraping tab:', sender.tab.id);
+              chrome.tabs.remove(sender.tab.id).catch(e => console.warn('Failed to close tab:', e));
+            }
+            sendResponse({ success: true, count: 0 }); // Respond even if no chats to avoid port error
           }
         } catch (error) {
           console.error('[Background] Error handling auto-scraped chats:', error);
+          sendResponse({ success: false, error: error.message });
         }
       })();
-      return false; // No response needed for auto-scrape
+      return true; // Keep channel open
     }
 
     // Handle chat scraping requests
@@ -1352,6 +1401,107 @@ async function main() {
         });
 
       return true; // Keep message channel open for async response
+    }
+
+    // Trigger scrape for ALL open chat tabs (for onboarding)
+    if (msg?.type === 'TRIGGER_ALL_CHATS_SCRAPE') {
+      console.log('[Background] Triggering scrape for all chat tabs...');
+      (async () => {
+        try {
+          const chatDomains = [
+            'chat.openai.com', 'chatgpt.com',
+            'claude.ai',
+            'gemini.google.com',
+            'grok.com',
+            'perplexity.ai',
+            'aistudio.google.com',
+            'lovable.dev'
+          ];
+
+          // Find all tabs matching these domains
+          const tabs = await chrome.tabs.query({});
+          const targetTabs = tabs.filter(tab =>
+            tab.url && chatDomains.some(domain => tab.url.includes(domain))
+          );
+
+          console.log(`[Background] Found ${targetTabs.length} chat tabs to scrape`);
+          let triggeredCount = 0;
+
+          // Send scrape command to each tab
+          const promises = targetTabs.map(async (tab) => {
+            try {
+              // Check if we can inject/message this tab
+              await chrome.tabs.sendMessage(tab.id, { type: 'SCRAPE_NEW_CHATS' });
+              triggeredCount++;
+              console.log(`[Background] Triggered scrape on tab ${tab.id} (${tab.url})`);
+            } catch (e) {
+              console.log(`[Background] Failed to trigger scrape on tab ${tab.id} (may need reload):`, e);
+            }
+          });
+
+          await Promise.all(promises);
+
+          sendResponse({
+            success: true,
+            triggeredCount,
+            totalFound: targetTabs.length
+          });
+
+        } catch (error) {
+          console.error('[Background] Error triggering all chats scrape:', error);
+          sendResponse({ success: false, error: error.message });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
+    }
+
+    // Trigger MANUAL scrape by opening tabs (Calendar-style)
+    if (msg?.type === 'TRIGGER_MANUAL_CHATS_SCRAPE') {
+      console.log('[Background] Triggering MANUAL scrape (opening tabs)...');
+      (async () => {
+        try {
+          const platforms = [
+            { url: 'https://chatgpt.com/?scraping=true', domain: 'chatgpt.com' },
+            { url: 'https://claude.ai/chats?scraping=true', domain: 'claude.ai' },
+            { url: 'https://gemini.google.com/app?scraping=true', domain: 'gemini.google.com' },
+            { url: 'https://www.perplexity.ai/?scraping=true', domain: 'perplexity.ai' }
+          ];
+
+          // Check for existing open tabs to avoid duplicates
+          const tabs = await chrome.tabs.query({});
+          let openedCount = 0;
+
+          for (const platform of platforms) {
+            // Check if we already have a tab for this domain (scraping or not)
+            const existingTab = tabs.find(t => t.url && t.url.includes(platform.domain));
+
+            if (existingTab) {
+              console.log(`[Background] Tab already open for ${platform.domain}, triggering scrape on it...`);
+              // Just trigger scrape on existing tab
+              chrome.tabs.sendMessage(existingTab.id, { type: 'SCRAPE_NEW_CHATS' }).catch(() => { });
+            } else {
+              // Open new invisible tab
+              console.log(`[Background] Opening hidden tab for ${platform.domain}...`);
+              await chrome.tabs.create({
+                url: platform.url,
+                active: false,
+                pinned: true
+              });
+              openedCount++;
+            }
+          }
+
+          sendResponse({ success: true, openedCount });
+        } catch (error) {
+          console.error('[Background] Error triggering manual chats scrape:', error);
+          sendResponse({ success: false, error: error.message });
+        } finally {
+          cleanup();
+        }
+      })();
+      return true;
     }
 
     // Delete a specific selection from daily notes
@@ -2118,3 +2268,68 @@ main()
     console.error('[Background] Main function failed:', e);
     console.error('[Background] Stack trace:', e.stack);
   });
+
+// Calendar Scraping Logic
+async function triggerCalendarScrape() {
+  try {
+    console.log('[Background:Calendar] 🚀 Triggering calendar scrape...');
+
+    // Check if we already have a scraping tab open?
+    const tabs = await chrome.tabs.query({ url: '*://calendar.google.com/*' });
+    console.log('[Background:Calendar] Found existing calendar tabs:', tabs.length);
+
+    for (const tab of tabs) {
+      if (tab.url.includes('scraping=true')) {
+        console.log('[Background:Calendar] Removing existing scraping tab:', tab.id);
+        await chrome.tabs.remove(tab.id);
+      }
+    }
+
+    // Create a new invisible tab
+    console.log('[Background:Calendar] Creating new hidden calendar tab...');
+    const tab = await chrome.tabs.create({
+      url: 'https://calendar.google.com/calendar/u/0/r/agenda?scraping=true',
+      active: false,
+      pinned: true
+    });
+
+    console.log('[Background:Calendar] ✅ Created hidden calendar tab:', tab.id);
+
+    // Set a timeout to close it if it hangs (45 seconds)
+    setTimeout(async () => {
+      try {
+        const t = await chrome.tabs.get(tab.id);
+        if (t) {
+          console.warn('[Background:Calendar] ⚠️ Safety timeout: closing calendar tab (scraper might be stuck):', tab.id);
+          chrome.tabs.remove(tab.id);
+        }
+      } catch (e) {
+        // Tab probably already closed
+      }
+    }, 45000);
+
+  } catch (error) {
+    console.error('[Background:Calendar] ❌ Failed to trigger calendar scrape:', error);
+  }
+}
+
+// Listen for alarms
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'calendar_scrape_alarm') {
+    console.log('[Background:Calendar] ⏰ Alarm fired: calendar_scrape_alarm');
+    triggerCalendarScrape();
+  }
+});
+
+// Setup alarm on startup
+chrome.runtime.onInstalled.addListener(() => {
+  // Check if alarm exists
+  chrome.alarms.get('calendar_scrape_alarm', (alarm) => {
+    if (!alarm) {
+      console.log('[Background] Creating calendar scrape alarm (every 30 min)');
+      chrome.alarms.create('calendar_scrape_alarm', {
+        periodInMinutes: 30
+      });
+    }
+  });
+});

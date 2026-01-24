@@ -587,7 +587,7 @@ export function NotesCanvas({ workspaceId }) {
             <div style={{
               background: 'var(--glass-bg)',
               backdropFilter: 'blur(16px)',
-              borderRadius: '16px',
+              borderRadius: '12px',
               border: '1px solid var(--border-primary)',
               display: 'flex',
               flexDirection: 'column',
@@ -598,7 +598,7 @@ export function NotesCanvas({ workspaceId }) {
                 padding: '12px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '4px',
+                gap: '2px',
                 overflowY: 'auto'
               }}>
                 <div className="sidebar-header" style={{
@@ -652,7 +652,7 @@ export function NotesCanvas({ workspaceId }) {
                   style={{
                     background: activeFolder === 'All Notes' ? 'var(--accent-blue-soft)' : 'transparent',
                     border: activeFolder === 'All Notes' ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
-                    borderRadius: '10px',
+                    borderRadius: '8px',
                     padding: '12px',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
@@ -695,7 +695,7 @@ export function NotesCanvas({ workspaceId }) {
                     style={{
                       background: activeFolder === folder ? 'var(--accent-blue-soft)' : 'transparent',
                       border: activeFolder === folder ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
-                      borderRadius: '10px',
+                      borderRadius: '8px',
                       padding: '12px',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
@@ -737,7 +737,7 @@ export function NotesCanvas({ workspaceId }) {
             <div style={{
               background: 'var(--glass-bg)',
               backdropFilter: 'blur(16px)',
-              borderRadius: '16px',
+              borderRadius: '12px',
               border: '1px solid var(--border-primary)',
               flex: 1,
               display: 'flex',
@@ -750,7 +750,7 @@ export function NotesCanvas({ workspaceId }) {
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '8px',
+                gap: '4px',
                 flex: 1
               }}>
                 {groupedNotes.length === 0 ? (
@@ -803,8 +803,8 @@ export function NotesCanvas({ workspaceId }) {
                           className={`notes-list-item ${activeNote?.id === note.id ? 'active' : ''}`}
                           style={{
                             padding: '10px 12px',
-                            borderRadius: '10px',
-                            marginBottom: '4px',
+                            borderRadius: '8px',
+                            marginBottom: '2px',
                             background: activeNote?.id === note.id ? 'var(--accent-blue-soft)' : 'var(--surface-2)',
                             border: activeNote?.id === note.id ? '1px solid var(--accent-blue-border)' : '1px solid var(--border-secondary)',
                             cursor: 'pointer',

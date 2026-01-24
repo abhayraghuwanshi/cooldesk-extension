@@ -11,6 +11,7 @@ import './styles/wallpaper-enhancements.css';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { faBroom, faClone, faGear, faGlobe, faHistory, faPlus, faRotateRight, faThumbtack, faTrash, faTriangleExclamation, faUndo } from '@fortawesome/free-solid-svg-icons';
 import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
+import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspace, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
@@ -338,8 +339,26 @@ export default function App() {
       const categoryData = categoryManager.getCategory(category);
       // Only create a new workspace if it doesn't already exist
       if (!existingNames.has(group.displayName.toLowerCase())) {
+
+        const categoryIcons = {
+          ai: '🤖',
+          finance: '💰',
+          shopping: '🛍️',
+          education: '🎓',
+          entertainment: '🎬',
+          travel: '✈️',
+          social: '💬',
+          utilities: '🛠️',
+          creativity: '🎨',
+          food: '🍔',
+          health: '🏥',
+          information: '📰',
+          productivity: '⚡'
+        };
+
         const workspaceConfig = {
           name: group.displayName,
+          icon: categoryIcons[category] || 'globe',
           description: `${group.displayName} websites`,
           gridType: 'ItemGrid',
           urls: group.urls.map(url => ({

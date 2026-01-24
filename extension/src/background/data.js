@@ -1,6 +1,7 @@
 // Data collection and storage operations (bookmarks, history)
-import { getSettings } from '../db/index.js';
+import { addUrlToWorkspace, getSettings, listWorkspaces, saveWorkspace } from '../db/index.js';
 import { storageGetWithTTL, storageSetWithTTL } from '../services/extensionApi.js';
+import GenericUrlParser from '../utils/GenericUrlParser.js';
 
 // Global variable to track last populate time
 let globalLastPopulateTime = 0;
@@ -42,18 +43,6 @@ async function collectHistory() {
   const results = await chrome.history.search({ text: '', startTime, maxResults })
   console.log(`[AI][collect] History collected: ${results.length}`)
 
-  // Debug: Check for ChatGPT URLs in collected history
-  const chatgptUrls = results.filter(h =>
-    h.url && (h.url.includes('chatgpt.com') || h.url.includes('chat.openai.com'))
-  );
-  console.log(`[AI][collect] ChatGPT URLs found in history: ${chatgptUrls.length}`);
-  if (chatgptUrls.length > 0) {
-    console.log('[AI][collect] Sample ChatGPT URLs:', chatgptUrls.slice(0, 3).map(u => ({
-      url: u.url,
-      title: u.title
-    })));
-  }
-
   return results.map((h) => ({
     title: h.title || (h.url ? new URL(h.url).hostname : 'Untitled'),
     url: h.url,
@@ -63,6 +52,88 @@ async function collectHistory() {
     workspaceGroup: undefined,
     type: 'History',
   }))
+}
+
+
+// Auto-populate workspaces from history data
+async function autoPopulateWorkspaces(historyData) {
+  if (!historyData || !historyData.length) {
+    console.log('[Onboarding] ⚠️ No history data provided to auto-populate');
+    return;
+  }
+
+  try {
+    console.log(`[Onboarding] 🚀 Starting workspace auto-population with ${historyData.length} items...`);
+
+    // 1. Get existing workspaces to avoid duplicates
+    const wsResult = await listWorkspaces();
+    const existingWorkspaces = wsResult?.success ? wsResult.data : [];
+    console.log(`[Onboarding] Found ${existingWorkspaces.length} existing workspaces`);
+
+    // 2. Extract URLs
+    const historyUrls = historyData.map(h => h.url);
+
+    // 3. Generate Workspace Suggestions
+    console.log('[Onboarding] 🔍 Analyzing URLs for workspace suggestions...');
+    const suggestedWorkspaces = await GenericUrlParser.createWorkspacesFromUrls(historyUrls, existingWorkspaces);
+
+    // 4. Create Workspaces
+    if (suggestedWorkspaces.length > 0) {
+      console.log(`[Onboarding] ✨ Creating ${suggestedWorkspaces.length} auto-generated workspaces`);
+
+      let createdCount = 0;
+      for (const ws of suggestedWorkspaces) {
+        // Determine ID
+        const wsId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        // Construct workspace object
+        const workspace = {
+          id: wsId,
+          name: ws.name,
+          description: ws.description,
+          gridType: ws.gridType || 'ProjectGrid',
+          createdAt: Date.now(),
+          urls: [], // We'll add URLs individually to ensure proper indexing
+          context: {
+            createdFrom: 'onboarding_scan',
+            autoCreated: true
+          }
+        };
+
+        await saveWorkspace(workspace);
+        console.log(`[Onboarding] ✅ Created workspace: "${ws.name}"`);
+
+        // Add URLs to the workspace
+        if (ws.urls && ws.urls.length) {
+          let addedUrls = 0;
+          for (const urlData of ws.urls) {
+            try {
+              await addUrlToWorkspace(urlData.url, wsId, {
+                title: urlData.title,
+                favicon: urlData.favicon,
+                addedAt: urlData.addedAt
+              });
+              addedUrls++;
+            } catch (e) { /* ignore individual url errors */ }
+          }
+          console.log(`[Onboarding]    Indexed ${addedUrls} URLs in "${ws.name}"`);
+        }
+        createdCount++;
+      }
+
+      console.log(`[Onboarding] 🎉 Successfully created ${createdCount} workspaces`);
+
+      // Notify UI
+      const bc = new BroadcastChannel('ws_db_changes');
+      bc.postMessage({ type: 'workspacesChanged', source: 'onboarding' });
+      bc.close();
+    } else {
+      console.log('[Onboarding] ℹ️ No new workspaces suggestion from history (all covered or excluded)');
+    }
+
+  } catch (e) {
+    console.error('[Onboarding] ❌ Failed to auto-populate workspaces:', e);
+  }
 }
 
 // Main data population function
@@ -80,11 +151,21 @@ export async function populateAndStore() {
     console.time('[AI][populate] populateAndStore')
     const [bookmarks, history] = await Promise.all([collectBookmarks(), collectHistory()])
     const dashboardData = { bookmarks, history };
+
     // Persist in background (non-blocking) and notify UI immediately with fresh data
-    // Use TTL cache (30 minutes). Fire-and-forget to avoid blocking UI.
     storageSetWithTTL('dashboardData', dashboardData).catch(() => { /* ignore */ });
+
     // Send data inline so UI can render without waiting for storage write
     chrome.runtime.sendMessage({ action: 'updateData', dashboardData })
+
+    // TRIGGER ONBOARDING WORKSPACE CREATION (Async/Non-blocking)
+    // Only run if we actually found history
+    if (history.length > 0) {
+      autoPopulateWorkspaces(history).catch(err => {
+        console.warn('[Background] Auto-populate workspaces failed (non-fatal):', err);
+      });
+    }
+
     const res = { ok: true, counts: { bookmarks: bookmarks.length, history: history.length } }
     console.log('[AI][populate] Stored counts:', res.counts)
     console.timeEnd('[AI][populate] populateAndStore')
@@ -149,3 +230,4 @@ export function initializeData() {
 }
 
 export { collectBookmarks, collectHistory };
+
