@@ -18,25 +18,25 @@ class TeamManager {
             this.activeTeamId = result[ACTIVE_TEAM_KEY] || null;
 
             // Check if default Cooldesk team exists, if not create it
-            // const defaultTeamName = 'Cooldesk Community';
-            // const defaultTeamSecret = 'cooldesk-community-default-secret';
+            const defaultTeamName = 'Cooldesk Community';
+            const defaultTeamSecret = 'cooldesk-community-default-secret';
 
-            // // Lazy load cryptoUtils
-            // const { cryptoUtils } = await import('./cryptoUtils');
-            // const { roomId: defaultTeamId } = cryptoUtils.deriveKeys(defaultTeamSecret);
+            // Lazy load cryptoUtils
+            const { cryptoUtils } = await import('./cryptoUtils');
+            const { roomId: defaultTeamId } = cryptoUtils.deriveKeys(defaultTeamSecret);
 
-            // const hasDefaultTeam = this.teams.some(t => t.id === defaultTeamId);
+            const hasDefaultTeam = this.teams.some(t => t.id === defaultTeamId);
 
-            // if (!hasDefaultTeam) {
-            //     console.log('[Team Manager] Creating default Cooldesk team');
-            //     // Create as Read-Only for normal users (createdByMe: false)
-            //     // If you are the admin, you should manually update this value in storage or use a dev flag
-            //     await this.addTeam(defaultTeamName, defaultTeamSecret, { createdByMe: false });
+            if (!hasDefaultTeam) {
+                console.log('[Team Manager] Creating default Cooldesk team');
+                // Create as Read-Only for normal users (createdByMe: false)
+                // If you are the admin, you should manually update this value in storage or use a dev flag
+                await this.addTeam(defaultTeamName, defaultTeamSecret, { createdByMe: false });
 
-            //     // Add default resources to the new team (This requires p2pStorage which is imported in TeamView, 
-            //     // so we might need a better way to seed data, but for now just creating the team is the first step.
-            //     // The actual resource seeding might need to happen where p2pStorage is available or by extending this manager)
-            // }
+                // Add default resources to the new team (This requires p2pStorage which is imported in TeamView, 
+                // so we might need a better way to seed data, but for now just creating the team is the first step.
+                // The actual resource seeding might need to happen where p2pStorage is available or by extending this manager)
+            }
 
             this.initialized = true;
             console.log('[Team Manager] Initialized with teams:', this.teams.length);

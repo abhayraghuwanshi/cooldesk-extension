@@ -1,0 +1,281 @@
+/* Editor Container */
+.tiptap-editor-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    /* Font smoothing for premium feel */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Main Content Area */
+.tiptap-content {
+    flex: 1;
+    overflow-y: auto;
+    outline: none;
+    padding: 0 4px 40px 4px;
+    /* Space for scrolling */
+}
+
+/* ProseMirror Core Styles */
+.ProseMirror {
+    outline: none !important;
+    min-height: 100%;
+    padding: 1rem 2rem;
+    /* More horizontal breathing room like Notion */
+    color: var(--text);
+    font-size: 16px;
+    /* Slightly larger text */
+    line-height: 1.8;
+    /* More comfortable reading */
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+    color: var(--text-muted);
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    font-style: normal;
+    font-weight: 400;
+    opacity: 0.4;
+}
+
+/* Heading Styles */
+.ProseMirror h1 {
+    font-size: 2.2em;
+    font-weight: 700;
+    margin-top: 2rem;
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
+    color: var(--text);
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.ProseMirror h1:hover {
+    border-color: var(--border-secondary);
+    /* Subtle interaction */
+}
+
+.ProseMirror h2 {
+    font-size: 1.6em;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+}
+
+.ProseMirror h3 {
+    font-size: 1.3em;
+    font-weight: 600;
+    margin-top: 1.2rem;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+}
+
+/* Lists */
+.ProseMirror ul,
+.ProseMirror ol {
+    padding: 0 1.5rem;
+    margin: 0.5rem 0 0.5rem 0.5rem;
+}
+
+.ProseMirror ul li {
+    list-style-type: disc;
+    margin-bottom: 0.3rem;
+}
+
+.ProseMirror ol li {
+    list-style-type: decimal;
+    margin-bottom: 0.3rem;
+}
+
+/* Task Lists (Checkboxes) */
+ul[data-type="taskList"] {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0;
+}
+
+li[data-type="taskItem"] {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 0.4rem;
+}
+
+li[data-type="taskItem"] input[type="checkbox"] {
+    margin-right: 0.8rem;
+    margin-top: 0.45rem;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
+    width: 16px;
+    height: 16px;
+    opacity: 0.8;
+}
+
+li[data-type="taskItem"] label {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    user-select: none;
+}
+
+li[data-type="taskItem"] div {
+    flex: 1;
+}
+
+/* Links */
+.ProseMirror a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.ProseMirror a:hover {
+    border-bottom-color: var(--accent-blue);
+}
+
+/* Code Blocks */
+.ProseMirror pre {
+    background: rgba(0, 0, 0, 0.85);
+    /* Deep black with slight transparency */
+    backdrop-filter: blur(8px);
+    /* Blur for wallpaper depth */
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    color: #e5e5e5;
+    /* Light grey/white for text */
+    overflow-x: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    line-height: 1.6;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.ProseMirror pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+}
+
+
+/* Images */
+.ProseMirror img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    margin: 1rem 0;
+    transition: transform 0.2s ease;
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+    outline: 2px solid var(--accent-blue);
+}
+
+/* Inline Code */
+.ProseMirror code {
+    background: rgba(235, 87, 87, 0.1);
+    /* Subtle red tint like Notion */
+    color: #EB5757;
+    border-radius: 4px;
+    padding: 0.2rem 0.4rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+}
+
+/* Blockquotes */
+.ProseMirror blockquote {
+    border-left: 3px solid var(--text);
+    margin: 1rem 0;
+    padding-left: 1rem;
+    font-style: italic;
+    color: var(--text-secondary);
+}
+
+/* Horizontal Rule */
+.ProseMirror hr {
+    border: none;
+    border-top: 1px solid var(--border-secondary);
+    margin: 1.5rem 0;
+}
+
+/* Floating & Bubble Menus */
+.tiptap-floating-menu,
+.tiptap-bubble-menu {
+    display: flex;
+    background: var(--surface-1);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 0.25rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-primary);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.05);
+    gap: 0.2rem;
+    animation: fadeIn 0.15s ease-out;
+    z-index: 50;
+    /* Ensure it stays on top */
+}
+
+
+
+/* We will style the floating menu buttons to look like a sidebar menu in the next step or keep as bar but cleaner */
+.tiptap-floating-menu {
+    background: var(--surface-1);
+    border: 1px solid var(--border-primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 4px;
+    border-radius: 8px;
+    gap: 4px;
+}
+
+.tiptap-floating-menu button,
+.tiptap-bubble-menu button {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+}
+
+.tiptap-floating-menu button:hover,
+.tiptap-bubble-menu button:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+.tiptap-floating-menu button.is-active,
+.tiptap-bubble-menu button.is-active {
+    background: var(--accent-blue-soft);
+    color: var(--accent-blue);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

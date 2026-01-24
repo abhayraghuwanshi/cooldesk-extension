@@ -1,4 +1,4 @@
-import { faCheck, faLink, faPencilAlt, faPlus, faShare, faTimes, faUserPlus, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faCheck, faLink, faPencilAlt, faPlus, faShare, faStickyNote, faTimes, faUserPlus, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
@@ -8,6 +8,7 @@ import { getFaviconUrl } from '../../utils';
 import { CreateTeamModal } from '../popups/CreateTeamModal';
 import { InviteUserModal } from '../popups/InviteUserModal';
 import { ManageMembersModal } from '../popups/ManageMembersModal';
+import { ReadNoteModal } from '../popups/ReadNoteModal';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import NoticeBoard from './NoticeBoard';
 import TeamContextPanel from './TeamContextPanel';
@@ -20,6 +21,8 @@ export default function TeamView({ team: propTeam }) {
     const [items, setItems] = useState([]);
     const [peerCounts, setPeerCounts] = useState(new Map());
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [isReadModalOpen, setIsReadModalOpen] = useState(false);
+    const [selectedNote, setSelectedNote] = useState(null);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
     const [isCreateTeamModalOpen, setIsCreateTeamModalOpen] = useState(false);
@@ -95,7 +98,46 @@ export default function TeamView({ team: propTeam }) {
 
             const currentItems = pArray.toArray();
             console.log('[TeamView] Loaded items:', currentItems);
-            setItems(currentItems);
+
+            // Cleanup: Remove duplicate NOTE_SHARE items (keep only the most recent)
+            const noteShareItems = currentItems.filter(item => item.type === 'NOTE_SHARE');
+            const seenNoteIds = new Map(); // noteId -> {index, timestamp}
+            const indicesToRemove = [];
+
+            noteShareItems.forEach((item, idx) => {
+                const noteId = item.payload?.id;
+                if (!noteId) return;
+
+                const actualIndex = currentItems.indexOf(item);
+                const existing = seenNoteIds.get(noteId);
+
+                if (existing) {
+                    // We've seen this note before - keep the newer one
+                    const itemTimestamp = item.timestamp || 0;
+                    const existingTimestamp = existing.timestamp || 0;
+
+                    if (itemTimestamp > existingTimestamp) {
+                        // Current item is newer, remove the old one
+                        indicesToRemove.push(existing.index);
+                        seenNoteIds.set(noteId, { index: actualIndex, timestamp: itemTimestamp });
+                    } else {
+                        // Existing item is newer, remove current one
+                        indicesToRemove.push(actualIndex);
+                    }
+                } else {
+                    seenNoteIds.set(noteId, { index: actualIndex, timestamp: item.timestamp || 0 });
+                }
+            });
+
+            // Remove duplicates in reverse order to maintain indices
+            if (indicesToRemove.length > 0) {
+                console.log(`[TeamView] Removing ${indicesToRemove.length} duplicate shared notes`);
+                indicesToRemove.sort((a, b) => b - a).forEach(index => {
+                    pArray.delete(index, 1);
+                });
+            }
+
+            setItems(pArray.toArray());
 
             // 2. Permission Loading
             const username = await userProfileService.getUsername();
@@ -574,6 +616,9 @@ export default function TeamView({ team: propTeam }) {
                                         return items.map((item, index) => {
                                             if (!item) return null;
 
+                                            // Skip Notes (handled in separate grid)
+                                            if (item.type === 'NOTE_SHARE') return null;
+
                                             // Dedup Logic
                                             if (item.type === 'link' && item.url) {
                                                 const normalized = item.url.endsWith('/') ? item.url.slice(0, -1) : item.url;
@@ -746,6 +791,106 @@ export default function TeamView({ team: propTeam }) {
                                     </div>
                                 )}
                             </div>
+
+                            {/* Shared Notes Grid */}
+                            <div style={{ padding: '0 20px', marginTop: 32 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                                    <FontAwesomeIcon icon={faStickyNote} style={{ color: '#f472b6', opacity: 0.8 }} />
+                                    <h2 style={{ fontSize: 'var(--font-xl)', fontWeight: 600, margin: 0, color: '#e5e7eb' }}>
+                                        Shared Notes
+                                    </h2>
+                                    <div style={{ height: 1, flex: 1, background: 'rgba(255,255,255,0.06)' }} />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+                                    {(() => {
+                                        const seenNotes = new Set();
+                                        const notes = items.filter(i => i.type === 'NOTE_SHARE');
+
+                                        if (notes.length === 0) return (
+                                            <div style={{
+                                                gridColumn: '1 / -1',
+                                                textAlign: 'center', padding: '40px 20px',
+                                                color: 'rgba(255,255,255,0.3)', border: '2px dashed rgba(255,255,255,0.05)',
+                                                borderRadius: 16, background: 'rgba(0,0,0,0.1)'
+                                            }}>
+                                                <div style={{ fontSize: 'var(--font-sm)', opacity: 0.7 }}>No notes shared yet.</div>
+                                            </div>
+                                        );
+
+                                        return notes.map((item, index) => {
+                                            // Deduplication Logic
+                                            const noteId = item.payload?.id;
+                                            if (noteId) {
+                                                if (seenNotes.has(noteId)) return null;
+                                                seenNotes.add(noteId);
+                                            } else {
+                                                // Fallback for older/malformed notes: prevent exact duplicate objects
+                                                const uniqueKey = item.id;
+                                                if (seenNotes.has(uniqueKey)) return null;
+                                                seenNotes.add(uniqueKey);
+                                            }
+
+                                            return (
+                                                <div
+                                                    key={item.id || index}
+                                                    onClick={() => {
+                                                        setSelectedNote(item);
+                                                        setIsReadModalOpen(true);
+                                                    }}
+                                                    style={{
+                                                        background: 'linear-gradient(135deg, rgba(244, 114, 182, 0.1) 0%, rgba(244, 114, 182, 0.05) 100%)',
+                                                        borderRadius: 16, padding: 16,
+                                                        border: '1px solid rgba(244, 114, 182, 0.2)',
+                                                        position: 'relative', overflow: 'hidden',
+                                                        transition: 'all 0.2s',
+                                                        display: 'flex', flexDirection: 'column', gap: 12
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 8 }}>
+                                                        <div style={{
+                                                            fontSize: 'var(--font-lg)', fontWeight: 600, color: '#fff',
+                                                            lineHeight: 1.4,
+                                                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+                                                        }}>
+                                                            {item.payload?.title || 'Untitled Note'}
+                                                        </div>
+                                                        {hasWriteAccess && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const realIndex = items.findIndex(i => i === item);
+                                                                    if (realIndex !== -1) deleteItem(realIndex);
+                                                                }}
+                                                                style={{
+                                                                    width: 24, height: 24, borderRadius: 12, border: 'none',
+                                                                    background: 'rgba(255,255,255,0.1)', color: '#fff',
+                                                                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    opacity: 0.6, flexShrink: 0
+                                                                }}
+                                                            >
+                                                                <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <div style={{
+                                                        fontSize: 'var(--font-sm)', color: 'rgba(255,255,255,0.6)',
+                                                        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                                                        fontStyle: 'italic'
+                                                    }}>
+                                                        {item.payload?.text?.replace(/<[^>]*>/g, '').substring(0, 100) || 'No preview available'}
+                                                    </div>
+
+                                                    <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--font-xs)', opacity: 0.5 }}>
+                                                        <span>{item.addedBy || 'Unknown'}</span>
+                                                        <span>{item.timestamp ? new Date(item.timestamp).toLocaleDateString() : 'Just now'}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        });
+                                    })()}
+                                </div>
+                            </div>
                         </div>
                     </>
                 )}
@@ -754,6 +899,12 @@ export default function TeamView({ team: propTeam }) {
                     isOpen={isShareModalOpen}
                     onClose={() => setIsShareModalOpen(false)}
                     initialTeamId={activeTeamId}
+                />
+                {/* Read Note Modal */}
+                <ReadNoteModal
+                    isOpen={isReadModalOpen}
+                    onClose={() => setIsReadModalOpen(false)}
+                    note={selectedNote}
                 />
                 {/* Invite Modal */}
                 <InviteUserModal

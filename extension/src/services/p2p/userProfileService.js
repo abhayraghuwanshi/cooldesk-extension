@@ -6,7 +6,46 @@
 class UserProfileService {
     constructor() {
         this.username = null;
+        this.browserId = null; // Stable ID that persists across username changes
         this.listeners = new Set();
+    }
+
+    /**
+     * Generate a unique browser ID (UUID-like)
+     */
+    generateBrowserId() {
+        return 'browser_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
+    }
+
+    /**
+     * Get or create a stable browser ID
+     */
+    async getBrowserId() {
+        if (this.browserId) return this.browserId;
+
+        try {
+            const { userProfile } = await chrome.storage.local.get(['userProfile']);
+
+            if (userProfile?.browserId) {
+                this.browserId = userProfile.browserId;
+            } else {
+                // Generate new browser ID and save it
+                this.browserId = this.generateBrowserId();
+                await chrome.storage.local.set({
+                    userProfile: {
+                        ...userProfile,
+                        browserId: this.browserId,
+                        createdAt: Date.now()
+                    }
+                });
+                console.log('[User Profile] Generated new browser ID:', this.browserId);
+            }
+        } catch (error) {
+            console.error('[User Profile] Error loading browser ID:', error);
+            this.browserId = this.generateBrowserId();
+        }
+
+        return this.browserId;
     }
 
     /**
@@ -17,6 +56,9 @@ class UserProfileService {
 
         try {
             const { userProfile } = await chrome.storage.local.get(['userProfile']);
+
+            // Ensure browser ID exists
+            await this.getBrowserId();
 
             if (userProfile?.username) {
                 this.username = userProfile.username;

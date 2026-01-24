@@ -1,11 +1,8 @@
 ﻿import {
-  faBold,
-  faCheckSquare,
   faClock,
   faFolder,
   faFolderOpen,
   faHighlighter,
-  faItalic,
   faLink,
   faListUl,
   faMicrophone,
@@ -16,17 +13,22 @@
   faTrash
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   deleteNote as dbDeleteNote,
   listNotes as dbListNotes,
   upsertNote as dbUpsertNote,
   deleteUrlNote,
-  listAllUrlNotes,
-  saveUrlNote,
   getSettings,
-  saveSettings
+  listAllUrlNotes,
+  saveSettings,
+  saveUrlNote
 } from '../../db/index.js';
+import { p2pStorage } from '../../services/p2p/storageService';
+import { teamManager } from '../../services/p2p/teamManager';
+import { getFaviconUrl } from '../../utils';
+import { ShareNoteModal } from '../popups/ShareNoteModal';
+import TiptapEditor from './editor/TiptapEditor';
 
 // Default notes to help users understand CoolDesk features
 const DEFAULT_NOTES = [
@@ -125,8 +127,6 @@ const createDefaultNotes = async () => {
   }
   console.log('[NotesCanvas] Created default guide notes');
 };
-import { getFaviconUrl } from '../../utils';
-import { defaultFontFamily } from '../../utils/fontUtils.js';
 
 export function NotesCanvas({ workspaceId }) {
   const [notes, setNotes] = useState([]);
@@ -144,135 +144,207 @@ export function NotesCanvas({ workspaceId }) {
   const [showSidebar, setShowSidebar] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [noteUrl, setNoteUrl] = useState('');
+  const [activeTeam, setActiveTeam] = useState(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const editorRef = useRef(null);
   const autoSaveTimeout = useRef(null);
+  // noteContentRef moved here for access in handlers
+  const noteContentRef = useRef('');
+  const titleRef = useRef('');
+  const folderRef = useRef('');
+  const urlRef = useRef('');
 
-  // Load workspace notes
-  const loadNotes = useCallback(async (showLoading = true, isInitialLoad = false) => {
+  // Sync refs with state
+  useEffect(() => { titleRef.current = noteTitle; }, [noteTitle]);
+  useEffect(() => { folderRef.current = noteFolder; }, [noteFolder]);
+  useEffect(() => { urlRef.current = noteUrl; }, [noteUrl]);
+  useEffect(() => { noteContentRef.current = noteContent; }, [noteContent]);
+
+  // Share note with team
+  const handleShareNote = async () => {
+    if (!activeNote || !activeTeam) {
+      alert('Please open a note and ensure you are in a team to share.');
+      return;
+    }
+
+    // Use current content from ref if available (editor updates ref directly)
+    const content = noteContentRef.current || noteContent;
+
+    const noteToShare = {
+      ...activeNote,
+      text: content,
+      title: noteTitle || 'Untitled Note',
+      folder: noteFolder || 'Shared'
+    };
+
     try {
-      if (showLoading) setLoading(true);
-      const result = await dbListNotes();
-      const allNotes = result?.data || result || [];
-      const notesArray = Array.isArray(allNotes) ? allNotes : [];
+      await p2pStorage.addItemToTeam(activeTeam.id, {
+        type: 'NOTE_SHARE',
+        payload: noteToShare,
+        timestamp: Date.now()
+      });
+      // Visual feedback could be better than alert, but alert works for now
+      alert(`Note shared with ${activeTeam.name}!`);
+    } catch (e) {
+      console.error('[NotesCanvas] Share failed:', e);
+      alert('Failed to share note. Please check connection.');
+    }
+  };
 
-      // Check if we need to create default notes (first-time user)
-      if (isInitialLoad && notesArray.length === 0) {
-        // Check if default notes were already dismissed
-        const settings = await getSettings();
-        if (!settings?.defaultNotesCreated) {
-          await createDefaultNotes();
-          await saveSettings({ ...settings, defaultNotesCreated: true });
-          // Reload notes after creating defaults
-          const newResult = await dbListNotes();
-          const newNotes = newResult?.data || newResult || [];
-          const newNotesArray = Array.isArray(newNotes) ? newNotes : [];
+  // Subscribe to Team Manager
+  useEffect(() => {
+    // Initial fetch
+    const team = teamManager.getActiveTeam();
+    if (team) setActiveTeam(team);
 
-          const regularNotes = newNotesArray.filter(note => {
-            if (note.type === 'highlight' || note.isHighlight) return false;
-            if (note.url && typeof note.url === 'string' && note.url.length > 0) return false;
-            return true;
-          });
+    // Subscribe to changes
+    const unsubscribe = teamManager.subscribe(({ activeTeamId }) => {
+      const currentTeam = teamManager.getTeam(activeTeamId);
+      setActiveTeam(currentTeam || null);
+    });
 
-          setNotes(regularNotes);
-          if (showLoading) setLoading(false);
-          return;
-        }
+    return unsubscribe;
+  }, []);
+
+  // Consolidated data loading
+  const fetchAllData = useCallback(async () => {
+    try {
+      setLoading(true);
+      console.log('[NotesCanvas] Starting consolidated data fetch...');
+
+      const startTime = Date.now();
+
+      // Fetch both sources in parallel
+      const [regularNotesResult, urlNotesResult, settings] = await Promise.all([
+        dbListNotes(),
+        listAllUrlNotes(),
+        getSettings()
+      ]);
+
+      const rawRegularNotes = regularNotesResult?.data || regularNotesResult || [];
+      const rawUrlNotes = urlNotesResult?.data || urlNotesResult || [];
+
+      const allRegularNotes = Array.isArray(rawRegularNotes) ? rawRegularNotes : [];
+      const allUrlNotes = Array.isArray(rawUrlNotes) ? rawUrlNotes : [];
+
+      // 1. Handle Default Notes (if needed)
+      if (allRegularNotes.length === 0 && !settings?.defaultNotesCreated) {
+        console.log('[NotesCanvas] Creating default notes...');
+        await createDefaultNotes();
+        await saveSettings({ ...settings, defaultNotesCreated: true });
+
+        // Quick re-fetch regular notes
+        const reFetchResult = await dbListNotes();
+        const reFetchedNotes = reFetchResult?.data || reFetchResult || [];
+        allRegularNotes.push(...(Array.isArray(reFetchedNotes) ? reFetchedNotes : []));
       }
 
-      // Exclude URL notes and highlights from regular notes - they appear in their own special folders
-      const regularNotes = notesArray.filter(note => {
-        // First check if it's a highlight (priority)
-        if (note.type === 'highlight' || note.isHighlight) {
-          return false; // Exclude - goes to Highlights folder
-        }
-        // Then check if it's a URL note (has URL and is not a highlight)
-        if (note.url && typeof note.url === 'string' && note.url.length > 0) {
-          return false; // Exclude - goes to URL Notes folder
-        }
-        // Otherwise it's a regular note
+      // 2. Process Regular Notes (Desktop/Workspace notes)
+      const workspaceNotes = allRegularNotes.filter(note => {
+        if (note.type === 'highlight' || note.isHighlight) return false;
+        if (note.url && typeof note.url === 'string' && note.url.length > 0) return false;
         return true;
       });
 
-      setNotes(regularNotes);
-    } catch (error) {
-      console.error('[NotesCanvas] Error loading notes:', error);
-      if (showLoading) setNotes([]);
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, []);
-
-  // Load all URL notes from the url_notes store
-  const loadUrlNotes = useCallback(async () => {
-    try {
-      console.log('[NotesCanvas] Loading URL notes from url_notes store...');
-
-      // URL notes are stored in a separate url_notes store in IndexedDB
-      const result = await listAllUrlNotes();
-      const urlNotesArray = (result?.data || result || []).filter(note =>
-        !(note.type === 'highlight')
+      // 3. Process URL Notes (from both stores)
+      const urlNotesFromStore = allUrlNotes.filter(n => !(n.type === 'highlight'));
+      const urlNotesFromRegular = allRegularNotes.filter(n =>
+        n.url && typeof n.url === 'string' && n.url.length > 0 &&
+        !(n.type === 'highlight' || n.isHighlight)
       );
 
-      // Also check regular notes database for URL notes (that are not highlights)
-      const regularNotesResult = await dbListNotes();
-      const allRegularNotes = regularNotesResult?.data || regularNotesResult || [];
-      const urlNotesFromRegular = (Array.isArray(allRegularNotes) ? allRegularNotes : []).filter(note =>
-        note.url && typeof note.url === 'string' && note.url.length > 0 &&
-        !(note.type === 'highlight' || note.isHighlight)
-      );
+      // Deduplicate URL notes
+      const combinedUrlNotes = [...urlNotesFromStore, ...urlNotesFromRegular];
+      const uniqueUrlNotes = Array.from(new Map(combinedUrlNotes.map(n => [n.id, n])).values());
 
-      // Combine both sources and deduplicate by ID
-      const combinedUrlNotes = [...urlNotesArray, ...urlNotesFromRegular];
-      const uniqueUrlNotes = Array.from(new Map(combinedUrlNotes.map(note => [note.id, note])).values());
+      // 4. Process Highlights (from both stores)
+      const highlightsFromStore = allUrlNotes.filter(n => n.type === 'highlight' || n.isHighlight);
+      const highlightsFromRegular = allRegularNotes.filter(n => n.type === 'highlight' || n.isHighlight);
 
-      console.log('[NotesCanvas] Found', uniqueUrlNotes.length, 'URL notes (', urlNotesArray.length, 'from url_notes store,', urlNotesFromRegular.length, 'from regular notes)');
+      const combinedHighlights = [...highlightsFromStore, ...highlightsFromRegular];
+      const uniqueHighlights = Array.from(new Map(combinedHighlights.map(n => [n.id, n])).values());
+
+      console.log(`[NotesCanvas] Data loaded in ${Date.now() - startTime}ms`);
+
+      // Batch updates
+      setNotes(workspaceNotes);
       setUrlNotes(uniqueUrlNotes);
-    } catch (error) {
-      console.error('[NotesCanvas] Error loading URL notes:', error);
-      setUrlNotes([]);
-    }
-  }, []);
-
-  // Load highlights from daily notes
-  const loadHighlights = useCallback(async () => {
-    try {
-      // Local storage data removed - only showing notes from IndexedDB
-      const allHighlights = [];
-
-      // Also check regular notes database for highlights
-      const regularNotesResult = await dbListNotes();
-      const allRegularNotes = regularNotesResult?.data || regularNotesResult || [];
-      const highlightsFromRegular = (Array.isArray(allRegularNotes) ? allRegularNotes : []).filter(note =>
-        note.type === 'highlight' || note.isHighlight
-      );
-
-      // Also check url_notes store for highlights (they might have been saved there)
-      const urlNotesResult = await listAllUrlNotes();
-      const allUrlNotes = urlNotesResult?.data || urlNotesResult || [];
-      const highlightsFromUrlNotes = (Array.isArray(allUrlNotes) ? allUrlNotes : []).filter(note =>
-        note.type === 'highlight' || note.isHighlight
-      );
-
-      // Combine all sources and deduplicate by ID
-      const combinedHighlights = [...allHighlights, ...highlightsFromRegular, ...highlightsFromUrlNotes];
-      const uniqueHighlights = Array.from(new Map(combinedHighlights.map(note => [note.id, note])).values());
-
-      console.log('[NotesCanvas] Found', uniqueHighlights.length, 'highlights (', allHighlights.length, 'from daily notes,', highlightsFromRegular.length, 'from regular notes,', highlightsFromUrlNotes.length, 'from url_notes store)');
       setHighlights(uniqueHighlights);
+
     } catch (error) {
-      console.error('[NotesCanvas] Error loading highlights:', error);
+      console.error('[NotesCanvas] Error loading data:', error);
+      // Fallback to empty states
+      setNotes([]);
+      setUrlNotes([]);
       setHighlights([]);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
+  // Data loading aliases defined above
+  const loadNotes = fetchAllData;
+  const loadUrlNotes = fetchAllData;
+  const loadHighlights = fetchAllData;
+
+  // Initial Load
   useEffect(() => {
-    loadNotes(true, true); // Pass isInitialLoad=true to check for default notes
-    loadUrlNotes();
-    loadHighlights();
-  }, [loadNotes, loadUrlNotes, loadHighlights]);
+    fetchAllData();
+  }, [fetchAllData]);
+
+  // Listen for shared notes from the team
+  useEffect(() => {
+    if (!activeTeam) return;
+
+    const unsubscribe = p2pStorage.subscribeToSharedItems(activeTeam.id, async (newItems) => {
+      console.log('[NotesCanvas] Received shared items:', newItems);
+
+      let newNotesCount = 0;
+
+      for (const item of newItems) {
+        if (item.type === 'NOTE_SHARE' && item.payload) {
+          try {
+            const note = item.payload;
+            // Check if we already have this note (by ID)
+            // Or maybe check by content/title match to avoid duplicates if ID is stripped?
+            // For now, let's assume we want to import it.
+            // We should give it a unique ID to avoid conflict if we are just "importing" a copy.
+            // OR keep the same ID if we want "sync" (but this is just sharing for now).
+            // Let's generate a new ID to treat it as a copy shared with me.
+
+            const importedNote = {
+              ...note,
+              id: `${Date.now()}_shared_${Math.random().toString(36).slice(2, 6)}`,
+              title: `(Shared) ${note.title || 'Untitled'}`,
+              folder: 'Shared with Me', // Put in a specific folder
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            };
+
+            await dbUpsertNote(importedNote);
+            newNotesCount++;
+          } catch (e) {
+            console.error('[NotesCanvas] Error saving shared note:', e);
+          }
+        }
+      }
+
+      if (newNotesCount > 0) {
+        // Refresh notes to show the new one
+        loadNotes(false);
+        // showToast(`Received ${newNotesCount} shared note(s)!`); // TODO: Add toast system
+        // For now, alert or just log? Alert is annoying. 
+        // We'll rely on the folder badge updating.
+      }
+    });
+
+    return unsubscribe;
+  }, [activeTeam, loadNotes]);
+
+  // Consolidated data loading logic moved up to avoid TDZ issues
 
   // Derived folders list with URL Notes and Highlights special folders
-  const folders = [
+  const folders = useMemo(() => [
     'All Notes',
     ...new Set(notes.map(n => n.folder).filter(Boolean).filter(f => f.trim() !== '')),
     'Highlights',
@@ -296,23 +368,24 @@ export function NotesCanvas({ workspaceId }) {
     }
 
     return a.localeCompare(b);
-  });
+  }), [notes]);
 
   // Filtered notes - show specific lists based on active folder
-  let filteredNotes = [];
-
-  if (activeFolder === 'URL Notes') {
-    filteredNotes = urlNotes.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  } else if (activeFolder === 'Highlights') {
-    filteredNotes = highlights.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-  } else {
-    filteredNotes = notes
-      .filter(note => activeFolder === 'All Notes' || note.folder === activeFolder)
-      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
-  }
+  const filteredNotes = useMemo(() => {
+    if (activeFolder === 'URL Notes') {
+      return urlNotes.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    } else if (activeFolder === 'Highlights') {
+      return highlights.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    } else {
+      return notes
+        .filter(note => activeFolder === 'All Notes' || note.folder === activeFolder)
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+    }
+  }, [activeFolder, urlNotes, highlights, notes]);
 
   // Group notes by time period (Apple Notes style)
-  const groupNotesByDate = (notesToGroup) => {
+  const groupedNotes = useMemo(() => {
+    const notesToGroup = filteredNotes;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterday = new Date(today);
@@ -355,9 +428,7 @@ export function NotesCanvas({ workspaceId }) {
 
     // Return only non-empty groups
     return Object.entries(groups).filter(([_, notes]) => notes.length > 0);
-  };
-
-  const groupedNotes = groupNotesByDate(filteredNotes);
+  }, [filteredNotes]);
 
   // Auto-save note (workspace or URL note)
   const saveNote = useCallback(async (content, noteId = null) => {
@@ -420,13 +491,7 @@ export function NotesCanvas({ workspaceId }) {
     }
   }, [notes, urlNotes, loadNotes, loadUrlNotes, activeNote, activeFolder]);
 
-  const titleRef = useRef('');
-  const folderRef = useRef('');
-  const urlRef = useRef('');
-
-  useEffect(() => { titleRef.current = noteTitle; }, [noteTitle]);
-  useEffect(() => { folderRef.current = noteFolder; }, [noteFolder]);
-  useEffect(() => { urlRef.current = noteUrl; }, [noteUrl]);
+  // Refs and Sync Effects moved to top
 
   const handleTitleChange = (e) => {
     const newTitle = e.target.value;
@@ -440,13 +505,15 @@ export function NotesCanvas({ workspaceId }) {
     triggerAutoSave();
   };
 
-  const triggerAutoSave = () => {
+  const triggerAutoSave = useCallback((content) => {
     setAutoSaveStatus('unsaved');
     clearTimeout(autoSaveTimeout.current);
+    const contentToSave = content !== undefined ? content : noteContentRef.current;
+
     autoSaveTimeout.current = setTimeout(() => {
-      saveNote(noteContent, activeNote?.id);
+      saveNote(contentToSave, activeNote?.id);
     }, 1000);
-  }
+  }, [saveNote, activeNote?.id]);
 
   const extractTitle = (html) => {
     const temp = document.createElement('div');
@@ -456,11 +523,13 @@ export function NotesCanvas({ workspaceId }) {
   };
 
   // Handle content change
-  const handleContentChange = (e) => {
-    const html = e.currentTarget.innerHTML;
-    setNoteContent(html);
-    triggerAutoSave();
-  };
+  // Handle content change
+  // We avoid updating state (setNoteContent) on every keystroke to prevent re-rendering the whole canvas
+  // TiptapEditor manages its own state, and we just need this for auto-save and reference
+  const handleContentChange = useCallback((newHtml) => {
+    noteContentRef.current = newHtml;
+    triggerAutoSave(newHtml);
+  }, [triggerAutoSave]);
 
 
   const [isRecording, setIsRecording] = useState(false);
@@ -468,22 +537,12 @@ export function NotesCanvas({ workspaceId }) {
   const streamRef = useRef(null);
 
   // Sync content when active note changes
+  // Sync content when active note changes - Tiptap handles this internal to the component via content prop
+  // We just need to ensure noteContent is updated when activeNote changes (done in selectNote)
   useEffect(() => {
-    if (editorRef.current) {
-      if (activeNote) {
-        if (document.activeElement === editorRef.current) {
-          return;
-        }
-
-        const currentHTML = editorRef.current.innerHTML || '';
-        const newText = activeNote.text || '';
-
-        if (currentHTML !== newText && currentHTML.trim() !== newText.trim()) {
-          editorRef.current.innerHTML = newText;
-        }
-      } else {
-        editorRef.current.innerHTML = '';
-      }
+    if (activeNote) {
+      // Optional: focus editor when switching notes if desired, but might be annoying
+      // editorRef.current?.focus();
     }
   }, [activeNote?.id]);
 
@@ -554,9 +613,8 @@ export function NotesCanvas({ workspaceId }) {
         }
 
         if (finalTranscript && editorRef.current) {
-          editorRef.current.focus();
-          document.execCommand('insertText', false, finalTranscript + ' ');
-          handleContentChange({ currentTarget: editorRef.current });
+          editorRef.current.insertContent(finalTranscript + ' ');
+          // No need to manually call handleContentChange as insertContent triggers onUpdate in Tiptap
         }
       };
 
@@ -579,17 +637,7 @@ export function NotesCanvas({ workspaceId }) {
     }
   };
 
-  // Editor Commands
-  const execCommand = (command, value = null) => {
-    document.execCommand(command, false, value);
-    editorRef.current?.focus();
-  };
 
-  const insertCheckbox = () => {
-    const checkboxHtml = '<input type="checkbox" style="margin-right: 8px; transform: scale(1.2);" />&nbsp;';
-    document.execCommand('insertHTML', false, checkboxHtml);
-    editorRef.current?.focus();
-  };
 
   // Delete note (workspace or URL note)
   const handleDeleteNote = async (noteId) => {
@@ -1237,6 +1285,58 @@ export function NotesCanvas({ workspaceId }) {
                   </datalist>
                 </div>
 
+                {/* Share Button (P2P) */}
+                {/* Share Button (P2P) */}
+                {activeTeam && (
+                  <button
+                    onClick={() => setIsShareModalOpen(true)}
+                    title={`Share currently open note`}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, var(--accent-purple), var(--accent-blue))',
+                      border: 'none',
+                      color: 'white',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.2s ease',
+                      height: '36px',
+                      flexShrink: 0,
+                      fontWeight: 600,
+                      fontSize: '12px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      minWidth: '100px',
+                      justifyContent: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = '0.9';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = '1';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faSync} style={{ fontSize: '12px' }} />
+                    <span style={{ fontSize: '12px' }}>Share</span>
+                  </button>
+                )}
+
+                {/* Share Modal */}
+                <ShareNoteModal
+                  isOpen={isShareModalOpen}
+                  onClose={() => setIsShareModalOpen(false)}
+                  note={{
+                    ...activeNote,
+                    text: noteContentRef.current || noteContent, // Ensure latest content
+                    title: noteTitle || 'Untitled Note',
+                    folder: noteFolder || 'Shared'
+                  }}
+                  activeTeamId={activeTeam?.id}
+                />
+
                 {/* Title Input */}
                 <input
                   type="text"
@@ -1268,184 +1368,56 @@ export function NotesCanvas({ workspaceId }) {
                 />
               </div>
 
-              {/* Formatting Toolbar */}
-              <div className="notes-editor-toolbar" style={{
+              <div style={{
+                position: 'relative',
+                flex: 1,
                 display: 'flex',
-                gap: '6px',
-                flexWrap: 'wrap',
-                padding: '12px',
-                background: 'var(--surface-2)',
-                borderRadius: '10px',
-                border: '1px solid var(--border-secondary)',
-                flexShrink: 0
+                flexDirection: 'column',
+                minHeight: 0,
+                // Premium Glassmorphism Background
+                background: 'linear-gradient(to bottom right, rgba(20, 20, 25, 0.95), rgba(30, 30, 35, 0.85))',
+                backdropFilter: 'blur(24px)',
+                WebkitBackdropFilter: 'blur(24px)',
+                borderRadius: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.05)',
+                overflow: 'hidden'
               }}>
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => execCommand('formatBlock', 'H1')}
-                  title="Heading 1"
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text)',
-                    fontWeight: 'bold',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  H1
-                </button>
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => execCommand('formatBlock', 'H2')}
-                  title="Heading 2"
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text)',
-                    fontWeight: 'bold',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  H2
-                </button>
-                <div style={{ width: '1px', height: '24px', background: 'var(--border-secondary)', margin: '0 4px' }} />
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => execCommand('bold')}
-                  title="Bold (Ctrl+B)"
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <FontAwesomeIcon icon={faBold} />
-                </button>
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => execCommand('italic')}
-                  title="Italic (Ctrl+I)"
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <FontAwesomeIcon icon={faItalic} />
-                </button>
-                <div style={{ width: '1px', height: '24px', background: 'var(--border-secondary)', margin: '0 4px' }} />
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => execCommand('insertUnorderedList')}
-                  title="Bullet List"
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <FontAwesomeIcon icon={faListUl} />
-                </button>
-                <button
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={insertCheckbox}
-                  title="Insert Checkbox"
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--interactive-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <FontAwesomeIcon icon={faCheckSquare} />
-                </button>
-                <div style={{ width: '1px', height: '24px', background: 'var(--border-secondary)', margin: '0 4px' }} />
+                {/* Voice Mic Button (Floating or Integrated) */}
                 <button
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={toggleRecording}
                   title={isRecording ? 'Stop Recording' : 'Start Recording'}
                   style={{
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: isRecording ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                    border: 'none',
-                    color: isRecording ? 'var(--accent-error)' : 'var(--text)',
+                    position: 'absolute',
+                    top: '12px',
+                    right: '12px',
+                    zIndex: 10,
+                    padding: '8px',
+                    borderRadius: '50%',
+                    background: isRecording ? 'rgba(239, 68, 68, 0.1)' : 'var(--surface-3)',
+                    border: isRecording ? '1px solid var(--accent-error)' : '1px solid var(--border-primary)',
+                    color: isRecording ? 'var(--accent-error)' : 'var(--text-secondary)',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isRecording) e.currentTarget.style.background = 'var(--interactive-hover)';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isRecording) e.currentTarget.style.background = 'transparent';
+                    transition: 'all 0.2s ease',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                   }}
                 >
                   <FontAwesomeIcon icon={faMicrophone} beat={isRecording} />
                 </button>
-              </div>
 
-              {/* Rich Text Editor */}
-              <div
-                ref={editorRef}
-                className="notes-editor-content"
-                contentEditable
-                onInput={handleContentChange}
-                suppressContentEditableWarning={true}
-                onKeyDown={(e) => {
-                  if (e.key === 'Tab') {
-                    e.preventDefault();
-                    document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  padding: '16px',
-                  borderRadius: '10px',
-                  background: 'var(--surface-1)',
-                  border: '1px solid var(--border-secondary)',
-                  color: 'var(--text)',
-                  fontSize: '15px',
-                  lineHeight: '1.6',
-                  outline: 'none',
-                  overflowY: 'auto',
-                  fontFamily: defaultFontFamily,
-                  minHeight: 0
-                }}
-              />
+                <TiptapEditor
+                  ref={editorRef}
+                  content={noteContent}
+                  onChange={handleContentChange}
+                  isEditable={true}
+                />
+              </div>
 
               <div style={{
                 display: 'flex',

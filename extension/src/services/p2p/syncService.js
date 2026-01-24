@@ -1,5 +1,6 @@
 import { WebrtcProvider } from 'y-webrtc';
 import { p2pStorage } from './storageService';
+import { tabCoordinator } from './tabCoordinator';
 import { teamManager } from './teamManager';
 import { userProfileService } from './userProfileService';
 
@@ -129,6 +130,24 @@ class P2PSyncService {
         console.log(`[P2P Sync] Connecting to team ${teamId}...`);
 
         try {
+            // Initialize tab coordination for this team
+            await tabCoordinator.initTeam(teamId);
+            console.log('[P2P Sync] Tab coordination initialized');
+
+            // Subscribe to leader changes
+            tabCoordinator.subscribe(teamId, (event) => {
+                if (event.type === 'LEADER_CHANGED') {
+                    console.log('[P2P Sync] Leader changed:', event.payload);
+                    if (event.payload.isLeader) {
+                        // We became leader, create P2P connection
+                        this.createP2PConnection(teamId, encryptionKey);
+                    } else {
+                        // We are now follower, disconnect P2P
+                        this.disconnectP2P(teamId);
+                    }
+                }
+            });
+
             // ensure storage is ready
             const ydoc = await p2pStorage.initializeTeamStorage(teamId);
 
@@ -136,6 +155,46 @@ class P2PSyncService {
             if (this.providers.has(teamId)) {
                 console.log(`[P2P Sync] Team ${teamId} was connected while waiting for storage`);
                 return this.providers.get(teamId);
+            }
+
+            // Only create P2P connection if we are the leader
+            const isLeader = tabCoordinator.isLeader(teamId);
+            console.log('[P2P Sync] Leadership check:', {
+                isLeader,
+                isLeaderTab: tabCoordinator.isLeaderTab,
+                leaderId: tabCoordinator.getLeaderId(teamId),
+                tabId: tabCoordinator.getTabId()
+            });
+
+            if (isLeader) {
+                console.log('[P2P Sync] This tab is the leader, creating P2P connection');
+                return await this.createP2PConnection(teamId, encryptionKey);
+            } else {
+                console.log('[P2P Sync] This tab is a follower, waiting for leader');
+                // Follower mode - will receive updates via BroadcastChannel
+                return null;
+            }
+        } catch (error) {
+            console.error(`[P2P Sync] Error connecting to team ${teamId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Create P2P connection (leader only)
+     */
+    async createP2PConnection(teamId, encryptionKey) {
+        if (this.providers.has(teamId)) {
+            console.log(`[P2P Sync] P2P connection already exists for team ${teamId}`);
+            return this.providers.get(teamId);
+        }
+
+        console.log(`[P2P Sync] Creating P2P connection for team ${teamId}`);
+
+        try {
+            const ydoc = p2pStorage.getDoc(teamId);
+            if (!ydoc) {
+                throw new Error('Team doc not initialized');
             }
 
 
@@ -244,72 +303,87 @@ class P2PSyncService {
 
             // 2. Set local user info with Signature if Admin
             const username = await userProfileService.getUsername();
+            const browserId = await userProfileService.getBrowserId();
             const localUserColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
             const isAdmin = team?.createdByMe && !!team?.adminPrivateKey;
             let adminSignature = null;
 
             if (isAdmin) {
-                // Sign our Client ID to prove we own this session
-                const { cryptoUtils } = await import('./cryptoUtils');
-                adminSignature = cryptoUtils.sign(awareness.clientID.toString(), team.adminPrivateKey);
+                // Sign our username with our private key
+                adminSignature = await crypto.subtle.sign(
+                    { name: 'ECDSA', hash: 'SHA-256' },
+                    team.adminPrivateKey,
+                    new TextEncoder().encode(username)
+                );
+                adminSignature = btoa(String.fromCharCode(...new Uint8Array(adminSignature)));
             }
 
+            // Set awareness state
             awareness.setLocalStateField('user', {
                 name: username,
+                browserId: browserId,
                 color: localUserColor,
                 isAdmin: isAdmin,
                 adminSignature: adminSignature
             });
 
-            awareness.on('change', async ({ added, removed }) => {
+            // 3. Observe awareness changes
+            awareness.on('change', async ({ added, updated, removed }) => {
                 // Only process added peers (not updates - they cause too many events)
-                if (added.length === 0 && removed.length === 0) return;
+                if (added.length === 0 && updated.length === 0 && removed.length === 0) return;
 
                 this.peerDetails.set(teamId, this.getPeers(teamId));
 
-                for (const clientId of added) {
+                for (const clientId of [...added, ...updated]) {
                     if (clientId === awareness.clientID) continue; // Skip self
 
                     const state = awareness.getStates().get(clientId);
-                    if (!state || !state.user) continue;
+                    if (!state?.user) continue;
 
-                    const memberKey = `${teamId}-${clientId.toString()}`;
+                    const memberKey = state.user.browserId || state.user.name; // Use browserId if available
+                    if (processedMembers.has(memberKey)) continue;
 
-                    // Only add if we haven't processed this member yet
-                    if (!processedMembers.has(memberKey)) {
-                        let validatedIsAdmin = false;
-
-                        // Verify Admin Claim
-                        if (state.user.isAdmin && state.user.adminSignature) {
-                            const publicKey = p2pStorage.getTeamPublicKey(teamId);
-                            if (publicKey) {
-                                const { cryptoUtils } = await import('./cryptoUtils');
-                                const isValid = cryptoUtils.verify(clientId.toString(), state.user.adminSignature, publicKey);
-                                if (isValid) {
-                                    validatedIsAdmin = true;
-                                    console.log(`[P2P Sync] Verified Admin signature for ${state.user.name}`);
-                                } else {
-                                    console.warn(`[P2P Sync] ⚠️ FAILED Admin verification for ${state.user.name}. Demoting to member.`);
+                    // Validate Admin Claim
+                    let validatedIsAdmin = false;
+                    if (state.user.isAdmin && state.user.adminSignature) {
+                        const publicKeyData = p2pStorage.getTeamMetadata(teamId)?.adminPublicKey;
+                        if (publicKeyData) {
+                            try {
+                                const publicKey = await crypto.subtle.importKey(
+                                    'jwk',
+                                    publicKeyData,
+                                    { name: 'ECDSA', namedCurve: 'P-256' },
+                                    false,
+                                    ['verify']
+                                );
+                                const signature = Uint8Array.from(atob(state.user.adminSignature), c => c.charCodeAt(0));
+                                const isValid = await crypto.subtle.verify(
+                                    { name: 'ECDSA', hash: 'SHA-256' },
+                                    publicKey,
+                                    signature,
+                                    new TextEncoder().encode(state.user.name)
+                                );
+                                validatedIsAdmin = isValid;
+                                if (!isValid) {
+                                    console.warn(`[P2P Sync] Invalid Admin signature for ${state.user.name}`);
                                 }
-                            } else {
-                                // If no public key is on record yet, we can't verify.
-                                // For safety, we treat as false unless we trust the "Trust On First Use" model, 
-                                // but here we default to strict fail-safe.
-                                // Exception: If we are not the admin ourselves, maybe we trust them? 
-                                // No, strict security means no verify = no admin.
-                                console.warn(`[P2P Sync] No Public Key found to verify Admin claim for ${state.user.name}`);
+                            } catch (err) {
+                                console.error('[P2P Sync] Error verifying Admin signature:', err);
                             }
+                        } else {
+                            console.warn(`[P2P Sync] No Public Key found to verify Admin claim for ${state.user.name}`);
                         }
-
-                        p2pStorage.addMemberToTeam(teamId, {
-                            id: clientId.toString(),
-                            name: state.user.name,
-                            color: state.user.color,
-                            isAdmin: validatedIsAdmin
-                        });
-                        processedMembers.add(memberKey);
-                        console.log(`[P2P Sync] Added member ${state.user.name} to team ${teamId}`);
                     }
+
+                    p2pStorage.addMemberToTeam(teamId, {
+                        id: clientId.toString(),
+                        browserId: state.user.browserId,
+                        name: state.user.name,
+                        color: state.user.color,
+                        isAdmin: validatedIsAdmin
+                    });
+                    processedMembers.add(memberKey);
+                    console.log(`[P2P Sync] Added member ${state.user.name} to team ${teamId}`);
                 }
 
                 if (removed.length > 0) {
@@ -322,6 +396,7 @@ class P2PSyncService {
             // Add self to members list
             p2pStorage.addMemberToTeam(teamId, {
                 id: awareness.clientID.toString(), // Ensure ID is always a string
+                browserId: browserId,
                 name: username,
                 color: localUserColor,
                 isAdmin: isAdmin
@@ -347,6 +422,20 @@ class P2PSyncService {
             this.providers.delete(teamId);
             this.peerCounts.delete(teamId);
             throw error;
+        }
+    }
+
+    /**
+     * Disconnect P2P connection (when becoming follower)
+     */
+    disconnectP2P(teamId) {
+        const provider = this.providers.get(teamId);
+        if (provider) {
+            console.log(`[P2P Sync] Disconnecting P2P for team ${teamId} (becoming follower)`);
+            provider.destroy();
+            this.providers.delete(teamId);
+            this.peerCounts.set(teamId, 0);
+            this.notify();
         }
     }
 

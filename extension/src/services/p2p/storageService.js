@@ -74,6 +74,36 @@ class P2PStorageService {
     }
 
     /**
+     * Get the shared array of saved data for a team
+     * @param {string} teamId
+     * @returns {Y.Array}
+     */
+    getSharedSavedData(teamId) {
+        const doc = this.getDoc(teamId);
+        if (!doc) {
+            throw new Error(`Storage not initialized for team ${teamId}`);
+        }
+        const savedData = doc.getArray('saved-data');
+        console.log(`[P2P Storage] Accessed saved-data for team ${teamId}, current length:`, savedData.length);
+        return savedData;
+    }
+
+    /**
+     * Get the shared array of server data for a team
+     * @param {string} teamId
+     * @returns {Y.Array}
+     */
+    getSharedServerData(teamId) {
+        const doc = this.getDoc(teamId);
+        if (!doc) {
+            throw new Error(`Storage not initialized for team ${teamId}`);
+        }
+        const serverData = doc.getArray('server-data');
+        console.log(`[P2P Storage] Accessed server-data for team ${teamId}, current length:`, serverData.length);
+        return serverData;
+    }
+
+    /**
      * Get the shared context map for a team (goals, status, etc.)
      * @param {string} teamId
      * @returns {Y.Map}
@@ -103,20 +133,24 @@ class P2PStorageService {
 
     /**
      * Add or update a member in the team
-     * Uses username as the primary key to prevent duplicates on reconnection
+     * Uses browserId as the primary key to prevent duplicates even if username changes
      * @param {string} teamId 
-     * @param {object} member - {id (clientID), name (username), color, joinedAt, lastSeen, isAdmin}
+     * @param {object} member - {id (clientID), browserId, name (username), color, joinedAt, lastSeen, isAdmin}
      */
     addMemberToTeam(teamId, member) {
         const membersMap = this.getSharedMembers(teamId);
-        const memberKey = member.name; // Use username as the key, not clientID
+
+        // Use browserId as the key if available, fallback to username for backwards compatibility
+        const memberKey = member.browserId || member.name;
         const existingMember = membersMap.get(memberKey);
 
         if (existingMember) {
-            // Update existing member with new clientID and last seen time
+            // Update existing member with new data
             membersMap.set(memberKey, {
                 ...existingMember,
                 id: member.id || existingMember.id, // Update to latest clientID if provided
+                browserId: member.browserId || existingMember.browserId,
+                name: member.name, // Always update username in case it changed
                 color: member.color || existingMember.color,
                 lastSeen: Date.now(),
                 isAdmin: member.isAdmin !== undefined ? member.isAdmin : existingMember.isAdmin
@@ -125,6 +159,7 @@ class P2PStorageService {
             // Add new member
             membersMap.set(memberKey, {
                 id: member.id,
+                browserId: member.browserId,
                 name: member.name,
                 color: member.color,
                 joinedAt: Date.now(),
@@ -385,6 +420,275 @@ class P2PStorageService {
         const yArray = this.getSharedItems(teamId);
         yArray.push([item]);
         console.log(`[P2P Storage] Added item to team ${teamId}:`, item);
+    }
+
+    /**
+     * Subscribe to shared items updates
+     * @param {string} teamId
+     * @param {function} callback - Called with Array of new items
+     * @returns {function} Unsubscribe function
+     */
+    subscribeToSharedItems(teamId, callback) {
+        try {
+            const yArray = this.getSharedItems(teamId);
+
+            const observer = (event) => {
+                // Extract added items from the transaction
+                const addedItems = [];
+
+                // Iterate through delta to find inserts
+                // Note: simple handling, for robust apps might need more complex delta parsing
+                // But since we just append, checking the latest items or relying on transaction might be enough.
+                // Actually, let's just pass the event target's new content that was added.
+                // Y.Array event provides deltas. 
+
+                // Let's iterate the changes to find added contents
+                event.changes.delta.forEach(item => {
+                    if (item.insert) {
+                        if (Array.isArray(item.insert)) {
+                            addedItems.push(...item.insert);
+                        } else {
+                            addedItems.push(item.insert);
+                        }
+                    }
+                });
+
+                if (addedItems.length > 0) {
+                    callback(addedItems);
+                }
+            };
+
+            yArray.observe(observer);
+            return () => yArray.unobserve(observer);
+        } catch (error) {
+            console.error(`[P2P Storage] Error subscribing to shared items for team ${teamId}:`, error);
+            return () => { };
+        }
+    }
+
+    /**
+     * Add saved data to the team
+     * @param {string} teamId
+     * @param {object} data - { id, type, title, content, url, tags, createdBy, metadata }
+     */
+    async addSavedData(teamId, data) {
+        if (!this.docs.has(teamId)) {
+            await this.initializeTeamStorage(teamId);
+        }
+
+        const yArray = this.getSharedSavedData(teamId);
+        const savedItem = {
+            id: data.id || `saved_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            type: data.type || 'bookmark',
+            title: data.title || '',
+            content: data.content || '',
+            url: data.url || '',
+            tags: data.tags || [],
+            createdBy: data.createdBy || 'unknown',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: data.metadata || {}
+        };
+        yArray.push([savedItem]);
+        console.log(`[P2P Storage] Added saved data to team ${teamId}:`, savedItem);
+        return savedItem;
+    }
+
+    /**
+     * Update saved data in the team
+     * @param {string} teamId
+     * @param {string} id - ID of the item to update
+     * @param {object} updates - Fields to update
+     */
+    updateSavedData(teamId, id, updates) {
+        const yArray = this.getSharedSavedData(teamId);
+        const items = yArray.toArray();
+        const index = items.findIndex(item => item.id === id);
+
+        if (index !== -1) {
+            const updatedItem = {
+                ...items[index],
+                ...updates,
+                updatedAt: Date.now()
+            };
+            yArray.delete(index, 1);
+            yArray.insert(index, [updatedItem]);
+            console.log(`[P2P Storage] Updated saved data in team ${teamId}:`, updatedItem);
+            return updatedItem;
+        }
+        console.warn(`[P2P Storage] Saved data item ${id} not found in team ${teamId}`);
+        return null;
+    }
+
+    /**
+     * Delete saved data from the team
+     * @param {string} teamId
+     * @param {string} id - ID of the item to delete
+     */
+    deleteSavedData(teamId, id) {
+        const yArray = this.getSharedSavedData(teamId);
+        const items = yArray.toArray();
+        const index = items.findIndex(item => item.id === id);
+
+        if (index !== -1) {
+            yArray.delete(index, 1);
+            console.log(`[P2P Storage] Deleted saved data from team ${teamId}:`, id);
+            return true;
+        }
+        console.warn(`[P2P Storage] Saved data item ${id} not found in team ${teamId}`);
+        return false;
+    }
+
+    /**
+     * Subscribe to saved data updates
+     * @param {string} teamId
+     * @param {function} callback - Called with Array of changes
+     * @returns {function} Unsubscribe function
+     */
+    subscribeToSavedData(teamId, callback) {
+        try {
+            const yArray = this.getSharedSavedData(teamId);
+
+            const observer = (event) => {
+                const addedItems = [];
+                const deletedItems = [];
+                const updatedItems = [];
+
+                event.changes.delta.forEach(item => {
+                    if (item.insert) {
+                        if (Array.isArray(item.insert)) {
+                            addedItems.push(...item.insert);
+                        } else {
+                            addedItems.push(item.insert);
+                        }
+                    }
+                    if (item.delete) {
+                        deletedItems.push({ count: item.delete });
+                    }
+                });
+
+                if (addedItems.length > 0 || deletedItems.length > 0) {
+                    callback({ added: addedItems, deleted: deletedItems, updated: updatedItems });
+                }
+            };
+
+            yArray.observe(observer);
+            return () => yArray.unobserve(observer);
+        } catch (error) {
+            console.error(`[P2P Storage] Error subscribing to saved data for team ${teamId}:`, error);
+            return () => { };
+        }
+    }
+
+    /**
+     * Add server data to the team
+     * @param {string} teamId
+     * @param {object} data - { source, type, payload, metadata }
+     */
+    async addServerData(teamId, data) {
+        if (!this.docs.has(teamId)) {
+            await this.initializeTeamStorage(teamId);
+        }
+
+        const yArray = this.getSharedServerData(teamId);
+        const serverItem = {
+            id: data.id || `server_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            source: data.source || 'unknown',
+            type: data.type || 'generic',
+            payload: data.payload || {},
+            processedAt: Date.now(),
+            syncedAt: Date.now(),
+            status: data.status || 'pending',
+            metadata: data.metadata || {}
+        };
+        yArray.push([serverItem]);
+        console.log(`[P2P Storage] Added server data to team ${teamId}:`, serverItem);
+        return serverItem;
+    }
+
+    /**
+     * Update server data in the team
+     * @param {string} teamId
+     * @param {string} id - ID of the item to update
+     * @param {object} updates - Fields to update
+     */
+    updateServerData(teamId, id, updates) {
+        const yArray = this.getSharedServerData(teamId);
+        const items = yArray.toArray();
+        const index = items.findIndex(item => item.id === id);
+
+        if (index !== -1) {
+            const updatedItem = {
+                ...items[index],
+                ...updates,
+                syncedAt: Date.now()
+            };
+            yArray.delete(index, 1);
+            yArray.insert(index, [updatedItem]);
+            console.log(`[P2P Storage] Updated server data in team ${teamId}:`, updatedItem);
+            return updatedItem;
+        }
+        console.warn(`[P2P Storage] Server data item ${id} not found in team ${teamId}`);
+        return null;
+    }
+
+    /**
+     * Delete server data from the team
+     * @param {string} teamId
+     * @param {string} id - ID of the item to delete
+     */
+    deleteServerData(teamId, id) {
+        const yArray = this.getSharedServerData(teamId);
+        const items = yArray.toArray();
+        const index = items.findIndex(item => item.id === id);
+
+        if (index !== -1) {
+            yArray.delete(index, 1);
+            console.log(`[P2P Storage] Deleted server data from team ${teamId}:`, id);
+            return true;
+        }
+        console.warn(`[P2P Storage] Server data item ${id} not found in team ${teamId}`);
+        return false;
+    }
+
+    /**
+     * Subscribe to server data updates
+     * @param {string} teamId
+     * @param {function} callback - Called with Array of changes
+     * @returns {function} Unsubscribe function
+     */
+    subscribeToServerData(teamId, callback) {
+        try {
+            const yArray = this.getSharedServerData(teamId);
+
+            const observer = (event) => {
+                const addedItems = [];
+                const deletedItems = [];
+
+                event.changes.delta.forEach(item => {
+                    if (item.insert) {
+                        if (Array.isArray(item.insert)) {
+                            addedItems.push(...item.insert);
+                        } else {
+                            addedItems.push(item.insert);
+                        }
+                    }
+                    if (item.delete) {
+                        deletedItems.push({ count: item.delete });
+                    }
+                });
+
+                if (addedItems.length > 0 || deletedItems.length > 0) {
+                    callback({ added: addedItems, deleted: deletedItems });
+                }
+            };
+
+            yArray.observe(observer);
+            return () => yArray.unobserve(observer);
+        } catch (error) {
+            console.error(`[P2P Storage] Error subscribing to shared items for team ${teamId}:`, error);
+            return () => { };
+        }
     }
 
     /**

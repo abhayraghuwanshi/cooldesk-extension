@@ -132,7 +132,7 @@ export const VALIDATION_SCHEMAS = {
         },
         content: {
             [ValidationRules.TYPE]: 'string',
-            [ValidationRules.MAX_LENGTH]: 50000 // 50KB limit
+            [ValidationRules.MAX_LENGTH]: 10000000 // 10MB limit (increased for images)
         },
         folder: {
             [ValidationRules.TYPE]: 'string',
@@ -141,7 +141,7 @@ export const VALIDATION_SCHEMAS = {
         // Current fields used by NotesSection
         text: {
             [ValidationRules.TYPE]: 'string',
-            [ValidationRules.MAX_LENGTH]: 50000 // 50KB limit
+            [ValidationRules.MAX_LENGTH]: 10000000 // 10MB limit (increased for images)
         },
         type: {
             [ValidationRules.TYPE]: 'string',
@@ -205,11 +205,11 @@ export const VALIDATION_SCHEMAS = {
         // Content/Text fields
         content: {
             [ValidationRules.TYPE]: 'string',
-            [ValidationRules.MAX_LENGTH]: 10000
+            [ValidationRules.MAX_LENGTH]: 10000000 // 10MB limit
         },
         text: {
             [ValidationRules.TYPE]: 'string',
-            [ValidationRules.MAX_LENGTH]: 50000
+            [ValidationRules.MAX_LENGTH]: 10000000 // 10MB limit
         },
         type: {
             [ValidationRules.TYPE]: 'string',
