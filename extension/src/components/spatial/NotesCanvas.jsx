@@ -23,8 +23,108 @@ import {
   upsertNote as dbUpsertNote,
   deleteUrlNote,
   listAllUrlNotes,
-  saveUrlNote
+  saveUrlNote,
+  getSettings,
+  saveSettings
 } from '../../db/index.js';
+
+// Default notes to help users understand CoolDesk features
+const DEFAULT_NOTES = [
+  {
+    id: 'guide_welcome',
+    title: 'Welcome to CoolDesk',
+    folder: 'Getting Started',
+    type: 'richtext',
+    text: `<p>CoolDesk is your personal productivity companion that helps you organize your browsing, take notes, and stay focused.</p>
+<h2>Quick Tips</h2>
+<ul>
+<li><strong>Create Notes</strong> - Click the + button to create new notes</li>
+<li><strong>Organize with Folders</strong> - Use folders to categorize your notes</li>
+<li><strong>Rich Text Editing</strong> - Format your notes with bold, italic, headings, and lists</li>
+<li><strong>Voice Input</strong> - Use the microphone button to dictate notes</li>
+<li><strong>Auto-Save</strong> - Your notes are automatically saved as you type</li>
+</ul>
+<p>Check out the other notes in the <strong>Getting Started</strong> folder for more tips!</p>`
+  },
+  {
+    id: 'guide_workspaces',
+    title: 'Workspaces & Tab Management',
+    folder: 'Getting Started',
+    type: 'richtext',
+    text: `<p>CoolDesk helps you organize your browser tabs into workspaces for better productivity.</p>
+<h2>Workspace Features</h2>
+<ul>
+<li><strong>Create Workspaces</strong> - Group related tabs together (Work, Research, Personal)</li>
+<li><strong>Auto Tab Cleanup</strong> - Automatically close inactive tabs to reduce clutter</li>
+<li><strong>Recently Closed</strong> - Easily restore tabs you accidentally closed</li>
+<li><strong>Tab Limits</strong> - Set limits to prevent tab overload</li>
+</ul>
+<h2>Protected Tabs</h2>
+<p>The following tabs are never auto-closed:</p>
+<ul>
+<li>Pinned tabs</li>
+<li>Active/current tab</li>
+<li>Tabs playing audio/video</li>
+<li>Important domains (Gmail, GitHub, etc.)</li>
+</ul>`
+  },
+  {
+    id: 'guide_highlights',
+    title: 'Highlights & URL Notes',
+    folder: 'Getting Started',
+    type: 'richtext',
+    text: `<p>Capture information from any webpage directly into CoolDesk!</p>
+<h2>Text Highlights</h2>
+<ul>
+<li><strong>Select any text</strong> on a webpage</li>
+<li><strong>Click the CoolDesk button</strong> that appears</li>
+<li>Your highlight is saved with the source URL</li>
+<li>Find all highlights in the <strong>Highlights</strong> folder</li>
+</ul>
+<h2>URL Notes</h2>
+<ul>
+<li>Add notes specific to any webpage</li>
+<li>Notes are linked to the URL for easy reference</li>
+<li>Find all URL notes in the <strong>URL Notes</strong> folder</li>
+</ul>
+<p><em>Tip: Highlights and URL notes automatically include the source webpage link!</em></p>`
+  },
+  {
+    id: 'guide_keyboard',
+    title: 'Keyboard Shortcuts & Tips',
+    folder: 'Getting Started',
+    type: 'richtext',
+    text: `<p>Speed up your workflow with these shortcuts:</p>
+<h2>Note Editor</h2>
+<ul>
+<li><strong>Ctrl+B</strong> - Bold text</li>
+<li><strong>Ctrl+I</strong> - Italic text</li>
+<li><strong>Tab</strong> - Insert indent</li>
+</ul>
+<h2>Pro Tips</h2>
+<ul>
+<li>Use checkboxes for task lists</li>
+<li>Pin important notes to keep them at the top</li>
+<li>Use search to quickly find notes</li>
+</ul>
+<h2>Themes</h2>
+<p>Customize CoolDesk with different themes! Go to settings to switch between light, dark, and accent color themes.</p>`
+  }
+];
+
+// Function to create default notes for first-time users
+const createDefaultNotes = async () => {
+  const now = Date.now();
+  for (let i = 0; i < DEFAULT_NOTES.length; i++) {
+    const note = DEFAULT_NOTES[i];
+    await dbUpsertNote({
+      ...note,
+      createdAt: now - (i * 1000), // Stagger creation times so they appear in order
+      updatedAt: now - (i * 1000)
+    });
+  }
+  console.log('[NotesCanvas] Created default guide notes');
+};
 import { getFaviconUrl } from '../../utils';
 import { defaultFontFamily } from '../../utils/fontUtils.js';
 
@@ -48,12 +148,36 @@ export function NotesCanvas({ workspaceId }) {
   const autoSaveTimeout = useRef(null);
 
   // Load workspace notes
-  const loadNotes = useCallback(async (showLoading = true) => {
+  const loadNotes = useCallback(async (showLoading = true, isInitialLoad = false) => {
     try {
       if (showLoading) setLoading(true);
       const result = await dbListNotes();
       const allNotes = result?.data || result || [];
       const notesArray = Array.isArray(allNotes) ? allNotes : [];
+
+      // Check if we need to create default notes (first-time user)
+      if (isInitialLoad && notesArray.length === 0) {
+        // Check if default notes were already dismissed
+        const settings = await getSettings();
+        if (!settings?.defaultNotesCreated) {
+          await createDefaultNotes();
+          await saveSettings({ ...settings, defaultNotesCreated: true });
+          // Reload notes after creating defaults
+          const newResult = await dbListNotes();
+          const newNotes = newResult?.data || newResult || [];
+          const newNotesArray = Array.isArray(newNotes) ? newNotes : [];
+
+          const regularNotes = newNotesArray.filter(note => {
+            if (note.type === 'highlight' || note.isHighlight) return false;
+            if (note.url && typeof note.url === 'string' && note.url.length > 0) return false;
+            return true;
+          });
+
+          setNotes(regularNotes);
+          if (showLoading) setLoading(false);
+          return;
+        }
+      }
 
       // Exclude URL notes and highlights from regular notes - they appear in their own special folders
       const regularNotes = notesArray.filter(note => {
@@ -142,7 +266,7 @@ export function NotesCanvas({ workspaceId }) {
   }, []);
 
   useEffect(() => {
-    loadNotes();
+    loadNotes(true, true); // Pass isInitialLoad=true to check for default notes
     loadUrlNotes();
     loadHighlights();
   }, [loadNotes, loadUrlNotes, loadHighlights]);
@@ -1034,14 +1158,14 @@ export function NotesCanvas({ workspaceId }) {
               )}
 
               {/* Title and Folder Inputs - Same Line */}
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
                 {/* Sidebar Toggle */}
                 <button
                   onClick={() => setShowSidebar(!showSidebar)}
                   title={showSidebar ? "Hide Sidebar" : "Show Sidebar"}
                   style={{
-                    padding: '10px',
-                    borderRadius: '10px',
+                    padding: '8px',
+                    borderRadius: '8px',
                     background: 'var(--surface-2)',
                     border: '1px solid var(--border-primary)',
                     color: 'var(--text-secondary)',
@@ -1050,8 +1174,9 @@ export function NotesCanvas({ workspaceId }) {
                     alignItems: 'center',
                     justifyContent: 'center',
                     transition: 'all 0.2s ease',
-                    height: '40px',
-                    width: '40px'
+                    height: '36px',
+                    width: '36px',
+                    flexShrink: 0
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = 'var(--surface-3)';
@@ -1066,33 +1191,35 @@ export function NotesCanvas({ workspaceId }) {
                 </button>
 
                 {/* Folder Input */}
-                <div style={{ position: 'relative', flex: '0 0 200px' }}>
+                <div style={{ position: 'relative', width: '160px', flexShrink: 0 }}>
                   <FontAwesomeIcon
                     icon={faFolder}
                     style={{
                       position: 'absolute',
-                      left: '14px',
+                      left: '10px',
                       top: '50%',
                       transform: 'translateY(-50%)',
                       color: 'var(--text-muted)',
-                      fontSize: '14px',
+                      fontSize: '12px',
                       pointerEvents: 'none'
                     }}
                   />
                   <input
                     type="text"
-                    placeholder="Folder..."
+                    placeholder="Folder"
                     value={noteFolder}
                     onChange={handleFolderChange}
                     list="existing-folders"
                     style={{
                       width: '100%',
-                      padding: '10px 14px 10px 40px',
-                      borderRadius: '10px',
+                      padding: '8px 10px 8px 30px',
+                      borderRadius: '8px',
                       background: 'var(--surface-2)',
                       border: '1px solid var(--border-primary)',
                       color: 'var(--text)',
                       fontSize: '13px',
+                      height: '36px',
+                      boxSizing: 'border-box',
                       outline: 'none',
                       transition: 'all 0.2s ease'
                     }}
@@ -1118,13 +1245,15 @@ export function NotesCanvas({ workspaceId }) {
                   onChange={handleTitleChange}
                   style={{
                     flex: 1,
-                    padding: '12px 16px',
-                    borderRadius: '10px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
                     background: 'var(--surface-2)',
                     border: '1px solid var(--border-primary)',
                     color: 'var(--text)',
-                    fontSize: '20px',
+                    fontSize: '16px',
                     fontWeight: 600,
+                    height: '36px',
+                    boxSizing: 'border-box',
                     outline: 'none',
                     transition: 'all 0.2s ease'
                   }}
