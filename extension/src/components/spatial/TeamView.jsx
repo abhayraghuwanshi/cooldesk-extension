@@ -8,6 +8,7 @@ import { getFaviconUrl } from '../../utils/helpers';
 import { CreateTeamModal } from '../popups/CreateTeamModal';
 import { InviteUserModal } from '../popups/InviteUserModal';
 import { ManageMembersModal } from '../popups/ManageMembersModal';
+import { PendingRequestsModal } from '../popups/PendingRequestsModal';
 import { ReadNoteModal } from '../popups/ReadNoteModal';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import NoticeBoard from './NoticeBoard';
@@ -25,9 +26,11 @@ export default function TeamView({ team: propTeam }) {
     const [selectedNote, setSelectedNote] = useState(null);
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
+    const [isPendingRequestsModalOpen, setIsPendingRequestsModalOpen] = useState(false);
     const [isCreateTeamModalOpen, setIsCreateTeamModalOpen] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
     const [renameValue, setRenameValue] = useState('');
+    const [pendingRequests, setPendingRequests] = useState([]);
     const [canWrite, setCanWrite] = useState(false); // State for non-admin writers
     const yArrayRef = useRef(null);
     const renameInputRef = useRef(null);
@@ -71,6 +74,46 @@ export default function TeamView({ team: propTeam }) {
         const unsub = p2pSyncService.subscribe(updateCounts);
         return unsub;
     }, [teams]);
+
+    // Listen for join requests (admin only)
+    useEffect(() => {
+        if (!activeTeamId) return;
+
+        const activeTeam = teams.find(t => t.id === activeTeamId);
+        if (!activeTeam || !activeTeam.isOwner) return; // Only admins listen
+
+        const setupRequestListener = async () => {
+            const { p2pStorage } = await import('../../services/p2p/storageService');
+            const { p2pSyncService } = await import('../../services/p2p/syncService');
+            const { p2pRequestService } = await import('../../services/p2p/requestService');
+
+            // Connect to discovery room
+            const discoveryRoomId = `discovery_${activeTeam.name.toLowerCase().replace(/\s+/g, '_')}`;
+            await p2pStorage.initializeTeamStorage(discoveryRoomId);
+            await p2pSyncService.connectTeam(discoveryRoomId, activeTeam.name);
+
+            console.log('[TeamView] Admin connected to discovery room:', discoveryRoomId);
+
+            // Listen for new requests on discovery room
+            const unsubscribe = p2pRequestService.listenForJoinRequests(discoveryRoomId, (request) => {
+                console.log('[TeamView] Received join request:', request);
+                setPendingRequests(prev => {
+                    // Avoid duplicates
+                    if (prev.some(r => r.id === request.id)) return prev;
+                    return [...prev, request];
+                });
+            });
+
+            return unsubscribe;
+        };
+
+        let cleanup;
+        setupRequestListener().then(unsub => { cleanup = unsub; });
+
+        return () => {
+            if (cleanup) cleanup();
+        };
+    }, [activeTeamId, teams]);
 
     const seedingRef = useRef(new Set()); // Track seeded teams in this session
 
@@ -539,11 +582,24 @@ export default function TeamView({ team: propTeam }) {
                                 {isOwner && (
                                     <>
                                         <button
-                                            onClick={() => setIsInviteModalOpen(true)}
+                                            onClick={() => setIsPendingRequestsModalOpen(true)}
                                             className="header-button"
+                                            style={{ position: 'relative' }}
+                                            title="Join Requests"
                                         >
                                             <FontAwesomeIcon icon={faUserPlus} />
-                                            Invite
+                                            Requests
+                                            {pendingRequests.length > 0 && (
+                                                <span style={{
+                                                    position: 'absolute', top: -4, right: -4,
+                                                    background: '#ef4444', color: '#fff',
+                                                    fontSize: 10, fontWeight: 700,
+                                                    padding: '2px 6px', borderRadius: 10,
+                                                    minWidth: 18, textAlign: 'center'
+                                                }}>
+                                                    {pendingRequests.length}
+                                                </span>
+                                            )}
                                         </button>
                                         <button
                                             onClick={() => setIsMembersModalOpen(true)}
@@ -922,6 +978,16 @@ export default function TeamView({ team: propTeam }) {
                     isOpen={isMembersModalOpen}
                     onClose={() => setIsMembersModalOpen(false)}
                     teamId={activeTeamId}
+                />
+                {/* Pending Requests Modal */}
+                <PendingRequestsModal
+                    isOpen={isPendingRequestsModalOpen}
+                    onClose={() => setIsPendingRequestsModalOpen(false)}
+                    teamId={activeTeamId}
+                    requests={pendingRequests}
+                    onRequestProcessed={(requestId) => {
+                        setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+                    }}
                 />
             </div>
         </div>

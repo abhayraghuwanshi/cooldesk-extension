@@ -845,7 +845,7 @@ export function NotesCanvas({ workspaceId }) {
                   style={{
                     background: activeFolder === 'All Notes' ? 'var(--accent-blue-soft)' : 'transparent',
                     border: activeFolder === 'All Notes' ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
-                    borderRadius: '8px',
+                    borderRadius: '10px',
                     padding: '12px',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
@@ -888,7 +888,7 @@ export function NotesCanvas({ workspaceId }) {
                     style={{
                       background: activeFolder === folder ? 'var(--accent-blue-soft)' : 'transparent',
                       border: activeFolder === folder ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
-                      borderRadius: '8px',
+                      borderRadius: '10px',
                       padding: '12px',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',

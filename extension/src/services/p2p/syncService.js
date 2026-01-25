@@ -308,14 +308,19 @@ class P2PSyncService {
             const isAdmin = team?.createdByMe && !!team?.adminPrivateKey;
             let adminSignature = null;
 
-            if (isAdmin) {
-                // Sign our username with our private key
-                adminSignature = await crypto.subtle.sign(
-                    { name: 'ECDSA', hash: 'SHA-256' },
-                    team.adminPrivateKey,
-                    new TextEncoder().encode(username)
-                );
-                adminSignature = btoa(String.fromCharCode(...new Uint8Array(adminSignature)));
+            // Only sign if we have a valid admin private key (skip for discovery rooms)
+            if (isAdmin && team.adminPrivateKey && team.adminPrivateKey.type === 'private') {
+                try {
+                    // Sign our username with our private key
+                    adminSignature = await crypto.subtle.sign(
+                        { name: 'ECDSA', hash: 'SHA-256' },
+                        team.adminPrivateKey,
+                        new TextEncoder().encode(username)
+                    );
+                    adminSignature = btoa(String.fromCharCode(...new Uint8Array(adminSignature)));
+                } catch (err) {
+                    console.warn('[P2P Sync] Failed to sign admin claim (might be discovery room):', err);
+                }
             }
 
             // Set awareness state

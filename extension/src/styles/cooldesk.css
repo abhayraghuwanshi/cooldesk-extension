@@ -8,15 +8,14 @@
   /* Font family AND size inherited from body element (set by theme system) */
   font-family: inherit;
   font-size: inherit;
-  padding: 16px;
-  padding-left: 15vw;
-  padding-right: 15vw;
+  padding: 0 8vw;
+  padding-bottom: 24px;
+  /* Balanced horizontal margins for centered content */
   position: relative;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
+  /* Lock parent container */
   display: flex;
   flex-direction: column;
-  gap: 16px;
   /* Custom scrollbar styling */
   scrollbar-width: thin;
   scrollbar-color: var(--primary-color, rgba(139, 92, 246, 0.4)) transparent;
@@ -45,20 +44,33 @@
 
 /* Top Logo and Settings */
 .cooldesk-header {
+  position: fixed;
+  /* COMPLETELY FIXED */
+  top: 24px;
+  /* Floating pill look */
+  left: 8vw;
+  /* Match container margin */
+  right: 8vw;
+  /* Match container margin */
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
   flex-shrink: 0;
-  width: 100%;
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 16px 32px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.5) 0%, rgba(30, 41, 59, 0.3) 100%);
-  border-bottom: 1px solid rgba(139, 92, 246, 0.15);
-  margin-bottom: 0;
-  position: relative;
-  z-index: 1002;
+  z-index: 10000;
+  /* StAY ON TOP */
+  height: 72px;
+  /* Set fixed height */
+  padding: 0 32px;
+  /* Internal content padding */
+  background: rgba(15, 23, 42, 0.9);
+  /* Slightly more opaque for floating look */
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: 16px;
+  /* Pill corners */
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .header-left {
@@ -317,8 +329,23 @@
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.cooldesk-search-box.command-nav {
+  border-color: rgba(52, 199, 89, 0.6);
+  box-shadow: 0 0 20px rgba(52, 199, 89, 0.15), 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.cooldesk-search-box.command-action {
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow: 0 0 25px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.cooldesk-search-box.command-ai {
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.2), 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .cooldesk-search-box:hover {
@@ -500,6 +527,106 @@
 
 .expanded-search-item.selected {
   box-shadow: 0 4px 16px rgba(139, 92, 246, 0.2);
+}
+
+/* Liquid UI Components */
+.command-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 6px;
+  color: #A78BFA;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  animation: pillPop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes pillPop {
+  from {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.holographic-card {
+  background: rgba(30, 41, 59, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.holographic-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+}
+
+.holographic-card:hover {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(139, 92, 246, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.holographic-card.active {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+}
+
+/* Theme Glows */
+.glow-text {
+  text-shadow: 0 0 10px currentColor;
+}
+
+.liquid-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.liquid-shimmer::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(45deg,
+      transparent 45%,
+      rgba(255, 255, 255, 0.03) 50%,
+      transparent 55%);
+  animation: shimmerMove 8s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmerMove {
+  0% {
+    transform: translate(-30%, -30%) rotate(0deg);
+  }
+
+  100% {
+    transform: translate(30%, 30%) rotate(360deg);
+  }
 }
 
 /* Main Grid Layout */

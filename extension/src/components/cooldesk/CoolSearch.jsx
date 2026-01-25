@@ -2,6 +2,7 @@ import { faMicrophone } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import { useEffect, useRef, useState } from 'react';
+import { executeAction } from '../../services/commandActions.js';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser } from '../../services/commandParser.js';
 import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
@@ -18,6 +19,11 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   const [commandSuggestions, setCommandSuggestions] = useState([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
 
+  // Liquid UI State
+  const [commandMode, setCommandMode] = useState('default'); // 'default', 'nav', 'action', 'ai'
+  const [activePill, setActivePill] = useState(null); // { label: 'ADD', prefix: '/add' }
+  const [currentTab, setCurrentTab] = useState(null); // { title, url, favicon }
+
   // Search suggestions state
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [autocompleteHint, setAutocompleteHint] = useState(''); // Ghost text for autocomplete
@@ -30,6 +36,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   const microphoneRef = useRef(null);
   const animationFrameRef = useRef(null);
   const feedbackTimeoutRef = useRef(null);
+  const inputRef = useRef(null);
 
   // Voice command processor
   const commandProcessorRef = useRef(null);
@@ -197,56 +204,236 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
   // Search suggestions from history and bookmarks
   useEffect(() => {
-    // Handle slash commands for navigation
+    // Handle active pill suggestions (Holographic Cards)
+    if (activePill) {
+      const query = searchValue.toLowerCase();
+
+      // Multi-Stage Destination Picker
+      if (activePill.stage === 'DESTINATION') {
+        const fetchWorkspaces = async () => {
+          try {
+            const { listWorkspaces } = await import('../../db/index.js');
+            const res = await listWorkspaces();
+            const workspaces = res?.success ? res.data : (Array.isArray(res) ? res : []);
+
+            const cards = workspaces.map(ws => ({
+              command: `${activePill.prefix} ${ws.name}`,
+              title: ws.name,
+              description: `Move current tab to "${ws.name}"`,
+              icon: '📁',
+              category: 'Select Destination'
+            })).filter(c => c.title.toLowerCase().includes(query));
+
+            setCommandSuggestions(cards);
+          } catch (e) {
+            console.error('Failed to fetch destinations:', e);
+          }
+        };
+        fetchWorkspaces();
+        setSearchSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+        return;
+      }
+
+      let pillSuggestions = [];
+      if (activePill.prefix === '/add') {
+        pillSuggestions = [];
+
+        // Contextual: Add Current Tab
+        if (currentTab) {
+          pillSuggestions.push({
+            command: `/add tab ${currentTab.url}`,
+            title: `Add "${currentTab.title}"`,
+            description: `Save this tab to a workspace`,
+            icon: '🌍',
+            category: 'Context',
+            metadata: { url: currentTab.url, title: currentTab.title }
+          });
+        }
+
+        pillSuggestions.push(
+          { command: '/add note', title: 'Add Note', description: 'Quickly jot down a thought', icon: '📝', category: 'Action' },
+          { command: '/add workspace', title: 'Add Workspace', description: 'Create a new project space', icon: '📁', category: 'Action' }
+        );
+      } else if (activePill.prefix === '/share') {
+        pillSuggestions = [
+          { command: '/share community', title: 'Share to Community', description: 'Publish your workspace for others', icon: '🌍', category: 'Action' },
+          { command: '/share team', title: 'Share with Team', description: 'Collaborate with your coworkers', icon: '👥', category: 'Action' }
+        ];
+      } else if (activePill.prefix === '/notes') {
+        pillSuggestions = [
+          { command: '/notes view', title: 'View All Notes', description: 'Open the full notes manager', icon: '📚', category: 'Nav' },
+          { command: '/notes last', title: 'Open Last Note', description: 'Instantly resume your latest thought', icon: '🔖', category: 'Nav' }
+        ];
+      }
+
+      const filtered = query === ''
+        ? pillSuggestions
+        : pillSuggestions.filter(s =>
+          (s.title?.toLowerCase().includes(query)) ||
+          (s.description?.toLowerCase().includes(query))
+        );
+
+      setCommandSuggestions(filtered);
+      setSearchSuggestions([]);
+      setSelectedSuggestionIndex(-1);
+      return;
+    }
+
+    // Handle slash commands for navigation and predicative actions
     if (searchValue.startsWith('/')) {
       const query = searchValue.slice(1).toLowerCase();
-      const navigationCommands = [
-        { command: '/notes', description: 'Navigate to Notes view', icon: '📝' },
-        { command: '/workspace', description: 'Navigate to Workspace view', icon: '💼' },
-        { command: '/chat', description: 'Navigate to Chat view', icon: '💬' },
-        { command: '/tabs', description: 'Navigate to Tabs view', icon: '📑' },
-        { command: '/team', description: 'Navigate to Team view', icon: '👥' },
-        { command: '/overview', description: 'Navigate to Overview', icon: '🏠' }
-      ];
 
-      if (query === '') {
-        setCommandSuggestions(navigationCommands);
-      } else {
-        // Fuzzy matching for smart autocomplete
-        const matches = navigationCommands.filter(cmd => {
-          const cmdName = cmd.command.slice(1).toLowerCase(); // Remove leading /
-          // Match if command starts with query OR contains all characters in order
-          return cmdName.startsWith(query) ||
-            query.split('').every((char, i) => cmdName.indexOf(char, i) !== -1);
-        });
+      const fetchFlattenedSuggestions = async () => {
+        const navigationCommands = [
+          { command: '/notes', title: 'Notes Manager', description: 'Navigate to Notes view', icon: '📝', category: 'Nav' },
+          { command: '/workspace', title: 'Workspaces', description: 'Navigate to Workspace view', icon: '💼', category: 'Nav' },
+          { command: '/chat', title: 'AI Chat', description: 'Navigate to Chat view', icon: '💬', category: 'Nav' },
+          { command: '/tabs', title: 'Tab Manager', description: 'Navigate to Tabs view', icon: '📑', category: 'Nav' },
+          { command: '/overview', title: 'Dashboard', description: 'Navigate to Overview', icon: '🏠', category: 'Nav' }
+        ];
 
-        // Sort by relevance (starts with > contains)
-        matches.sort((a, b) => {
-          const aName = a.command.slice(1).toLowerCase();
-          const bName = b.command.slice(1).toLowerCase();
-          const aStarts = aName.startsWith(query);
-          const bStarts = bName.startsWith(query);
+        // 🟢 TIERED CONTEXTUAL LOGIC
+        // Case A: Parameter Pivoting (/add tab <url> <space>)
+        if (searchValue.startsWith('/add tab ')) {
+          const parts = searchValue.replace('/add tab ', '').split(' ');
+          const urlPart = parts[0];
+          const hasSpaceAfterUrl = parts.length > 1;
 
-          if (aStarts && !bStarts) return -1;
-          if (!aStarts && bStarts) return 1;
-          return aName.localeCompare(bName);
-        });
+          // If user has typed a URL and a trailing space, suggest Workspaces for that URL
+          if (urlPart && hasSpaceAfterUrl) {
+            try {
+              const { listWorkspaces } = await import('../../db/index.js');
+              const res = await listWorkspaces();
+              const workspaces = res?.success ? res.data : (Array.isArray(res) ? res : []);
 
-        setCommandSuggestions(matches);
+              const destinationCards = workspaces.map(ws => ({
+                command: `/add tab ${urlPart} ${ws.name}`,
+                title: `Save to "${ws.name}"`,
+                description: `Add "${urlPart.substring(0, 20)}..." to workspace`,
+                icon: '📁',
+                category: 'Select Destination',
+                metadata: { url: urlPart, workspaceName: ws.name }
+              }));
 
-        // Set autocomplete hint for the first match
-        if (matches.length > 0 && query.length > 0) {
-          const firstMatch = matches[0].command;
-          // Only show hint if the first match starts with what user typed
-          if (firstMatch.toLowerCase().startsWith(searchValue.toLowerCase())) {
-            setAutocompleteHint(firstMatch);
+              setCommandSuggestions(destinationCards);
+              setAutocompleteHint('');
+              return;
+            } catch (e) {
+              console.error('Destination fetch error:', e);
+            }
+          }
+
+          // If they just typed "/add tab " (with space), suggest current tab as first choice
+          if (currentTab && !urlPart) {
+            const { listWorkspaces } = await import('../../db/index.js');
+            const res = await listWorkspaces();
+            const workspaces = res?.success ? res.data : (Array.isArray(res) ? res : []);
+
+            const quickTabSaves = workspaces.map(ws => ({
+              command: `/add tab ${currentTab.url} ${ws.name}`,
+              title: `Save "${currentTab.title.substring(0, 15)}..." to ${ws.name}`,
+              description: `Save this page to your ${ws.name} workspace`,
+              icon: '🌍',
+              category: 'Quick Save',
+              metadata: { url: currentTab.url, workspaceName: ws.name }
+            }));
+
+            setCommandSuggestions(quickTabSaves);
+            return;
+          }
+        }
+
+        let predictiveActions = [];
+
+        // Add Core Actions
+        predictiveActions.push(
+          { command: '/save', title: 'Save All Tabs', description: 'Snapshot all tabs to workspace', icon: '💾', category: 'Action' },
+          { command: '/share community', title: 'Share Work', description: 'Post to community hub', icon: '🌍', category: 'Action' },
+          { command: '/add note', title: 'New Note', description: 'Create a quick thought', icon: '📝', category: 'Action' },
+          { command: '/add workspace', title: 'New Workspace', description: 'Create project space', icon: '📁', category: 'Action' }
+        );
+
+        // Add Predictive "Save current tab to WS" actions (Flattened Flow)
+        const quickSaves = [];
+        try {
+          const { listWorkspaces } = await import('../../db/index.js');
+          const res = await listWorkspaces();
+          const workspaces = res?.success ? res.data : (Array.isArray(res) ? res : []);
+
+          if (currentTab) {
+            workspaces.forEach(ws => {
+              quickSaves.push({
+                command: `/add tab ${currentTab.url} ${ws.name}`,
+                title: `Save to "${ws.name}"`,
+                description: `Add this tab to your "${ws.name}" workspace`,
+                icon: '📁',
+                category: 'Quick Save',
+                metadata: { url: currentTab.url, workspaceName: ws.name }
+              });
+            });
+          }
+        } catch (e) {
+          console.warn('Predictive fetch failed:', e);
+        }
+
+        // Tiered Suggestions List
+        const allOptions = [...quickSaves, ...predictiveActions, ...navigationCommands];
+
+        if (query === '') {
+          setCommandSuggestions(allOptions.slice(0, 10));
+        } else {
+          // Fuzzy matching against Title, Command or Category
+          const matches = allOptions.filter(opt => {
+            const searchStr = `${opt.title} ${opt.command} ${opt.category}`.toLowerCase();
+            return searchStr.includes(query) ||
+              query.split('').every((char, i) => searchStr.indexOf(char, i) !== -1);
+          });
+
+          // Sort by relevance
+          matches.sort((a, b) => {
+            const aTitle = (a.title || '').toLowerCase();
+            const bTitle = (b.title || '').toLowerCase();
+            const aCmd = a.command.toLowerCase();
+            const bCmd = b.command.toLowerCase();
+
+            // 1. Exact match for Command (Navigation Restoration)
+            if (aCmd === '/' + query) return -1;
+            if (bCmd === '/' + query) return 1;
+
+            // 2. Starts with query (Title or Command)
+            const aStarts = aTitle.startsWith(query) || aCmd.startsWith('/' + query);
+            const bStarts = bTitle.startsWith(query) || bCmd.startsWith('/' + query);
+
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+
+            // 3. Category Priority (Quick Save > Action > Nav)
+            const prio = { 'Quick Save': 1, 'Action': 2, 'Nav': 3 };
+            const aPrio = prio[a.category] || 4;
+            const bPrio = prio[b.category] || 4;
+            if (aPrio !== bPrio) return aPrio - bPrio;
+
+            return aTitle.localeCompare(bTitle);
+          });
+
+          setCommandSuggestions(matches.slice(0, 10));
+
+          // Ghost text logic
+          if (matches.length > 0 && query.length > 0) {
+            const firstMatch = matches[0].command;
+            if (firstMatch.toLowerCase().startsWith(searchValue.toLowerCase())) {
+              setAutocompleteHint(firstMatch);
+            } else {
+              setAutocompleteHint('');
+            }
           } else {
             setAutocompleteHint('');
           }
-        } else {
-          setAutocompleteHint('');
         }
-      }
+      };
+
+      fetchFlattenedSuggestions();
       setSearchSuggestions([]);
       setSelectedSuggestionIndex(-1);
       return;
@@ -429,6 +616,81 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     const timeoutId = setTimeout(fetchSuggestions, 150);
     return () => clearTimeout(timeoutId);
   }, [searchValue]);
+
+  // Focus search input on mount and global shortcuts
+  useEffect(() => {
+    // Single focus attempt on mount
+    const focusTimeout = setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus({ preventScroll: true });
+      }
+    }, 100);
+
+    const handleGlobalKeys = (e) => {
+      // Focus on '/' if not in an input
+      if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+      // Blur on 'Escape'
+      if (e.key === 'Escape' && document.activeElement === inputRef.current) {
+        inputRef.current?.blur();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeys);
+
+    return () => {
+      clearTimeout(focusTimeout);
+      window.removeEventListener('keydown', handleGlobalKeys);
+    };
+  }, []);
+
+  // Sync commandMode with input
+  useEffect(() => {
+    if (activePill) {
+      if (['/add', '/share'].includes(activePill.prefix)) {
+        setCommandMode('action');
+      } else {
+        setCommandMode('nav');
+      }
+      return;
+    }
+
+    const val = searchValue.toLowerCase();
+    if (val.startsWith('!')) {
+      setCommandMode('ai');
+    } else if (val.startsWith('/')) {
+      const mode = (val.startsWith('/add') || val.startsWith('/share')) ? 'action' : 'nav';
+      setCommandMode(mode);
+    } else {
+      setCommandMode('default');
+    }
+  }, [searchValue, activePill]);
+
+  // Fetch current tab info on mount or focus
+  useEffect(() => {
+    const fetchCurrentTab = async () => {
+      try {
+        if (chrome?.tabs?.query) {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tab && !tab.url.startsWith('chrome://')) {
+            setCurrentTab({
+              title: tab.title,
+              url: tab.url,
+              favicon: tab.favIconUrl
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to fetch current tab:', e);
+      }
+    };
+
+    fetchCurrentTab();
+    window.addEventListener('focus', fetchCurrentTab);
+    return () => window.removeEventListener('focus', fetchCurrentTab);
+  }, []);
 
   // Fetch workspace data for voice commands
   const fetchWorkspaceData = async () => {
@@ -690,7 +952,33 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   // Better: Use a ref for current listening state in the listener, OR rely on the toggleVoice function handling it correctly.
 
   const handleChange = (e) => {
-    setSearchValue(e.target.value);
+    const value = e.target.value;
+
+    // Detect space after command for Pill creation
+    if (!activePill && value.endsWith(' ')) {
+      const trimmed = value.trim().toLowerCase();
+      const supportedPills = {
+        '/add': 'ADD',
+        '/share': 'SHARE',
+        '/notes': 'NOTES',
+        '/workspace': 'WORKSPACE',
+        '/chat': 'CHAT',
+        '/tabs': 'TABS'
+      };
+
+      if (supportedPills[trimmed]) {
+        setActivePill({ label: supportedPills[trimmed], prefix: trimmed });
+        setSearchValue('');
+        setAutocompleteHint('');
+        return;
+      }
+    }
+
+    setSearchValue(value);
+
+    // Clear autocomplete if empty
+    if (!value) setAutocompleteHint('');
+
     // Clear command feedback when user starts typing again
     if (commandFeedback && commandFeedback.type === 'help') {
       setCommandFeedback(null);
@@ -698,124 +986,164 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   };
 
   const handleKeyDown = (e) => {
-    const activeSuggestions = commandSuggestions.length > 0 ? commandSuggestions : searchSuggestions;
-    const isCommandMode = commandSuggestions.length > 0;
-
-    // Tab key for autocomplete
-    if (e.key === 'Tab' && activeSuggestions.length > 0) {
+    // Backspace to remove pill
+    if (e.key === 'Backspace' && activePill && searchValue === '') {
       e.preventDefault();
-      const firstSuggestion = activeSuggestions[0];
-
-      if (isCommandMode && firstSuggestion.command) {
-        // Autocomplete with the first command
-        setSearchValue(firstSuggestion.command);
-        setSelectedSuggestionIndex(0);
-      } else if (!isCommandMode && firstSuggestion.title) {
-        // For search results, select the first one
-        setSelectedSuggestionIndex(0);
-      }
+      setSearchValue(activePill.prefix + ' ');
+      setActivePill(null);
       return;
     }
 
-    // Check for slash commands first
-    if (e.key === 'Enter' && searchValue.startsWith('/')) {
-      e.preventDefault();
+    const activeSuggestions = commandSuggestions.length > 0 ? commandSuggestions : searchSuggestions;
+    const isCommandMode = commandSuggestions.length > 0;
 
-      // Smart Enter: Use autocompleteHint if available, otherwise use searchValue
-      const commandToExecute = (autocompleteHint && autocompleteHint.startsWith(searchValue))
-        ? autocompleteHint.toLowerCase().trim()
-        : searchValue.toLowerCase().trim();
+    // Tab key: Autocomplete or Pill conversion
+    if (e.key === 'Tab') {
+      if (activeSuggestions.length > 0) {
+        e.preventDefault();
+        const first = activeSuggestions[0];
+        const supportedPrefixes = {
+          '/add': 'ADD',
+          '/share': 'SHARE',
+          '/notes': 'NOTES'
+        };
 
-      console.log('[CoolSearch] Enter pressed. Executing command:', commandToExecute);
-
-      // Navigation commands
-      const navigationMap = {
-        '/notes': 'notes',
-        '/workspace': 'workspace',
-        '/chat': 'chat',
-        '/tabs': 'tabs',
-        '/team': 'team',
-        '/overview': 'overview'
-      };
-
-      const destination = navigationMap[commandToExecute];
-      if (destination) {
-        if (onNavigate) {
-          console.log('[CoolSearch] Mapping found! Navigating to:', destination);
-          onNavigate(destination);
+        if (supportedPrefixes[first.command] && !activePill) {
+          setActivePill({ label: supportedPrefixes[first.command], prefix: first.command });
           setSearchValue('');
-          setSearchSuggestions([]);
-          setCommandSuggestions([]);
-          setAutocompleteHint('');
-        } else {
-          console.error('[CoolSearch] onNavigate prop is missing!');
+          return;
+        }
+
+        if (isCommandMode && first.command) {
+          setSearchValue(first.command);
+          setSelectedSuggestionIndex(0);
+        } else if (!isCommandMode && first.title) {
+          setSelectedSuggestionIndex(0);
         }
         return;
-      } else {
-        console.warn('[CoolSearch] Command not in navigation map:', commandToExecute);
       }
     }
 
-    if (activeSuggestions.length === 0) return;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedSuggestionIndex(prev =>
-        prev < activeSuggestions.length - 1 ? prev + 1 : prev
-      );
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
-    } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
-      e.preventDefault();
-      const selected = activeSuggestions[selectedSuggestionIndex];
-
-      if (isCommandMode) {
-        // Check if it's a slash command (navigation)
-        if (selected.command.startsWith('/')) {
-          const navigationMap = {
-            '/notes': 'notes',
-            '/workspace': 'workspace',
-            '/chat': 'chat',
-            '/tabs': 'tabs',
-            '/team': 'team',
-            '/overview': 'overview'
-          };
-
-          if (navigationMap[selected.command] && onNavigate) {
-            onNavigate(navigationMap[selected.command]);
-            setSearchValue('');
-            setCommandSuggestions([]);
-            setSelectedSuggestionIndex(-1);
-          }
-        } else {
-          // Regular command - fill search box
-          setSearchValue(selected.command);
-          setCommandSuggestions([]);
-        }
-      } else {
-        // Handle workspace or URL selection
-        if (selected.type === 'workspace') {
-          // Full workspace - navigate to workspace view
-          if (onWorkspaceNavigate) {
-            onWorkspaceNavigate(selected.workspace);
-          } else {
-            handleWorkspaceOpen(selected.workspace);
-          }
-        } else if (selected.type === 'workspace-url' || selected.url) {
-          // Individual URL from workspace or history/bookmark - open in new tab
-          if (chrome?.tabs?.create) {
-            chrome.tabs.create({ url: selected.url });
-          } else {
-            window.open(selected.url, '_blank');
-          }
-        }
-        setSearchValue('');
-        setSearchSuggestions([]);
+    // Enter key
+    if (e.key === 'Enter') {
+      // 1. If we have a selected suggestion, handle it
+      if (selectedSuggestionIndex >= 0 && activeSuggestions[selectedSuggestionIndex]) {
+        e.preventDefault();
+        onSelectSuggestion(activeSuggestions[selectedSuggestionIndex]);
+        return;
       }
-      setSelectedSuggestionIndex(-1);
-    } else if (e.key === 'Escape') {
-      setCommandSuggestions([]);
+
+      // 2. If it's a known prefix with no args, convert to Pill
+      const supportedPrefixes = {
+        '/add': 'ADD',
+        '/share': 'SHARE',
+        '/notes': 'NOTES'
+      };
+      const trimmed = searchValue.trim().toLowerCase();
+      if (supportedPrefixes[trimmed] && !activePill) {
+        e.preventDefault();
+        setActivePill({ label: supportedPrefixes[trimmed], prefix: trimmed });
+        setSearchValue('');
+        return;
+      }
+
+      // 3. Regular command execution
+      if (searchValue.startsWith('/') || activePill) {
+        e.preventDefault();
+        handleSubmit(e);
+        return;
+      }
+    }
+
+    // Navigation through suggestions
+    if (activeSuggestions.length > 0) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev =>
+          prev < activeSuggestions.length - 1 ? prev + 1 : 0
+        );
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev =>
+          prev > 0 ? prev - 1 : activeSuggestions.length - 1
+        );
+      } else if (e.key === 'Escape') {
+        setCommandSuggestions([]);
+        setSearchSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+      }
+    }
+  };
+
+  const onSelectSuggestion = async (item) => {
+    const isCommandMode = commandSuggestions.length > 0;
+
+    if (isCommandMode) {
+      // Check if it's a slash command (navigation or action)
+      if (item.command.startsWith('/')) {
+        const navigationMap = {
+          '/notes': 'notes',
+          '/workspace': 'workspace',
+          '/chat': 'chat',
+          '/tabs': 'tabs',
+          '/team': 'team',
+          '/overview': 'overview'
+        };
+
+        // Handle specific actions for Pills
+        const supportedPrefixes = {
+          '/add': 'ADD',
+          '/share': 'SHARE',
+          '/notes': 'NOTES'
+        };
+
+        // Flattened Execution: If it's a fully composed Quick Save or Note, execute immediately
+        if (item.category === 'Quick Save' || item.category === 'Select Destination' || item.command.split(' ').length > 2) {
+          setSearchValue(item.command);
+          setCommandSuggestions([]);
+          setSelectedSuggestionIndex(-1);
+          // Trigger immediate submit
+          setTimeout(() => handleSubmit({ preventDefault: () => { } }), 10);
+          return;
+        }
+
+        // Navigation Priority: Check for core navigation matches first
+        if (navigationMap[item.command] && onNavigate) {
+          onNavigate(navigationMap[item.command]);
+          setSearchValue('');
+          setActivePill(null);
+          setCommandSuggestions([]);
+          setSelectedSuggestionIndex(-1);
+          return;
+        }
+
+        // Navigation Pivot: If it's a prefix command, just fill and wait for parameters
+        if (supportedPrefixes[item.command]) {
+          setSearchValue(item.command + ' ');
+          setCommandSuggestions([]);
+          setSelectedSuggestionIndex(-1);
+          return;
+        }
+
+        // Fallback for sub-commands or direct command entry
+        setSearchValue(item.command);
+        setCommandSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+      } else {
+        setSearchValue(item.command);
+        setCommandSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+      }
+    } else {
+      // Handle workspace/URL selection (same logic as before)
+      if (item.type === 'workspace') {
+        if (onWorkspaceNavigate) onWorkspaceNavigate(item.workspace);
+        else handleWorkspaceOpen(item.workspace);
+      } else if (item.type === 'workspace-url' || item.url) {
+        if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
+        else window.open(item.url, '_blank');
+      }
+      setSearchValue('');
       setSearchSuggestions([]);
       setSelectedSuggestionIndex(-1);
     }
@@ -849,14 +1177,50 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!searchValue.trim()) return;
+    if (!searchValue.trim() && !activePill) return;
 
-    const query = searchValue.trim();
+    let query = searchValue.trim();
+    if (activePill) {
+      query = `${activePill.prefix} ${query}`.trim();
+    }
 
     // Check if it's a command
-    if (CommandParser.isCommand(query)) {
+    if (CommandParser.isCommand(query) || query.startsWith('/')) {
       try {
-        const parsed = CommandParser.parse(query);
+        // Special handling for slash commands that are just navigation
+        const navigationMap = {
+          '/notes': 'notes',
+          '/workspace': 'workspace',
+          '/chat': 'chat',
+          '/tabs': 'tabs',
+          '/team': 'team',
+          '/overview': 'overview'
+        };
+
+        if (navigationMap[query] && onNavigate) {
+          onNavigate(navigationMap[query]);
+          setSearchValue('');
+          setActivePill(null);
+          return;
+        }
+
+        // Handle Action Commands (/add, /share)
+        if (query.startsWith('/add') || query.startsWith('/share')) {
+          const result = await executeAction(query, '', (feedback) => setCommandFeedback(feedback));
+          if (result.success) {
+            // Handle workspace switch if created
+            if (result.workspace) {
+              window.dispatchEvent(new CustomEvent('workspaceChanged', {
+                detail: { workspace: result.workspace }
+              }));
+            }
+            setSearchValue('');
+            setActivePill(null);
+          }
+          return;
+        }
+
+        const parsed = CommandParser.parse(query.startsWith('/') ? `!${query.slice(1)}` : query);
         console.log('[CoolSearch] Executing command:', parsed);
 
         const result = await commandExecutor.execute(parsed);
@@ -870,6 +1234,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         }
 
         setSearchValue('');
+        setActivePill(null);
       } catch (error) {
         console.error('[CoolSearch] Command execution error:', error);
         setCommandFeedback({
@@ -1097,7 +1462,12 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
   return (
     <div className="cooldesk-search-container">
-      <form onSubmit={handleSubmit} className="cooldesk-search-box">
+      <form
+        onSubmit={handleSubmit}
+        className="cooldesk-search-box"
+        onClick={() => inputRef.current?.focus()}
+        style={{ cursor: 'text' }}
+      >
         <span className="terminal-prompt" style={{
           fontFamily: "'Fira Code', monospace",
           fontWeight: '700',
@@ -1110,6 +1480,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         }}>{'>'}</span>
         <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
           <input
+            ref={inputRef}
             type="text"
             className="cooldesk-search-input"
             placeholder={placeholder}
@@ -1190,6 +1561,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         suggestions={commandSuggestions.length > 0 ? commandSuggestions : searchSuggestions}
         selectedIndex={selectedSuggestionIndex}
         searchValue={searchValue}
+        activePill={activePill}
         onHover={(idx) => setSelectedSuggestionIndex(idx)}
         onClose={() => {
           setCommandSuggestions([]);
@@ -1200,43 +1572,15 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           const isCommandMode = commandSuggestions.length > 0;
 
           if (isCommandMode) {
-            // Check if it's a slash command (navigation)
-            if (item.command.startsWith('/')) {
-              const navigationMap = {
-                '/notes': 'notes',
-                '/workspace': 'workspace',
-                '/chat': 'chat',
-                '/tabs': 'tabs',
-                '/team': 'team',
-                '/overview': 'overview'
-              };
-
-              if (navigationMap[item.command] && onNavigate) {
-                onNavigate(navigationMap[item.command]);
-                setSearchValue('');
-                setCommandSuggestions([]);
-                setSelectedSuggestionIndex(-1);
-              }
-            } else {
-              // Regular command - fill search box
-              setSearchValue(item.command);
-              setCommandSuggestions([]);
-              setSelectedSuggestionIndex(-1);
-            }
+            onSelectSuggestion(item);
           } else {
             // Handle workspace or URL selection
             if (item.type === 'workspace') {
-              if (onWorkspaceNavigate) {
-                onWorkspaceNavigate(item.workspace);
-              } else {
-                handleWorkspaceOpen(item.workspace);
-              }
+              if (onWorkspaceNavigate) onWorkspaceNavigate(item.workspace);
+              else handleWorkspaceOpen(item.workspace);
             } else if (item.type === 'workspace-url' || item.url) {
-              if (chrome?.tabs?.create) {
-                chrome.tabs.create({ url: item.url });
-              } else {
-                window.open(item.url, '_blank');
-              }
+              if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
+              else window.open(item.url, '_blank');
             }
             setSearchValue('');
             setSearchSuggestions([]);
@@ -1245,85 +1589,36 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         }}
       />
 
-      {/* Command Feedback - Only show when no suggestions */}
-      {
-        commandFeedback && commandSuggestions.length === 0 && searchSuggestions.length === 0 && (
-          <div style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: '8px',
-            padding: '10px 16px',
-            borderRadius: '10px',
-            background: commandFeedback.type === 'error'
-              ? 'rgba(239, 68, 68, 0.15)'
-              : commandFeedback.type === 'success'
-                ? 'rgba(34, 197, 94, 0.15)'
-                : 'rgba(59, 130, 246, 0.15)',
-            border: `1px solid ${commandFeedback.type === 'error'
-              ? 'rgba(239, 68, 68, 0.3)'
-              : commandFeedback.type === 'success'
-                ? 'rgba(34, 197, 94, 0.3)'
-                : 'rgba(59, 130, 246, 0.3)'}`,
-            color: commandFeedback.type === 'error'
-              ? '#F87171'
-              : commandFeedback.type === 'success'
-                ? '#4ADE80'
-                : '#60A5FA',
-            fontSize: '12px',
-            fontWeight: 500,
-            zIndex: 1001,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            gap: '8px'
-          }}>
-            <div style={{ flex: 1, whiteSpace: 'pre-wrap' }}>
-              {commandFeedback.message}
-            </div>
-            <button
-              onClick={() => setCommandFeedback(null)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'inherit',
-                cursor: 'pointer',
-                fontSize: '16px',
-                padding: '0 4px',
-                opacity: 0.6,
-                flexShrink: 0
-              }}
-              onMouseEnter={(e) => e.target.style.opacity = '1'}
-              onMouseLeave={(e) => e.target.style.opacity = '0.6'}
-              title="Close"
-            >
-              ✕
-            </button>
-          </div>
-        )
-      }
-
-      {/* Command Help Hint */}
-      {
-        searchValue.startsWith('!') && !commandFeedback && commandSuggestions.length === 0 && (
-          <div style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: '8px',
-            fontSize: '11px',
-            opacity: 0.6,
-            textAlign: 'center',
-            color: '#94A3B8'
-          }}>
-            Type <code style={{ background: 'rgba(148, 163, 184, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>!?</code> for help
-          </div>
-        )
-      }
-    </div >
+      {/* Command Feedback */}
+      {commandFeedback && commandSuggestions.length === 0 && searchSuggestions.length === 0 && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          marginTop: '8px',
+          padding: '10px 16px',
+          borderRadius: '10px',
+          background: commandFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.15)' :
+            commandFeedback.type === 'success' ? 'rgba(34, 197, 94, 0.15)' :
+              'rgba(59, 130, 246, 0.15)',
+          border: `1px solid ${commandFeedback.type === 'error' ? 'rgba(239, 68, 68, 0.3)' :
+            commandFeedback.type === 'success' ? 'rgba(34, 197, 94, 0.3)' :
+              'rgba(59, 130, 246, 0.3)'}`,
+          color: commandFeedback.type === 'error' ? '#F87171' :
+            commandFeedback.type === 'success' ? '#4ADE80' :
+              '#60A5FA',
+          fontSize: '12px',
+          fontWeight: 500,
+          zIndex: 1001,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ flex: 1 }}>{commandFeedback.message}</div>
+          <button onClick={() => setCommandFeedback(null)} style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: '0 4px', opacity: 0.6 }}>✕</button>
+        </div>
+      )}
+    </div>
   );
 }

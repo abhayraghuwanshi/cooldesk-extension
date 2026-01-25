@@ -1332,7 +1332,7 @@ export default function App() {
 
             // Add URL using existing handler
             await handleAddSavedUrlToWorkspace(urlData.url, workspace.name);
-            console.log('[CoolDesk] Added URL to workspace:', { workspace: workspace.name, url: urlData.url });
+            // console.log('[CoolDesk] Added URL to workspace:', { workspace: workspace.name, url: urlData.url });
           } catch (error) {
             console.error('[CoolDesk] Failed to add URL:', error);
           }

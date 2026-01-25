@@ -185,47 +185,45 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     return () => window.removeEventListener('keydown', handleKeyboard);
   }, [navigateToFace, currentFace]);
 
+  // Hyper-Spatial: Global Fluid Navigation (Two-finger scroll)
   useEffect(() => {
-    let scrollTimeout;
-    let scrollDelta = 0;
+    let lastPulseTime = 0;
+    const PULSE_COOLDOWN = 600; // Match transition duration
+    const THRESHOLD = 30; // High sensitivity
 
     const handleWheel = (e) => {
+      // Ignore vertical scrolling unless Shift is held
       if (!e.shiftKey && Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
 
-      e.preventDefault();
-      scrollDelta += e.shiftKey ? e.deltaY : e.deltaX;
-      clearTimeout(scrollTimeout);
+      const delta = e.shiftKey ? e.deltaY : e.deltaX;
 
-      scrollTimeout = setTimeout(() => {
-        const threshold = 50;
-        if (scrollDelta > threshold) {
+      // Prevent rapid fire hops
+      const now = Date.now();
+      if (now - lastPulseTime < PULSE_COOLDOWN) return;
+
+      if (Math.abs(delta) > THRESHOLD) {
+        e.preventDefault();
+
+        if (delta > 0) {
           if (currentFace === 'chat') navigateToFace('workspace');
           else if (currentFace === 'workspace') navigateToFace('overview');
           else if (currentFace === 'overview') navigateToFace('tabs');
           else if (currentFace === 'tabs') navigateToFace('team');
           else if (currentFace === 'team') navigateToFace('notes');
-        } else if (scrollDelta < -threshold) {
+        } else {
           if (currentFace === 'notes') navigateToFace('team');
           else if (currentFace === 'team') navigateToFace('tabs');
           else if (currentFace === 'tabs') navigateToFace('overview');
           else if (currentFace === 'overview') navigateToFace('workspace');
           else if (currentFace === 'workspace') navigateToFace('chat');
         }
-        scrollDelta = 0;
-      }, 100);
-    };
 
-    const container = document.querySelector('.workspace-shell');
-    if (container) {
-      container.addEventListener('wheel', handleWheel, { passive: false });
-    }
-
-    return () => {
-      clearTimeout(scrollTimeout);
-      if (container) {
-        container.removeEventListener('wheel', handleWheel);
+        lastPulseTime = now;
       }
     };
+
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
   }, [navigateToFace, currentFace]);
 
   const transform = useMemo(() => {

@@ -9,7 +9,8 @@ export function ExpandedSearchPanel({
     onSelect,
     onHover,
     onClose,
-    searchValue
+    searchValue,
+    activePill
 }) {
     const panelRef = useRef(null);
 
@@ -53,7 +54,9 @@ export function ExpandedSearchPanel({
             <div style={{
                 padding: '16px 20px',
                 borderBottom: '1px solid rgba(139, 92, 246, 0.15)',
-                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.03) 100%)',
+                background: activePill
+                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.02) 100%)'
+                    : 'linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.03) 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between'
@@ -80,120 +83,169 @@ export function ExpandedSearchPanel({
                 </div>
             </div>
 
-            {/* Results List */}
+            {/* Results List / Action Cards */}
             <div style={{
                 maxHeight: 'calc(60vh - 60px)',
                 overflowY: 'auto',
-                padding: '8px'
+                padding: activePill ? '16px' : '8px',
+                display: activePill ? 'grid' : 'block',
+                gridTemplateColumns: activePill ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'none',
+                gap: '12px'
             }}>
-                {suggestions.map((suggestion, idx) => (
-                    <div
-                        key={idx}
-                        className={`expanded-search-item ${selectedIndex === idx ? 'selected' : ''}`}
-                        onMouseEnter={() => onHover?.(idx)}
-                        onClick={() => onSelect?.(suggestion, idx)}
-                        style={{
-                            padding: '14px 16px',
-                            borderRadius: '10px',
-                            marginBottom: '4px',
-                            cursor: 'pointer',
-                            background: selectedIndex === idx
-                                ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.12) 100%)'
-                                : 'transparent',
-                            border: selectedIndex === idx
-                                ? '1px solid rgba(139, 92, 246, 0.3)'
-                                : '1px solid transparent',
-                            transition: 'all 0.15s ease',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '14px'
-                        }}
-                    >
-                        {/* Icon/Favicon */}
-                        <div style={{
-                            width: '32px',
-                            height: '32px',
-                            flexShrink: 0,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            borderRadius: '8px',
-                            background: 'rgba(139, 92, 246, 0.1)',
-                            fontSize: '16px'
-                        }}>
-                            {suggestion.icon ? (
-                                <span>{suggestion.icon}</span>
-                            ) : suggestion.favicon ? (
-                                <img
-                                    src={suggestion.favicon}
-                                    alt=""
-                                    style={{ width: '20px', height: '20px', borderRadius: '4px' }}
-                                    onError={(e) => { e.target.style.display = 'none'; }}
+                {suggestions.map((suggestion, idx) => {
+                    if (activePill) {
+                        return (
+                            <div
+                                key={idx}
+                                className={`holographic-card ${selectedIndex === idx ? 'active' : ''}`}
+                                onMouseEnter={() => onHover?.(idx)}
+                                onClick={() => onSelect?.(suggestion, idx)}
+                            >
+                                <div style={{
+                                    fontSize: '24px',
+                                    marginBottom: '12px',
+                                    color: selectedIndex === idx ? '#A78BFA' : '#94A3B8'
+                                }}>
+                                    {suggestion.icon || '✨'}
+                                </div>
+                                <div style={{
+                                    fontSize: '14px',
+                                    fontWeight: 700,
+                                    color: '#F8FAFC',
+                                    marginBottom: '4px'
+                                }}>
+                                    {suggestion.title || suggestion.command}
+                                </div>
+                                <div style={{
+                                    fontSize: '11px',
+                                    color: '#94A3B8',
+                                    lineHeight: '1.4'
+                                }}>
+                                    {suggestion.description}
+                                </div>
+                                {selectedIndex === idx && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        bottom: '8px',
+                                        right: '12px',
+                                        fontSize: '10px',
+                                        color: '#A78BFA',
+                                        fontWeight: 600
+                                    }}>SELECT ↵</div>
+                                )}
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <div
+                            key={idx}
+                            className={`expanded-search-item ${selectedIndex === idx ? 'selected' : ''}`}
+                            onMouseEnter={() => onHover?.(idx)}
+                            onClick={() => onSelect?.(suggestion, idx)}
+                            style={{
+                                padding: '14px 16px',
+                                borderRadius: '10px',
+                                marginBottom: '4px',
+                                cursor: 'pointer',
+                                background: selectedIndex === idx
+                                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.12) 100%)'
+                                    : 'transparent',
+                                border: selectedIndex === idx
+                                    ? '1px solid rgba(139, 92, 246, 0.3)'
+                                    : '1px solid transparent',
+                                transition: 'all 0.15s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '14px'
+                            }}
+                        >
+                            {/* Icon/Favicon */}
+                            <div style={{
+                                width: '32px',
+                                height: '32px',
+                                flexShrink: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '8px',
+                                background: 'rgba(139, 92, 246, 0.1)',
+                                fontSize: '16px'
+                            }}>
+                                {suggestion.icon ? (
+                                    <span>{suggestion.icon}</span>
+                                ) : suggestion.favicon ? (
+                                    <img
+                                        src={suggestion.favicon}
+                                        alt=""
+                                        style={{ width: '20px', height: '20px', borderRadius: '4px' }}
+                                        onError={(e) => { e.target.style.display = 'none'; }}
+                                    />
+                                ) : (
+                                    <span style={{ color: '#A78BFA' }}>🔗</span>
+                                )}
+                            </div>
+
+                            {/* Content */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                    fontSize: '14px',
+                                    fontWeight: 500,
+                                    color: '#F1F5F9',
+                                    marginBottom: '4px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    {suggestion.title || suggestion.command}
+                                </div>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: '#94A3B8',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    {suggestion.description || suggestion.url}
+                                </div>
+                            </div>
+
+                            {/* Badge */}
+                            <div style={{
+                                flexShrink: 0,
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: 500,
+                                background: suggestion.type === 'workspace-url' ? 'rgba(139, 92, 246, 0.15)' :
+                                    suggestion.type === 'bookmark' ? 'rgba(251, 191, 36, 0.15)' :
+                                        suggestion.type === 'history' ? 'rgba(59, 130, 246, 0.15)' :
+                                            'rgba(52, 199, 89, 0.15)',
+                                color: suggestion.type === 'workspace-url' ? '#C4B5FD' :
+                                    suggestion.type === 'bookmark' ? '#FCD34D' :
+                                        suggestion.type === 'history' ? '#93C5FD' :
+                                            '#86EFAC'
+                            }}>
+                                {suggestion.type === 'workspace-url' ? '📎 Workspace' :
+                                    suggestion.type === 'bookmark' ? '⭐ Bookmark' :
+                                        suggestion.type === 'history' ? '🕐 History' :
+                                            suggestion.category || 'Command'}
+                            </div>
+
+                            {/* Arrow indicator for selected */}
+                            {selectedIndex === idx && (
+                                <FontAwesomeIcon
+                                    icon={faArrowRight}
+                                    style={{
+                                        color: '#A78BFA',
+                                        fontSize: '14px',
+                                        flexShrink: 0
+                                    }}
                                 />
-                            ) : (
-                                <span style={{ color: '#A78BFA' }}>🔗</span>
                             )}
                         </div>
-
-                        {/* Content */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{
-                                fontSize: '14px',
-                                fontWeight: 500,
-                                color: '#F1F5F9',
-                                marginBottom: '4px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                            }}>
-                                {suggestion.title || suggestion.command}
-                            </div>
-                            <div style={{
-                                fontSize: '12px',
-                                color: '#94A3B8',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                            }}>
-                                {suggestion.description || suggestion.url}
-                            </div>
-                        </div>
-
-                        {/* Badge */}
-                        <div style={{
-                            flexShrink: 0,
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: 500,
-                            background: suggestion.type === 'workspace-url' ? 'rgba(139, 92, 246, 0.15)' :
-                                suggestion.type === 'bookmark' ? 'rgba(251, 191, 36, 0.15)' :
-                                    suggestion.type === 'history' ? 'rgba(59, 130, 246, 0.15)' :
-                                        'rgba(52, 199, 89, 0.15)',
-                            color: suggestion.type === 'workspace-url' ? '#C4B5FD' :
-                                suggestion.type === 'bookmark' ? '#FCD34D' :
-                                    suggestion.type === 'history' ? '#93C5FD' :
-                                        '#86EFAC'
-                        }}>
-                            {suggestion.type === 'workspace-url' ? '📎 Workspace' :
-                                suggestion.type === 'bookmark' ? '⭐ Bookmark' :
-                                    suggestion.type === 'history' ? '🕐 History' :
-                                        suggestion.category || 'Command'}
-                        </div>
-
-                        {/* Arrow indicator for selected */}
-                        {selectedIndex === idx && (
-                            <FontAwesomeIcon
-                                icon={faArrowRight}
-                                style={{
-                                    color: '#A78BFA',
-                                    fontSize: '14px',
-                                    flexShrink: 0
-                                }}
-                            />
-                        )}
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div >
     );
