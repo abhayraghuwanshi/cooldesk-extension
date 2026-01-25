@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { listScrapedChats } from '../../../db/index.js';
 import '../../../styles/theme.css';
-import { getFaviconUrl } from '../../../utils.js';
+import { getFaviconUrl } from '../../../utils/helpers.js';
 
 const PLATFORM_CONFIG = {
     'ChatGPT': { url: 'https://chat.openai.com', emoji: '💬', accentColor: '#10a37f' },

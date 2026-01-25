@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { listWorkspaces, addUrlToWorkspace } from '../../db/index.js';
-import { getFaviconUrl } from '../../utils';
+import { getFaviconUrl } from '../../utils/helpers';
 
 export function ContextMenu({
   show,

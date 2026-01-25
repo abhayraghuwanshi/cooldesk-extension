@@ -8,7 +8,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
 import '../../styles/cooldesk.css';
-import { getFaviconUrl } from '../../utils.js';
+import { getFaviconUrl } from '../../utils/helpers.js';
 
 // Debounce utility
 function debounce(func, wait) {

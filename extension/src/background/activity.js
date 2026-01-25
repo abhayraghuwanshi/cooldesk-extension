@@ -1,7 +1,7 @@
 // Activity tracking, time series, and session management
 import { cleanupOldTimeSeriesData, getAllActivity, getTimeSeriesStorageStats, getUrlAnalytics, putActivityTimeSeriesEvent } from '../db/index.js';
 import { setHostActivity } from '../services/extensionApi.js';
-import { getUrlParts } from '../utils.js';
+import { getUrlParts } from '../utils/helpers.js';
 // import { autoSavePredictor } from '../ml/inference/autoSavePredictor.js'; // DISABLED - ML modules removed
 
 

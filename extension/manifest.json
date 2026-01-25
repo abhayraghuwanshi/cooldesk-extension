@@ -43,10 +43,10 @@
       "resources": [
         "assets/*",
         "dist/*",
-        "src/footerBar.js",
-        "src/contentInteractions.js",
-        "src/chatScraper.js",
-        "src/calendarScraper.js",
+        "src/components/footerBar.js",
+        "src/content-scripts/contentInteractions.js",
+        "src/scrapers/chatScraper.js",
+        "src/scrapers/calendarScraper.js",
         "logo-2.png",
         "index.html"
       ],
@@ -61,7 +61,7 @@
         "https://*/*"
       ],
       "js": [
-        "src/interactionContent.js"
+        "src/content-scripts/interactionContent.js"
       ],
       "run_at": "document_idle"
     },
@@ -78,7 +78,7 @@
         "https://lovable.dev/*"
       ],
       "js": [
-        "src/chatScraper.js"
+        "src/scrapers/chatScraper.js"
       ],
       "run_at": "document_idle"
     },
@@ -87,7 +87,7 @@
         "https://calendar.google.com/*"
       ],
       "js": [
-        "src/calendarScraper.js"
+        "src/scrapers/calendarScraper.js"
       ],
       "run_at": "document_idle"
     }

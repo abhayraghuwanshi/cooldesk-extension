@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getFaviconUrl } from '../../utils';
+import { getFaviconUrl } from '../../utils/helpers';
 
 export function AddLinkFlow({ allItems, savedItems = [], currentWorkspace, onAdd, onAddSaved, onCancel }) {
   const [search, setSearch] = useState('');

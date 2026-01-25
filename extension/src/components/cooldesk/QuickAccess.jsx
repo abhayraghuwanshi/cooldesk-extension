@@ -8,7 +8,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
-import { getFaviconUrl } from '../../utils.js';
+import { getFaviconUrl } from '../../utils/helpers.js';
 
 const DEFAULT_LINKS = [
   { id: '1', title: 'Jira Dashboard', url: 'https://jira.example.com', icon: faLink },

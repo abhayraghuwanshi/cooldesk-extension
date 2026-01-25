@@ -2,7 +2,7 @@ import { faArrowRight, faComments, faSync } from '@fortawesome/free-solid-svg-ic
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
-import { getFaviconUrl } from '../../utils.js';
+import { getFaviconUrl } from '../../utils/helpers.js';
 
 // Platform configuration matching AIChats.jsx
 const PLATFORM_CONFIG = {

@@ -18,9 +18,9 @@ import { useOnboarding } from './hooks/useOnboarding';
 import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
 import { p2pSyncService } from './services/p2p/syncService';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
-import { getFaviconUrl } from './utils';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
+import { getFaviconUrl } from './utils/helpers';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
 
 library.add(

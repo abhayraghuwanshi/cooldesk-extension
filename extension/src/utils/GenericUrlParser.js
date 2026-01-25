@@ -3,7 +3,7 @@
  * Replaces workspace-patterns.json, workspaceParser.js, and workspaceAutoCreator.js
  */
 
-import { getFaviconUrl } from '../utils.js';
+import { getFaviconUrl } from './helpers.js';
 
 export class GenericUrlParser {
   static config = {

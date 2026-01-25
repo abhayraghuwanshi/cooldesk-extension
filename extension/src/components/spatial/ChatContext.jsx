@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { listScrapedChats } from '../../db/index.js';
-import { getFaviconUrl } from '../../utils.js';
+import { getFaviconUrl } from '../../utils/helpers.js';
 /**
  * ChatContext - AI conversation interface bound to workspace
  *

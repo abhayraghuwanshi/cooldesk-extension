@@ -26,7 +26,7 @@ import {
 } from '../../db/index.js';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { teamManager } from '../../services/p2p/teamManager';
-import { getFaviconUrl } from '../../utils';
+import { getFaviconUrl } from '../../utils/helpers';
 import { ShareNoteModal } from '../popups/ShareNoteModal';
 import TiptapEditor from './editor/TiptapEditor';
 
@@ -146,6 +146,7 @@ export function NotesCanvas({ workspaceId }) {
   const [noteUrl, setNoteUrl] = useState('');
   const [activeTeam, setActiveTeam] = useState(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [deleteConfirmNote, setDeleteConfirmNote] = useState(null);
   const editorRef = useRef(null);
   const autoSaveTimeout = useRef(null);
   // noteContentRef moved here for access in handlers
@@ -458,7 +459,17 @@ export function NotesCanvas({ workspaceId }) {
         };
 
         await saveUrlNote(urlNote);
-        await loadUrlNotes();
+
+        // Update state optimistically instead of full reload
+        setUrlNotes(prev => {
+          const existing = prev.findIndex(n => n.id === urlNote.id);
+          if (existing >= 0) {
+            const updated = [...prev];
+            updated[existing] = urlNote;
+            return updated;
+          }
+          return [urlNote, ...prev];
+        });
 
         if (!noteId && activeNote?.id !== urlNote.id) {
           setActiveNote(urlNote);
@@ -476,7 +487,17 @@ export function NotesCanvas({ workspaceId }) {
         };
 
         await dbUpsertNote(note);
-        await loadNotes(false);
+
+        // Update state optimistically instead of full reload
+        setNotes(prev => {
+          const existing = prev.findIndex(n => n.id === note.id);
+          if (existing >= 0) {
+            const updated = [...prev];
+            updated[existing] = note;
+            return updated;
+          }
+          return [note, ...prev];
+        });
 
         if (!noteId && activeNote?.id !== note.id) {
           setActiveNote(note);
@@ -489,7 +510,7 @@ export function NotesCanvas({ workspaceId }) {
       console.error('[NotesCanvas] Error saving note:', error);
       setAutoSaveStatus('error');
     }
-  }, [notes, urlNotes, loadNotes, loadUrlNotes, activeNote, activeFolder]);
+  }, [notes, urlNotes, activeNote, activeFolder]);
 
   // Refs and Sync Effects moved to top
 
@@ -1096,7 +1117,7 @@ export function NotesCanvas({ workspaceId }) {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (confirm('Delete this note?')) handleDeleteNote(note.id);
+                                setDeleteConfirmNote(note);
                               }}
                               style={{
                                 background: 'rgba(239, 68, 68, 0.1)',
@@ -1474,6 +1495,112 @@ export function NotesCanvas({ workspaceId }) {
           )}
         </div>
       </div >
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmNote && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}
+          onClick={() => setDeleteConfirmNote(null)}
+        >
+          <div style={{
+            background: 'var(--surface-1)',
+            borderRadius: '12px',
+            border: '1px solid var(--border-primary)',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+          }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{
+              margin: '0 0 12px 0',
+              fontSize: '18px',
+              fontWeight: 600,
+              color: 'var(--text-primary)'
+            }}>
+              Delete Note?
+            </h3>
+            <p style={{
+              margin: '0 0 24px 0',
+              fontSize: '14px',
+              color: 'var(--text-secondary)',
+              lineHeight: '1.5'
+            }}>
+              Are you sure you want to delete "{deleteConfirmNote.title || 'Untitled Note'}"? This action cannot be undone.
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => setDeleteConfirmNote(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: 'var(--surface-2)',
+                  border: '1px solid var(--border-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--surface-3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--surface-2)';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleDeleteNote(deleteConfirmNote.id);
+                  setDeleteConfirmNote(null);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: 'var(--accent-error)',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#dc2626';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--accent-error)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       <style>{`
         @keyframes pulse {

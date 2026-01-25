@@ -4,7 +4,7 @@
  * Provides consistent, validated, error-handled database operations
  */
 
-import { getUrlParts } from '../utils.js'
+import { getUrlParts } from '../utils/helpers.js'
 import { ErrorSeverity, ErrorStrategy, handleDatabaseError, withErrorHandling } from './error-handler.js'
 import { cleanupLegacyDatabases, isMigrationNeeded, performMigration } from './migration-manager.js'
 import { closeUnifiedDB, DB_CONFIG, getUnifiedDB } from './unified-db.js'

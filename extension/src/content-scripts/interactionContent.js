@@ -187,8 +187,8 @@ try {
   });
 } catch { }
 
+import { injectFooterBar } from '../components/footerBar.js';
 import { initContentInteractions } from './contentInteractions.js';
-import { injectFooterBar } from './footerBar.js';
 
 // Initialize content interactions (analytics, preview collection)
 try {

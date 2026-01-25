@@ -1,6 +1,7 @@
-import { faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { TabCard, TabGroupCard } from './TabCard';
 
 // Debounce utility
@@ -21,12 +22,14 @@ export function TabManagement() {
   const [tabsLoading, setTabsLoading] = useState(true);
   const [expandedDomain, setExpandedDomain] = useState(null);
   const [autoGroupEnabled, setAutoGroupEnabled] = useState(false);
+  const [smartSortEnabled, setSmartSortEnabled] = useState(true);
   const [visibleTabsCount, setVisibleTabsCount] = useState(12);
 
-  // Load auto-group state on mount
+  // Load auto-group and smart sort state on mount
   useEffect(() => {
-    chrome.storage.local.get(['autoGroupEnabled'], (result) => {
+    chrome.storage.local.get(['autoGroupEnabled', 'smartSortEnabled'], (result) => {
       setAutoGroupEnabled(result.autoGroupEnabled || false);
+      setSmartSortEnabled(result.smartSortEnabled !== false); // Default to true
     });
   }, []);
 
@@ -39,13 +42,20 @@ export function TabManagement() {
       if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
         const allTabs = await chrome.tabs.query({});
 
-        // Sort: Active tabs first, then by windowId + index
-        const sortedTabs = (allTabs || []).sort((a, b) => {
-          if (a.active && !b.active) return -1;
-          if (!a.active && b.active) return 1;
-          if (a.windowId !== b.windowId) return a.windowId - b.windowId;
-          return a.index - b.index;
-        });
+        // Sort based on user preference
+        let sortedTabs;
+        if (smartSortEnabled) {
+          // Smart sort: Usage-based scoring
+          sortedTabs = await scoreAndSortTabs(allTabs || []);
+        } else {
+          // Default sort: Active tabs first, then by windowId + index
+          sortedTabs = (allTabs || []).sort((a, b) => {
+            if (a.active && !b.active) return -1;
+            if (!a.active && b.active) return 1;
+            if (a.windowId !== b.windowId) return a.windowId - b.windowId;
+            return a.index - b.index;
+          });
+        }
 
         setTabs(sortedTabs);
       }
@@ -54,7 +64,7 @@ export function TabManagement() {
     } finally {
       setTabsLoading(false);
     }
-  }, [tabs.length]);
+  }, [tabs.length, smartSortEnabled]);
 
   // Debounced refresh (300ms delay)
   const debouncedRefresh = useMemo(
@@ -167,6 +177,69 @@ export function TabManagement() {
           Browser Tabs
         </h2>
         <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={async () => {
+              try {
+                const newState = !smartSortEnabled;
+                await chrome.storage.local.set({ smartSortEnabled: newState });
+                setSmartSortEnabled(newState);
+                console.log('[TabManagement] Smart sort toggled:', newState);
+                refreshTabs(); // Refresh to apply new sorting
+              } catch (error) {
+                console.error('[TabManagement] Smart sort toggle error:', error);
+              }
+            }}
+            style={{
+              background: smartSortEnabled
+                ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(124, 58, 237, 0.15))'
+                : 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
+              border: smartSortEnabled
+                ? '1px solid rgba(139, 92, 246, 0.4)'
+                : '1px solid rgba(100, 116, 139, 0.3)',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              color: smartSortEnabled ? '#A78BFA' : '#94A3B8',
+              cursor: 'pointer',
+              fontSize: 'var(--font-sm, 12px)',
+              fontWeight: 600,
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            onMouseEnter={(e) => {
+              if (smartSortEnabled) {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(124, 58, 237, 0.25))';
+                e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.6)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              } else {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.25))';
+                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.5)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (smartSortEnabled) {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(124, 58, 237, 0.15))';
+                e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              } else {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))';
+                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.3)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
+            }}
+            title={smartSortEnabled
+              ? "Smart sort enabled - Tabs sorted by usage patterns"
+              : "Smart sort disabled - Tabs sorted by window and index"}
+          >
+            <FontAwesomeIcon
+              icon={faBrain}
+              size="lg"
+              style={{ pointerEvents: 'none' }}
+            />
+            <span style={{ pointerEvents: 'none' }}>Smart Sort</span>
+          </button>
           <button
             onClick={async () => {
               try {

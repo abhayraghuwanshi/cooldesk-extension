@@ -259,6 +259,39 @@ export function CoolDeskContainer({
     console.log('[CoolDesk] Navigated to face:', face);
   };
 
+  const handleWorkspaceNavigate = (workspaceName) => {
+    // Find the workspace by name
+    const workspace = savedWorkspaces.find(ws => ws.name === workspaceName);
+    if (workspace) {
+      setCurrentWorkspace(workspace);
+      setActiveFace('workspace'); // Navigate to workspace view
+      onOpenWorkspace?.(workspace);
+      console.log('[CoolDesk] Navigated to workspace:', workspaceName);
+    }
+  };
+
+  const handleNavigate = (destination) => {
+    console.log('[CoolDesk] Navigation requested to:', destination);
+
+    // Map navigation commands to face names
+    const faceMap = {
+      'notes': 'notes',
+      'workspace': 'workspace',
+      'chat': 'chat',
+      'tabs': 'tabs',
+      'team': 'team',
+      'overview': 'overview'
+    };
+
+    const face = faceMap[destination];
+    if (face) {
+      console.log('[CoolDesk] Navigating from', activeFace, 'to', face);
+      setActiveFace(face);
+    } else {
+      console.warn('[CoolDesk] Unknown destination:', destination);
+    }
+  };
+
   return (
     <div className={`cooldesk-container ${themeClass}`}>
       {/* Wallpaper Background Overlay (Blur) handled by React, Image handled by Body CSS */}
@@ -295,7 +328,11 @@ export function CoolDeskContainer({
         </div>
 
         <div className="header-center">
-          <CoolSearch onSearch={handleSearch} />
+          <CoolSearch
+            onSearch={handleSearch}
+            onWorkspaceNavigate={handleWorkspaceNavigate}
+            onNavigate={handleNavigate}
+          />
         </div>
 
         <div className="header-right">

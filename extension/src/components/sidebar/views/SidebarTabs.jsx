@@ -2,14 +2,16 @@ import { faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import '../../../styles/theme.css';
+import { scoreAndSortTabs } from '../../../utils/tabScoring.js';
 
 export function SidebarTabs() {
     const [tabs, setTabs] = useState([]);
 
     useEffect(() => {
-        // Load initial tabs
-        chrome.tabs.query({}, (result) => {
-            setTabs(result);
+        // Load initial tabs with smart sorting
+        chrome.tabs.query({}, async (result) => {
+            const sorted = await scoreAndSortTabs(result);
+            setTabs(sorted);
         });
 
         // Listen for updates

@@ -96,10 +96,11 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   }, [currentFace, debouncedSave]);
 
   useEffect(() => {
-    if (activeFace && activeFace !== 'overview') {
+    if (activeFace && activeFace !== currentFace) {
+      console.log('[WorkspaceShell] Responding to activeFace change:', activeFace);
       setCurrentFace(activeFace);
     }
-  }, [activeFace]);
+  }, [activeFace, currentFace]);
 
   const navigateToFace = useCallback((face) => {
     if (face === currentFace || isTransitioning) return;

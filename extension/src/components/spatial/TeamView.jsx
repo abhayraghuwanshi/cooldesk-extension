@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { p2pSyncService } from '../../services/p2p/syncService';
 import { teamManager } from '../../services/p2p/teamManager';
-import { getFaviconUrl } from '../../utils';
+import { getFaviconUrl } from '../../utils/helpers';
 import { CreateTeamModal } from '../popups/CreateTeamModal';
 import { InviteUserModal } from '../popups/InviteUserModal';
 import { ManageMembersModal } from '../popups/ManageMembersModal';

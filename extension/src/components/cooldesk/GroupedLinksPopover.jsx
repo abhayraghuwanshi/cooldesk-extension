@@ -2,7 +2,7 @@ import { faExternalLinkAlt, faLink, faTimes } from '@fortawesome/free-solid-svg-
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getFaviconUrl } from '../../utils';
+import { getFaviconUrl } from '../../utils/helpers';
 
 export function GroupedLinksPopover({ group, onClose, triggerRect }) {
     const popoverRef = useRef(null);

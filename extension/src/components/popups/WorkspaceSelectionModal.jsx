@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { listWorkspaces, addUrlToWorkspace } from '../../db/index.js';
-import { getFaviconUrl } from '../../utils';
+import { getFaviconUrl } from '../../utils/helpers';
 
 export function WorkspaceSelectionModal({ show, onClose, url, title }) {
   const [workspaces, setWorkspaces] = useState([]);

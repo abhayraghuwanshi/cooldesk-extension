@@ -457,6 +457,51 @@
   transform: scale(0.95);
 }
 
+/* Expanded Search Panel */
+@keyframes expandedPanelSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.expanded-search-panel {
+  animation: expandedPanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.expanded-search-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.expanded-search-panel::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.3);
+  border-radius: 4px;
+}
+
+.expanded-search-panel::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 4px;
+}
+
+.expanded-search-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.5);
+}
+
+.expanded-search-item:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.08) 100%) !important;
+  border-color: rgba(139, 92, 246, 0.2) !important;
+  transform: translateX(4px);
+}
+
+.expanded-search-item.selected {
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.2);
+}
+
 /* Main Grid Layout */
 .cooldesk-grid {
   display: grid;

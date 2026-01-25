@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { getFaviconUrl } from '../../utils';
+import { getFaviconUrl } from '../../utils/helpers';
 
 export function AddToWorkspaceModal({ show, onClose, onSave, workspace, suggestions = [] }) {
   const [newUrl, setNewUrl] = useState('');

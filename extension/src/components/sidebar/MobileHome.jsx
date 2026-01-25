@@ -13,7 +13,6 @@ import { listWorkspaces } from '../../db/index.js';
  */
 export function MobileHome({ onOpenApp, onSearch }) {
     const [recentWorkspaces, setRecentWorkspaces] = useState([]);
-    const [recentTabs, setRecentTabs] = useState([]);
     const [recentLinks, setRecentLinks] = useState([]);
 
     useEffect(() => {
@@ -33,18 +32,6 @@ export function MobileHome({ onOpenApp, onSearch }) {
             allUrls.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
             setRecentLinks(allUrls.slice(0, 3));
         });
-
-        // Fetch Recent Tabs (Active in Chrome)
-        if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
-            chrome.tabs.query({ currentWindow: true }, (tabs) => {
-                // Sort by active status or index? Assuming "recent" means currently open ones.
-                // We'll just take the first 2 that are NOT the current extension tab (if possible to detect)
-                // or just take the first 2.
-                // Better: query({ active: false }) to avoid showing the extension itself if it's active?
-                // Actually, just show top 2 tabs.
-                setRecentTabs(tabs.slice(0, 2));
-            });
-        }
     }, []);
 
     const APPS = [
@@ -97,56 +84,6 @@ export function MobileHome({ onOpenApp, onSearch }) {
                 />
             </div>
 
-            {/* Recent Tabs (Jump Back In) */}
-            {recentTabs.length > 0 && (
-                <div style={{
-                    background: 'var(--glass-bg)',
-                    borderRadius: '24px',
-                    padding: '16px',
-                    border: '1px solid var(--border-primary)',
-                    backdropFilter: 'var(--glass-backdrop)'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{ fontSize: 'var(--font-base)', fontWeight: 600, color: 'var(--text)' }}>Jump Back In</span>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '10px', textTransform: 'uppercase', fontWeight: 600 }}>Tabs</div>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {recentTabs.map(tab => (
-                            <div
-                                key={tab.id}
-                                onClick={() => {
-                                    if (typeof chrome !== 'undefined' && chrome.tabs) {
-                                        chrome.tabs.update(tab.id, { active: true });
-                                    }
-                                }}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: '12px',
-                                    padding: '10px', borderRadius: '12px',
-                                    background: 'rgba(255,255,255,0.05)',
-                                    cursor: 'pointer',
-                                    border: '1px solid transparent'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--border-primary)'}
-                                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
-                            >
-                                {tab.favIconUrl ? (
-                                    <img src={tab.favIconUrl} alt="" style={{ width: '24px', height: '24px', borderRadius: '6px' }} />
-                                ) : (
-                                    <div style={{ width: '24px', height: '24px', borderRadius: '6px', background: 'var(--surface-3)' }} />
-                                )}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ color: 'var(--text)', fontSize: '13px', fontWeight: 500, truncate: true, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {tab.title}
-                                    </div>
-                                    <div style={{ color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {tab.url}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {/* App Grid */}
             <div>

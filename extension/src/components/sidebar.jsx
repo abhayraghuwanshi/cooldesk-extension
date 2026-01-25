@@ -16,8 +16,8 @@ window.onunhandledrejection = function (event) {
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import SidebarApp from './SidebarApp.jsx';
-import './index.css';
+import SidebarApp from '../SidebarApp.jsx';
+import '../index.css';
 
 try {
     const rootElement = document.getElementById('root');

@@ -20,7 +20,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
-import { getFaviconUrl } from '../../utils.js';
+import { getFaviconUrl } from '../../utils/helpers.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
 

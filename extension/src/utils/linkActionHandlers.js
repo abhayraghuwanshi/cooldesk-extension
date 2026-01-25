@@ -1,6 +1,5 @@
 import { deletePing, listPings, upsertPing } from '../db/index.js';
 import { enqueueOpenInChrome } from '../services/extensionApi.js';
-import { getFaviconUrl } from '../utils.js';
 
 /**
  * Pin/Unpin a URL
