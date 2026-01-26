@@ -245,7 +245,7 @@ export function SettingsModal({
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
+        position: 'fixed', inset: 0, zIndex: 20000,
         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '20px', animation: 'fadeIn 0.2s ease'

@@ -27,6 +27,18 @@ const PLATFORM_CONFIG = {
   'Runway': { url: 'https://runwayml.com', emoji: '🎬', gradient: 'linear-gradient(135deg, rgba(250, 204, 21, 0.2), rgba(250, 204, 21, 0.05))', borderColor: 'rgba(250, 204, 21, 0.3)', textColor: '#FDE047', accentColor: '#facc15' },
   'Luma Dream Machine': { url: 'https://lumalabs.ai/dream-machine', emoji: '🎥', gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05))', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#6EE7B7', accentColor: '#10b981' },
   'Pika': { url: 'https://pika.art', emoji: '🐇', gradient: 'linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(167, 139, 250, 0.05))', borderColor: 'rgba(167, 139, 250, 0.3)', textColor: '#C4B5FD', accentColor: '#8b5cf6' },
+  // Scraped platforms (from click-to-scrape)
+  'GitHub': { url: 'https://github.com', emoji: '🐙', gradient: 'linear-gradient(135deg, rgba(110, 84, 148, 0.2), rgba(110, 84, 148, 0.05))', borderColor: 'rgba(110, 84, 148, 0.3)', textColor: '#C9B1FF', accentColor: '#6e5494' },
+  'GitLab': { url: 'https://gitlab.com', emoji: '🦊', gradient: 'linear-gradient(135deg, rgba(252, 109, 38, 0.2), rgba(252, 109, 38, 0.05))', borderColor: 'rgba(252, 109, 38, 0.3)', textColor: '#FDBA74', accentColor: '#fc6d26' },
+  'Vercel': { url: 'https://vercel.com', emoji: '▲', gradient: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))', borderColor: 'rgba(255, 255, 255, 0.2)', textColor: '#F3F4F6', accentColor: '#ffffff' },
+  'Notion': { url: 'https://notion.so', emoji: '📓', gradient: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))', borderColor: 'rgba(255, 255, 255, 0.2)', textColor: '#F3F4F6', accentColor: '#ffffff' },
+  'Linear': { url: 'https://linear.app', emoji: '✅', gradient: 'linear-gradient(135deg, rgba(98, 126, 234, 0.2), rgba(98, 126, 234, 0.05))', borderColor: 'rgba(98, 126, 234, 0.3)', textColor: '#A5B4FC', accentColor: '#627eea' },
+  'Figma': { url: 'https://figma.com', emoji: '📐', gradient: 'linear-gradient(135deg, rgba(162, 89, 255, 0.2), rgba(162, 89, 255, 0.05))', borderColor: 'rgba(162, 89, 255, 0.3)', textColor: '#D8B4FE', accentColor: '#a259ff' },
+  'Google Cloud': { url: 'https://console.cloud.google.com', emoji: '☁️', gradient: 'linear-gradient(135deg, rgba(66, 133, 244, 0.2), rgba(66, 133, 244, 0.05))', borderColor: 'rgba(66, 133, 244, 0.3)', textColor: '#93C5FD', accentColor: '#4285f4' },
+  'Firebase': { url: 'https://console.firebase.google.com', emoji: '🔥', gradient: 'linear-gradient(135deg, rgba(255, 196, 0, 0.2), rgba(255, 196, 0, 0.05))', borderColor: 'rgba(255, 196, 0, 0.3)', textColor: '#FDE047', accentColor: '#ffc400' },
+  'Supabase': { url: 'https://supabase.com', emoji: '⚡', gradient: 'linear-gradient(135deg, rgba(62, 207, 142, 0.2), rgba(62, 207, 142, 0.05))', borderColor: 'rgba(62, 207, 142, 0.3)', textColor: '#6EE7B7', accentColor: '#3ecf8e' },
+  'Railway': { url: 'https://railway.app', emoji: '🚂', gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.05))', borderColor: 'rgba(139, 92, 246, 0.3)', textColor: '#C4B5FD', accentColor: '#8b5cf6' },
+  'Render': { url: 'https://render.com', emoji: '🎨', gradient: 'linear-gradient(135deg, rgba(70, 225, 149, 0.2), rgba(70, 225, 149, 0.05))', borderColor: 'rgba(70, 225, 149, 0.3)', textColor: '#6EE7B7', accentColor: '#46e195' },
 };
 
 const POPULAR_TOOLS = [
@@ -65,6 +77,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState(() => localStorage.getItem('chatFilter') || 'All');
   const [visibleCount, setVisibleCount] = useState(8);
+  const [availablePlatforms, setAvailablePlatforms] = useState([]); // Dynamic platforms from data
 
   // Custom Links State
   const [customLinks, setCustomLinks] = useState([]);
@@ -144,7 +157,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
       const queryOptions = {
         sortBy: 'scrapedAt',
         sortOrder: 'desc',
-        limit: 50
+        limit: 100 // Increased to get more data for platform detection
       };
 
       if (filter !== 'All') {
@@ -154,7 +167,14 @@ export function ChatContext({ workspaceId, workspaceName }) {
       const response = await listScrapedChats(queryOptions);
 
       const allChats = response?.data || response || [];
-      setChats(Array.isArray(allChats) ? allChats : []);
+      const chatArray = Array.isArray(allChats) ? allChats : [];
+      setChats(chatArray);
+
+      // Extract unique platforms from the data (for dynamic filter)
+      if (filter === 'All' && chatArray.length > 0) {
+        const platforms = [...new Set(chatArray.map(c => c.platform).filter(Boolean))];
+        setAvailablePlatforms(platforms);
+      }
     } catch (error) {
       console.error('[ChatContext] Error loading chats:', error);
       setChats([]);
@@ -859,13 +879,22 @@ export function ChatContext({ workspaceId, workspaceName }) {
                 borderRadius: '6px',
                 outline: 'none',
                 cursor: 'pointer',
-                maxWidth: '100px'
+                maxWidth: '120px'
               }}
             >
               <option value="All" style={{ background: '#1e1e1e', color: '#ffffff' }}>All</option>
-              {Object.keys(PLATFORM_CONFIG).map(platform => (
-                <option key={platform} value={platform} style={{ background: '#1e1e1e', color: '#ffffff' }}>{platform}</option>
-              ))}
+              {/* Show platforms that have data first, then others from config */}
+              {availablePlatforms.length > 0 ? (
+                availablePlatforms.map(platform => (
+                  <option key={platform} value={platform} style={{ background: '#1e1e1e', color: '#ffffff' }}>
+                    {platform} {PLATFORM_CONFIG[platform] ? '' : '🔗'}
+                  </option>
+                ))
+              ) : (
+                Object.keys(PLATFORM_CONFIG).map(platform => (
+                  <option key={platform} value={platform} style={{ background: '#1e1e1e', color: '#ffffff' }}>{platform}</option>
+                ))
+              )}
             </select>
           </div>
 
@@ -943,8 +972,17 @@ export function ChatContext({ workspaceId, workspaceName }) {
                 gap: '8px'
               }}>
                 {chats.slice(0, visibleCount).map((chat, index) => {
-                  const platform = PLATFORM_CONFIG[chat.platform] || {};
-                  const faviconUrl = platform.url ? getFaviconUrl(platform.url, 32) : null;
+                  const platform = PLATFORM_CONFIG[chat.platform] || {
+                    // Fallback for dynamically scraped platforms
+                    url: chat.url,
+                    emoji: '🔗',
+                    gradient: 'linear-gradient(135deg, rgba(100, 100, 100, 0.2), rgba(100, 100, 100, 0.05))',
+                    borderColor: 'rgba(100, 100, 100, 0.3)',
+                    textColor: '#9CA3AF',
+                    accentColor: '#6b7280'
+                  };
+                  // Use chat URL for favicon if platform URL not available
+                  const faviconUrl = platform.url ? getFaviconUrl(platform.url, 32) : (chat.url ? getFaviconUrl(chat.url, 32) : null);
 
                   return (
                     <li
@@ -991,12 +1029,29 @@ export function ChatContext({ workspaceId, workspaceName }) {
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {/* Source indicator */}
+                        {chat.source === 'click-to-scrape' && (
+                          <span
+                            style={{
+                              fontSize: '10px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              background: 'rgba(59, 130, 246, 0.15)',
+                              color: '#60A5FA',
+                              fontWeight: 500
+                            }}
+                            title="Scraped via click-to-scrape"
+                          >
+                            🔗
+                          </span>
+                        )}
+
                         {/* Visual indicator of recency (fading dot) */}
                         <div style={{
                           width: '4px',
                           height: '4px',
                           borderRadius: '50%',
-                          background: 'var(--accent-color, #34C759)',
+                          background: chat.source === 'click-to-scrape' ? '#60A5FA' : 'var(--accent-color, #34C759)',
                           opacity: Math.max(0.2, 1 - (index * 0.1))
                         }} title="Recency indicator" />
 

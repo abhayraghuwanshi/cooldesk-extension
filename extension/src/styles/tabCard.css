@@ -380,3 +380,49 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Recent and Last Active Styles */
+.cooldesk-tab-card.last-active {
+  border-color: rgba(96, 165, 250, 0.5) !important;
+  background: rgba(59, 130, 246, 0.08) !important;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+  animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+  0% {
+    border-color: rgba(96, 165, 250, 0.3);
+  }
+
+  50% {
+    border-color: rgba(96, 165, 250, 0.6);
+  }
+
+  100% {
+    border-color: rgba(96, 165, 250, 0.3);
+  }
+}
+
+.tab-recent-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: linear-gradient(135deg, #60A5FA, #3B82F6);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tab-recent-badge span {
+  font-size: 9px;
+}

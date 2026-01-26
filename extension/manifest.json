@@ -47,6 +47,8 @@
         "src/content-scripts/contentInteractions.js",
         "src/scrapers/chatScraper.js",
         "src/scrapers/calendarScraper.js",
+        "src/scrapers/clickToScrape.js",
+        "src/scrapers/genericLinkScraper.js",
         "logo-2.png",
         "index.html"
       ],

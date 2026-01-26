@@ -10,7 +10,7 @@ const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
  * Follows WorkspaceCard design pattern with tab-specific features
  * Memoized to prevent unnecessary re-renders
  */
-export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isPinned = false, isActive = false }) {
+export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isPinned = false, isActive = false, isLastActive = false }) {
   if (!tab) return null;
 
   const { url, title, favIconUrl } = tab;
@@ -33,7 +33,14 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
   };
 
   return (
-    <div className={`cooldesk-tab-card ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''}`} onClick={handleCardClick}>
+    <div className={`cooldesk-tab-card ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''} ${isLastActive ? 'last-active' : ''}`} onClick={handleCardClick}>
+      {/* Last active indicator badge */}
+      {isLastActive && !isActive && (
+        <div className="tab-recent-badge" title="Most recently used">
+          <FontAwesomeIcon icon={faExternalLinkAlt} style={{ fontSize: '10px' }} />
+          <span>Recent</span>
+        </div>
+      )}
       {/* Pinned indicator badge */}
       {isPinned && (
         <div className="tab-pinned-badge">

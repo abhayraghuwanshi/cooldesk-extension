@@ -136,7 +136,7 @@ export function NotesCanvas({ workspaceId }) {
   const [noteTitle, setNoteTitle] = useState('');
   const [noteFolder, setNoteFolder] = useState('');
   const [activeFolder, setActiveFolder] = useState('All Notes');
-  const [expandedFolders, setExpandedFolders] = useState(new Set(['All Notes', 'Highlights', 'URL Notes']));
+  const [expandedFolders, setExpandedFolders] = useState(new Set(['All Notes']));
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved');
   const [searchQuery, setSearchQuery] = useState('');

@@ -9,8 +9,8 @@
   position: relative;
   width: 100%;
   flex: 1;
-  /* Clear Floating Header: 72px height + 24px top + 16px gap */
-  margin-top: 112px;
+  /* Clear relative header gap only */
+  margin-top: 24px;
   min-height: 0;
   overflow: hidden;
   perspective: 2000px;

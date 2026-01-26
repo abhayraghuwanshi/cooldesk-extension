@@ -40,7 +40,9 @@ export function CoolDeskContainer({
   const [expandedWorkspace, setExpandedWorkspace] = useState(null);
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
   const [workspacePage, setWorkspacePage] = useState(0);
-  const [activeFace, setActiveFace] = useState('overview');
+  const [activeFace, setActiveFace] = useState(() => {
+    return localStorage.getItem('cooldesk-active-face') || 'overview';
+  });
 
   // Add Modal State
   const [addModalState, setAddModalState] = useState({
@@ -256,6 +258,7 @@ export function CoolDeskContainer({
 
   const handleFaceChange = (face) => {
     setActiveFace(face);
+    localStorage.setItem('cooldesk-active-face', face);
     console.log('[CoolDesk] Navigated to face:', face);
   };
 
@@ -287,6 +290,7 @@ export function CoolDeskContainer({
     if (face) {
       console.log('[CoolDesk] Navigating from', activeFace, 'to', face);
       setActiveFace(face);
+      localStorage.setItem('cooldesk-active-face', face);
     } else {
       console.warn('[CoolDesk] Unknown destination:', destination);
     }

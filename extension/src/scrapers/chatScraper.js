@@ -1,8 +1,12 @@
 /**
  * Chat Link Scraper - Content Script
  * Scrapes chat links from AI platform pages (ChatGPT, Claude, Gemini)
+ * Also supports generic link scraping for any website
  * Based on DOM structure analysis
  */
+
+// Import generic scraper functions (will be loaded alongside this script)
+// The generic scraper provides automatic link detection for non-configured sites
 
 const PLATFORM_CONFIGS = {
   'chat.openai.com': {
@@ -695,3 +699,233 @@ new MutationObserver(() => {
     autoScrape();
   }
 }).observe(document, { subtree: true, childList: true });
+
+/**
+ * ============================================
+ * GENERIC LINK SCRAPING (for non-AI platforms)
+ * ============================================
+ */
+
+/**
+ * Check if current site has a specific config or needs generic scraping
+ */
+function hasSpecificConfig() {
+  const hostname = window.location.hostname.replace('www.', '');
+  return PLATFORM_CONFIGS.hasOwnProperty(hostname);
+}
+
+/**
+ * Scrape links using generic auto-detection
+ * Used for sites like GitHub, Vercel, Cloud Run, etc.
+ */
+async function scrapeLinksGeneric(options = {}) {
+  // Check if GenericLinkScraper is loaded
+  if (window.GenericLinkScraper?.scrapeLinksGeneric) {
+    return await window.GenericLinkScraper.scrapeLinksGeneric(options);
+  }
+
+  // Fallback: inline implementation for when generic scraper isn't loaded
+  const {
+    minScore = 10,
+    maxLinks = 100,
+    waitTime = 2000,
+  } = options;
+
+  const hostname = window.location.hostname.replace('www.', '');
+  console.log(`[ChatScraper] Generic scraping for ${hostname}...`);
+
+  // Wait for page to load
+  await new Promise(resolve => setTimeout(resolve, waitTime));
+
+  // Simple heuristic: find links in nav/sidebar areas
+  const navSelectors = [
+    'nav a[href]',
+    'aside a[href]',
+    '[role="navigation"] a[href]',
+    '.sidebar a[href]',
+    '[class*="sidebar"] a[href]',
+    '[class*="nav"] a[href]:not(header a):not(footer a)',
+  ];
+
+  const links = [];
+  const seenUrls = new Set();
+
+  for (const selector of navSelectors) {
+    const elements = document.querySelectorAll(selector);
+    for (const el of elements) {
+      const href = el.getAttribute('href');
+      if (!href || href === '#' || href.startsWith('javascript:')) continue;
+
+      const fullUrl = href.startsWith('http') ? href : `${window.location.origin}${href}`;
+
+      // Skip external links
+      try {
+        if (new URL(fullUrl).hostname !== window.location.hostname) continue;
+      } catch {
+        continue;
+      }
+
+      if (seenUrls.has(fullUrl)) continue;
+      seenUrls.add(fullUrl);
+
+      const title = el.getAttribute('title') ||
+        el.getAttribute('aria-label') ||
+        el.querySelector('.truncate')?.textContent?.trim() ||
+        el.textContent?.trim();
+
+      if (title && title.length > 2 && title.length < 150) {
+        links.push({
+          url: fullUrl,
+          linkId: extractGenericId(fullUrl),
+          title: title.substring(0, 100),
+          platform: detectPlatformName(hostname),
+          scrapedAt: Date.now(),
+        });
+      }
+
+      if (links.length >= maxLinks) break;
+    }
+    if (links.length >= maxLinks) break;
+  }
+
+  console.log(`[ChatScraper] Generic scrape found ${links.length} links`);
+
+  return {
+    success: true,
+    platform: detectPlatformName(hostname),
+    hostname,
+    links,
+    isGeneric: true,
+    scrapedAt: Date.now(),
+  };
+}
+
+/**
+ * Extract an ID from any URL
+ */
+function extractGenericId(url) {
+  try {
+    const pathname = new URL(url).pathname;
+
+    // UUID pattern
+    const uuid = pathname.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+    if (uuid) return uuid[1];
+
+    // Hex hash pattern
+    const hex = pathname.match(/\/([a-f0-9]{7,40})(?:\/|$)/i);
+    if (hex) return hex[1];
+
+    // Numeric ID
+    const num = pathname.match(/\/(\d+)(?:\/|$)/);
+    if (num) return num[1];
+
+    // Last path segment
+    const segments = pathname.split('/').filter(Boolean);
+    return segments.length ? segments[segments.length - 1] : pathname;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Detect platform name from hostname
+ */
+function detectPlatformName(hostname) {
+  const platforms = {
+    'github.com': 'GitHub',
+    'gitlab.com': 'GitLab',
+    'bitbucket.org': 'Bitbucket',
+    'vercel.com': 'Vercel',
+    'netlify.com': 'Netlify',
+    'render.com': 'Render',
+    'railway.app': 'Railway',
+    'heroku.com': 'Heroku',
+    'console.cloud.google.com': 'Google Cloud',
+    'console.firebase.google.com': 'Firebase',
+    'console.aws.amazon.com': 'AWS',
+    'portal.azure.com': 'Azure',
+    'supabase.com': 'Supabase',
+    'notion.so': 'Notion',
+    'linear.app': 'Linear',
+    'figma.com': 'Figma',
+    'trello.com': 'Trello',
+    'jira.atlassian.com': 'Jira',
+  };
+
+  for (const [domain, name] of Object.entries(platforms)) {
+    if (hostname.includes(domain.split('.')[0])) {
+      return name;
+    }
+  }
+
+  // Capitalize first letter of hostname
+  const name = hostname.split('.')[0];
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
+ * Unified scrape function - uses specific config or generic fallback
+ */
+async function scrapeAny() {
+  if (hasSpecificConfig()) {
+    return await scrapeChats();
+  } else {
+    return await scrapeLinksGeneric();
+  }
+}
+
+/**
+ * Listen for generic scrape requests
+ */
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'SCRAPE_LINKS_GENERIC') {
+    console.log('[ChatScraper] Received generic scrape request');
+
+    scrapeLinksGeneric(message.options || {})
+      .then(result => {
+        console.log('[ChatScraper] Generic scrape complete:', result);
+        sendResponse(result);
+      })
+      .catch(error => {
+        console.error('[ChatScraper] Generic scrape failed:', error);
+        sendResponse({
+          success: false,
+          error: error.message,
+        });
+      });
+
+    return true;
+  }
+
+  if (message.type === 'SCRAPE_ANY') {
+    console.log('[ChatScraper] Received unified scrape request');
+
+    scrapeAny()
+      .then(result => {
+        console.log('[ChatScraper] Unified scrape complete:', result);
+        sendResponse(result);
+      })
+      .catch(error => {
+        console.error('[ChatScraper] Unified scrape failed:', error);
+        sendResponse({
+          success: false,
+          error: error.message,
+        });
+      });
+
+    return true;
+  }
+});
+
+// Export for testing
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    PLATFORM_CONFIGS,
+    scrapeChats,
+    scrapeNewChats,
+    scrapeLinksGeneric,
+    scrapeAny,
+    hasSpecificConfig,
+    detectPlatformName,
+  };
+}

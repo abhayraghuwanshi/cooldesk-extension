@@ -294,6 +294,20 @@ export async function handleSetAutoCleanup(msg, sender, sendResponse) {
   }
 }
 
+// Handle getTabActivity message
+export function handleGetTabActivity(msg, sender, sendResponse) {
+  try {
+    const activityData = {};
+    for (const [tabId, timestamp] of tabActivityTracker.entries()) {
+      activityData[tabId] = timestamp;
+    }
+    sendResponse({ ok: true, activityData });
+  } catch (e) {
+    console.error('[TabCleanup] Error getting tab activity:', e);
+    sendResponse({ ok: false, error: e.message });
+  }
+}
+
 // Export for testing/debugging
 export function getCleanupStats() {
   return {

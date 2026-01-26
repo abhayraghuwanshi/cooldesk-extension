@@ -452,7 +452,39 @@ export function injectFooterBar() {
     container.appendChild(highlightBtn);
 
 
-    // 3. AI Voice Button
+    // 3. Scrape Links Button
+    const scrapeBtn = document.createElement('div');
+    scrapeBtn.className = 'action-btn scrape-btn';
+    scrapeBtn.id = 'cooldesk-scrape-btn';
+
+    // Create Link/Scrape Icon
+    const scrapeIcon = document.createElement('div');
+    scrapeIcon.textContent = '🔗';
+    scrapeIcon.style.fontSize = '20px';
+    scrapeIcon.style.lineHeight = '1';
+    scrapeBtn.appendChild(scrapeIcon);
+
+    scrapeBtn.onclick = async (e) => {
+      e.stopPropagation();
+      // Visual feedback
+      scrapeBtn.style.transform = 'scale(0.95)';
+      setTimeout(() => scrapeBtn.style.transform = '', 150);
+
+      // Enter select mode for scraping
+      enterLinkSelectMode(shadow, showNotification);
+    };
+    scrapeBtn.onmousedown = (e) => e.stopPropagation();
+
+    // Tooltip for Scrape
+    const scrapeTooltip = document.createElement('div');
+    scrapeTooltip.className = 'action-tooltip';
+    scrapeTooltip.textContent = 'Scrape Links';
+    scrapeBtn.appendChild(scrapeTooltip);
+
+    container.appendChild(scrapeBtn);
+
+
+    // 4. AI Voice Button
     const voiceBtn = document.createElement('div');
     voiceBtn.className = 'action-btn voice-btn';
     voiceBtn.id = 'cooldesk-voice-btn'; // For easier selection
@@ -1386,6 +1418,1036 @@ export function injectFooterBar() {
 
   } catch (e) {
     console.error('Error injecting CoolDesk floating button:', e);
+  }
+}
+
+/**
+ * ============================================
+ * CLICK-TO-SCRAPE LINK SELECTOR
+ * ============================================
+ * Allows users to click on any link to scrape all similar links
+ */
+
+let isSelectMode = false;
+let selectOverlay = null;
+let selectTooltip = null;
+let highlightedLink = null;
+let currentShadowRoot = null;
+let currentShowNotification = null;
+let pendingSelectorInfo = null;
+let excludedDomains = new Set();
+
+/**
+ * Get hostname for storage key
+ */
+function getHostKey() {
+  return window.location.hostname.replace(/^www\./, '');
+}
+
+/**
+ * Generate CSS selector for similar links
+ * Strategy: Find the repeating card/item pattern, not just any container
+ */
+function generateLinkSelector(link) {
+  // Strategy 1: Find the card/item wrapper that repeats
+  const cardInfo = findRepeatingCard(link);
+  if (cardInfo) {
+    return cardInfo;
+  }
+
+  // Strategy 2: Find parent container with multiple links
+  const container = findLinkContainer(link);
+  if (!container) {
+    return buildSimpleSelector(link);
+  }
+
+  const containerSelector = buildContainerSelector(container);
+  const linkPattern = buildLinkPattern(link, container);
+
+  return {
+    container: containerSelector,
+    links: linkPattern,
+    full: containerSelector ? `${containerSelector} ${linkPattern}` : linkPattern,
+    sample: {
+      title: extractLinkTitle(link),
+      url: link.href,
+    }
+  };
+}
+
+/**
+ * Find the repeating card/item pattern
+ * Look for parent elements that have siblings with the same structure
+ */
+function findRepeatingCard(link) {
+  let current = link;
+  let depth = 0;
+  const maxDepth = 8; // Don't go too far up
+
+  while (current && current !== document.body && depth < maxDepth) {
+    const parent = current.parentElement;
+    if (!parent) break;
+
+    // Check if this element has siblings with similar structure
+    const siblings = Array.from(parent.children);
+    const similarSiblings = siblings.filter(sibling => {
+      if (sibling === current) return true;
+      // Check if sibling has similar structure (same tag, similar classes)
+      if (sibling.tagName !== current.tagName) return false;
+      // Must contain at least one link
+      if (!sibling.querySelector('a[href]')) return false;
+      // Similar class pattern (at least one shared class)
+      const currentClasses = getMeaningfulClasses(current);
+      const siblingClasses = getMeaningfulClasses(sibling);
+      if (currentClasses.length > 0 && siblingClasses.length > 0) {
+        const shared = currentClasses.filter(c => siblingClasses.includes(c));
+        return shared.length > 0;
+      }
+      return true;
+    });
+
+    // Found repeating pattern with 2+ similar items
+    if (similarSiblings.length >= 2) {
+      // Build selector for the card and its primary link
+      const cardSelector = buildCardSelector(current, parent);
+      const linkInCard = buildLinkInCardSelector(link, current);
+
+      // Verify the selector matches expected count
+      const fullSelector = `${cardSelector} ${linkInCard}`;
+      try {
+        const matches = document.querySelectorAll(fullSelector);
+        // Good if it matches roughly the number of similar siblings
+        if (matches.length >= 2 && matches.length <= similarSiblings.length * 3) {
+          return {
+            container: cardSelector,
+            links: linkInCard,
+            full: fullSelector,
+            cardCount: similarSiblings.length,
+            sample: {
+              title: extractLinkTitle(link),
+              url: link.href,
+            }
+          };
+        }
+      } catch (e) {
+        console.warn('[Scraper] Invalid selector:', fullSelector);
+      }
+    }
+
+    current = parent;
+    depth++;
+  }
+
+  return null;
+}
+
+/**
+ * Build selector for the card element
+ */
+function buildCardSelector(card, parent) {
+  const parts = [];
+
+  // Start with parent selector if it has ID or meaningful class
+  if (parent.id) {
+    parts.push(`#${CSS.escape(parent.id)}`);
+  } else {
+    const parentClasses = getMeaningfulClasses(parent);
+    if (parentClasses.length > 0) {
+      parts.push(`.${CSS.escape(parentClasses[0])}`);
+    }
+  }
+
+  // Add card tag
+  parts.push(card.tagName.toLowerCase());
+
+  // Add card's meaningful classes (max 2)
+  const cardClasses = getMeaningfulClasses(card);
+  if (cardClasses.length > 0) {
+    parts.push(`.${cardClasses.slice(0, 2).map(c => CSS.escape(c)).join('.')}`);
+  }
+
+  // Add data attributes if present (common in React/Vue apps)
+  const dataAttrs = Array.from(card.attributes).filter(a => a.name.startsWith('data-') && a.value);
+  for (const attr of dataAttrs.slice(0, 1)) {
+    // Only use boolean-style data attrs or short values
+    if (!attr.value || attr.value.length < 30) {
+      parts.push(`[${attr.name}]`);
+      break;
+    }
+  }
+
+  return parts.join(' > ');
+}
+
+/**
+ * Build selector for the link within a card
+ */
+function buildLinkInCardSelector(link, card) {
+  // If link is direct child
+  if (link.parentElement === card) {
+    const linkClasses = getMeaningfulClasses(link);
+    if (linkClasses.length > 0) {
+      return `> a.${CSS.escape(linkClasses[0])}[href]`;
+    }
+    return '> a[href]';
+  }
+
+  // Link is nested - try to find its direct container
+  const linkClasses = getMeaningfulClasses(link);
+  if (linkClasses.length > 0) {
+    return `a.${CSS.escape(linkClasses[0])}[href]`;
+  }
+
+  // Check if link has href pattern we can use
+  const href = link.getAttribute('href') || '';
+  if (href.startsWith('/')) {
+    // Internal link - use first path segment as pattern
+    const pathMatch = href.match(/^\/([a-z0-9-]+)/i);
+    if (pathMatch) {
+      return `a[href^="/${pathMatch[1]}"]`;
+    }
+  }
+
+  // Fallback: first link in card
+  return 'a[href]:first-of-type';
+}
+
+/**
+ * Find container with multiple similar links (fallback)
+ */
+function findLinkContainer(link) {
+  let current = link.parentElement;
+  let bestContainer = null;
+  let bestScore = 0;
+
+  while (current && current !== document.body) {
+    const links = current.querySelectorAll('a[href]');
+    const linkCount = links.length;
+
+    if (linkCount >= 3) {
+      const score = linkCount;
+      const isSemanticContainer =
+        current.tagName === 'NAV' ||
+        current.tagName === 'UL' ||
+        current.tagName === 'OL' ||
+        current.getAttribute('role') === 'navigation' ||
+        current.getAttribute('role') === 'menu' ||
+        current.classList.contains('sidebar') ||
+        current.id?.includes('sidebar');
+
+      if (isSemanticContainer && score > bestScore) {
+        bestScore = score;
+        bestContainer = current;
+      } else if (score > bestScore * 1.5) {
+        bestScore = score;
+        bestContainer = current;
+      }
+    }
+    current = current.parentElement;
+  }
+  return bestContainer;
+}
+
+/**
+ * Build selector for container
+ */
+function buildContainerSelector(container) {
+  if (container.id) {
+    return `#${CSS.escape(container.id)}`;
+  }
+
+  const parts = [container.tagName.toLowerCase()];
+
+  const role = container.getAttribute('role');
+  if (role) {
+    parts.push(`[role="${role}"]`);
+    return parts.join('');
+  }
+
+  const meaningfulClasses = getMeaningfulClasses(container);
+  if (meaningfulClasses.length > 0) {
+    parts.push(`.${meaningfulClasses.slice(0, 2).map(c => CSS.escape(c)).join('.')}`);
+  }
+
+  return parts.join('');
+}
+
+/**
+ * Build pattern to match links
+ */
+function buildLinkPattern(link, container) {
+  const listItem = link.closest('li');
+  if (listItem && container.contains(listItem)) {
+    return 'li a[href]';
+  }
+
+  const linkClasses = getMeaningfulClasses(link);
+  if (linkClasses.length > 0) {
+    return `a.${CSS.escape(linkClasses[0])}[href]`;
+  }
+
+  return 'a[href]';
+}
+
+/**
+ * Build simple selector fallback
+ */
+function buildSimpleSelector(link) {
+  const parts = ['a'];
+  const classes = getMeaningfulClasses(link);
+  if (classes.length > 0) {
+    parts.push(`.${classes.slice(0, 2).map(c => CSS.escape(c)).join('.')}`);
+  }
+  parts.push('[href]');
+
+  return {
+    container: null,
+    links: parts.join(''),
+    full: parts.join(''),
+    sample: {
+      title: extractLinkTitle(link),
+      url: link.href,
+    }
+  };
+}
+
+/**
+ * Get meaningful class names (filter utility classes)
+ */
+function getMeaningfulClasses(element) {
+  const classList = Array.from(element.classList || []);
+  const skipPatterns = [
+    /^(p|m|px|py|mx|my|pt|pb|pl|pr|mt|mb|ml|mr)-/,
+    /^(w|h|min|max)-/,
+    /^(flex|grid|block|inline|hidden)/,
+    /^(text|font|bg|border|rounded|shadow)/,
+    /^(hover|focus|active|disabled):/,
+    /^(sm|md|lg|xl|2xl):/,
+    /^_/,
+    /^css-/,
+    /^sc-/,
+    /^[a-z]{1,2}$/,
+  ];
+
+  return classList.filter(cls => {
+    if (cls.length < 2) return false;
+    return !skipPatterns.some(pattern => pattern.test(cls));
+  });
+}
+
+/**
+ * Extract title from link
+ */
+function extractLinkTitle(link) {
+  const strategies = [
+    () => link.getAttribute('title'),
+    () => link.getAttribute('aria-label'),
+    () => link.querySelector('[title]')?.getAttribute('title'),
+    () => link.querySelector('.truncate')?.textContent?.trim(),
+    () => link.querySelector('span, p')?.textContent?.trim(),
+    () => {
+      const clone = link.cloneNode(true);
+      clone.querySelectorAll('svg, img').forEach(el => el.remove());
+      const text = clone.textContent?.trim();
+      return text && text.length > 0 && text.length < 200 ? text : null;
+    },
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      const title = strategy();
+      if (title && title.trim().length > 0) {
+        return title.trim().replace(/\s+/g, ' ');
+      }
+    } catch { continue; }
+  }
+  return null;
+}
+
+/**
+ * Count similar links that would be matched
+ */
+function countSimilarLinks(link) {
+  const selector = generateLinkSelector(link);
+  if (!selector) return 1;
+
+  // If we found a card pattern, return the card count
+  if (selector.cardCount) {
+    return selector.cardCount;
+  }
+
+  try {
+    const matches = document.querySelectorAll(selector.full);
+    // Filter to only count unique URLs
+    const uniqueUrls = new Set();
+    for (const el of matches) {
+      const a = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      if (a && a.href) {
+        uniqueUrls.add(a.href);
+      }
+    }
+    return uniqueUrls.size || matches.length;
+  } catch { return 1; }
+}
+
+/**
+ * Scrape links using selector
+ * @param {string} selector - CSS selector
+ * @param {Set<string>} domainsToExclude - Domains to skip
+ */
+function scrapeWithSelector(selector, domainsToExclude = new Set()) {
+  const links = [];
+  const seenUrls = new Set();
+
+  try {
+    const elements = document.querySelectorAll(selector);
+    console.log(`[CoolDesk Scraper] Selector "${selector}" matched ${elements.length} elements`);
+    if (domainsToExclude.size > 0) {
+      console.log(`[CoolDesk Scraper] Excluding domains:`, Array.from(domainsToExclude));
+    }
+
+    for (const el of elements) {
+      const link = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      if (!link) continue;
+
+      const url = link.href;
+      if (!url || !url.startsWith('http')) continue;
+
+      // Check if domain is excluded
+      try {
+        const domain = new URL(url).hostname.replace(/^www\./, '');
+        if (domainsToExclude.has(domain)) continue;
+      } catch { /* ignore */ }
+
+      // Normalize URL (remove trailing slashes, query params for dedup)
+      const normalizedUrl = normalizeUrlForDedup(url);
+      if (seenUrls.has(normalizedUrl)) continue;
+      seenUrls.add(normalizedUrl);
+
+      // Try to get title from the card/container, not just the link
+      const card = el.tagName === 'A' ? el.parentElement : el;
+      const title = extractLinkTitle(link) || extractCardTitle(card);
+      if (!title || title.length < 2) continue;
+
+      // Skip generic/navigation titles
+      const lowerTitle = title.toLowerCase();
+      if (['home', 'back', 'next', 'previous', 'menu', 'skip', 'close'].includes(lowerTitle)) continue;
+
+      links.push({
+        url,
+        title,
+        linkId: extractIdFromUrl(url),
+        platform: detectPlatformName(),
+        scrapedAt: Date.now(),
+      });
+    }
+
+    console.log(`[CoolDesk Scraper] Found ${links.length} unique links (after domain filtering)`);
+  } catch (error) {
+    console.error('[CoolDesk Scraper] Selector error:', error);
+  }
+  return links;
+}
+
+/**
+ * Normalize URL for deduplication
+ */
+function normalizeUrlForDedup(url) {
+  try {
+    const u = new URL(url);
+    // Remove common tracking params
+    u.searchParams.delete('ref');
+    u.searchParams.delete('utm_source');
+    u.searchParams.delete('utm_medium');
+    u.searchParams.delete('utm_campaign');
+    // Remove hash
+    u.hash = '';
+    // Remove trailing slash
+    let path = u.pathname;
+    if (path.endsWith('/') && path.length > 1) {
+      path = path.slice(0, -1);
+    }
+    return `${u.origin}${path}${u.search}`;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Extract title from card element (not just link)
+ */
+function extractCardTitle(card) {
+  if (!card) return null;
+
+  // Look for common title patterns in cards
+  const titleSelectors = [
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    '[class*="title"]', '[class*="name"]', '[class*="heading"]',
+    '.truncate', '[class*="truncate"]',
+    'strong', 'b',
+  ];
+
+  for (const selector of titleSelectors) {
+    const el = card.querySelector(selector);
+    if (el) {
+      const text = el.textContent?.trim();
+      if (text && text.length > 1 && text.length < 200) {
+        return text;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract ID from URL
+ */
+function extractIdFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    const segments = pathname.split('/').filter(Boolean);
+
+    // UUID
+    for (const seg of segments) {
+      if (seg.length === 36 && seg.split('-').length === 5) return seg;
+    }
+    // Numeric
+    for (const seg of segments) {
+      if (/^\d+$/.test(seg) && seg.length < 20) return seg;
+    }
+    return segments[segments.length - 1] || pathname;
+  } catch { return url; }
+}
+
+/**
+ * Detect platform name
+ */
+function detectPlatformName() {
+  const hostname = getHostKey();
+  const platforms = {
+    'github.com': 'GitHub', 'gitlab.com': 'GitLab', 'vercel.com': 'Vercel',
+    'netlify.com': 'Netlify', 'console.cloud.google.com': 'Google Cloud',
+    'console.firebase.google.com': 'Firebase', 'notion.so': 'Notion',
+    'linear.app': 'Linear', 'figma.com': 'Figma', 'render.com': 'Render',
+    'railway.app': 'Railway', 'supabase.com': 'Supabase',
+  };
+  for (const [domain, name] of Object.entries(platforms)) {
+    if (hostname.includes(domain.split('.')[0])) return name;
+  }
+  return hostname.split('.')[0].charAt(0).toUpperCase() + hostname.split('.')[0].slice(1);
+}
+
+/**
+ * Save selector for domain
+ */
+async function saveSelectorForDomain(selectorInfo) {
+  const hostKey = getHostKey();
+  try {
+    const result = await chrome.storage.local.get('domainSelectors');
+    const selectors = result.domainSelectors || {};
+    selectors[hostKey] = {
+      selector: selectorInfo.full,
+      container: selectorInfo.container,
+      links: selectorInfo.links,
+      sample: selectorInfo.sample,
+      savedAt: Date.now(),
+    };
+    await chrome.storage.local.set({ domainSelectors: selectors });
+    console.log(`[CoolDesk Scraper] Saved selector for ${hostKey}:`, selectorInfo.full);
+  } catch (error) {
+    console.error('[CoolDesk Scraper] Failed to save selector:', error);
+  }
+}
+
+/**
+ * Create select mode overlay
+ */
+function createSelectOverlay(shadowRoot) {
+  // Tooltip at top
+  selectTooltip = document.createElement('div');
+  selectTooltip.id = 'cooldesk-scrape-tooltip';
+  selectTooltip.style.cssText = `
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: white;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    z-index: 2147483647;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid rgba(255,255,255,0.1);
+  `;
+  selectTooltip.innerHTML = `
+    <span style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 20px;">🎯</span>
+      <span>Click on any link to scrape similar links</span>
+    </span>
+    <button id="cooldesk-scrape-cancel" style="
+      background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: transform 0.2s, box-shadow 0.2s;
+    ">Cancel (Esc)</button>
+  `;
+
+  shadowRoot.appendChild(selectTooltip);
+
+  // Cancel button handler
+  const cancelBtn = selectTooltip.querySelector('#cooldesk-scrape-cancel');
+  cancelBtn.onmouseenter = () => {
+    cancelBtn.style.transform = 'scale(1.05)';
+    cancelBtn.style.boxShadow = '0 4px 12px rgba(255,71,87,0.4)';
+  };
+  cancelBtn.onmouseleave = () => {
+    cancelBtn.style.transform = '';
+    cancelBtn.style.boxShadow = '';
+  };
+  cancelBtn.onclick = (e) => {
+    e.stopPropagation();
+    exitLinkSelectMode();
+  };
+}
+
+/**
+ * Remove select overlay
+ */
+function removeSelectOverlay() {
+  if (selectTooltip) {
+    selectTooltip.remove();
+    selectTooltip = null;
+  }
+}
+
+/**
+ * Extract domain info for preview
+ */
+function extractDomainsPreview(selectorInfo) {
+  try {
+    const elements = document.querySelectorAll(selectorInfo.full);
+    const domains = new Map(); // domain -> count
+
+    for (const el of elements) {
+      const link = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      if (!link || !link.href) continue;
+
+      try {
+        const url = new URL(link.href);
+        const domain = url.hostname.replace(/^www\./, '');
+        domains.set(domain, (domains.get(domain) || 0) + 1);
+      } catch { continue; }
+    }
+
+    // Sort by count descending
+    return Array.from(domains.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5); // Top 5 domains
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Extract URL pattern from selector
+ */
+function extractUrlPattern(selectorInfo) {
+  try {
+    const elements = document.querySelectorAll(selectorInfo.full);
+    if (elements.length === 0) return null;
+
+    // Get first few URLs to detect pattern
+    const urls = [];
+    for (const el of Array.from(elements).slice(0, 5)) {
+      const link = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      if (link && link.href) {
+        try {
+          const u = new URL(link.href);
+          urls.push(u.pathname);
+        } catch { continue; }
+      }
+    }
+
+    if (urls.length === 0) return null;
+
+    // Find common pattern
+    const first = urls[0];
+    const parts = first.split('/').filter(Boolean);
+
+    if (parts.length >= 2) {
+      // Check if first part is consistent
+      const firstParts = urls.map(u => u.split('/').filter(Boolean)[0]);
+      const allSame = firstParts.every(p => p === parts[0]);
+
+      if (allSame) {
+        return `/${parts[0]}/...`;
+      }
+    }
+
+    return first.length > 30 ? first.substring(0, 30) + '...' : first;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Highlight link on hover
+ */
+function highlightLink(element) {
+  unhighlightLink();
+
+  const link = element?.tagName === 'A' ? element : element?.closest('a');
+  if (!link) return;
+
+  highlightedLink = link;
+  link.style.outline = '3px solid #00d9ff';
+  link.style.outlineOffset = '2px';
+  link.style.backgroundColor = 'rgba(0, 217, 255, 0.15)';
+  link.style.borderRadius = '4px';
+
+  // Update tooltip with preview
+  const title = extractLinkTitle(link) || 'No title';
+  const selectorInfo = generateLinkSelector(link);
+  pendingSelectorInfo = selectorInfo;
+  const domains = extractDomainsPreview(selectorInfo);
+  const urlPattern = extractUrlPattern(selectorInfo);
+
+  // Calculate count excluding excluded domains
+  const includedCount = domains
+    .filter(([domain]) => !excludedDomains.has(domain))
+    .reduce((sum, [, cnt]) => sum + cnt, 0);
+
+  if (selectTooltip) {
+    // Build domains list with checkboxes
+    let domainsHtml = '';
+    if (domains.length > 0) {
+      const domainItems = domains.map(([domain, cnt]) => {
+        const isChecked = !excludedDomains.has(domain);
+        const shortDomain = domain.length > 35 ? domain.substring(0, 32) + '...' : domain;
+        return `
+          <label data-domain="${domain}" style="
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            background: ${isChecked ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)'};
+            border: 1px solid ${isChecked ? 'rgba(16, 185, 129, 0.4)' : 'rgba(255,255,255,0.1)'};
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+            opacity: ${isChecked ? '1' : '0.5'};
+          ">
+            <input type="checkbox" ${isChecked ? 'checked' : ''} data-domain="${domain}" style="
+              width: 14px;
+              height: 14px;
+              cursor: pointer;
+              accent-color: #10b981;
+            "/>
+            <span style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${domain}">${shortDomain}</span>
+            <span style="opacity: 0.6; flex-shrink: 0;">(${cnt})</span>
+          </label>
+        `;
+      }).join('');
+      domainsHtml = `
+        <div style="margin-top: 8px;">
+          <div style="font-size: 10px; opacity: 0.6; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+            <span>Select domains to scrape:</span>
+            <span style="display: flex; gap: 8px;">
+              <a href="#" id="cooldesk-select-all" style="color: #00d9ff; text-decoration: none;">All</a>
+              <a href="#" id="cooldesk-select-none" style="color: #ff4757; text-decoration: none;">None</a>
+            </span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 450px; max-height: 120px; overflow-y: auto;">
+            ${domainItems}
+          </div>
+        </div>
+      `;
+    }
+
+    // Build CSS selector preview
+    const selectorPreview = selectorInfo?.full
+      ? (selectorInfo.full.length > 40 ? selectorInfo.full.substring(0, 37) + '...' : selectorInfo.full)
+      : 'a[href]';
+
+    selectTooltip.innerHTML = `
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 18px;">🎯</span>
+          <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">"${title.substring(0, 35)}${title.length > 35 ? '...' : ''}"</span>
+        </div>
+        <div style="font-size: 12px; opacity: 0.8; margin-bottom: 4px;">
+          <strong style="color: #00d9ff;">${includedCount}</strong> links selected
+          ${domains.length > 0 ? `<span style="opacity: 0.5; font-size: 11px;"> from ${domains.filter(([d]) => !excludedDomains.has(d)).length}/${domains.length} domains</span>` : ''}
+        </div>
+        ${urlPattern ? `
+        <div style="font-size: 11px; opacity: 0.6; margin-bottom: 4px;">
+          <span style="color: #a78bfa;">URL:</span> <code style="background: rgba(255,255,255,0.1); padding: 1px 4px; border-radius: 2px;">${urlPattern}</code>
+        </div>
+        ` : ''}
+        <div style="font-size: 10px; opacity: 0.5; font-family: monospace;">
+          <span style="color: #fbbf24;">CSS:</span> ${selectorPreview}
+        </div>
+        ${domainsHtml}
+      </div>
+      <button id="cooldesk-scrape-cancel" style="
+        background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+        border: none;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        flex-shrink: 0;
+        align-self: flex-start;
+      ">Cancel</button>
+    `;
+
+    // Add event listeners for checkboxes
+    selectTooltip.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const domain = checkbox.dataset.domain;
+        if (checkbox.checked) {
+          excludedDomains.delete(domain);
+        } else {
+          excludedDomains.add(domain);
+        }
+        // Re-render tooltip with updated state
+        highlightLink(highlightedLink);
+      });
+    });
+
+    // Select All / None handlers
+    const selectAll = selectTooltip.querySelector('#cooldesk-select-all');
+    const selectNone = selectTooltip.querySelector('#cooldesk-select-none');
+
+    if (selectAll) {
+      selectAll.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        excludedDomains.clear();
+        highlightLink(highlightedLink);
+      };
+    }
+
+    if (selectNone) {
+      selectNone.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        domains.forEach(([domain]) => excludedDomains.add(domain));
+        highlightLink(highlightedLink);
+      };
+    }
+
+    selectTooltip.querySelector('#cooldesk-scrape-cancel').onclick = (e) => {
+      e.stopPropagation();
+      exitLinkSelectMode();
+    };
+  }
+}
+
+/**
+ * Remove link highlight
+ */
+function unhighlightLink() {
+  if (highlightedLink) {
+    highlightedLink.style.outline = '';
+    highlightedLink.style.outlineOffset = '';
+    highlightedLink.style.backgroundColor = '';
+    highlightedLink.style.borderRadius = '';
+    highlightedLink = null;
+  }
+}
+
+/**
+ * Handle mouse move in select mode
+ */
+function handleSelectMouseMove(e) {
+  if (!isSelectMode) return;
+  const element = document.elementFromPoint(e.clientX, e.clientY);
+  if (element && !selectTooltip?.contains(element)) {
+    highlightLink(element);
+  }
+}
+
+/**
+ * Handle click in select mode
+ */
+function handleSelectClick(e) {
+  if (!isSelectMode) return;
+
+  // Ignore clicks on tooltip
+  if (selectTooltip?.contains(e.target)) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const element = document.elementFromPoint(e.clientX, e.clientY);
+  const link = element?.tagName === 'A' ? element : element?.closest('a');
+
+  if (!link) {
+    if (currentShowNotification) {
+      currentShowNotification('Please click on a link', '#ff4757');
+    }
+    return;
+  }
+
+  // Use pending selector info if available (from hover), otherwise generate
+  const selectorInfo = pendingSelectorInfo || generateLinkSelector(link);
+  if (!selectorInfo) {
+    if (currentShowNotification) {
+      currentShowNotification('Could not generate selector', '#ff4757');
+    }
+    return;
+  }
+
+  // Save selector for this domain
+  saveSelectorForDomain(selectorInfo);
+
+  // Capture excluded domains before exiting (which resets state)
+  const domainsToExclude = new Set(excludedDomains);
+
+  // Exit select mode
+  exitLinkSelectMode();
+
+  // Scrape links with domain filtering
+  const results = scrapeWithSelector(selectorInfo.full, domainsToExclude);
+
+  if (currentShowNotification) {
+    currentShowNotification(`✓ Scraped ${results.length} links!`, '#10b981');
+  }
+
+  // Send to background
+  sendScrapedLinks(results, selectorInfo);
+}
+
+/**
+ * Handle keydown in select mode
+ */
+function handleSelectKeyDown(e) {
+  if (!isSelectMode) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    exitLinkSelectMode();
+  }
+}
+
+/**
+ * Send scraped links to background
+ */
+async function sendScrapedLinks(links, selectorInfo) {
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'SCRAPED_LINKS',
+      data: {
+        success: true,
+        platform: detectPlatformName(),
+        hostname: getHostKey(),
+        links,
+        selector: selectorInfo,
+        scrapedAt: Date.now(),
+      }
+    });
+    console.log(`[CoolDesk Scraper] Sent ${links.length} links to background`);
+  } catch (error) {
+    console.error('[CoolDesk Scraper] Failed to send links:', error);
+  }
+}
+
+/**
+ * Enter link select mode
+ */
+function enterLinkSelectMode(shadowRoot, showNotification) {
+  if (isSelectMode) return;
+
+  isSelectMode = true;
+  currentShadowRoot = shadowRoot;
+  currentShowNotification = showNotification;
+
+  createSelectOverlay(shadowRoot);
+
+  // Add event listeners to document (not shadow DOM)
+  document.addEventListener('mousemove', handleSelectMouseMove, true);
+  document.addEventListener('click', handleSelectClick, true);
+  document.addEventListener('keydown', handleSelectKeyDown, true);
+
+  console.log('[CoolDesk Scraper] Select mode activated');
+}
+
+/**
+ * Exit link select mode
+ */
+function exitLinkSelectMode() {
+  if (!isSelectMode) return;
+
+  isSelectMode = false;
+  unhighlightLink();
+  removeSelectOverlay();
+
+  document.removeEventListener('mousemove', handleSelectMouseMove, true);
+  document.removeEventListener('click', handleSelectClick, true);
+  document.removeEventListener('keydown', handleSelectKeyDown, true);
+
+  currentShadowRoot = null;
+  currentShowNotification = null;
+  pendingSelectorInfo = null;
+  excludedDomains.clear();
+
+  console.log('[CoolDesk Scraper] Select mode deactivated');
+}
+
+/**
+ * Auto-scrape if saved selector exists for this domain
+ */
+async function autoScrapeIfConfigured() {
+  try {
+    const hostKey = getHostKey();
+    const result = await chrome.storage.local.get('domainSelectors');
+    const selectors = result.domainSelectors || {};
+    const saved = selectors[hostKey];
+
+    if (!saved) return null;
+
+    console.log(`[CoolDesk Scraper] Auto-scraping ${hostKey} with saved selector`);
+
+    // Wait for page to load
+    await new Promise(resolve => setTimeout(resolve, 2500));
+
+    const links = scrapeWithSelector(saved.selector);
+
+    if (links.length > 0) {
+      console.log(`[CoolDesk Scraper] Auto-scraped ${links.length} links`);
+      sendScrapedLinks(links, saved);
+    }
+
+    return links;
+  } catch (error) {
+    console.error('[CoolDesk Scraper] Auto-scrape failed:', error);
+    return null;
+  }
+}
+
+// Auto-scrape on page load (after a delay)
+if (typeof window !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(autoScrapeIfConfigured, 3000);
+    });
+  } else {
+    setTimeout(autoScrapeIfConfigured, 3000);
   }
 }
 

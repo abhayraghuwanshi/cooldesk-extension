@@ -4,18 +4,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { teamManager } from '../../services/p2p/teamManager';
 import '../../styles/spatial.css';
 
-// Debounce utility
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
 
 /**
  * WorkspaceShell - Spatial container for workspace faces (cube metaphor)
@@ -32,15 +20,19 @@ function debounce(func, wait) {
 const WorkspaceFaceContext = React.createContext({ currentFace: 'overview' });
 
 export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange, onSearch }) {
-  const [currentFace, setCurrentFace] = useState(() => {
-    const savedFace = localStorage.getItem('cooldesk-active-face');
-    return savedFace || activeFace;
-  });
+  const [currentFace, setCurrentFace] = useState(activeFace);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [activeTeam, setActiveTeam] = useState(null);
   const [hoveredFace, setHoveredFace] = useState(null);
   const [activeTabTitle, setActiveTabTitle] = useState('');
   const transitionTimeoutRef = useRef(null);
+  const wheelStateRef = useRef({
+    accumulator: 0,
+    isLatched: false,
+    lastTimestamp: 0,
+    lastDirection: 0,
+    lastSwitchTime: 0
+  });
 
   // Track active browser tab title
   useEffect(() => {
@@ -71,13 +63,6 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     }
   }, []);
 
-  const debouncedSave = useMemo(
-    () =>
-      debounce((face) => {
-        localStorage.setItem('cooldesk-active-face', face);
-      }, 300),
-    []
-  );
 
   useEffect(() => {
     teamManager.init().then(() => {
@@ -91,9 +76,6 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     });
   }, []);
 
-  useEffect(() => {
-    debouncedSave(currentFace);
-  }, [currentFace, debouncedSave]);
 
   useEffect(() => {
     if (activeFace && activeFace !== currentFace) {
@@ -189,44 +171,79 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
 
   // Hyper-Spatial: Global Fluid Navigation (Two-finger scroll)
   useEffect(() => {
-    let lastPulseTime = 0;
-    const PULSE_COOLDOWN = 600; // Match transition duration
-    const THRESHOLD = 100; // Increased to dampen sensitivity ("speed")
+    const GESTURE_TIMEOUT = 150; // Ms before considering gesture ended
+    const MIN_SWITCH_COOLDOWN = 300; // Minimum ms between auto-hops to prevent flying to end
 
     const handleWheel = (e) => {
-      // Reverted: Triggers on natural horizontal scroll (or Shift+Scroll) without modifier
+      const isMouseWheel = e.deltaMode !== 0; // 1 = lines, 2 = pages (mouse wheel)
+      const THRESHOLD = isMouseWheel ? 50 : 200; // Increased for trackpads to require more energy
+      const NEUTRAL_THRESHOLD = isMouseWheel ? 10 : 20;
+      const VELOCITY_DECAY_THRESHOLD = isMouseWheel ? 40 : 80; // Harder to reset latch during active swipe
 
-      // Ignore vertical scrolling (standard trackpad behavior for navigation)
-      // unless Shift is held (which converts vertical wheel to horizontal in many browsers)
-      if (!e.shiftKey && Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
+      // Priority 1: Strict Vertical Rejection
+      if (!e.shiftKey && Math.abs(e.deltaX) < Math.abs(e.deltaY) * 0.5) {
+        wheelStateRef.current.accumulator = 0;
+        return;
+      }
 
       const delta = e.shiftKey ? e.deltaY : e.deltaX;
-
-      // Prevent rapid fire hops
       const now = Date.now();
-      if (now - lastPulseTime < PULSE_COOLDOWN) return;
+      const state = wheelStateRef.current;
 
-      if (Math.abs(delta) > THRESHOLD) {
+      // Reset state if too much time has passed since last event (new physical gesture)
+      if (now - state.lastTimestamp > GESTURE_TIMEOUT) {
+        state.isLatched = false;
+        state.accumulator = 0;
+      }
+
+      state.lastTimestamp = now;
+
+      // Cooldown check: No processing if we JUST switched
+      if (now - state.lastSwitchTime < MIN_SWITCH_COOLDOWN) {
+        state.accumulator = 0;
+        return;
+      }
+
+      // Direction check: Reset latch if user reverses scroll
+      const currentDirection = Math.sign(delta);
+      if (state.lastDirection !== 0 && currentDirection !== state.lastDirection && Math.abs(delta) > NEUTRAL_THRESHOLD) {
+        state.isLatched = false;
+        state.accumulator = 0;
+      }
+      state.lastDirection = currentDirection;
+
+      // If latched, we allow reset ONLY if user slows down significantly
+      if (state.isLatched) {
+        if (Math.abs(delta) < VELOCITY_DECAY_THRESHOLD) {
+          state.isLatched = false;
+          state.accumulator = 0; // Important: Clear any built-up energy
+        }
+        return;
+      }
+
+      // Consuming energy
+      state.accumulator += delta;
+
+      if (Math.abs(state.accumulator) > THRESHOLD) {
         e.preventDefault();
 
-        // Direction logic: 
-        // Positive delta (Scroll Down/Right) -> Next Face
-        // Negative delta (Scroll Up/Left) -> Previous Face
-        if (delta > 0) {
-          if (currentFace === 'chat') navigateToFace('workspace');
-          else if (currentFace === 'workspace') navigateToFace('overview');
-          else if (currentFace === 'overview') navigateToFace('tabs');
-          else if (currentFace === 'tabs') navigateToFace('team');
-          else if (currentFace === 'team') navigateToFace('notes');
-        } else {
-          if (currentFace === 'notes') navigateToFace('team');
-          else if (currentFace === 'team') navigateToFace('tabs');
-          else if (currentFace === 'tabs') navigateToFace('overview');
-          else if (currentFace === 'overview') navigateToFace('workspace');
-          else if (currentFace === 'workspace') navigateToFace('chat');
+        const faces = ['chat', 'workspace', 'overview', 'tabs', 'team', 'notes'];
+        const currentIndex = faces.indexOf(currentFace);
+
+        let switched = false;
+        if (state.accumulator > 0 && currentIndex < faces.length - 1) {
+          navigateToFace(faces[currentIndex + 1]);
+          switched = true;
+        } else if (state.accumulator < 0 && currentIndex > 0) {
+          navigateToFace(faces[currentIndex - 1]);
+          switched = true;
         }
 
-        lastPulseTime = now;
+        if (switched) {
+          state.isLatched = true;
+          state.lastSwitchTime = now;
+        }
+        state.accumulator = 0;
       }
     };
 

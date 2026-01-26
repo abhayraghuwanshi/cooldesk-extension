@@ -25,27 +25,28 @@ export function GroupedLinksPopover({ group, onClose, triggerRect }) {
         position: 'fixed',
         top: `${triggerRect.bottom + 12}px`,
         left: `${triggerRect.left}px`,
-        width: '320px',
-        maxHeight: '400px',
-        overflowY: 'auto',
-        background: 'rgba(30, 41, 59, 0.95)',
-        backdropFilter: 'blur(16px)',
+        width: '380px',
+        maxHeight: '520px',
+        background: '#1a1d24',
+        backdropFilter: 'blur(20px)',
         border: '1px solid rgba(255, 255, 255, 0.1)',
         borderRadius: '16px',
         padding: '0',
-        boxShadow: '0 20px 40px -5px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255,255,255,0.1)',
-        zIndex: 9999,
+        boxShadow: '0 24px 48px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+        zIndex: 20000,
         color: '#F1F5F9',
         display: 'flex',
         flexDirection: 'column',
+        overflow: 'hidden',
+        animation: 'popoverIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
     };
 
     // Adjust if going off-screen
-    if (window.innerHeight - triggerRect.bottom < 400) {
+    if (window.innerHeight - triggerRect.bottom < 520) {
         style.top = 'auto';
         style.bottom = `${window.innerHeight - triggerRect.top + 12}px`;
     }
-    if (triggerRect.left + 320 > window.innerWidth) {
+    if (triggerRect.left + 380 > window.innerWidth) {
         style.left = 'auto';
         style.right = '24px';
     }
@@ -53,194 +54,202 @@ export function GroupedLinksPopover({ group, onClose, triggerRect }) {
     // Get group info
     const label = group.label || group.domain;
     const subLabel = group.subLabel || (group.domain !== label ? group.domain : null);
-    const headerFavicon = getFaviconUrl(group.primaryUrl || group.urls[0]?.url, 24);
+    const headerFavicon = getFaviconUrl(group.primaryUrl || group.urls[0]?.url, 64);
 
     return createPortal(
-        <div
-            className="grouped-links-popover"
-            style={style}
-            ref={popoverRef}
-            onClick={e => e.stopPropagation()}
-        >
-            {/* Header */}
-            <div style={{
-                padding: '16px 16px 12px 16px',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                background: 'rgba(255, 255, 255, 0.02)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                position: 'relative' // For absolute close button if needed, or flex
-            }}>
-                {/* Header Icon */}
+        <>
+            <style>{`
+        @keyframes popoverIn {
+          from { opacity: 0; transform: translateY(8px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .popover-item:hover {
+          background: rgba(255, 255, 255, 0.06) !important;
+          border-color: rgba(255, 255, 255, 0.1) !important;
+        }
+        .popover-item:hover .external-icon {
+          color: #F1F5F9 !important;
+        }
+      `}</style>
+            <div
+                className="grouped-links-popover"
+                style={style}
+                ref={popoverRef}
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
                 <div style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '10px',
-                    background: 'rgba(255, 255, 255, 0.05)',
+                    padding: '24px 20px',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    flexShrink: 0
+                    gap: '16px',
+                    background: 'rgba(255, 255, 255, 0.02)'
                 }}>
-                    {headerFavicon ? (
-                        <img src={headerFavicon} alt="" style={{ width: '20px', height: '20px', borderRadius: '4px' }} />
-                    ) : (
-                        <FontAwesomeIcon icon={faLink} color="#94A3B8" />
-                    )}
-                </div>
-
-                {/* Header Text */}
-                <div style={{ flex: 1, overflow: 'hidden' }}>
+                    {/* Header Icon */}
                     <div style={{
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        color: '#F8FAFC',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                    }}>
-                        {label}
-                    </div>
-                    {(subLabel || group.domain) && (
-                        <div style={{
-                            fontSize: '11px',
-                            color: '#94A3B8',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                        }}>
-                            <span>{subLabel || group.domain}</span>
-                            <span style={{
-                                width: '3px',
-                                height: '3px',
-                                borderRadius: '50%',
-                                background: '#475569'
-                            }} />
-                            <span>{group.urls.length} items</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Close Button */}
-                <div
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onClose();
-                    }}
-                    style={{
-                        width: '24px',
-                        height: '24px',
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '12px',
+                        background: 'rgba(255, 255, 255, 0.05)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        color: '#94A3B8',
-                        transition: 'all 0.2s',
-                        background: 'rgba(255,255,255,0.05)'
-                    }}
-                    onMouseEnter={e => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                        e.currentTarget.style.color = '#F1F5F9';
-                    }}
-                    onMouseLeave={e => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                        e.currentTarget.style.color = '#94A3B8';
-                    }}
-                >
-                    <FontAwesomeIcon icon={faTimes} size="sm" />
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        flexShrink: 0,
+                        overflow: 'hidden'
+                    }}>
+                        {headerFavicon ? (
+                            <img src={headerFavicon} alt="" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+                        ) : (
+                            <FontAwesomeIcon icon={faLink} color="#94A3B8" size="lg" />
+                        )}
+                    </div>
+
+                    {/* Header Text */}
+                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{
+                            fontSize: '18px',
+                            fontWeight: 700,
+                            color: '#F8FAFC',
+                            marginBottom: '2px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                        }}>
+                            {label}
+                        </div>
+                        <div style={{
+                            fontSize: '13px',
+                            color: '#94A3B8',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                        }}>
+                            <span>{subLabel || group.domain}</span>
+                            <span style={{ color: '#475569' }}>·</span>
+                            <span>{group.urls.length} items</span>
+                        </div>
+                    </div>
+
+                    {/* Close Button */}
+                    <div
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onClose();
+                        }}
+                        style={{
+                            width: '32px',
+                            height: '32px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '50%',
+                            cursor: 'pointer',
+                            color: '#64748B',
+                            transition: 'all 0.2s',
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            border: '1px solid rgba(255, 255, 255, 0.05)'
+                        }}
+                        onMouseEnter={e => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                            e.currentTarget.style.color = '#F1F5F9';
+                        }}
+                        onMouseLeave={e => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                            e.currentTarget.style.color = '#64748B';
+                        }}
+                    >
+                        <FontAwesomeIcon icon={faTimes} size="sm" />
+                    </div>
+                </div>
+
+                {/* List */}
+                <div className="custom-scrollbar" style={{
+                    padding: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    overflowY: 'auto'
+                }}>
+                    {group.urls.map((urlObj, idx) => {
+                        const faviconUrl = getFaviconUrl(urlObj.url, 48);
+                        return (
+                            <div
+                                key={idx}
+                                className="popover-item"
+                                onClick={() => window.open(urlObj.url, '_blank')}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '16px',
+                                    padding: '16px 14px',
+                                    borderRadius: '12px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                                    background: 'transparent',
+                                    border: '1px solid transparent',
+                                    textDecoration: 'none'
+                                }}
+                            >
+                                {/* Icon */}
+                                <div style={{
+                                    width: '44px',
+                                    height: '44px',
+                                    flexShrink: 0,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: '#fff',
+                                    borderRadius: '10px',
+                                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                                    overflow: 'hidden'
+                                }}>
+                                    {faviconUrl ? (
+                                        <img src={faviconUrl} alt="" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />
+                                    ) : (
+                                        <FontAwesomeIcon icon={faLink} size="sm" color="#64748B" />
+                                    )}
+                                </div>
+
+                                {/* Title/URL */}
+                                <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
+                                    <div style={{
+                                        fontSize: '15px',
+                                        fontWeight: 600,
+                                        color: '#F1F5F9',
+                                        marginBottom: '2px',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                    }}>
+                                        {urlObj.title || new URL(urlObj.url).hostname}
+                                    </div>
+                                    <div style={{
+                                        fontSize: '13px',
+                                        color: '#64748B',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis'
+                                    }}>
+                                        {new URL(urlObj.url).hostname}
+                                    </div>
+                                </div>
+
+                                {/* External Link Icon */}
+                                <div className="external-icon" style={{
+                                    color: '#334155',
+                                    transition: 'color 0.2s',
+                                    padding: '4px'
+                                }}>
+                                    <FontAwesomeIcon icon={faExternalLinkAlt} style={{ fontSize: '14px' }} />
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
-
-            {/* List */}
-            <div className="custom-scrollbar" style={{
-                padding: '8px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-                maxHeight: '320px',
-                overflowY: 'auto'
-            }}>
-                {group.urls.map((urlObj, idx) => {
-                    const faviconUrl = getFaviconUrl(urlObj.url, 16);
-                    return (
-                        <div
-                            key={idx}
-                            onClick={() => window.open(urlObj.url, '_blank')}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                padding: '10px 12px',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                background: 'transparent',
-                                border: '1px solid transparent',
-                                textDecoration: 'none'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
-                                e.currentTarget.style.transform = 'translateY(-1px)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'transparent';
-                                e.currentTarget.style.borderColor = 'transparent';
-                                e.currentTarget.style.transform = 'translateY(0)';
-                            }}
-                        >
-                            {/* Icon */}
-                            <div style={{
-                                width: '20px',
-                                height: '20px',
-                                flexShrink: 0,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                background: 'rgba(255, 255, 255, 0.03)',
-                                borderRadius: '6px'
-                            }}>
-                                {faviconUrl ? (
-                                    <img src={faviconUrl} alt="" style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }} />
-                                ) : (
-                                    <FontAwesomeIcon icon={faLink} size="xs" color="#64748B" />
-                                )}
-                            </div>
-
-                            {/* Title/URL */}
-                            <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
-                                <div style={{
-                                    fontSize: '13px',
-                                    fontWeight: 500,
-                                    color: '#E2E8F0',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis'
-                                }}>
-                                    {urlObj.title || new URL(urlObj.url).pathname.split('/').pop() || 'Untitled'}
-                                </div>
-                                <div style={{
-                                    fontSize: '11px',
-                                    color: '#64748B',
-                                    marginTop: '2px',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis'
-                                }}>
-                                    {new URL(urlObj.url).pathname !== '/' ? new URL(urlObj.url).pathname : new URL(urlObj.url).hostname}
-                                </div>
-                            </div>
-
-                            {/* External Link Icon */}
-                            <FontAwesomeIcon icon={faExternalLinkAlt} style={{ fontSize: '10px', color: '#475569' }} />
-                        </div>
-                    );
-                })}
-            </div>
-        </div>,
+        </>,
         document.body
     );
 }

@@ -1,7 +1,3 @@
-export const getDomainFromUrl = (url) => {
-  try { return new URL(url).hostname; } catch { return 'unknown'; }
-};
-
 // Prefer robust public suffix parsing for base domain (psl)
 // Works if bundled with `psl` or if `window.psl` is injected. Falls back gracefully otherwise.
 let pslLib = null;
@@ -36,6 +32,19 @@ const getBaseDomain = (host) => {
   // Fallback: last two labels
   const labels = String(host).split('.');
   return labels.length >= 2 ? labels.slice(-2).join('.') : host;
+};
+
+export const getDomainFromUrl = (url) => {
+  try { return new URL(url).hostname; } catch { return 'unknown'; }
+};
+
+export const getBaseDomainFromUrl = (url) => {
+  try {
+    const hostname = new URL(url).hostname;
+    return getBaseDomain(hostname);
+  } catch {
+    return 'unknown';
+  }
 };
 
 export const getUrlParts = (url) => {

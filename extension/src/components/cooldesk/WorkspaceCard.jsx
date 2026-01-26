@@ -1,26 +1,45 @@
+import { faGithub } from '@fortawesome/free-brands-svg-icons';
 import {
+  faBook,
+  faBriefcase,
   faChartLine,
+  faCloud,
+  faCode,
   faExternalLinkAlt,
   faFilm,
+  faFlask,
   faFolder,
   faFolderOpen,
   faFutbol,
+  faGamepad,
   faGraduationCap,
   faHashtag,
   faHeartPulse,
+  faHome,
+  faLightbulb,
   faLink,
+  faMusic,
+  faNewspaper,
+  faPalette,
   faPlane,
   faPlus,
+  faRobot,
+  faSearch,
   faShoppingBag,
+  faTasks,
+  faTerminal,
   faThumbtack,
   faTools,
   faTrash,
-  faUtensils
+  faUtensils,
+  faVial,
+  faVideo,
+  faVrCardboard
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
-import { getFaviconUrl } from '../../utils/helpers.js';
+import { getBaseDomainFromUrl, getFaviconUrl } from '../../utils/helpers.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
 
@@ -42,7 +61,42 @@ const CATEGORY_ICONS = {
   entertainment: faFilm,
   shopping: faShoppingBag,
   food: faUtensils,
-  utilities: faTools
+  utilities: faTools,
+  github: faGithub,
+  git: faGithub,
+  dev: faCode,
+  development: faCode,
+  coding: faCode,
+  code: faCode,
+  terminal: faTerminal,
+  ai: faRobot,
+  gpt: faRobot,
+  openai: faRobot,
+  work: faBriefcase,
+  business: faBriefcase,
+  office: faBriefcase,
+  personal: faHome,
+  home: faHome,
+  tasks: faTasks,
+  management: faTasks,
+  project: faTasks,
+  design: faPalette,
+  creative: faPalette,
+  research: faSearch,
+  google: faSearch,
+  search: faSearch,
+  spatial: faVrCardboard,
+  cloud: faCloud,
+  gaming: faGamepad,
+  games: faGamepad,
+  music: faMusic,
+  video: faVideo,
+  news: faNewspaper,
+  reading: faBook,
+  ideas: faLightbulb,
+  test: faVial,
+  lab: faFlask,
+  cooldesk: faVrCardboard
 };
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
@@ -58,8 +112,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const urlCount = urls.length;
 
   const colorClass = ICON_COLORS[Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
-  const normalizedName = name.toLowerCase();
-  const categoryIcon = CATEGORY_ICONS[normalizedName];
+  const normalizedName = name.toLowerCase().trim();
+
+  // Advanced category matching (checks if category key is contained in the name)
+  const matchedCategory = Object.keys(CATEGORY_ICONS).find(cat =>
+    normalizedName === cat || normalizedName.includes(cat + ' ') || normalizedName.includes(' ' + cat)
+  );
+
+  const categoryIcon = matchedCategory ? CATEGORY_ICONS[matchedCategory] : null;
   const iconToUse = categoryIcon || (isActive ? faFolderOpen : (ICON_MAP[icon] || faFolder));
 
   // Helper function to format domain name like mobile apps
@@ -177,119 +237,48 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const [visibleCount, setVisibleCount] = useState(8);
   const iconsContainerRef = useRef(null);
 
-  // Advanced Grouping Logic
+  // Grouping Logic using PSL for proper base domain detection
+  // Strategy: Group by base domain (company/org level)
+  // e.g., dash.cloudflare.com, workers.cloudflare.com -> "Cloudflare"
+  // e.g., console.firebase.google.com, docs.google.com -> "Google"
   const getGroupingInfo = (urlStr) => {
     try {
       const url = new URL(urlStr);
-      const hostname = url.hostname;
-      const domain = hostname.replace(/^www\./, '');
+      const baseDomain = getBaseDomainFromUrl(urlStr);
       const pathParts = url.pathname.split('/').filter(Boolean);
 
-      // GitHub: Group by Owner (github.com/owner/...)
-      if (domain === 'github.com' && pathParts.length > 0) {
+      const formatLabel = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+      const baseName = baseDomain.split('.')[0];
+
+      // GitHub: Group by owner (github.com/owner/...)
+      if (baseDomain === 'github.com' && pathParts.length > 0) {
         const owner = pathParts[0];
-        // Filter out common non-user paths if needed, but usually 1st part is owner
         if (!['pulls', 'issues', 'marketplace', 'explore', 'settings', 'topics', 'notifications'].includes(owner)) {
           return {
             key: `github-${owner}`,
             label: owner,
             subLabel: 'GitHub',
-            domain: 'github.com'
+            domain: baseDomain
           };
         }
       }
 
-      // Notion: Group by subdomain or path
-      if (domain.includes('notion.site')) {
-        const subdomain = domain.split('.')[0];
-        return {
-          key: `notion-${subdomain}`,
-          label: subdomain,
-          subLabel: 'Notion',
-          domain: 'notion.so'
-        };
-      }
-
-      // Linear
-      if (domain === 'linear.app' && pathParts.length > 0) {
+      // Linear: Group by workspace
+      if (baseDomain === 'linear.app' && pathParts.length > 0) {
         return {
           key: `linear-${pathParts[0]}`,
           label: pathParts[0],
           subLabel: 'Linear',
-          domain: 'linear.app'
+          domain: baseDomain
         };
       }
 
-      // Google Services (Catch-all for anything ending in google.com)
-      if (domain.endsWith('.google.com') || domain === 'google.com') {
-        // Extract service name from subdomain (e.g. "docs", "mail", "gemini")
-        // If it's just google.com, label as Google
-        const parts = domain.split('.');
-        let service = parts.length > 2 ? parts[parts.length - 3] : 'Google'; // maps.google.com -> maps
-
-        // Refine common service names
-        if (service === 'www') service = 'Google';
-
-        return {
-          key: `google-${service}`,
-          label: service.charAt(0).toUpperCase() + service.slice(1),
-          subLabel: 'Google',
-          domain: domain
-        };
-      }
-
-      // Dropbox (dropbox.com, paper.dropbox.com)
-      if (domain.endsWith('dropbox.com')) {
-        return {
-          key: 'dropbox',
-          label: 'Dropbox',
-          subLabel: 'Dropbox',
-          domain: 'dropbox.com'
-        };
-      }
-
-      // Telegram (t.me, telegram.org)
-      if (domain === 't.me' || domain.endsWith('telegram.org')) {
-        return {
-          key: 'telegram',
-          label: 'Telegram',
-          subLabel: 'Telegram',
-          domain: 'telegram.org'
-        };
-      }
-
-      // Amazon (amazon.com, aws.amazon.com)
-      if (domain.endsWith('amazon.com')) {
-        return {
-          key: 'amazon',
-          label: 'Amazon',
-          subLabel: 'Amazon',
-          domain: 'amazon.com'
-        };
-      }
-
-      // Microsoft (office.com, microsoft.com)
-      if (domain.endsWith('microsoft.com') || domain.endsWith('office.com') || domain.endsWith('sharepoint.com')) {
-        return {
-          key: 'microsoft',
-          label: 'Microsoft',
-          subLabel: 'Microsoft',
-          domain: 'microsoft.com'
-        };
-      }
-
-      // Default: Group by Domain
-      // Heuristic: If we can't identify the service, clear subLabel so it doesn't get grouped into "Other ..."
-      // Unless we want to group all unknown "example.com" links? 
-      // Current logic: entityGroups uses 'key' (domain). If >1, it groups.
-      // If 1 item, it falls back to 'subLabel' or 'domain' for misc bucket.
-      // So if we have 2 links to "random.com/a" and "random.com/b", key is "random.com", so they group.
-
+      // Default: Group by base domain
       return {
-        key: domain,
-        label: formatDomainName(urlStr),
-        subLabel: null, // Let domain grouping handle it
-        domain: domain
+        key: baseDomain,
+        label: formatLabel(baseName),
+        subLabel: null,
+        domain: baseDomain
       };
 
     } catch (e) {
@@ -391,7 +380,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
     for (let i = 0; i < groupedItems.length; i++) {
       const item = groupedItems[i];
-      const itemWidth = item.type === 'group' ? 86 : 44;
+      const itemWidth = item.type === 'group' ? 100 : 54;
 
       if (usedWidth + itemWidth <= availableWidth) {
         usedWidth += itemWidth;
@@ -480,7 +469,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                       <img
                         src={faviconUrl}
                         alt=""
-                        style={{ width: isGroup ? 'var(--font-2xl)' : 'var(--font-3xl)', height: isGroup ? 'var(--font-2xl)' : 'var(--font-3xl)', objectFit: 'contain' }}
+                        className="compact-item-img"
                         onError={(e) => {
                           e.target.style.display = 'none';
                           e.target.nextSibling.style.display = 'flex';
@@ -768,6 +757,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         opacity: (isHovered || isPopoverOpen) ? 1 : 0,
                         transition: 'all 0.2s',
                         marginRight: '4px',
+                        height: '44px',
                         pointerEvents: (isHovered || isPopoverOpen) ? 'auto' : 'none'
                       }}
                       title="View Analytics"
@@ -802,54 +792,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   }}
                 >
                   <span className="workspace-link-text">
-                    +{sortedUrls.length - (compact ? 3 : 5)} more...
-                  </span>
-                </li>
-              )}
-              {showAll && sortedUrls.length > (compact ? 3 : 5) && (
-                <li
-                  className="workspace-link-item"
-                  style={{ opacity: 0.6, fontStyle: 'italic', cursor: 'pointer', justifyContent: 'center' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowAll(false);
-                  }}
-                >
-                  <span className="workspace-link-text">
-                    Show less
+                    + {sortedUrls.length - (compact ? 3 : 5)} more items...
                   </span>
                 </li>
               )}
             </ul>
           )}
-
-          {urlCount === 0 && !compact && (
-            <div className="workspace-empty-state">
-              <div className="empty-icon">
-                <FontAwesomeIcon icon={faLink} />
-              </div>
-              <p>No links yet</p>
-              <span>Use the + button to add URLs</span>
-            </div>
-          )}
         </>
       )}
-    </div>
-  );
-});
-
-// Memoized CreateWorkspaceCard
-export const CreateWorkspaceCard = memo(function CreateWorkspaceCard({ onCreate }) {
-  const handleClick = () => {
-    onCreate?.();
-  };
-
-  return (
-    <div className="workspace-create-btn" onClick={handleClick}>
-      <div className="create-icon">
-        <FontAwesomeIcon icon={faPlus} />
-      </div>
-      <div className="create-text">Create New Workspace</div>
     </div>
   );
 });

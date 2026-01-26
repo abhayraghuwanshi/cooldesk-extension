@@ -1,4 +1,4 @@
-import { faBrain, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faFilter, faSearch, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
@@ -24,12 +24,16 @@ export function TabManagement() {
   const [autoGroupEnabled, setAutoGroupEnabled] = useState(false);
   const [smartSortEnabled, setSmartSortEnabled] = useState(true);
   const [visibleTabsCount, setVisibleTabsCount] = useState(12);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tabActivity, setTabActivity] = useState({});
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   // Load auto-group and smart sort state on mount
   useEffect(() => {
-    chrome.storage.local.get(['autoGroupEnabled', 'smartSortEnabled'], (result) => {
+    chrome.storage.local.get(['autoGroupEnabled', 'smartSortEnabled', 'isFocusMode'], (result) => {
       setAutoGroupEnabled(result.autoGroupEnabled || false);
       setSmartSortEnabled(result.smartSortEnabled !== false); // Default to true
+      setIsFocusMode(result.isFocusMode || false);
     });
   }, []);
 
@@ -58,6 +62,13 @@ export function TabManagement() {
         }
 
         setTabs(sortedTabs);
+
+        // Also fetch real-time activity data
+        chrome.runtime.sendMessage({ type: 'GET_TAB_ACTIVITY' }, (response) => {
+          if (response?.ok) {
+            setTabActivity(response.activityData || {});
+          }
+        });
       }
     } catch (error) {
       console.error('[TabManagement] Failed to fetch tabs:', error);
@@ -156,6 +167,49 @@ export function TabManagement() {
     }
   }, []);
 
+  // Filter tabs based on search and focus mode
+  const filteredTabs = useMemo(() => {
+    let result = tabs;
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(tab =>
+        tab.title?.toLowerCase().includes(query) ||
+        tab.url?.toLowerCase().includes(query)
+      );
+    }
+
+    if (isFocusMode && !searchQuery) {
+      // Focus mode: show pinned, active, and top 20% scored tabs
+      // For now, let's just show top 15 tabs if focus mode is on
+      result = result.slice(0, 15);
+    }
+
+    return result;
+  }, [tabs, searchQuery, isFocusMode]);
+
+  // Get recently active tabs (excluding current active)
+  const recentTabs = useMemo(() => {
+    if (!tabActivity) return [];
+
+    return tabs
+      .filter(tab => !tab.active && tabActivity[tab.id])
+      .sort((a, b) => (tabActivity[b.id] || 0) - (tabActivity[a.id] || 0))
+      .slice(0, 4);
+  }, [tabs, tabActivity]);
+
+  // Find the VERY last active tab
+  const lastActiveTabId = useMemo(() => {
+    const sorted = Object.entries(tabActivity)
+      .filter(([id, _]) => {
+        const tab = tabs.find(t => t.id === parseInt(id));
+        return tab && !tab.active;
+      })
+      .sort((a, b) => b[1] - a[1]);
+
+    return sorted.length > 0 ? parseInt(sorted[0][0]) : null;
+  }, [tabActivity, tabs]);
+
   return (
     <div style={{
       display: 'flex',
@@ -175,6 +229,7 @@ export function TabManagement() {
           margin: 0
         }}>
           Browser Tabs
+          {tabs.length > 0 && <span style={{ fontSize: '13px', color: 'var(--text-secondary)', marginLeft: '8px', fontWeight: 400 }}>({tabs.length})</span>}
         </h2>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
@@ -342,6 +397,69 @@ export function TabManagement() {
         </div>
       </div>
 
+      {/* Search and Filters */}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{
+          flex: 1,
+          position: 'relative',
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          borderRadius: '10px',
+          padding: '2px 8px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <FontAwesomeIcon icon={faSearch} style={{ color: 'var(--text-secondary)', fontSize: '12px' }} />
+          <input
+            type="text"
+            placeholder="Search tabs..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#fff',
+              fontSize: '13px',
+              padding: '6px 0',
+              width: '100%',
+              outline: 'none'
+            }}
+          />
+          {searchQuery && (
+            <FontAwesomeIcon
+              icon={faTimes}
+              onClick={() => setSearchQuery('')}
+              style={{ cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '12px' }}
+            />
+          )}
+        </div>
+        <button
+          onClick={() => {
+            const newState = !isFocusMode;
+            setIsFocusMode(newState);
+            chrome.storage.local.set({ isFocusMode: newState });
+          }}
+          style={{
+            background: isFocusMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+            border: isFocusMode ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: '10px',
+            padding: '8px 12px',
+            color: isFocusMode ? '#60A5FA' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.2s'
+          }}
+          title={isFocusMode ? "Exit Focus Mode" : "Focus Mode - Show only relevant tabs"}
+        >
+          <FontAwesomeIcon icon={faFilter} />
+          <span>Focus</span>
+        </button>
+      </div>
+
       <div style={{
         flex: 1,
         overflowY: 'auto',
@@ -366,8 +484,42 @@ export function TabManagement() {
           </div>
         ) : (
           <>
+            {/* Recent Activity Section */}
+            {!searchQuery && recentTabs.length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-sm, 12px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <FontAwesomeIcon icon={faClock} style={{ opacity: 0.6 }} />
+                  Recent Activity
+                </h3>
+                <div className="tabs-grid">
+                  {recentTabs.map(tab => (
+                    <TabCard
+                      key={tab.id}
+                      tab={tab}
+                      onClick={handleTabClick}
+                      onClose={handleTabClose}
+                      onPin={handleTabPin}
+                      isPinned={tab.pinned}
+                      isActive={tab.active}
+                      isLastActive={tab.id === lastActiveTabId}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Pinned Tabs Section */}
-            {tabs.filter(tab => tab.pinned).length > 0 && (
+            {tabs.filter(tab => tab.pinned).length > 0 && !searchQuery && (
               <div>
                 <h3 style={{
                   fontSize: 'var(--font-sm, 12px)',
@@ -436,12 +588,12 @@ export function TabManagement() {
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em'
               }}>
-                All Tabs ({tabs.length})
+                {searchQuery ? `Search Results (${filteredTabs.length})` : `All Tabs (${filteredTabs.length})`}
               </h3>
-              {tabs.length > 0 ? (
+              {filteredTabs.length > 0 ? (
                 <>
                   <div className="tabs-grid">
-                    {tabs.slice(0, visibleTabsCount).map(tab => (
+                    {filteredTabs.slice(0, visibleTabsCount).map(tab => (
                       <TabCard
                         key={tab.id}
                         tab={tab}
@@ -450,6 +602,7 @@ export function TabManagement() {
                         onPin={handleTabPin}
                         isPinned={tab.pinned}
                         isActive={tab.active}
+                        isLastActive={tab.id === lastActiveTabId}
                       />
                     ))}
                   </div>
@@ -517,6 +670,6 @@ export function TabManagement() {
           </>
         )}
       </div>
-    </div>
+    </div >
   );
 }

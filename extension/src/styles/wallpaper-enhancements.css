@@ -34,8 +34,6 @@
         0 1px 0 rgba(255, 255, 255, 0.1) inset;
     /* Crisp top highlight */
     border-radius: 16px !important;
-    margin: 16px 24px 0 24px !important;
-    width: auto !important;
 }
 
 /* === SEARCH DROPDOWN === */
@@ -316,14 +314,14 @@
 
 /* Notes Widget in Overview - Don't override component's inline styling to preserve premium gradient borders and glassmorphism */
 /* Fix double container: Remove border/bg from the inner widget panel since the outer card already has it */
-.wallpaper-enabled .overview-notes-card .notes-widget,
+/* .wallpaper-enabled .overview-notes-card .notes-widget,
 .wallpaper-enabled .overview-notes-card .notes-widget>div {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
     border-radius: 0 !important;
-}
+} */
 
 .wallpaper-enabled .cooldesk-workspace-card:hover {
     background: linear-gradient(135deg,

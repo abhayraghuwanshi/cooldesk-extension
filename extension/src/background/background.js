@@ -499,6 +499,17 @@ async function main() {
       return true; // Keep channel open for async response
     }
 
+    // Handle get tab activity command
+    if (msg?.type === 'GET_TAB_ACTIVITY') {
+      try {
+        handleGetTabActivity?.(msg, sender, sendResponse);
+      } catch (e) {
+        console.error('[Background] Failed to handle GET_TAB_ACTIVITY:', e);
+        sendResponse({ ok: false, error: e.message });
+      }
+      return true;
+    }
+
     // Handle media control commands
     if (msg?.type === 'MEDIA_COMMAND') {
       console.log('[Background] Full message received:', JSON.stringify(msg));
@@ -706,7 +717,7 @@ async function main() {
 
     // Handle activity tracking messages from content scripts
     // Skip activity handling for chat scraping messages and calendar triggers
-    if (msg.type && sender.tab && msg.type !== 'AUTO_SCRAPED_CHATS' && msg.type !== 'TRIGGER_CALENDAR_SCRAPE' && msg.type !== 'CALENDAR_EVENTS_SCRAPED' && msg.type !== 'TRIGGER_MANUAL_CHATS_SCRAPE' && msg.type !== 'TRIGGER_ALL_CHATS_SCRAPE') {
+    if (msg.type && sender.tab && msg.type !== 'AUTO_SCRAPED_CHATS' && msg.type !== 'SCRAPED_LINKS' && msg.type !== 'TRIGGER_CALENDAR_SCRAPE' && msg.type !== 'CALENDAR_EVENTS_SCRAPED' && msg.type !== 'TRIGGER_MANUAL_CHATS_SCRAPE' && msg.type !== 'TRIGGER_ALL_CHATS_SCRAPE') {
       console.log('[Background Debug] Potential activity message:', { type: msg.type, url: sender.tab?.url });
 
       const activityHandled = handleActivityContentScriptMessage(msg, sender);
@@ -1052,6 +1063,103 @@ async function main() {
         }
       })();
       return true; // Keep channel open
+    }
+
+    // Handle scraped links from click-to-scrape (footerBar.js)
+    if (msg?.type === 'SCRAPED_LINKS') {
+      console.log('[Background] 🔗 SCRAPED_LINKS message received!');
+      (async () => {
+        try {
+          const result = msg.data;
+          console.log('[Background] Received scraped links:', {
+            success: result.success,
+            platform: result.platform,
+            hostname: result.hostname,
+            linksCount: result.links?.length
+          });
+
+          if (result.success && result.links && result.links.length > 0) {
+            const db = await getUnifiedDB();
+
+            // Get existing links for this platform to deduplicate
+            const readTx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS], 'readonly');
+            const readStore = readTx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
+            const index = readStore.index('by_platform');
+
+            const existingLinks = await new Promise((resolve, reject) => {
+              const request = index.getAll(result.platform);
+              request.onsuccess = () => resolve(request.result || []);
+              request.onerror = () => reject(request.error);
+            });
+
+            const existingIds = new Set(existingLinks.map(l => l.chatId || l.linkId));
+
+            // Filter to only new links
+            const newLinks = result.links.filter(link => {
+              const id = link.linkId || link.chatId;
+              return id && !existingIds.has(id);
+            });
+
+            console.log(`[Background] Found ${existingLinks.length} existing, ${newLinks.length} new links`);
+
+            if (newLinks.length > 0) {
+              // Store new links in IndexedDB (use chatId field for compatibility)
+              const writeTx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS, DB_CONFIG.STORES.UI_STATE], 'readwrite');
+              const writeStore = writeTx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
+
+              for (const link of newLinks) {
+                // Normalize to use chatId as key (for compatibility with existing store)
+                const entry = {
+                  chatId: link.linkId || link.chatId,
+                  url: link.url,
+                  title: link.title,
+                  platform: result.platform,
+                  hostname: result.hostname,
+                  scrapedAt: link.scrapedAt || Date.now(),
+                  source: 'click-to-scrape'
+                };
+                writeStore.put(entry);
+              }
+
+              // Update last scrape time
+              const uiStateStore = writeTx.objectStore(DB_CONFIG.STORES.UI_STATE);
+              uiStateStore.put({
+                id: `lastScrape_${result.platform}`,
+                timestamp: result.scrapedAt || Date.now(),
+                platform: result.platform,
+                hostname: result.hostname,
+                updatedAt: Date.now()
+              });
+
+              // Save the selector for this domain
+              if (result.selector) {
+                uiStateStore.put({
+                  id: `selector_${result.hostname}`,
+                  selector: result.selector,
+                  platform: result.platform,
+                  hostname: result.hostname,
+                  savedAt: Date.now()
+                });
+              }
+
+              await new Promise((resolve, reject) => {
+                writeTx.oncomplete = () => resolve();
+                writeTx.onerror = () => reject(writeTx.error);
+              });
+
+              console.log(`[Background] ✅ Stored ${newLinks.length} new links from ${result.platform}`);
+            }
+
+            sendResponse({ success: true, newCount: newLinks.length, totalCount: result.links.length });
+          } else {
+            sendResponse({ success: true, newCount: 0, totalCount: 0 });
+          }
+        } catch (error) {
+          console.error('[Background] Error handling scraped links:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+      return true;
     }
 
     // Handle chat scraping requests

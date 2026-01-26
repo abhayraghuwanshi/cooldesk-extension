@@ -460,16 +460,17 @@ export function ActivityFeed() {
                     padding: '16px',
                     position: 'sticky',
                     top: 0,
-                    background: 'var(--glass-bg, rgba(15, 23, 42, 0.95))',
+                    // background: 'var(--glass-bg, rgba(15, 23, 42, 0.95))',
                     zIndex: 10,
                     backdropFilter: 'blur(12px)',
-                    borderBottom: '1px solid rgba(148, 163, 184, 0.1)'
+                    // borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+                    // borderRadius: '12px'
                 }}>
                     {/* Modern Pill-Style Segmented Control */}
                     <div style={{
                         display: 'inline-flex',
-                        background: 'rgba(15, 23, 42, 0.6)',
-                        border: '1px solid rgba(148, 163, 184, 0.15)',
+                        // background: 'rgba(15, 23, 42, 0.6)',
+                        // border: '1px solid rgba(148, 163, 184, 0.15)',
                         borderRadius: '12px',
                         padding: '4px',
                         gap: '4px',
@@ -481,13 +482,13 @@ export function ActivityFeed() {
                                 onClick={() => setActiveTab(tab)}
                                 style={{
                                     padding: '8px 16px',
-                                    background: activeTab === tab
-                                        ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.25), rgba(59, 130, 246, 0.15))'
-                                        : 'transparent',
-                                    border: activeTab === tab
-                                        ? '1px solid rgba(96, 165, 250, 0.4)'
-                                        : '1px solid transparent',
-                                    borderRadius: '10px',
+                                    // background: activeTab === tab
+                                    //     ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.25), rgba(59, 130, 246, 0.15))'
+                                    //     : 'transparent',
+                                    // border: activeTab === tab
+                                    //     ? '1px solid rgba(96, 165, 250, 0.8)'
+                                    //     : '1px solid transparent',
+                                    // borderRadius: '10px',
                                     color: activeTab === tab ? '#60A5FA' : '#94A3B8',
                                     fontSize: '12px',
                                     fontWeight: activeTab === tab ? 600 : 500,
@@ -497,9 +498,9 @@ export function ActivityFeed() {
                                     position: 'relative',
                                     zIndex: 1,
                                     whiteSpace: 'nowrap',
-                                    boxShadow: activeTab === tab
-                                        ? '0 4px 12px rgba(96, 165, 250, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
-                                        : 'none'
+                                    // boxShadow: activeTab === tab
+                                    //     ? '0 4px 12px rgba(96, 165, 250, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                                    //     : 'none'
                                 }}
                                 onMouseEnter={(e) => {
                                     if (activeTab !== tab) {
