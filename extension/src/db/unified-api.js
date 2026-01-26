@@ -333,7 +333,7 @@ export const addUrlToWorkspace = withErrorHandling(async (url, workspaceId, meta
         }
 
         tx.oncomplete = () => {
-            console.log(`[Unified API] Added URL to workspace: ${url} -> ${workspaceId}`)
+            // console.log(`[Unified API] Added URL to workspace: ${url} -> ${workspaceId}`)
             resolve(urlDoc)
         }
 
@@ -1518,13 +1518,12 @@ export const getUrlAnalytics = withErrorHandling(async (url) => {
         console.warn('Failed to parse URL for analytics:', e);
     }
 
-    // Fetch data for all candidates
-    console.log('[Unified API Debug] getUrlAnalytics searching for:', targetUrls);
+    // console.log('[Unified API Debug] getUrlAnalytics searching for:', targetUrls);
     const results = await Promise.all(targetUrls.map(u =>
         new Promise((resolve) => {
             const req = index.getAll(u);
             req.onsuccess = () => {
-                console.log(`[Unified API Debug] Found ${req.result?.length || 0} events for ${u}`);
+                // console.log(`[Unified API Debug] Found ${req.result?.length || 0} events for ${u}`);
                 resolve(req.result || []);
             };
             req.onerror = () => {
@@ -1535,7 +1534,7 @@ export const getUrlAnalytics = withErrorHandling(async (url) => {
     ));
 
     const events = results.flat();
-    console.log('[Unified API Debug] Total events found:', events.length);
+    // console.log('[Unified API Debug] Total events found:', events.length);
 
     return new Promise((resolve) => {
         if (events.length === 0) {

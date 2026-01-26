@@ -1,8 +1,9 @@
+// ... (imports remain the same)
 import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
-export function ExpandedSearchPanel({
+export const ExpandedSearchPanel = React.memo(function ExpandedSearchPanel({
     isOpen,
     suggestions,
     selectedIndex,
@@ -47,7 +48,8 @@ export function ExpandedSearchPanel({
                 boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(139, 92, 246, 0.1)',
                 overflow: 'hidden',
                 zIndex: 2000,
-                animation: 'expandedPanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                animation: 'expandedPanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                willChange: 'transform, opacity' // Optimization for animation
             }}
         >
             {/* Header */}
@@ -249,4 +251,4 @@ export function ExpandedSearchPanel({
             </div>
         </div >
     );
-}
+});

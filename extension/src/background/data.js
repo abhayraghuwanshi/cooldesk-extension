@@ -37,7 +37,7 @@ async function collectHistory() {
   const settings = await getSettings();
   const daysNum = Number(settings?.historyDays);
   const days = Number.isFinite(daysNum) && daysNum > 0 ? daysNum : 30;
-  const maxResults = 1000; // fixed cap to avoid huge payloads
+  const maxResults = 2000; // fixed cap to avoid huge payloads
   console.log(`[AI][collect] Collecting history (last ${days} days, max ${maxResults})...`, { rawDays: settings?.historyDays })
   const startTime = Date.now() - (1000 * 60 * 60 * 24 * days);
   const results = await chrome.history.search({ text: '', startTime, maxResults })

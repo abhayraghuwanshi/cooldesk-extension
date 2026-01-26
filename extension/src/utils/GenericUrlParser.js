@@ -507,13 +507,13 @@ export class GenericUrlParser {
       if (browserAPI && (isChatGPT || isClaude)) {
         try {
           const platform = isChatGPT ? 'ChatGPT' : 'Claude';
-          console.log(`[GenericUrlParser] Enriching ${platform} URL: ${url} (existing: "${existingTitle}")`);
+          // console.log(`[GenericUrlParser] Enriching ${platform} URL: ${url} (existing: "${existingTitle}")`);
           const enriched = await this.enrichWithHistory(url, existingTitle, browserAPI);
           if (enriched.title && !this.isGenericTitle(enriched.title)) {
-            console.log(`[GenericUrlParser] Using enriched title: "${enriched.title}"`);
+            // console.log(`[GenericUrlParser] Using enriched title: "${enriched.title}"`);
             finalTitle = enriched.title;
           } else {
-            console.log(`[GenericUrlParser] Enriched title was generic or null: "${enriched.title}"`);
+            // console.log(`[GenericUrlParser] Enriched title was generic or null: "${enriched.title}"`);
           }
         } catch (err) {
           console.warn('History enrichment failed for:', url, err);
@@ -1033,9 +1033,24 @@ export class GenericUrlParser {
   static async enrichWithHistory(url, title, browserAPI) {
     if (!browserAPI?.history) return { url, title };
 
+    // 1. Check Cache
+    try {
+      const cacheKey = 'generic_url_enrichment_cache';
+      const cacheRaw = localStorage.getItem(cacheKey);
+      if (cacheRaw) {
+        const cache = JSON.parse(cacheRaw);
+        const entry = cache[url];
+        // Cache valid for 24 hours
+        if (entry && entry.title && (Date.now() - entry.timestamp < 24 * 60 * 60 * 1000)) {
+          // console.log('[GenericUrlParser] Cache hit for:', url);
+          return { url, title: entry.title };
+        }
+      }
+    } catch (e) { /* ignore cache errors */ }
+
     try {
       // Debug logging to see what we're searching for
-      console.log('[GenericUrlParser] enrichWithHistory searching for:', url);
+      // console.log('[GenericUrlParser] enrichWithHistory searching for:', url);
 
       const historyItems = await browserAPI.history.search({
         text: url,
@@ -1074,7 +1089,8 @@ export class GenericUrlParser {
         }
 
         if (match && match.title) {
-          console.log('[GenericUrlParser] enrichWithHistory found title:', match.title, 'for URL:', url);
+          // console.log('[GenericUrlParser] enrichWithHistory found title:', match.title, 'for URL:', url);
+          this._updateCache(url, match.title);
           return { url, title: match.title };
         }
       }
@@ -1082,8 +1098,30 @@ export class GenericUrlParser {
       console.warn("History enrichment failed", err);
     }
 
-    console.log('[GenericUrlParser] enrichWithHistory no title found, using fallback for:', url);
+    // console.log('[GenericUrlParser] enrichWithHistory no title found, using fallback for:', url);
     return { url, title };
+  }
+
+  /**
+   * Helper to update cache
+   */
+  static _updateCache(url, title) {
+    try {
+      const cacheKey = 'generic_url_enrichment_cache';
+      const cacheRaw = localStorage.getItem(cacheKey);
+      const cache = cacheRaw ? JSON.parse(cacheRaw) : {};
+
+      cache[url] = { title, timestamp: Date.now() };
+
+      // Prune old entries if cache gets too big (> 500 items)
+      const keys = Object.keys(cache);
+      if (keys.length > 500) {
+        // Simple prune: remove first 100
+        for (let i = 0; i < 100; i++) delete cache[keys[i]];
+      }
+
+      localStorage.setItem(cacheKey, JSON.stringify(cache));
+    } catch (e) { /* ignore */ }
   }
 }
 

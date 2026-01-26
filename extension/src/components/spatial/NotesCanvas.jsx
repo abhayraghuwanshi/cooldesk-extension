@@ -1,7 +1,6 @@
 ﻿import {
-  faClock,
+  faChevronRight,
   faFolder,
-  faFolderOpen,
   faHighlighter,
   faLink,
   faListUl,
@@ -9,7 +8,6 @@
   faPlus,
   faStickyNote,
   faSync,
-  faThumbtack,
   faTrash
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -138,6 +136,7 @@ export function NotesCanvas({ workspaceId }) {
   const [noteTitle, setNoteTitle] = useState('');
   const [noteFolder, setNoteFolder] = useState('');
   const [activeFolder, setActiveFolder] = useState('All Notes');
+  const [expandedFolders, setExpandedFolders] = useState(new Set(['All Notes', 'Highlights', 'URL Notes']));
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved');
   const [searchQuery, setSearchQuery] = useState('');
@@ -297,49 +296,60 @@ export function NotesCanvas({ workspaceId }) {
   useEffect(() => {
     if (!activeTeam) return;
 
-    const unsubscribe = p2pStorage.subscribeToSharedItems(activeTeam.id, async (newItems) => {
-      console.log('[NotesCanvas] Received shared items:', newItems);
+    let unsubscribe = () => { };
+    let isMounted = true;
 
-      let newNotesCount = 0;
+    const initAndSubscribe = async () => {
+      try {
+        // Ensure storage is initialized before subscribing
+        // This prevents "Storage not initialized" error if TeamView hasn't been mounted yet
+        await p2pStorage.initializeTeamStorage(activeTeam.id);
 
-      for (const item of newItems) {
-        if (item.type === 'NOTE_SHARE' && item.payload) {
-          try {
-            const note = item.payload;
-            // Check if we already have this note (by ID)
-            // Or maybe check by content/title match to avoid duplicates if ID is stripped?
-            // For now, let's assume we want to import it.
-            // We should give it a unique ID to avoid conflict if we are just "importing" a copy.
-            // OR keep the same ID if we want "sync" (but this is just sharing for now).
-            // Let's generate a new ID to treat it as a copy shared with me.
+        if (!isMounted) return;
 
-            const importedNote = {
-              ...note,
-              id: `${Date.now()}_shared_${Math.random().toString(36).slice(2, 6)}`,
-              title: `(Shared) ${note.title || 'Untitled'}`,
-              folder: 'Shared with Me', // Put in a specific folder
-              createdAt: Date.now(),
-              updatedAt: Date.now()
-            };
+        unsubscribe = p2pStorage.subscribeToSharedItems(activeTeam.id, async (newItems) => {
+          console.log('[NotesCanvas] Received shared items:', newItems);
 
-            await dbUpsertNote(importedNote);
-            newNotesCount++;
-          } catch (e) {
-            console.error('[NotesCanvas] Error saving shared note:', e);
+          let newNotesCount = 0;
+
+          for (const item of newItems) {
+            if (item.type === 'NOTE_SHARE' && item.payload) {
+              try {
+                const note = item.payload;
+                // Import shared note as a new copy
+                const importedNote = {
+                  ...note,
+                  id: `${Date.now()}_shared_${Math.random().toString(36).slice(2, 6)}`,
+                  title: `(Shared) ${note.title || 'Untitled'}`,
+                  folder: 'Shared with Me', // Put in a specific folder
+                  createdAt: Date.now(),
+                  updatedAt: Date.now()
+                };
+
+                await dbUpsertNote(importedNote);
+                newNotesCount++;
+              } catch (e) {
+                console.error('[NotesCanvas] Error saving shared note:', e);
+              }
+            }
           }
-        }
-      }
 
-      if (newNotesCount > 0) {
-        // Refresh notes to show the new one
-        loadNotes(false);
-        // showToast(`Received ${newNotesCount} shared note(s)!`); // TODO: Add toast system
-        // For now, alert or just log? Alert is annoying. 
-        // We'll rely on the folder badge updating.
+          if (newNotesCount > 0) {
+            // Refresh notes to show the new one
+            loadNotes(false);
+          }
+        });
+      } catch (err) {
+        console.error('[NotesCanvas] Failed to initialize storage subscription:', err);
       }
-    });
+    };
 
-    return unsubscribe;
+    initAndSubscribe();
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [activeTeam, loadNotes]);
 
   // Consolidated data loading logic moved up to avoid TDZ issues
@@ -384,52 +394,126 @@ export function NotesCanvas({ workspaceId }) {
     }
   }, [activeFolder, urlNotes, highlights, notes]);
 
-  // Group notes by time period (Apple Notes style)
-  const groupedNotes = useMemo(() => {
-    const notesToGroup = filteredNotes;
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const last7Days = new Date(today);
-    last7Days.setDate(last7Days.getDate() - 7);
-    const last30Days = new Date(today);
-    last30Days.setDate(last30Days.getDate() - 30);
-    const thisYear = new Date(now.getFullYear(), 0, 1);
-
-    const groups = {
-      'Pinned': [],
-      'Today': [],
-      'Yesterday': [],
-      'Previous 7 Days': [],
-      'Previous 30 Days': [],
-      'This Year': [],
-      'Older': []
-    };
-
-    notesToGroup.forEach(note => {
-      const noteDate = new Date(note.updatedAt || note.createdAt);
-
-      if (note.pinned) {
-        groups['Pinned'].push(note);
-      } else if (noteDate >= today) {
-        groups['Today'].push(note);
-      } else if (noteDate >= yesterday) {
-        groups['Yesterday'].push(note);
-      } else if (noteDate >= last7Days) {
-        groups['Previous 7 Days'].push(note);
-      } else if (noteDate >= last30Days) {
-        groups['Previous 30 Days'].push(note);
-      } else if (noteDate >= thisYear) {
-        groups['This Year'].push(note);
+  // Toggle folder expansion
+  const toggleFolder = (folder) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folder)) {
+        next.delete(folder);
       } else {
-        groups['Older'].push(note);
+        next.add(folder);
       }
+      return next;
     });
+  };
 
-    // Return only non-empty groups
-    return Object.entries(groups).filter(([_, notes]) => notes.length > 0);
-  }, [filteredNotes]);
+  // Create note in specific folder
+  const createNewNoteInFolder = (folder) => {
+    setActiveNote(null);
+    setNoteContent('');
+    setNoteTitle('');
+    setNoteUrl('');
+    setNoteFolder(folder === 'Uncategorized' ? '' : folder);
+    setAutoSaveStatus('idle');
+    setIsEditing(true);
+
+    // Ensure folder is expanded
+    if (!expandedFolders.has(folder)) {
+      toggleFolder(folder);
+    }
+
+    setTimeout(() => {
+      editorRef.current?.focus();
+      if (editorRef.current) editorRef.current.innerHTML = '';
+    }, 100);
+  };
+
+  // Render sidebar note item
+  const renderSidebarNoteItem = (note) => (
+    <div
+      key={note.id}
+      onClick={() => selectNote(note)}
+      className={`notes-list-item ${activeNote?.id === note.id ? 'active' : ''}`}
+      style={{
+        padding: '6px 12px 6px 36px', // Indented
+        borderRadius: '6px',
+        marginBottom: '1px',
+        background: activeNote?.id === note.id ? 'var(--accent-blue-soft)' : 'transparent',
+        borderLeft: activeNote?.id === note.id ? '2px solid var(--accent-blue)' : '2px solid transparent',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        position: 'relative',
+        fontSize: 'var(--font-sm)',
+        color: activeNote?.id === note.id ? 'var(--text)' : '#e2e8f0'
+      }}
+      onMouseEnter={(e) => {
+        if (activeNote?.id !== note.id) {
+          e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+          e.currentTarget.style.color = 'var(--text)';
+        }
+        const hoverEl = e.currentTarget.querySelector('.note-hover-actions');
+        if (hoverEl) hoverEl.style.opacity = '1';
+      }}
+      onMouseLeave={(e) => {
+        if (activeNote?.id !== note.id) {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--text-secondary)';
+        }
+        const hoverEl = e.currentTarget.querySelector('.note-hover-actions');
+        if (hoverEl) hoverEl.style.opacity = '0';
+      }}
+    >
+      <div style={{
+        flex: 1,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px'
+      }}>
+        {note.url ? (
+          <img
+            src={getFaviconUrl(note.url, 16)}
+            alt=""
+            style={{ width: '14px', height: '14px', borderRadius: '3px', flexShrink: 0 }}
+            onError={(e) => e.target.style.display = 'none'}
+          />
+        ) : (
+          <FontAwesomeIcon icon={faStickyNote} style={{ fontSize: '10px', opacity: 0.5 }} />
+        )}
+        <span>{note.title || 'Untitled Note'}</span>
+      </div>
+
+      <div className="note-hover-actions" style={{
+        opacity: 0,
+        display: 'flex',
+        gap: '4px',
+        transition: 'opacity 0.2s'
+      }}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setDeleteConfirmNote(note);
+          }}
+          className="icon-btn-danger"
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '2px',
+            color: '#ef4444',
+            cursor: 'pointer',
+            fontSize: '10px'
+          }}
+        >
+          <FontAwesomeIcon icon={faTrash} />
+        </button>
+      </div>
+    </div>
+  );
 
   // Auto-save note (workspace or URL note)
   const saveNote = useCallback(async (content, noteId = null) => {
@@ -740,8 +824,8 @@ export function NotesCanvas({ workspaceId }) {
         gap: '16px',
         color: 'var(--text-secondary)'
       }}>
-        <FontAwesomeIcon icon={faSync} spin style={{ fontSize: '32px' }} />
-        <p style={{ margin: 0, fontSize: '14px' }}>Loading your notes...</p>
+        <FontAwesomeIcon icon={faSync} spin style={{ fontSize: 'var(--font-5xl)' }} />
+        <p style={{ margin: 0, fontSize: 'var(--font-lg)' }}>Loading your notes...</p>
       </div>
     );
   }
@@ -770,386 +854,198 @@ export function NotesCanvas({ workspaceId }) {
       }}>
         {/* Sidebar */}
         {showSidebar && !isFullScreen && (
-          <div className="notes-sidebar" style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            flexShrink: 0
-          }}>
-            {/* Folder List */}
-            <div style={{
-              background: 'var(--glass-bg)',
-              backdropFilter: 'blur(16px)',
-              borderRadius: '12px',
-              border: '1px solid var(--border-primary)',
+          <div className="notes-sidebar">
+            <div className="sidebar-header" style={{
+              padding: '16px 16px 12px',
               display: 'flex',
-              flexDirection: 'column',
-              maxHeight: '40%',
-              overflow: 'hidden'
+              alignItems: 'center',
+              justifyContent: 'space-between'
             }}>
-              <div className="custom-scrollbar" style={{
-                padding: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-                overflowY: 'auto'
-              }}>
-                <div className="sidebar-header" style={{
+              <span className="sidebar-title" style={{ padding: 0 }}>Notes</span>
+              <button
+                onClick={createNewNote}
+                className="icon-btn"
+                style={{
+                  padding: '6px',
+                  fontSize: '12px',
+                  background: 'var(--surface-3)',
+                  border: '1px solid var(--border-primary)',
+                  color: 'var(--text)',
+                  width: '24px',
+                  height: '24px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '0 0 4px', // Adjusted padding since container has padding
-                  marginBottom: '4px'
-                }}>
-                  <span className="folder-text" style={{
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    color: 'var(--text-secondary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em'
-                  }}>
-                    Folders
-                  </span>
-                  <button
-                    onClick={createNewNote}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      padding: '4px',
-                      borderRadius: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.2s ease',
-                      fontSize: '11px'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'var(--surface-3)';
-                      e.currentTarget.style.color = 'var(--text)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = 'var(--text-secondary)';
-                    }}
-                    title="Create New Note"
-                  >
-                    <FontAwesomeIcon icon={faPlus} />
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => setActiveFolder('All Notes')}
-                  className={`notes-sidebar-btn ${activeFolder === 'All Notes' ? 'active' : ''}`}
-                  style={{
-                    background: activeFolder === 'All Notes' ? 'var(--accent-blue-soft)' : 'transparent',
-                    border: activeFolder === 'All Notes' ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
-                    borderRadius: '10px',
-                    padding: '12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    textAlign: 'left',
-                    color: activeFolder === 'All Notes' ? 'var(--accent-blue)' : 'var(--text)'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (activeFolder !== 'All Notes') {
-                      e.currentTarget.style.background = 'var(--interactive-hover)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (activeFolder !== 'All Notes') {
-                      e.currentTarget.style.background = 'transparent';
-                    }
-                  }}
-                >
-                  <FontAwesomeIcon icon={activeFolder === 'All Notes' ? faFolderOpen : faFolder} style={{ fontSize: '16px' }} />
-                  <span className="folder-text" style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>All Notes</span>
-                  <span className="notes-badge folder-text" style={{
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: activeFolder === 'All Notes' ? 'var(--accent-blue)' : 'var(--surface-3)',
-                    color: activeFolder === 'All Notes' ? 'white' : 'var(--text-secondary)',
-                    fontSize: '11px',
-                    fontWeight: 600
-                  }}>
-                    {notes.length}
-                  </span>
-                </button>
-
-                {folders.filter(f => f !== 'All Notes').map(folder => (
-                  <button
-                    key={folder}
-                    onClick={() => setActiveFolder(folder)}
-                    className={`notes-sidebar-btn ${activeFolder === folder ? 'active' : ''}`}
-                    style={{
-                      background: activeFolder === folder ? 'var(--accent-blue-soft)' : 'transparent',
-                      border: activeFolder === folder ? '1px solid var(--accent-blue-border)' : '1px solid transparent',
-                      borderRadius: '10px',
-                      padding: '12px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      textAlign: 'left',
-                      color: activeFolder === folder ? 'var(--accent-blue)' : 'var(--text)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (activeFolder !== folder) {
-                        e.currentTarget.style.background = 'var(--interactive-hover)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (activeFolder !== folder) {
-                        e.currentTarget.style.background = 'transparent';
-                      }
-                    }}
-                  >
-                    <FontAwesomeIcon icon={folder === 'URL Notes' ? faLink : folder === 'Highlights' ? faHighlighter : (activeFolder === folder ? faFolderOpen : faFolder)} style={{ fontSize: '16px' }} />
-                    <span className="folder-text" style={{ flex: 1, fontSize: '14px', fontWeight: 500 }}>{folder}</span>
-                    <span className="notes-badge folder-text" style={{
-                      padding: '2px 8px',
-                      borderRadius: '8px',
-                      background: activeFolder === folder ? 'var(--accent-blue)' : 'var(--surface-3)',
-                      color: activeFolder === folder ? 'white' : 'var(--text-secondary)',
-                      fontSize: '11px',
-                      fontWeight: 600
-                    }}>
-                      {folder === 'URL Notes' ? urlNotes.length : folder === 'Highlights' ? highlights.length : notes.filter(n => n.folder === folder).length}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                  justifyContent: 'center'
+                }}
+                title="New Note"
+              >
+                <FontAwesomeIcon icon={faPlus} />
+              </button>
             </div>
 
-            {/* Notes List */}
-            <div style={{
-              background: 'var(--glass-bg)',
-              backdropFilter: 'blur(16px)',
-              borderRadius: '12px',
-              border: '1px solid var(--border-primary)',
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              minHeight: 0,
-              overflow: 'hidden'
-            }}>
-              <div className="custom-scrollbar" style={{
-                padding: '12px',
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
-                flex: 1
-              }}>
-                {groupedNotes.length === 0 ? (
-                  <div style={{
+            <div className="notes-list custom-scrollbar" style={{ padding: '0 12px 12px' }}>
+              {/* Special Folder: Highlights */}
+              <div className="folder-group">
+                <div
+                  className={`folder-header ${expandedFolders.has('Highlights') ? 'expanded' : ''}`}
+                  onClick={() => toggleFolder('Highlights')}
+                  style={{
+                    padding: '8px 10px',
                     display: 'flex',
-                    flexDirection: 'column',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '40px 20px',
-                    textAlign: 'center',
-                    gap: '8px'
-                  }}>
-                    <div style={{ fontSize: '32px', opacity: 0.3 }}><FontAwesomeIcon icon={faStickyNote} /></div>
-                    <p style={{ margin: 0, fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>No notes here</p>
-                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>Click + to create one</p>
+                    gap: '8px',
+                    cursor: 'pointer',
+                    borderRadius: '8px',
+                    color: activeFolder === 'Highlights' ? 'var(--accent-blue)' : '#e2e8f0',
+                    fontWeight: 600,
+                    fontSize: 'var(--font-sm)',
+                    userSelect: 'none'
+                  }}
+                >
+                  <FontAwesomeIcon
+                    icon={faChevronRight}
+                    style={{
+                      fontSize: '10px',
+                      transition: 'transform 0.2s',
+                      transform: expandedFolders.has('Highlights') ? 'rotate(90deg)' : 'rotate(0deg)',
+                      opacity: 0.7
+                    }}
+                  />
+                  <FontAwesomeIcon icon={faHighlighter} style={{ fontSize: '14px', opacity: 0.8 }} />
+                  <span style={{ flex: 1 }}>Highlights</span>
+                  <span className="note-count">{highlights.length}</span>
+                </div>
+                {expandedFolders.has('Highlights') && (
+                  <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {highlights.length === 0 ? (
+                      <div style={{ padding: '8px', fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>No highlights</div>
+                    ) : (
+                      highlights.map(note => renderSidebarNoteItem(note))
+                    )}
                   </div>
-                ) : (
-                  groupedNotes.map(([groupName, groupNotes]) => (
-                    <div key={groupName} style={{ marginBottom: '8px' }}>
-                      {/* Group Header */}
-                      <div style={{
-                        fontSize: '11px',
-                        fontWeight: 600,
-                        color: groupName === 'Pinned' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        padding: '8px 4px 6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}>
-                        {groupName === 'Pinned' && <FontAwesomeIcon icon={faThumbtack} style={{ fontSize: '12px', marginRight: '4px' }} />}
-                        {groupName}
-                        <span style={{
-                          fontSize: '10px',
-                          padding: '1px 6px',
-                          borderRadius: '8px',
-                          background: 'var(--surface-3)',
-                          color: 'var(--text-muted)',
-                          fontWeight: 500
-                        }}>
-                          {groupNotes.length}
-                        </span>
-                      </div>
-                      {/* Notes in this group */}
-                      {groupNotes.map((note) => (
-                        <div
-                          key={note.id}
-                          onClick={() => selectNote(note)}
-                          className={`notes-list-item ${activeNote?.id === note.id ? 'active' : ''}`}
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: '8px',
-                            marginBottom: '2px',
-                            background: activeNote?.id === note.id ? 'var(--accent-blue-soft)' : 'var(--surface-2)',
-                            border: activeNote?.id === note.id ? '1px solid var(--accent-blue-border)' : '1px solid var(--border-secondary)',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '4px',
-                            position: 'relative'
-                          }}
-                          onMouseEnter={(e) => {
-                            if (activeNote?.id !== note.id) {
-                              e.currentTarget.style.background = 'var(--interactive-hover)';
-                            }
-                            // Show hover elements
-                            const hoverEl = e.currentTarget.querySelector('.note-hover-meta');
-                            if (hoverEl) hoverEl.style.opacity = '1';
-                          }}
-                          onMouseLeave={(e) => {
-                            if (activeNote?.id !== note.id) {
-                              e.currentTarget.style.background = 'var(--surface-2)';
-                            }
-                            // Hide hover elements
-                            const hoverEl = e.currentTarget.querySelector('.note-hover-meta');
-                            if (hoverEl) hoverEl.style.opacity = '0';
-                          }}
-                        >
-                          {/* Note Title with Favicon for URL notes */}
-                          < div style={{
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            color: 'var(--text)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
-                          }}>
-                            {
-                              note.url && (
-                                <img
-                                  src={getFaviconUrl(note.url, 16)}
-                                  alt=""
-                                  style={{
-                                    width: '16px',
-                                    height: '16px',
-                                    borderRadius: '3px',
-                                    flexShrink: 0
-                                  }}
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                  }}
-                                />
-                              )
-                            }
-                            < span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {note.title || 'Untitled Note'}
-                            </span >
-                          </div >
-                          {/* Note Preview */}
-                          < div
-                            style={{
-                              fontSize: '12px',
-                              color: 'var(--text-secondary)',
-                              lineHeight: '1.3',
-                              overflow: 'hidden',
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical'
-                            }}
-                            dangerouslySetInnerHTML={{
-                              __html: note.text ?
-                                (note.text.replace(/<[^>]*>/g, '').substring(0, 100) + (note.text.length > 100 ? '...' : ''))
-                                : '<i>Empty note</i>'
-                            }}
-                          />
-                          {/* Folder tag (always visible) */}
-                          {
-                            note.folder && (
-                              <span style={{
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                background: 'var(--surface-3)',
-                                fontSize: '9px',
-                                color: 'var(--text-muted)',
-                                alignSelf: 'flex-start',
-                                marginTop: '2px'
-                              }}>
-                                {note.folder}
-                              </span>
-                            )
-                          }
-                          {/* Hover Meta - Date and Delete (only visible on hover) */}
-                          <div
-                            className="note-hover-meta"
-                            style={{
-                              position: 'absolute',
-                              bottom: '8px',
-                              right: '8px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              opacity: 0,
-                              transition: 'opacity 0.2s ease'
-                            }}
-                          >
-                            <span style={{
-                              fontSize: '10px',
-                              color: 'var(--text-muted)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}>
-                              <FontAwesomeIcon icon={faClock} style={{ fontSize: '9px' }} />
-                              {new Date(note.updatedAt || note.createdAt).toLocaleDateString()}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirmNote(note);
-                              }}
-                              style={{
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                border: 'none',
-                                color: '#f87171',
-                                cursor: 'pointer',
-                                padding: '4px 6px',
-                                borderRadius: '4px',
-                                transition: 'all 0.2s ease',
-                                fontSize: '10px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                              }}
-                            >
-                              <FontAwesomeIcon icon={faTrash} />
-                            </button>
-                          </div>
-                        </div >
-                      ))}
-                    </div >
-                  ))
                 )}
-              </div >
-            </div >
-          </div >
+              </div>
+
+              {/* Special Folder: URL Notes */}
+              <div className="folder-group">
+                <div
+                  className={`folder-header ${expandedFolders.has('URL Notes') ? 'expanded' : ''}`}
+                  onClick={() => toggleFolder('URL Notes')}
+                  style={{
+                    padding: '8px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    borderRadius: '8px',
+                    color: activeFolder === 'URL Notes' ? 'var(--accent-blue)' : '#e2e8f0',
+                    fontWeight: 600,
+                    fontSize: 'var(--font-sm)',
+                    userSelect: 'none'
+                  }}
+                >
+                  <FontAwesomeIcon
+                    icon={faChevronRight}
+                    style={{
+                      fontSize: '10px',
+                      transition: 'transform 0.2s',
+                      transform: expandedFolders.has('URL Notes') ? 'rotate(90deg)' : 'rotate(0deg)',
+                      opacity: 0.7
+                    }}
+                  />
+                  <FontAwesomeIcon icon={faLink} style={{ fontSize: '14px', opacity: 0.8 }} />
+                  <span style={{ flex: 1 }}>URL Notes</span>
+                  <span className="note-count">{urlNotes.length}</span>
+                </div>
+                {expandedFolders.has('URL Notes') && (
+                  <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {urlNotes.length === 0 ? (
+                      <div style={{ padding: '8px', fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>No URL notes</div>
+                    ) : (
+                      urlNotes.map(note => renderSidebarNoteItem(note))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Regular Folders */}
+              {(() => {
+                // Get unique folders from regular notes, excluding empty/null
+                const workspaceFolders = [...new Set(notes.map(n => n.folder || 'Uncategorized'))].sort();
+                // Ensure Uncategorized is last
+                const sortedFolders = workspaceFolders.filter(f => f !== 'Uncategorized');
+                if (workspaceFolders.includes('Uncategorized')) sortedFolders.push('Uncategorized');
+
+                return sortedFolders.map(folderName => {
+                  const folderNotes = notes.filter(n => (n.folder || 'Uncategorized') === folderName);
+                  if (folderNotes.length === 0) return null;
+
+                  return (
+                    <div className="folder-group" key={folderName}>
+                      <div
+                        className={`folder-header ${expandedFolders.has(folderName) ? 'expanded' : ''}`}
+                        onClick={() => toggleFolder(folderName)}
+                        style={{
+                          padding: '8px 10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          cursor: 'pointer',
+                          borderRadius: '8px',
+                          color: '#e2e8f0',
+                          fontWeight: 600,
+                          fontSize: 'var(--font-sm)',
+                          userSelect: 'none'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <FontAwesomeIcon
+                          icon={faChevronRight}
+                          style={{
+                            fontSize: '10px',
+                            transition: 'transform 0.2s',
+                            transform: expandedFolders.has(folderName) ? 'rotate(90deg)' : 'rotate(0deg)',
+                            opacity: 0.7
+                          }}
+                        />
+                        <FontAwesomeIcon icon={folderName === 'Uncategorized' ? faStickyNote : faFolder} style={{ fontSize: '14px', opacity: 0.8 }} />
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderName}</span>
+                        <span className="note-count">{folderNotes.length}</span>
+
+                        {/* Quick Add to Folder */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            createNewNoteInFolder(folderName);
+                          }}
+                          className="folder-add-btn"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'inherit',
+                            padding: '4px',
+                            cursor: 'pointer',
+                            opacity: 0,
+                            transition: 'opacity 0.2s'
+                          }}
+                          title={`New note in ${folderName}`}
+                        >
+                          <FontAwesomeIcon icon={faPlus} style={{ fontSize: '10px' }} />
+                        </button>
+                      </div>
+
+                      {expandedFolders.has(folderName) && (
+                        <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          {folderNotes.map(note => renderSidebarNoteItem(note))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
         )}
 
         {/* Editor Area */}
@@ -1306,46 +1202,8 @@ export function NotesCanvas({ workspaceId }) {
                   </datalist>
                 </div>
 
-                {/* Share Button (P2P) */}
-                {/* Share Button (P2P) */}
-                {activeTeam && (
-                  <button
-                    onClick={() => setIsShareModalOpen(true)}
-                    title={`Share currently open note`}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: 'linear-gradient(135deg, var(--accent-purple), var(--accent-blue))',
-                      border: 'none',
-                      color: 'white',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      transition: 'all 0.2s ease',
-                      height: '36px',
-                      flexShrink: 0,
-                      fontWeight: 600,
-                      fontSize: '12px',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                      minWidth: '100px',
-                      justifyContent: 'center'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.opacity = '0.9';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.opacity = '1';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faSync} style={{ fontSize: '12px' }} />
-                    <span style={{ fontSize: '12px' }}>Share</span>
-                  </button>
-                )}
+                {/* Share Modal moved to end of header or outside to avoid layout issues, keeping modal here is fine as it's absolute/fixed usually, but button needs to move */}
 
-                {/* Share Modal */}
                 <ShareNoteModal
                   isOpen={isShareModalOpen}
                   onClose={() => setIsShareModalOpen(false)}
@@ -1387,6 +1245,45 @@ export function NotesCanvas({ workspaceId }) {
                     e.target.style.background = 'var(--surface-2)';
                   }}
                 />
+
+                {/* Share Button (P2P) - Moved to Right */}
+                {activeTeam && (
+                  <button
+                    onClick={() => setIsShareModalOpen(true)}
+                    title={`Share currently open note`}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, var(--accent-purple), var(--accent-blue))',
+                      border: 'none',
+                      color: 'white',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.2s ease',
+                      height: '36px',
+                      flexShrink: 0,
+                      fontWeight: 600,
+                      fontSize: '12px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      minWidth: '80px',
+                      justifyContent: 'center',
+                      marginLeft: '8px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = '0.9';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = '1';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faSync} style={{ fontSize: '12px' }} />
+                    <span style={{ fontSize: '12px' }}>Share</span>
+                  </button>
+                )}
               </div>
 
               <div style={{
@@ -1635,6 +1532,7 @@ style.textContent = `
     .notes-sidebar {
         width: 280px;
         transition: transform 0.3s ease;
+        padding-left: 8px;
     }
     .folder-text {
         display: inline;

@@ -374,7 +374,8 @@ export default function TeamView({ team: propTeam }) {
                 flexShrink: 0,
                 borderRight: '1px solid rgba(255,255,255,0.1)',
                 display: 'flex', flexDirection: 'column',
-                background: 'rgba(0,0,0,0.2)',
+                background: 'rgba(0,0,0,0.3)',
+                paddingLeft: '4px',
                 transition: 'width 0.3s ease'
             }}>
                 <div className="sidebar-header" style={{ padding: '16px', fontSize: 'var(--font-sm)', fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -405,25 +406,25 @@ export default function TeamView({ team: propTeam }) {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                     <div style={{
                                         width: 24, height: 24, borderRadius: 6,
-                                        background: isActive ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
+                                        background: isActive ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.15)',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontSize: 10, fontWeight: 700, flexShrink: 0,
-                                        color: isActive ? '#fff' : '#9ca3af'
+                                        fontSize: 'var(--font-xs)', fontWeight: 700, flexShrink: 0,
+                                        color: isActive ? '#fff' : '#e2e8f0'
                                     }}>
                                         {team.name.substring(0, 2).toUpperCase()}
                                     </div>
                                     <div className="sidebar-text" style={{
-                                        fontSize: 14, fontWeight: 500,
-                                        color: isActive ? '#fff' : '#ccc',
+                                        fontSize: 'var(--font-sm)', fontWeight: 600,
+                                        color: isActive ? '#fff' : '#e2e8f0',
                                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                                     }}>
                                         {team.name}
                                     </div>
                                 </div>
-                                <div className="sidebar-text" style={{ fontSize: 11, color: isActive ? '#93c5fd' : '#6b7280', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div className="sidebar-text" style={{ fontSize: 'var(--font-xs)', color: isActive ? '#bfdbfe' : '#cbd5e1', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <span style={{
                                         width: 6, height: 6, borderRadius: '50%',
-                                        background: count > 0 ? '#4ade80' : '#4b5563',
+                                        background: count > 0 ? '#4ade80' : '#94a3b8',
                                         boxShadow: count > 0 ? '0 0 6px #4ade80' : 'none'
                                     }} />
                                     {count} peer{count !== 1 ? 's' : ''}

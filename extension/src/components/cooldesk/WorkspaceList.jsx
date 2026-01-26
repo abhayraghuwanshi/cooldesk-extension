@@ -288,6 +288,16 @@ export function WorkspaceList({
                         ({savedWorkspaces.length})
                     </span>
                 </h2>
+                {/* <div style={{
+                    fontSize: 'var(--font-sm)',
+                    fontWeight: 600,
+                    color: 'var(--text-secondary)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    paddingLeft: '4px'
+                }}>
+                    Workspaces
+                </div> */}
 
                 <div className="view-toggle" style={{ display: 'flex', gap: 8 }}>
                     <button

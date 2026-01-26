@@ -50,8 +50,8 @@
   /* Floating pill look */
   left: 8vw;
   /* Match container margin */
-  right: 8vw;
-  /* Match container margin */
+  /* Match container margin + scrollbar width (8px) for alignment */
+  right: calc(8vw + 8px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -106,14 +106,29 @@
 }
 
 .cooldesk-logo-icon {
-  width: 40px;
-  height: 40px;
+  width: calc(var(--font-5xl) * 1.2);
+  height: calc(var(--font-5xl) * 1.2);
   background: linear-gradient(135deg, var(--primary-color, #3B82F6) 0%, var(--secondary-color, #8B5CF6) 100%);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 24px;
+  transition: all 0.2s ease;
+}
+
+@media (min-width: 1600px) {
+  .cooldesk-logo-icon {
+    width: calc(var(--font-5xl) * 1.4);
+    height: calc(var(--font-5xl) * 1.4);
+  }
+}
+
+@media (min-width: 2000px) {
+  .cooldesk-logo-icon {
+    width: calc(var(--font-5xl) * 1.6);
+    height: calc(var(--font-5xl) * 1.6);
+  }
 }
 
 .cooldesk-settings-btn {
@@ -368,7 +383,7 @@
   border: none !important;
   outline: none !important;
   color: var(--text-primary, #F8FAFC);
-  font-size: 15px;
+  font-size: var(--font-lg);
   font-weight: 500;
   min-width: 0;
   height: 100%;
@@ -750,7 +765,13 @@
 .cooldesk-workspace-card.compact {
   height: auto;
   max-height: none;
-  padding: 0;
+  padding: 10px 16px;
+  /* Increased padding for more height/clarity */
+  min-height: 64px;
+  /* Minimum height guarantee */
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .cooldesk-workspace-card.compact:hover {
@@ -780,14 +801,22 @@
 }
 
 .workspace-icon {
-  width: 44px;
-  height: 44px;
+  width: calc(var(--font-5xl) * 1.4);
+  /* Responsive sizing (~44px at base) */
+  height: calc(var(--font-5xl) * 1.4);
+  min-width: calc(var(--font-5xl) * 1.4);
+  /* Prevent shrinking */
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: calc(var(--font-2xl) * 1.1);
+  /* Responsive icon size */
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  /* Added depth */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* Subtle border */
 }
 
 .workspace-icon.blue {
@@ -1162,7 +1191,7 @@
 }
 
 .create-text {
-  font-size: 15px;
+  font-size: var(--font-lg);
   font-weight: 500;
   color: #C4B5FD;
 }
@@ -1522,24 +1551,6 @@
   max-height: 400px;
 }
 
-/* Notes List Scrollbar */
-.notes-widget>div>div:last-child::-webkit-scrollbar {
-  width: 6px;
-}
-
-.notes-widget>div>div:last-child::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.3);
-  border-radius: 3px;
-}
-
-.notes-widget>div>div:last-child::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.3);
-  border-radius: 3px;
-}
-
-.notes-widget>div>div:last-child::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.5);
-}
 
 /* Compact Notes inside Workspace Card */
 .cooldesk-workspace-card .notes-widget {
@@ -1548,6 +1559,8 @@
   padding: 0;
   max-height: none;
   font-size: 12px;
+  width: 100%;
+  /* box-sizing: border-box; */
 }
 
 .cooldesk-workspace-card .notes-widget .panel-header {
@@ -1562,7 +1575,8 @@
   overflow-y: auto;
 }
 
-.cooldesk-workspace-card .notes-widget textarea,
+/* Don't override the new inline styles for textarea - let the component handle it */
+
 .cooldesk-workspace-card .notes-widget input {
   font-size: 12px;
   padding: 8px;
@@ -1702,7 +1716,7 @@
   }
 
   .workspace-name {
-    font-size: 15px;
+    font-size: var(--font-lg);
   }
 
   .workspace-count {
@@ -1714,7 +1728,7 @@
   }
 
   .cooldesk-panel {
-    font-size: 15px;
+    font-size: var(--font-lg);
   }
 
   .panel-title {
@@ -1722,7 +1736,7 @@
   }
 
   .cooldesk-search-input {
-    font-size: 15px;
+    font-size: var(--font-lg);
     padding: 14px 16px;
   }
 
@@ -1964,7 +1978,7 @@
 }
 
 .compact-workspace-name {
-  font-size: 15px;
+  font-size: var(--font-lg);
   /* Increased from 13px */
   font-weight: 600;
   color: var(--text-primary, #F1F5F9);
@@ -2168,9 +2182,9 @@
 }
 
 .cooldesk-workspace-card.compact .workspace-icon {
-  width: 36px;
-  height: 36px;
-  font-size: 18px;
+  width: calc(var(--font-5xl) * 1.3);
+  height: calc(var(--font-5xl) * 1.3);
+  font-size: var(--font-2xl);
   border-radius: 10px;
 }
 
@@ -2397,6 +2411,12 @@
     gap: 8px;
   }
 
+  .cooldesk-logo-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+
   .cooldesk-header {
     padding: 8px 12px;
     gap: 8px;
@@ -2541,12 +2561,7 @@
     padding: 14px 20px;
   }
 
-  .compact-workspace-icon {
-    width: 48px;
-    height: 48px;
-    font-size: 24px;
-    border-radius: 14px;
-  }
+  /* compact-workspace-icon removed to use base responsive size */
 
   .compact-workspace-info {
     min-width: 140px;
@@ -2611,12 +2626,7 @@
     padding: 12px 18px;
   }
 
-  .compact-workspace-icon {
-    width: 42px;
-    height: 42px;
-    font-size: 22px;
-    border-radius: 12px;
-  }
+  /* compact-workspace-icon removed to use base responsive size */
 
   .compact-workspace-info {
     min-width: 120px;
@@ -2680,11 +2690,7 @@
     padding: 10px 16px;
   }
 
-  .compact-workspace-icon {
-    width: 38px;
-    height: 38px;
-    font-size: 20px;
-  }
+  /* compact-workspace-icon removed to use base responsive size */
 
   .compact-workspace-info {
     min-width: 110px;
@@ -2692,7 +2698,7 @@
   }
 
   .compact-workspace-name {
-    font-size: 15px;
+    font-size: var(--font-lg);
   }
 
   .compact-workspace-count {
@@ -2732,11 +2738,7 @@
     padding: 10px 14px;
   }
 
-  .compact-workspace-icon {
-    width: 36px;
-    height: 36px;
-    font-size: 18px;
-  }
+  /* compact-workspace-icon removed to use base responsive size */
 
   .compact-workspace-info {
     min-width: 100px;

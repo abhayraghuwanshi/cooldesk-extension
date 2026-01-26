@@ -295,19 +295,19 @@ export function CoolDeskContainer({
   return (
     <div className={`cooldesk-container ${themeClass}`}>
       {/* Wallpaper Background Overlay (Blur) handled by React, Image handled by Body CSS */}
-      {wallpaperEnabled && wallpaperUrl && (
+      {/* {wallpaperEnabled && wallpaperUrl && (
         <div style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          // backdropFilter: 'blur(8px)',
+          // WebkitBackdropFilter: 'blur(8px)',
           zIndex: -1,
           pointerEvents: 'none'
         }} />
-      )}
+      )} */}
 
       {/* Header with Logo and Settings - Unified Top Bar */}
       <div className="cooldesk-header">
@@ -318,8 +318,6 @@ export function CoolDeskContainer({
               alt="CoolDesk Logo"
               className="cooldesk-logo-icon"
               style={{
-                width: '32px',
-                height: '32px',
                 objectFit: 'contain'
               }}
             />

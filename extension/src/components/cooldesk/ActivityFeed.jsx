@@ -59,9 +59,11 @@ export function ActivityFeed() {
     // Load calendar events
     const loadCalendarEvents = useCallback(async () => {
         try {
-            const result = await chrome.storage.local.get(['calendar_events']);
-            if (result.calendar_events) {
-                setCalendarEvents(result.calendar_events);
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                const result = await chrome.storage.local.get(['calendar_events']);
+                if (result.calendar_events) {
+                    setCalendarEvents(result.calendar_events);
+                }
             }
         } catch (e) {
             console.error('Failed to load calendar events:', e);
@@ -69,9 +71,11 @@ export function ActivityFeed() {
     }, []);
 
     const triggerCalendarScrape = () => {
-        chrome.runtime.sendMessage({ type: 'TRIGGER_CALENDAR_SCRAPE' }, () => {
-            setTimeout(loadCalendarEvents, 5000);
-        });
+        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+            chrome.runtime.sendMessage({ type: 'TRIGGER_CALENDAR_SCRAPE' }, () => {
+                setTimeout(loadCalendarEvents, 5000);
+            });
+        }
     };
 
     // Load Most Visited (Quick Access) - memoized
@@ -91,7 +95,7 @@ export function ActivityFeed() {
                     type: 'link',
                     hostname: new URL(url).hostname.replace('www.', '')
                 }));
-            } else if (chrome?.history?.search) {
+            } else if (typeof chrome !== 'undefined' && chrome.history && chrome.history.search) {
                 const results = await chrome.history.search({
                     text: '',
                     maxResults: 50,
@@ -149,23 +153,52 @@ export function ActivityFeed() {
 
         // 2. Fetch Active Tabs
         try {
-            if (chrome?.tabs?.query) {
+            if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
                 const tabs = await chrome.tabs.query({ currentWindow: true });
                 const tabItems = tabs
                     .filter(t => !t.url.startsWith('chrome://'))
-                    .map(tab => ({
-                        id: `tab_${tab.id}`,
-                        title: tab.title,
-                        url: tab.url,
-                        timestamp: tab.lastAccessed || Date.now(),
-                        type: 'tab',
-                        subtitle: new URL(tab.url).hostname,
-                        favIconUrl: tab.favIconUrl
-                    }));
+                    .map(tab => {
+                        let hostname = 'Browser Tab';
+                        try {
+                            if (tab.url) hostname = new URL(tab.url).hostname;
+                        } catch (e) {
+                            // Invalid URL, keep default
+                        }
+
+                        return {
+                            id: `tab_${tab.id}`,
+                            title: tab.title || 'Untitled Tab',
+                            url: tab.url,
+                            timestamp: tab.lastAccessed || Date.now(),
+                            type: 'tab',
+                            subtitle: hostname,
+                            favIconUrl: tab.favIconUrl
+                        };
+                    });
                 items.push(...tabItems);
             }
         } catch (e) {
             console.error('Failed to load tabs', e);
+        }
+
+        // 3. Fetch Calendar Events
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                const calResult = await chrome.storage.local.get(['calendar_events']);
+                const events = calResult.calendar_events || [];
+                const calendarItems = events.map((evt, idx) => ({
+                    id: `cal_${evt.scrapedAt}_${idx}`,
+                    title: evt.title || 'Untitled Event',
+                    url: evt.link || 'https://calendar.google.com/',
+                    timestamp: evt.scrapedAt || Date.now(),
+                    type: 'calendar',
+                    subtitle: evt.time || 'Upcoming',
+                    platform: 'Google Calendar'
+                }));
+                items.push(...calendarItems);
+            }
+        } catch (e) {
+            console.error('Failed to load calendar items', e);
         }
 
         // Sort combined feed by timestamp (newest first)
@@ -196,32 +229,43 @@ export function ActivityFeed() {
 
         // Event-driven updates with debouncing
         try {
-            // Listen to tab events for real-time updates
-            chrome.tabs.onCreated.addListener(debouncedUpdate);
-            chrome.tabs.onRemoved.addListener(debouncedUpdate);
-            chrome.tabs.onUpdated.addListener(debouncedUpdate);
-            chrome.tabs.onActivated.addListener(debouncedUpdate);
-
-            // Listen to storage changes for chat and calendar updates
-            const storageListener = (changes) => {
-                if (changes.calendar_events) {
-                    setCalendarEvents(changes.calendar_events.newValue || []);
+            if (typeof chrome !== 'undefined') {
+                // Listen to tab events for real-time updates
+                if (chrome.tabs) {
+                    chrome.tabs.onCreated.addListener(debouncedUpdate);
+                    chrome.tabs.onRemoved.addListener(debouncedUpdate);
+                    chrome.tabs.onUpdated.addListener(debouncedUpdate);
+                    chrome.tabs.onActivated.addListener(debouncedUpdate);
                 }
-                debouncedUpdate();
-            };
-            chrome.storage.onChanged.addListener(storageListener);
 
-            return () => {
-                chrome.tabs.onCreated.removeListener(debouncedUpdate);
-                chrome.tabs.onRemoved.removeListener(debouncedUpdate);
-                chrome.tabs.onUpdated.removeListener(debouncedUpdate);
-                chrome.tabs.onActivated.removeListener(debouncedUpdate);
-                chrome.storage.onChanged.removeListener(storageListener);
-            };
+                // Listen to storage changes for chat and calendar updates
+                if (chrome.storage) {
+                    const storageListener = (changes) => {
+                        if (changes.calendar_events) {
+                            setCalendarEvents(changes.calendar_events.newValue || []);
+                        }
+                        debouncedUpdate();
+                    };
+                    chrome.storage.onChanged.addListener(storageListener);
+
+                    return () => {
+                        if (chrome.tabs) {
+                            chrome.tabs.onCreated.removeListener(debouncedUpdate);
+                            chrome.tabs.onRemoved.removeListener(debouncedUpdate);
+                            chrome.tabs.onUpdated.removeListener(debouncedUpdate);
+                            chrome.tabs.onActivated.removeListener(debouncedUpdate);
+                        }
+                        if (chrome.storage) {
+                            chrome.storage.onChanged.removeListener(storageListener);
+                        }
+                    };
+                }
+            }
         } catch (error) {
             console.warn('[ActivityFeed] Failed to setup event listeners', error);
             return () => { };
         }
+        return () => { };
     }, [loadQuickLinks, loadFeed, loadCalendarEvents, debouncedUpdate]);
 
     // Calculate how many favorite icons can fit in the available width
@@ -640,9 +684,10 @@ export function ActivityFeed() {
                                 .filter(item => activeTab === 'all' || item.type === (activeTab === 'chats' ? 'chat' : 'tab'))
                                 .map(item => {
                                     const isChat = item.type === 'chat';
+                                    const isCalendar = item.type === 'calendar';
                                     const icon = isChat
                                         ? PLATFORM_CONFIG[item.platform]?.emoji || '💬'
-                                        : null;
+                                        : isCalendar ? '📅' : null;
 
                                     return (
                                         <div key={item.id}
@@ -664,12 +709,12 @@ export function ActivityFeed() {
                                             <div style={{
                                                 width: '36px', height: '36px',
                                                 borderRadius: isChat ? '12px' : '8px',
-                                                background: isChat ? 'var(--accent-purple-soft, rgba(139, 92, 246, 0.15))' : 'var(--accent-blue-soft, rgba(96, 165, 250, 0.15))',
-                                                border: isChat ? '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))' : '1px solid var(--accent-blue-border, rgba(96, 165, 250, 0.2))',
+                                                background: isChat ? 'var(--accent-purple-soft, rgba(139, 92, 246, 0.15))' : isCalendar ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent-blue-soft, rgba(96, 165, 250, 0.15))',
+                                                border: isChat ? '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))' : isCalendar ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid var(--accent-blue-border, rgba(96, 165, 250, 0.2))',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 fontSize: '18px',
                                                 flexShrink: 0,
-                                                color: isChat ? 'var(--accent-purple, #8b5cf6)' : 'var(--accent-blue, #60a5fa)',
+                                                color: isChat ? 'var(--accent-purple, #8b5cf6)' : isCalendar ? '#10B981' : 'var(--accent-blue, #60a5fa)',
                                                 overflow: 'hidden'
                                             }}>
                                                 <img
@@ -727,6 +772,19 @@ export function ActivityFeed() {
                                                         textTransform: 'uppercase'
                                                     }}>
                                                         Chat
+                                                    </div>
+                                                ) : isCalendar ? (
+                                                    <div style={{
+                                                        fontSize: '10px',
+                                                        fontWeight: 600,
+                                                        color: '#10B981',
+                                                        background: 'rgba(16, 185, 129, 0.1)',
+                                                        border: '1px solid rgba(16, 185, 129, 0.2)',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px',
+                                                        textTransform: 'uppercase'
+                                                    }}>
+                                                        Event
                                                     </div>
                                                 ) : (
                                                     <div style={{

@@ -74,17 +74,21 @@ export function ChatContext({ workspaceId, workspaceName }) {
 
   // Load custom links from storage
   useEffect(() => {
-    chrome.storage.local.get(['chatContextLinks'], (result) => {
-      if (result.chatContextLinks) {
-        setCustomLinks(result.chatContextLinks);
-      }
-    });
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['chatContextLinks'], (result) => {
+        if (result.chatContextLinks) {
+          setCustomLinks(result.chatContextLinks);
+        }
+      });
+    }
   }, []);
 
   // Save custom links to storage
   const saveCustomLinks = (links) => {
     setCustomLinks(links);
-    chrome.storage.local.set({ chatContextLinks: links });
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ chatContextLinks: links });
+    }
   };
 
   const handleAddPopularTool = (tool) => {
@@ -196,13 +200,17 @@ export function ChatContext({ workspaceId, workspaceName }) {
   const triggerScrape = () => {
     setLoading(true);
     // Use the new manual trigger that opens tabs if needed
-    chrome.runtime.sendMessage({ type: 'TRIGGER_MANUAL_CHATS_SCRAPE' }, (response) => {
-      // Re-fetch after delays to allow scrape to start/finish
-      // The background script now opens tabs, so it might take a bit longer
-      setTimeout(loadChats, 3000);
-      setTimeout(loadChats, 8000);
-      setTimeout(loadChats, 15000);
-    });
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'TRIGGER_MANUAL_CHATS_SCRAPE' }, (response) => {
+        // Re-fetch after delays to allow scrape to start/finish
+        // The background script now opens tabs, so it might take a bit longer
+        setTimeout(loadChats, 3000);
+        setTimeout(loadChats, 8000);
+        setTimeout(loadChats, 15000);
+      });
+    } else {
+      setLoading(false);
+    }
   };
 
   return (
@@ -520,7 +528,6 @@ export function ChatContext({ workspaceId, workspaceName }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontFamily: 'Inter, system-ui, sans-serif'
             }} onClick={() => setIsAddingLink(false)}>
               <style>{`
                 @keyframes modalIn {

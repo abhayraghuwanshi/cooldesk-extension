@@ -393,55 +393,25 @@ export default function App() {
           return;
         }
 
-        // ENHANCED: Scan browser history directly instead of relying only on dashboard data
-        let urls = [];
+        // Use dashboard data (background history scan) for auto-creation
         const urlTimes = new Map();
-
-        // Try to get URLs from browser history API (for chat platforms)
-        const browserAPI = typeof chrome !== 'undefined' && chrome?.history ? chrome : null;
-        if (browserAPI) {
-          try {
-            const endTime = Date.now();
-            const startTime = endTime - (30 * 24 * 60 * 60 * 1000); // Last 30 days
-
-            console.log('[AutoCreate] Scanning browser history for chat platforms...');
-            const historyItems = await browserAPI.history.search({
-              text: '',
-              startTime: startTime,
-              endTime: endTime,
-              maxResults: 2000
-            });
-
-            console.log(`[AutoCreate] Found ${historyItems.length} history items`);
-
-            // Extract URLs and timestamps
-            for (const item of historyItems) {
-              if (item.url) {
-                urls.push(item.url);
-                const t = item.lastVisitTime || Date.now();
-                const prev = urlTimes.get(item.url) || 0;
-                if (t > prev) urlTimes.set(item.url, t);
+        const parseUrlsFromData = () => {
+          const uList = [];
+          if (data && Array.isArray(data)) {
+            data.forEach(it => {
+              const u = it?.url;
+              if (u) {
+                uList.push(u);
+                const t = Number(it?.lastVisitTime || it?.dateAdded || 0) || 0;
+                const prev = Number(urlTimes.get(u) || 0);
+                if (t > prev) urlTimes.set(u, t);
               }
-            }
-
-            console.log(`[AutoCreate] Extracted ${urls.length} URLs from history`);
-          } catch (err) {
-            console.warn('[AutoCreate] Failed to scan browser history:', err);
+            });
           }
-        }
+          return uList;
+        };
 
-        // Fallback: Also include URLs from dashboard data if history scan failed
-        if (urls.length === 0 && data && Array.isArray(data)) {
-          console.log('[AutoCreate] Falling back to dashboard data');
-          urls = data.map(item => item.url).filter(Boolean);
-          for (const it of data) {
-            const u = it?.url;
-            if (!u) continue;
-            const t = Number(it?.lastVisitTime || it?.dateAdded || 0) || 0;
-            const prev = Number(urlTimes.get(u) || 0);
-            if (t > prev) urlTimes.set(u, t);
-          }
-        }
+        const urls = parseUrlsFromData();
 
         if (urls.length === 0) {
           console.log('[AutoCreate] No URLs found to process');

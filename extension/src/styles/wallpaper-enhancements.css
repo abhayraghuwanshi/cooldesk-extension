@@ -4,7 +4,7 @@
    ============================================ */
 
 /* === SOPHISTICATED COLOR PALETTE === */
-.wallpaper-enabled * {
+.wallpaper-enabled {
     /* Neural Tinted Glass */
     --glass-tint-primary: rgba(255, 255, 255, 0.05);
     /* Subtle White */
@@ -95,7 +95,8 @@
             rgba(10, 10, 15, 0.75) 100%) !important;
     backdrop-filter: blur(140px) saturate(140%) brightness(1.15);
     -webkit-backdrop-filter: blur(140px) saturate(140%) brightness(1.15);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: none !important;
+    /* border: 1px solid rgba(255, 255, 255, 0.12); Removed per user request */
     box-shadow:
         0 12px 48px rgba(0, 0, 0, 0.3),
         0 2px 0 rgba(255, 255, 255, 0.05) inset,
@@ -215,12 +216,29 @@
 }
 
 .wallpaper-enabled .notes-sidebar>div {
-    box-shadow: none !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
     background: linear-gradient(135deg,
-            rgba(20, 20, 28, 0.5) 0%,
-            rgba(15, 15, 22, 0.45) 100%) !important;
+            rgba(25, 25, 35, 0.8) 0%,
+            rgba(15, 15, 25, 0.75) 100%) !important;
+    backdrop-filter: blur(40px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(40px) saturate(120%) !important;
     border-radius: 12px !important;
+}
+
+/* Team View Sidebar - matching Notes Sidebar enhancements */
+.wallpaper-enabled .team-view-sidebar {
+    background: linear-gradient(135deg,
+            rgba(25, 25, 35, 0.8) 0%,
+            rgba(15, 15, 25, 0.75) 100%) !important;
+    backdrop-filter: blur(40px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(40px) saturate(120%) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.wallpaper-enabled .team-view-sidebar .sidebar-header {
+    opacity: 1 !important;
+    color: #e2e8f0 !important;
 }
 
 /* Reduce gap between folder/note items */
@@ -296,25 +314,15 @@
     transform: none;
 }
 
-/* Notes Widget in Overview - lighter styling */
-.wallpaper-enabled .notes-widget,
-.wallpaper-enabled .overview-notes-card {
+/* Notes Widget in Overview - Don't override component's inline styling to preserve premium gradient borders and glassmorphism */
+/* Fix double container: Remove border/bg from the inner widget panel since the outer card already has it */
+.wallpaper-enabled .overview-notes-card .notes-widget,
+.wallpaper-enabled .overview-notes-card .notes-widget>div {
+    background: transparent !important;
+    border: none !important;
     box-shadow: none !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    background: linear-gradient(135deg,
-            rgba(20, 20, 28, 0.65) 0%,
-            rgba(15, 15, 22, 0.6) 100%) !important;
-}
-
-.wallpaper-enabled .notes-widget textarea,
-.wallpaper-enabled .overview-notes-card textarea {
-    box-shadow: none !important;
-}
-
-/* Notes input card within widget */
-.wallpaper-enabled .notes-widget>div>div {
-    box-shadow: none !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: none !important;
+    border-radius: 0 !important;
 }
 
 .wallpaper-enabled .cooldesk-workspace-card:hover {
@@ -323,11 +331,11 @@
             rgba(15, 15, 20, 0.8) 100%) !important;
     backdrop-filter: blur(150px) saturate(140%) brightness(1.15);
     -webkit-backdrop-filter: blur(150px) saturate(140%) brightness(1.15);
-    border-color: rgba(255, 255, 255, 0.25);
-    box-shadow:
+    /* border-color: rgba(255, 255, 255, 0.25); */
+    /* box-shadow:
         0 24px 96px rgba(0, 0, 0, 0.45),
         0 3px 0 rgba(255, 255, 255, 0.08) inset,
-        0 -2px 0 rgba(0, 0, 0, 0.3) inset;
+        0 -2px 0 rgba(0, 0, 0, 0.3) inset; */
     transform: translateY(-6px) scale(1.02);
 }
 

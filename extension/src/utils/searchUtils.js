@@ -13,6 +13,12 @@ export const fuzzySearch = (data, query, keys, options = {}) => {
         return data;
     }
 
+    // If data is already a Fuse instance, use it directly
+    if (data instanceof Fuse) {
+        const result = data.search(query);
+        return result.map(r => r.item);
+    }
+
     const defaultOptions = {
         includeScore: true,
         shouldSort: true,

@@ -1,7 +1,6 @@
 import {
   faMicrophone,
   faPaperPlane,
-  faStickyNote,
   faStop
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -78,142 +77,184 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
   };
 
   return (
-    <div className="cooldesk-panel notes-widget" style={{
+    <div className="notes-widget" style={{
       display: 'flex',
       flexDirection: 'column',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
+      width: '100%',
+      minHeight: 0,
+      overflow: 'visible'
     }}>
-      <div className="panel-header" style={{ flexShrink: 0 }}>
-        <div className="panel-title">
-          <FontAwesomeIcon icon={faStickyNote} style={{ marginRight: '8px' }} />
-          Quick Note
-        </div>
-      </div>
-
+      {/* Unified Input Card */}
       <div style={{
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
-        boxSizing: 'border-box',
-        minHeight: 0,
-        overflow: 'visible'
+        position: 'relative',
+        borderRadius: '20px',
+        overflow: 'hidden',
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        // background: isListening
+        //   ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(220, 38, 38, 0.05) 100%)'
+        //   : 'linear-gradient(135deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%)',
+        backdropFilter: 'blur(12px)',
+        border: 'none',
+        // boxShadow: isListening
+        //   ? '0 8px 24px -4px rgba(239, 68, 68, 0.3)'
+        //   : '0 8px 32px -8px rgba(0, 0, 0, 0.4), 0 4px 16px -4px rgba(0, 0, 0, 0.2)',
       }}>
-        {/* Unified Input Card */}
+
+        {/* Action Bar (Top of card) */}
         <div style={{
-          minHeight: 0,
           display: 'flex',
-          flexDirection: 'column',
-          border: `1px solid ${isListening ? '#ef4444' : 'rgba(148, 163, 184, 0.4)'}`,
-          borderRadius: '16px', // Slightly more rounded
-          overflow: 'hidden',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          background: 'rgba(15, 23, 42, 0.3)', // Slight background tint
-          boxShadow: isListening ? '0 0 0 2px rgba(239, 68, 68, 0.2)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 16px 12px',
+          borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+          // background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%)',
+          flexShrink: 0,
+          position: 'relative',
+          zIndex: 1,
         }}>
-
-          {/* Action Bar (Top of card) */}
+          {/* Left: Character Count or Status */}
           <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            borderBottom: 'none',
-            background: 'transparent',
-            flexShrink: 0
+            fontSize: '11px',
+            fontWeight: 600,
+            letterSpacing: '0.5px',
+            color: isListening ? '#EF4444' : '#64748B',
+            opacity: newNoteText.length > 0 || isListening ? 1 : 0,
+            transition: 'all 0.3s ease',
+            textTransform: 'uppercase',
           }}>
-            {/* Left: Character Count or Status */}
-            <div style={{
-              fontSize: '12px',
-              color: '#64748B',
-              opacity: newNoteText.length > 0 ? 1 : 0
-            }}>
-              {newNoteText.length} chars
-            </div>
-
-            {/* Right: Actions */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {/* Voice Button */}
-              <button
-                onClick={toggleVoice}
-                title={isListening ? "Stop listening" : "Start voice input"}
-                style={{
-                  background: isListening ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
-                  color: isListening ? '#EF4444' : '#94A3B8',
-                  border: 'none',
-                  borderRadius: '8px',
-                  width: '32px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => !isListening && (e.currentTarget.style.color = '#F1F5F9')}
-                onMouseLeave={(e) => !isListening && (e.currentTarget.style.color = '#94A3B8')}
-              >
-                <FontAwesomeIcon icon={isListening ? faStop : faMicrophone} />
-              </button>
-
-              {/* Send Button */}
-              <button
-                onClick={handleAddNote}
-                disabled={!newNoteText.trim() || isSaving}
-                title="Save Note (Ctrl+Enter)"
-                style={{
-                  background: newNoteText.trim()
-                    ? 'linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%)'
-                    : 'rgba(148, 163, 184, 0.1)',
-                  color: newNoteText.trim() ? 'white' : '#64748B',
-                  border: newNoteText.trim() ? '1px solid rgba(167, 139, 250, 0.5)' : '1px solid rgba(148, 163, 184, 0.2)',
-                  borderRadius: '10px',
-                  padding: '0 16px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  cursor: newNoteText.trim() ? 'pointer' : 'not-allowed',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                {isSaving ? (
-                  <span>...</span>
-                ) : (
-                  <>
-                    <span>Save</span>
-                    <FontAwesomeIcon icon={faPaperPlane} size="sm" />
-                  </>
-                )}
-              </button>
-            </div>
+            {isListening ? '● Recording' : `${newNoteText.length} chars`}
           </div>
 
-          {/* Text Area Area */}
-          <textarea
-            value={newNoteText}
-            onChange={(e) => setNewNoteText(e.target.value)}
-            placeholder={isListening ? "Listening..." : "Type or use voice to add a note..."}
-            style={{
-              height: '180px',
-              width: '100%',
-              background: 'transparent',
-              border: 'none',
-              padding: '16px',
-              color: '#E5E7EB',
-              fontSize: 'var(--font-md, 14px)',
-              fontFamily: 'inherit',
-              resize: 'none',
-              outline: 'none',
-              boxShadow: 'none',
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                handleAddNote();
-              }
-            }}
-          />
+
+          {/* Right: Actions */}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {/* Voice Button */}
+            <button
+              onClick={toggleVoice}
+              title={isListening ? "Stop listening" : "Start voice input"}
+              style={{
+                background: isListening
+                  ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(220, 38, 38, 0.2) 100%)'
+                  : 'rgba(148, 163, 184, 0.08)',
+                color: isListening ? '#EF4444' : '#94A3B8',
+                border: `1px solid ${isListening ? 'rgba(239, 68, 68, 0.3)' : 'rgba(148, 163, 184, 0.15)'}`,
+                borderRadius: '10px',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: isListening
+                  ? '0 4px 12px rgba(239, 68, 68, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                  : '0 2px 8px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+                transform: isListening ? 'scale(1.05)' : 'scale(1)',
+              }}
+              onMouseEnter={(e) => {
+                if (!isListening) {
+                  e.currentTarget.style.color = '#F1F5F9';
+                  e.currentTarget.style.background = 'rgba(148, 163, 184, 0.15)';
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isListening) {
+                  e.currentTarget.style.color = '#94A3B8';
+                  e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }
+              }}
+            >
+              <FontAwesomeIcon icon={isListening ? faStop : faMicrophone} />
+            </button>
+
+            {/* Send Button */}
+            <button
+              onClick={handleAddNote}
+              disabled={!newNoteText.trim() || isSaving}
+              title="Save Note (Ctrl+Enter)"
+              style={{
+                background: newNoteText.trim()
+                  ? 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 50%, #6D28D9 100%)'
+                  : 'rgba(148, 163, 184, 0.08)',
+                color: newNoteText.trim() ? 'white' : '#64748B',
+                border: newNoteText.trim()
+                  ? '1px solid rgba(167, 139, 250, 0.4)'
+                  : '1px solid rgba(148, 163, 184, 0.15)',
+                borderRadius: '12px',
+                padding: '0 18px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                cursor: newNoteText.trim() ? 'pointer' : 'not-allowed',
+                fontSize: '13px',
+                fontWeight: 600,
+                letterSpacing: '0.3px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: newNoteText.trim()
+                  ? '0 4px 16px rgba(139, 92, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                  : '0 2px 8px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+                transform: 'scale(1)',
+              }}
+              onMouseEnter={(e) => {
+                if (newNoteText.trim()) {
+                  e.currentTarget.style.transform = 'scale(1.05) translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 92, 246, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (newNoteText.trim()) {
+                  e.currentTarget.style.transform = 'scale(1) translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(139, 92, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+                }
+              }}
+            >
+              {isSaving ? (
+                <span>...</span>
+              ) : (
+                <>
+                  <span>Save</span>
+                  <FontAwesomeIcon icon={faPaperPlane} size="sm" />
+                </>
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* Text Area Area */}
+        <textarea
+          value={newNoteText}
+          onChange={(e) => setNewNoteText(e.target.value)}
+          placeholder={isListening ? "Listening..." : "Type or use voice to add a note..."}
+          style={{
+            height: '180px',
+            width: '100%',
+            background: 'transparent',
+            border: 'none',
+            padding: '18px 20px',
+            color: '#E5E7EB',
+            fontSize: '14px',
+            lineHeight: '1.6',
+            fontFamily: 'inherit',
+            resize: 'none',
+            outline: 'none',
+            boxShadow: 'none',
+            position: 'relative',
+            zIndex: 1,
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              handleAddNote();
+            }
+          }}
+        />
       </div>
     </div>
   );

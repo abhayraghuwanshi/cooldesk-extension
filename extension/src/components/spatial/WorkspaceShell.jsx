@@ -103,7 +103,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   }, [activeFace, currentFace]);
 
   const navigateToFace = useCallback((face) => {
-    if (face === currentFace || isTransitioning) return;
+    if (face === currentFace) return;
 
     // Smart Travel: Dynamic duration based on distance
     const faces = ['chat', 'workspace', 'overview', 'tabs', 'team', 'notes'];
@@ -111,15 +111,13 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     const targetIndex = faces.indexOf(face);
     const distance = Math.abs(targetIndex - currentIndex);
 
-    // Aggressive optimization for "seamless" feel
-    // < 1 hop: smooth 600ms
-    // > 1 hop: super fast 300ms (whoosh effect)
-    const duration = distance > 1 ? 350 : 600;
+    // Instant feel: 200ms single, 100ms multi
+    const duration = distance > 1 ? 100 : 200;
 
     const container = document.querySelector('.workspace-faces');
     if (container) {
-      // Use efficient bezier for seamless landing
-      container.style.transition = `transform ${duration}ms cubic-bezier(0.2, 1, 0.4, 1)`;
+      // Snappier bezier
+      container.style.transition = `transform ${duration}ms cubic-bezier(0.16, 1, 0.3, 1)`;
     }
 
     setIsTransitioning(true);
@@ -135,35 +133,39 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     transitionTimeoutRef.current = setTimeout(() => {
       setIsTransitioning(false);
     }, duration);
-  }, [currentFace, isTransitioning, onFaceChange]);
+  }, [currentFace, onFaceChange]);
 
   useEffect(() => {
     const handleKeyboard = (e) => {
       const modifierPressed = e.ctrlKey || e.metaKey;
+      const isInput = ['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable;
 
-      if (modifierPressed && (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      // Don't override default text navigation in inputs unless specifically requested
+      // (This prevents Ctrl+Arrow from breaking cursor movement in text fields)
+      if (isInput && modifierPressed && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        return;
+      }
+
+      if (modifierPressed && ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        console.log('[WorkspaceShell] Spatial Nav triggered:', e.key);
         e.preventDefault();
-        switch (e.key) {
-          case 'ArrowLeft':
-            if (currentFace === 'overview') navigateToFace('workspace');
-            else if (currentFace === 'workspace') navigateToFace('chat');
-            else if (currentFace === 'tabs') navigateToFace('overview');
-            else if (currentFace === 'team') navigateToFace('tabs');
-            else if (currentFace === 'notes') navigateToFace('team');
-            break;
-          case 'ArrowRight':
-            if (currentFace === 'overview') navigateToFace('tabs');
-            else if (currentFace === 'tabs') navigateToFace('team');
-            else if (currentFace === 'team') navigateToFace('notes');
-            else if (currentFace === 'workspace') navigateToFace('overview');
-            else if (currentFace === 'chat') navigateToFace('workspace');
-            break;
-          case 'ArrowDown':
-          case 'ArrowUp':
-            navigateToFace('overview');
-            break;
-          default:
-            break;
+
+        const faces = ['chat', 'workspace', 'overview', 'tabs', 'team', 'notes'];
+        const currentIndex = faces.indexOf(currentFace);
+
+        if (currentIndex === -1) {
+          console.warn('[WorkspaceShell] Invalid currentFace:', currentFace);
+          // Fallback to overview if state is corrupted
+          navigateToFace('overview');
+          return;
+        }
+
+        if (e.key === 'ArrowLeft') {
+          if (currentIndex > 0) navigateToFace(faces[currentIndex - 1]);
+        } else if (e.key === 'ArrowRight') {
+          if (currentIndex < faces.length - 1) navigateToFace(faces[currentIndex + 1]);
+        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          navigateToFace('overview');
         }
       }
 
@@ -189,10 +191,13 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   useEffect(() => {
     let lastPulseTime = 0;
     const PULSE_COOLDOWN = 600; // Match transition duration
-    const THRESHOLD = 30; // High sensitivity
+    const THRESHOLD = 100; // Increased to dampen sensitivity ("speed")
 
     const handleWheel = (e) => {
-      // Ignore vertical scrolling unless Shift is held
+      // Reverted: Triggers on natural horizontal scroll (or Shift+Scroll) without modifier
+
+      // Ignore vertical scrolling (standard trackpad behavior for navigation)
+      // unless Shift is held (which converts vertical wheel to horizontal in many browsers)
       if (!e.shiftKey && Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
 
       const delta = e.shiftKey ? e.deltaY : e.deltaX;
@@ -204,6 +209,9 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       if (Math.abs(delta) > THRESHOLD) {
         e.preventDefault();
 
+        // Direction logic: 
+        // Positive delta (Scroll Down/Right) -> Next Face
+        // Negative delta (Scroll Up/Left) -> Previous Face
         if (delta > 0) {
           if (currentFace === 'chat') navigateToFace('workspace');
           else if (currentFace === 'workspace') navigateToFace('overview');

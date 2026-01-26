@@ -38,6 +38,13 @@ export default defineConfig(({ mode }) => {
       }),
       react(),
     ],
+    server: {
+      port: 5173,
+      strictPort: true,
+      hmr: {
+        port: 5173,
+      },
+    },
     build: {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
