@@ -1740,7 +1740,7 @@ const VoiceNavigationChatGPT = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '12px',
+        fontSize: 'var(--font-sm)',
         fontWeight: '700',
         letterSpacing: '0.2px',
         border: '1px solid rgba(255,255,255,0.35)',
@@ -1976,7 +1976,7 @@ const VoiceNavigationChatGPT = () => {
         }}
       >
         <h3 style={{
-          fontSize: 'var(--font-size-2xl)',
+          fontSize: 'var(--font-2xl)',
           fontWeight: 600,
           margin: 0,
           color: '#ffffff',
@@ -1988,7 +1988,7 @@ const VoiceNavigationChatGPT = () => {
           Voice Navigation
         </h3>
         <span style={{
-          fontSize: '0.85rem',
+          fontSize: 'var(--font-sm)',
           opacity: 0.5,
           color: 'var(--text-secondary, #aaa)'
         }}>
@@ -2027,7 +2027,7 @@ const VoiceNavigationChatGPT = () => {
           padding: '0 4px'
         }}>
           <h3 style={{
-            fontSize: 'var(--font-size-2xl)',
+            fontSize: 'var(--font-2xl)',
             fontWeight: 600,
             margin: 0,
             color: '#ffffff',
@@ -2041,7 +2041,7 @@ const VoiceNavigationChatGPT = () => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
-            fontSize: '0.75rem',
+            fontSize: 'var(--font-xs)',
             opacity: 0.4,
             color: 'var(--text-secondary, #aaa)'
           }}>
@@ -2126,7 +2126,7 @@ const VoiceNavigationChatGPT = () => {
                     }} />
                   ))}
                 </div>
-                <div style={{ marginLeft: 'auto', color: 'var(--text-secondary, #9ca3af)', fontSize: 12 }}>
+                <div style={{ marginLeft: 'auto', color: 'var(--text-secondary, #9ca3af)', fontSize: 'var(--font-sm)' }}>
                   {isListening ? formatTime(Math.max(0, 1800 - timeRemaining)) : '0:00'}
                 </div>
               </div>

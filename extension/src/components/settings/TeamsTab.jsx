@@ -219,10 +219,10 @@ export default function TeamsTab() {
                 background: 'rgba(59, 130, 246, 0.05)',
                 border: '1px solid rgba(59, 130, 246, 0.2)'
             }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 12px 0', color: '#fff' }}>Your Profile</h3>
+                <h3 style={{ fontSize: 'var(--font-lg)', fontWeight: 600, margin: '0 0 12px 0', color: '#fff' }}>Your Profile</h3>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                     <div style={{ flex: 1 }}>
-                        <label style={{ display: 'block', fontSize: 12, marginBottom: 4, opacity: 0.7 }}>Display Name</label>
+                        <label style={{ display: 'block', fontSize: 'var(--font-sm)', marginBottom: 4, opacity: 0.7 }}>Display Name</label>
                         <input
                             type="text"
                             value={username}
@@ -233,11 +233,11 @@ export default function TeamsTab() {
                             style={{
                                 width: '100%', padding: '8px 12px', borderRadius: 8,
                                 background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
-                                color: '#fff', outline: 'none', fontSize: 14
+                                color: '#fff', outline: 'none', fontSize: 'var(--font-base)'
                             }}
                         />
-                        {usernameError && <div style={{ color: '#f87171', fontSize: 12, marginTop: 4 }}>{usernameError}</div>}
-                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
+                        {usernameError && <div style={{ color: '#f87171', fontSize: 'var(--font-sm)', marginTop: 4 }}>{usernameError}</div>}
+                        <div style={{ fontSize: 'var(--font-xs)', color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
                             This name will be shown to other team members
                         </div>
                     </div>
@@ -246,7 +246,7 @@ export default function TeamsTab() {
                             onClick={handleSaveUsername}
                             style={{
                                 marginTop: 20, padding: '8px 16px', borderRadius: 8, border: 'none',
-                                background: '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 600,
+                                background: '#3b82f6', color: '#fff', fontSize: 'var(--font-md)', fontWeight: 600,
                                 cursor: 'pointer'
                             }}
                         >
@@ -258,8 +258,8 @@ export default function TeamsTab() {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 4px 0', color: '#fff' }}>My Teams</h3>
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>
+                    <h3 style={{ fontSize: 'var(--font-lg)', fontWeight: 600, margin: '0 0 4px 0', color: '#fff' }}>My Teams</h3>
+                    <p style={{ fontSize: 'var(--font-md)', color: 'rgba(255,255,255,0.5)', margin: 0 }}>
                         Join or create P2P sync groups. Data is encrypted with your secret.
                     </p>
                 </div>
@@ -268,7 +268,7 @@ export default function TeamsTab() {
                         onClick={() => setIsCreating(true)}
                         style={{
                             padding: '8px 16px', borderRadius: 8, border: 'none',
-                            background: '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 600,
+                            background: '#3b82f6', color: '#fff', fontSize: 'var(--font-md)', fontWeight: 600,
                             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
                         }}
                     >
@@ -283,10 +283,10 @@ export default function TeamsTab() {
                     padding: 16, background: 'rgba(59, 130, 246, 0.1)',
                     borderRadius: 12, border: '1px solid rgba(59, 130, 246, 0.2)'
                 }}>
-                    <h4 style={{ margin: '0 0 16px 0', fontSize: 14 }}>Connect to Team</h4>
+                    <h4 style={{ margin: '0 0 16px 0', fontSize: 'var(--font-base)' }}>Connect to Team</h4>
                     <form onSubmit={handleCreateJoin} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <div>
-                            <label style={{ display: 'block', fontSize: 12, marginBottom: 4, opacity: 0.7 }}>Team Name (Local Label)</label>
+                            <label style={{ display: 'block', fontSize: 'var(--font-sm)', marginBottom: 4, opacity: 0.7 }}>Team Name (Local Label)</label>
                             <input
                                 type="text"
                                 value={teamName}
@@ -301,8 +301,8 @@ export default function TeamsTab() {
                         </div>
                         <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                <label style={{ fontSize: 12, opacity: 0.7 }}>Secret Phrase (4+ words)</label>
-                                <button type="button" onClick={generateSecret} style={{ background: 'none', border: 'none', color: '#60a5fa', fontSize: 11, cursor: 'pointer' }}>Generate Random</button>
+                                <label style={{ fontSize: 'var(--font-sm)', opacity: 0.7 }}>Secret Phrase (4+ words)</label>
+                                <button type="button" onClick={generateSecret} style={{ background: 'none', border: 'none', color: '#60a5fa', fontSize: 'var(--font-xs)', cursor: 'pointer' }}>Generate Random</button>
                             </div>
                             <input
                                 type="text"
@@ -315,12 +315,12 @@ export default function TeamsTab() {
                                     color: '#fff', outline: 'none', fontFamily: 'monospace'
                                 }}
                             />
-                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
+                            <div style={{ fontSize: 'var(--font-xs)', color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>
                                 This phrase generates the encryption keys. Share it securely with your team.
                             </div>
                         </div>
 
-                        {error && <div style={{ color: '#f87171', fontSize: 13 }}>{error}</div>}
+                        {error && <div style={{ color: '#f87171', fontSize: 'var(--font-md)' }}>{error}</div>}
 
                         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                             <button type="submit" style={{
@@ -343,7 +343,7 @@ export default function TeamsTab() {
                                 width: '100%', padding: '8px', borderRadius: 8,
                                 border: '1px dashed rgba(255,255,255,0.2)',
                                 background: 'rgba(255,255,255,0.02)', color: '#94a3b8',
-                                fontSize: 12, cursor: 'pointer', transition: 'all 0.2s'
+                                fontSize: 'var(--font-sm)', cursor: 'pointer', transition: 'all 0.2s'
                             }}
                                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#fff'; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; e.currentTarget.style.color = '#94a3b8'; }}
@@ -419,11 +419,11 @@ export default function TeamsTab() {
                                         <FontAwesomeIcon icon={faUsers} size="sm" />
                                     </div>
                                     <div style={{ flex: 1 }}>
-                                        <div style={{ fontWeight: 600, fontSize: 14 }}>
+                                        <div style={{ fontWeight: 600, fontSize: 'var(--font-base)' }}>
                                             {team.name}
-                                            {activeTeamId === team.id && <span style={{ marginLeft: 8, fontSize: 10, background: '#3b82f6', padding: '2px 6px', borderRadius: 4 }}>Active</span>}
+                                            {activeTeamId === team.id && <span style={{ marginLeft: 8, fontSize: 'var(--font-xs)', background: '#3b82f6', padding: '2px 6px', borderRadius: 4 }}>Active</span>}
                                         </div>
-                                        <div style={{ fontSize: 11, opacity: 0.4, fontFamily: 'monospace' }}>
+                                        <div style={{ fontSize: 'var(--font-xs)', opacity: 0.4, fontFamily: 'monospace' }}>
                                             ID: {team.id.substring(0, 8)}...
                                         </div>
                                     </div>
@@ -435,14 +435,14 @@ export default function TeamsTab() {
                                             border: '1px solid rgba(255,255,255,0.1)',
                                             color: '#fff', cursor: 'pointer',
                                             display: 'flex', alignItems: 'center', gap: 6,
-                                            fontSize: 11
+                                            fontSize: 'var(--font-xs)'
                                         }}
                                     >
                                         <div style={{
                                             padding: '2px 8px', borderRadius: 12,
                                             background: (peerCounts.get(team.id) || 0) > 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)',
                                             color: (peerCounts.get(team.id) || 0) > 0 ? '#34d399' : 'rgba(255,255,255,0.4)',
-                                            fontSize: 11, fontWeight: 600
+                                            fontSize: 'var(--font-xs)', fontWeight: 600
                                         }}>
                                             {members.length} {members.length === 1 ? 'Member' : 'Members'}
                                         </div>
@@ -486,7 +486,7 @@ export default function TeamsTab() {
                                     padding: '0 16px 16px 16px',
                                     borderTop: '1px solid rgba(255,255,255,0.05)'
                                 }}>
-                                    <div style={{ fontSize: 12, fontWeight: 600, marginTop: 12, marginBottom: 8, opacity: 0.7 }}>
+                                    <div style={{ fontSize: 'var(--font-sm)', fontWeight: 600, marginTop: 12, marginBottom: 8, opacity: 0.7 }}>
                                         Team Members
                                     </div>
                                     {members.length === 0 ? (
@@ -494,7 +494,7 @@ export default function TeamsTab() {
                                             padding: 16,
                                             textAlign: 'center',
                                             color: 'rgba(255,255,255,0.3)',
-                                            fontSize: 12,
+                                            fontSize: 'var(--font-sm)',
                                             fontStyle: 'italic'
                                         }}>
                                             No members yet
@@ -519,14 +519,14 @@ export default function TeamsTab() {
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
-                                                        fontSize: 10,
+                                                        fontSize: 'var(--font-xs)',
                                                         fontWeight: 600,
                                                         color: '#fff'
                                                     }}>
                                                         {member.name.charAt(0).toUpperCase()}
                                                     </div>
                                                     <div style={{ flex: 1 }}>
-                                                        <div style={{ fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                        <div style={{ fontSize: 'var(--font-md)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
                                                             {member.name}
                                                             {member.isAdmin && (
                                                                 <span style={{
@@ -537,7 +537,7 @@ export default function TeamsTab() {
                                                                     borderRadius: 4,
                                                                     background: 'rgba(251, 191, 36, 0.2)',
                                                                     border: '1px solid rgba(251, 191, 36, 0.3)',
-                                                                    fontSize: 9,
+                                                                    fontSize: 'var(--font-xs)',
                                                                     fontWeight: 700,
                                                                     color: '#fbbf24',
                                                                     textTransform: 'uppercase',
@@ -556,7 +556,7 @@ export default function TeamsTab() {
                                                                     borderRadius: 4,
                                                                     background: 'rgba(16, 185, 129, 0.2)',
                                                                     border: '1px solid rgba(16, 185, 129, 0.3)',
-                                                                    fontSize: 9,
+                                                                    fontSize: 'var(--font-xs)',
                                                                     fontWeight: 700,
                                                                     color: '#34d399',
                                                                     textTransform: 'uppercase',
@@ -575,7 +575,7 @@ export default function TeamsTab() {
                                                                     borderRadius: 4,
                                                                     background: 'rgba(148, 163, 184, 0.1)',
                                                                     border: '1px solid rgba(148, 163, 184, 0.2)',
-                                                                    fontSize: 9,
+                                                                    fontSize: 'var(--font-xs)',
                                                                     fontWeight: 700,
                                                                     color: '#94a3b8',
                                                                     textTransform: 'uppercase',
@@ -585,9 +585,9 @@ export default function TeamsTab() {
                                                                     Viewer
                                                                 </span>
                                                             )}
-                                                            {member.isOnline && <span style={{ marginLeft: 6, fontSize: 9, color: '#34d399', fontWeight: 600 }}>● Online</span>}
+                                                            {member.isOnline && <span style={{ marginLeft: 6, fontSize: 'var(--font-xs)', color: '#34d399', fontWeight: 600 }}>● Online</span>}
                                                         </div>
-                                                        <div style={{ fontSize: 10, opacity: 0.4, fontFamily: 'monospace' }}>
+                                                        <div style={{ fontSize: 'var(--font-xs)', opacity: 0.4, fontFamily: 'monospace' }}>
                                                             ID: {member.id.toString().substring(0, 8)}
                                                         </div>
                                                     </div>

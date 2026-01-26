@@ -27,17 +27,17 @@ export const applyBaseFontSize = (fontSizeId) => {
   // Set comprehensive CSS custom properties on document root
   document.documentElement.style.setProperty('--base-font-size', fontSizeObj.size);
 
-  // Font scale variables (based on base font size)
-  document.documentElement.style.setProperty('--font-xs', `${Math.round(baseSize * 0.75)}px`);   // 75% - timestamps, icons
-  document.documentElement.style.setProperty('--font-sm', `${Math.round(baseSize * 0.85)}px`);    // 85% - small buttons
-  document.documentElement.style.setProperty('--font-md', `${Math.round(baseSize * 0.9)}px`);    // 90% - metadata
-  document.documentElement.style.setProperty('--font-base', `${Math.round(baseSize * 0.95)}px`); // 95% - secondary text
-  document.documentElement.style.setProperty('--font-lg', `${Math.round(baseSize * 1.05)}px`);   // 105% - main text
-  document.documentElement.style.setProperty('--font-xl', `${Math.round(baseSize * 1)}px`);      // 100% - base
-  document.documentElement.style.setProperty('--font-2xl', `${Math.round(baseSize * 1.15)}px`);  // 115% - titles
-  document.documentElement.style.setProperty('--font-3xl', `${Math.round(baseSize * 1.4)}px`);   // 140% - headings
-  document.documentElement.style.setProperty('--font-4xl', `${Math.round(baseSize * 1.7)}px`);   // 170% - large icons
-  document.documentElement.style.setProperty('--font-5xl', `${Math.round(baseSize * 2)}px`);     // 200% - emoji icons
+  // Font scale variables (standardized progression)
+  document.documentElement.style.setProperty('--font-xs', `${Math.round(baseSize * 0.75)}px`);   // ~10-11px (Tiny)
+  document.documentElement.style.setProperty('--font-sm', `${Math.round(baseSize * 0.85)}px`);   // ~12px (Small)
+  document.documentElement.style.setProperty('--font-md', `${Math.round(baseSize * 0.92)}px`);   // ~13px (Medium-Small)
+  document.documentElement.style.setProperty('--font-base', `${Math.round(baseSize * 0.95)}px`); // ~13-14px (Secondary)
+  document.documentElement.style.setProperty('--font-xl', `${Math.round(baseSize * 1.0)}px`);    // ~14-16px (Base/Current)
+  document.documentElement.style.setProperty('--font-lg', `${Math.round(baseSize * 1.15)}px`);   // ~16-18px (Large)
+  document.documentElement.style.setProperty('--font-2xl', `${Math.round(baseSize * 1.3)}px`);   // ~18-21px (Subtitle)
+  document.documentElement.style.setProperty('--font-3xl', `${Math.round(baseSize * 1.6)}px`);   // ~22-26px (Title)
+  document.documentElement.style.setProperty('--font-4xl', `${Math.round(baseSize * 2.1)}px`);   // ~28-34px (Heading)
+  document.documentElement.style.setProperty('--font-5xl', `${Math.round(baseSize * 2.8)}px`);   // ~38-45px (Hero)
 
   // Also set directly on body for immediate effect
   document.body.style.fontSize = fontSizeObj.size;

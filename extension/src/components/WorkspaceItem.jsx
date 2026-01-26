@@ -202,7 +202,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Workspace Title */}
           <div style={{
-            fontSize: 16,
+            fontSize: 'var(--font-xl)',
             color: 'var(--text, #ffffff)',
             lineHeight: 1.4,
             marginBottom: 2,
@@ -219,7 +219,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
           {/* Time spent display */}
           {timeString && timeString !== '0s' && (
             <div style={{
-              fontSize: 12,
+              fontSize: 'var(--font-sm)',
               color: 'var(--accent-color, #3b82f6)',
               lineHeight: 1.3,
               marginTop: 2,
@@ -250,7 +250,7 @@ export const WorkspaceItem = React.forwardRef(function WorkspaceItem({ base, val
             alignItems: 'center',
             justifyContent: 'center',
             color: 'var(--text-secondary, rgba(255, 255, 255, 0.6))',
-            fontSize: '16px',
+            fontSize: 'var(--font-xl)',
             fontWeight: 'bold',
             lineHeight: 1,
             transform: 'rotate(90deg)',

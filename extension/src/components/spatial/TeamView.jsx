@@ -594,7 +594,7 @@ export default function TeamView({ team: propTeam }) {
                                                 <span style={{
                                                     position: 'absolute', top: -4, right: -4,
                                                     background: '#ef4444', color: '#fff',
-                                                    fontSize: 10, fontWeight: 700,
+                                                    fontSize: 'var(--font-xs)', fontWeight: 700,
                                                     padding: '2px 6px', borderRadius: 10,
                                                     minWidth: 18, textAlign: 'center'
                                                 }}>
@@ -741,7 +741,7 @@ export default function TeamView({ team: propTeam }) {
                                                                         opacity: 0.6
                                                                     }}
                                                                 >
-                                                                    <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
+                                                                    <span style={{ fontSize: 'var(--font-xl)', lineHeight: 1 }}>×</span>
                                                                 </button>
                                                             )}
                                                         </div>
@@ -797,10 +797,10 @@ export default function TeamView({ team: propTeam }) {
                                                             />
                                                         </div>
                                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                                            <div style={{ fontSize: 12, opacity: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                            <div style={{ fontSize: 'var(--font-sm)', opacity: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                                 {hostname}
                                                             </div>
-                                                            <div style={{ fontSize: 11, opacity: 0.3 }}>
+                                                            <div style={{ fontSize: 'var(--font-xs)', opacity: 0.3 }}>
                                                                 {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : ''}
                                                             </div>
                                                         </div>
@@ -925,7 +925,7 @@ export default function TeamView({ team: propTeam }) {
                                                                     opacity: 0.6, flexShrink: 0
                                                                 }}
                                                             >
-                                                                <span style={{ fontSize: 16, lineHeight: 1 }}>×</span>
+                                                                <span style={{ fontSize: 'var(--font-xl)', lineHeight: 1 }}>×</span>
                                                             </button>
                                                         )}
                                                     </div>

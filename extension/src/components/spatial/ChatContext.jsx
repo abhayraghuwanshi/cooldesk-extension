@@ -234,8 +234,8 @@ export function ChatContext({ workspaceId, workspaceName }) {
         flexShrink: 0
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <FontAwesomeIcon icon={faComments} style={{ color: 'var(--accent-blue)', fontSize: '20px' }} />
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: 'var(--text)' }}>AI Chats</h2>
+          <FontAwesomeIcon icon={faComments} style={{ color: 'var(--accent-blue)', fontSize: 'var(--font-3xl)' }} />
+          <h2 style={{ margin: 0, fontSize: 'var(--font-2xl)', fontWeight: 600, color: 'var(--text)' }}>AI Chats</h2>
           {workspaceName && (
             <span style={{
               padding: '4px 12px',
@@ -243,7 +243,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
               background: 'var(--accent-blue-soft)',
               border: '1px solid var(--accent-blue-border)',
               color: 'var(--accent-blue)',
-              fontSize: '12px',
+              fontSize: 'var(--font-sm)',
               fontWeight: 500
             }}>
               {workspaceName}
@@ -289,7 +289,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
         {/* Workspace-aware prompts */}
         {/* <div>
           <div style={{
-            fontSize: '12px',
+            fontSize: 'var(--font-sm)',
             fontWeight: 600,
             color: 'var(--text-secondary)',
             textTransform: 'uppercase',
@@ -332,8 +332,8 @@ export function ChatContext({ workspaceId, workspaceName }) {
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
-                <span style={{ fontSize: '20px' }}>{prompt.icon}</span>
-                <span style={{ fontSize: '13px', fontWeight: 500, flex: 1 }}>{prompt.text}</span>
+                <span style={{ fontSize: 'var(--font-2xl)' }}>{prompt.icon}</span>
+                <span style={{ fontSize: 'var(--font-md)', fontWeight: 500, flex: 1 }}>{prompt.text}</span>
               </button>
             ))}
           </div>
@@ -349,7 +349,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
           marginBottom: '20px'
         }}>
           <div style={{
-            fontSize: '12px',
+            fontSize: 'var(--font-sm)',
             fontWeight: 600,
             color: 'var(--text-secondary)',
             textTransform: 'uppercase',
@@ -372,14 +372,37 @@ export function ChatContext({ workspaceId, workspaceName }) {
                   key={name}
                   className="workspace-link-item"
                   onClick={() => window.open(config.url, '_blank')}
-                  style={{ cursor: 'pointer', padding: '10px' }}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '12px',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    minHeight: '80px',
+                    textAlign: 'center',
+                    background: config.gradient || 'rgba(255, 255, 255, 0.03)',
+                    border: `1px solid ${config.borderColor || 'rgba(255, 255, 255, 0.05)'}`,
+                    borderRadius: '12px',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.borderColor = config.accentColor || 'rgba(59, 130, 246, 0.3)';
+                    e.currentTarget.style.boxShadow = `0 0 15px ${config.accentColor}40`;
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.borderColor = config.borderColor || 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 >
-                  <span className="workspace-link-icon">
+                  <span className="workspace-link-icon" style={{ width: '32px', height: '32px', margin: '0 auto' }}>
                     {faviconUrl ? (
                       <img
                         src={faviconUrl}
                         alt={name}
                         className="link-favicon"
+                        style={{ width: '24px', height: '24px' }}
                         onError={(e) => {
                           e.target.style.display = 'none';
                           e.target.nextSibling.style.display = 'inline';
@@ -389,21 +412,16 @@ export function ChatContext({ workspaceId, workspaceName }) {
                     <FontAwesomeIcon
                       icon={faLink}
                       className="link-fallback-icon"
-                      style={{ display: faviconUrl ? 'none' : 'inline' }}
+                      style={{ display: faviconUrl ? 'none' : 'inline', fontSize: 'var(--font-xl)' }}
                     />
                   </span>
-                  <span className="workspace-link-text">{name}</span>
-                  <FontAwesomeIcon
-                    icon={faExternalLinkAlt}
-                    className="workspace-link-external"
-                  />
+                  <span className="workspace-link-text" style={{ fontSize: 'var(--font-sm)', fontWeight: 600, color: '#fff' }}>{name}</span>
                 </li>
               );
             })}
 
             {/* Custom Links */}
             {customLinks.map((link) => {
-              // ALWAYS try to get a favicon URL first
               const faviconUrl = getFaviconUrl(link.url, 32);
 
               return (
@@ -411,42 +429,63 @@ export function ChatContext({ workspaceId, workspaceName }) {
                   key={link.id}
                   className="workspace-link-item group"
                   onClick={() => window.open(link.url, '_blank')}
-                  style={{ position: 'relative', cursor: 'pointer', padding: '10px' }}
+                  style={{
+                    position: 'relative',
+                    cursor: 'pointer',
+                    padding: '12px',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    minHeight: '80px',
+                    textAlign: 'center',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                    e.currentTarget.style.boxShadow = '0 0 15px rgba(59, 130, 246, 0.15)';
+                    e.currentTarget.querySelector('.workspace-link-remove').style.opacity = 1;
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.querySelector('.workspace-link-remove').style.opacity = 0;
+                  }}
                 >
-                  <span className="workspace-link-icon">
-                    {/* Primary: Try to show Favicon */}
+                  <span className="workspace-link-icon" style={{ width: '32px', height: '32px', margin: '0 auto' }}>
                     {faviconUrl && (
                       <img
                         src={faviconUrl}
                         alt={link.name}
                         className="link-favicon"
-                        style={{ display: 'inline', width: '16px', height: '16px', borderRadius: '4px' }}
+                        style={{ display: 'inline', width: '24px', height: '24px', borderRadius: '4px' }}
                         onError={(e) => {
                           e.target.style.display = 'none';
-                          // Show the sibling fallback span
                           const fallback = e.target.nextSibling;
                           if (fallback) fallback.style.display = 'inline';
                         }}
                       />
                     )}
 
-                    {/* Secondary: Emoji Fallback (initially hidden if we have a URL) */}
                     <span
                       className="link-fallback-icon"
-                      style={{ display: faviconUrl ? 'none' : 'inline', fontSize: '18px', lineHeight: 1 }}
+                      style={{ display: faviconUrl ? 'none' : 'inline', fontSize: 'var(--font-xl)', lineHeight: 1 }}
                     >
                       {link.emoji || '🔗'}
                     </span>
                   </span>
-                  <span className="workspace-link-text">{link.name}</span>
+                  <span className="workspace-link-text" style={{ fontSize: 'var(--font-sm)', fontWeight: 600, color: '#fff' }}>{link.name}</span>
                   <button
                     onClick={(e) => handleRemoveLink(e, link.id)}
                     className="workspace-link-remove"
                     style={{
                       position: 'absolute',
-                      right: '8px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
+                      right: '4px',
+                      top: '4px',
                       background: 'none',
                       border: 'none',
                       color: 'var(--text-secondary)',
@@ -454,13 +493,14 @@ export function ChatContext({ workspaceId, workspaceName }) {
                       cursor: 'pointer',
                       padding: '4px',
                       borderRadius: '4px',
-                      transition: 'all 0.2s'
+                      transition: 'all 0.2s',
+                      zIndex: 2
                     }}
                     onMouseEnter={e => e.target.style.background = 'rgba(239, 68, 68, 0.1)'}
                     onMouseLeave={e => e.target.style.background = 'none'}
                     title="Remove link"
                   >
-                    <FontAwesomeIcon icon={faTimes} style={{ fontSize: '12px' }} />
+                    <FontAwesomeIcon icon={faTimes} style={{ fontSize: 'var(--font-sm)' }} />
                   </button>
                 </li>
               );
@@ -508,9 +548,9 @@ export function ChatContext({ workspaceId, workspaceName }) {
                 transition: 'all 0.3s ease',
                 color: 'var(--text-secondary)'
               }}>
-                <FontAwesomeIcon icon={faPlus} style={{ fontSize: '14px' }} />
+                <FontAwesomeIcon icon={faPlus} style={{ fontSize: 'var(--font-base)' }} />
               </div>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Add Shortcut</span>
+              <span style={{ fontSize: 'var(--font-sm)', fontWeight: 500, color: 'var(--text-secondary)' }}>Add Shortcut</span>
             </li>
           </ul>
 
@@ -569,8 +609,8 @@ export function ChatContext({ workspaceId, workspaceName }) {
                   background: 'linear-gradient(to bottom, rgba(255,255,255,0.03), transparent)'
                 }}>
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: '#fff', letterSpacing: '-0.02em' }}>Add Shortcut</h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#9CA3AF' }}>Pin your favorite tools for quick access</p>
+                    <h3 style={{ margin: 0, fontSize: 'var(--font-2xl)', fontWeight: 600, color: '#fff', letterSpacing: '-0.02em' }}>Add Shortcut</h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: 'var(--font-md)', color: '#9CA3AF' }}>Pin your favorite tools for quick access</p>
                   </div>
                   <button
                     onClick={() => setIsAddingLink(false)}
@@ -616,7 +656,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                           color: activeTab === tab ? '#fff' : '#9CA3AF',
                           cursor: 'pointer',
                           fontWeight: 500,
-                          fontSize: '13px',
+                          fontSize: 'var(--font-md)',
                           transition: 'all 0.2s',
                           boxShadow: activeTab === tab ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
                         }}
@@ -658,9 +698,9 @@ export function ChatContext({ workspaceId, workspaceName }) {
                             onMouseEnter={e => !isAdded && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
                             onMouseLeave={e => !isAdded && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)')}
                           >
-                            <span style={{ fontSize: '20px', lineHeight: 1 }}>{tool.emoji}</span>
-                            <span style={{ fontSize: '13px', fontWeight: 500, flex: 1 }}>{tool.name}</span>
-                            {isAdded && <FontAwesomeIcon icon={faCheck} style={{ fontSize: '10px', color: '#10B981' }} />}
+                            <span style={{ fontSize: 'var(--font-3xl)', lineHeight: 1 }}>{tool.emoji}</span>
+                            <span style={{ fontSize: 'var(--font-md)', fontWeight: 500, flex: 1 }}>{tool.name}</span>
+                            {isAdded && <FontAwesomeIcon icon={faCheck} style={{ fontSize: 'var(--font-xs)', color: '#10B981' }} />}
                           </button>
                         );
                       })}
@@ -668,7 +708,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                   ) : (
                     <form onSubmit={handleAddCustomLink} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#9CA3AF', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Display Name</label>
+                        <label style={{ display: 'block', fontSize: 'var(--font-sm)', fontWeight: 600, color: '#9CA3AF', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Display Name</label>
                         <input
                           type="text"
                           value={newLinkData.name}
@@ -681,7 +721,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                             border: '1px solid rgba(255, 255, 255, 0.1)',
                             borderRadius: '12px',
                             color: '#fff',
-                            fontSize: '14px',
+                            fontSize: 'var(--font-base)',
                             outline: 'none',
                             transition: 'all 0.2s',
                             boxSizing: 'border-box'
@@ -692,7 +732,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#9CA3AF', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Destination URL</label>
+                        <label style={{ display: 'block', fontSize: 'var(--font-sm)', fontWeight: 600, color: '#9CA3AF', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Destination URL</label>
                         <input
                           type="text"
                           value={newLinkData.url}
@@ -705,7 +745,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                             border: '1px solid rgba(255, 255, 255, 0.1)',
                             borderRadius: '12px',
                             color: '#fff',
-                            fontSize: '14px',
+                            fontSize: 'var(--font-base)',
                             outline: 'none',
                             transition: 'all 0.2s',
                             boxSizing: 'border-box'
@@ -715,7 +755,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#9CA3AF', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Icon (Emoji)</label>
+                        <label style={{ display: 'block', fontSize: 'var(--font-sm)', fontWeight: 600, color: '#9CA3AF', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Icon (Emoji)</label>
                         <input
                           type="text"
                           value={newLinkData.emoji}
@@ -729,7 +769,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                             border: '1px solid rgba(255, 255, 255, 0.1)',
                             borderRadius: '12px',
                             color: '#fff',
-                            fontSize: '18px',
+                            fontSize: 'var(--font-2xl)',
                             textAlign: 'center',
                             outline: 'none',
                             transition: 'all 0.2s'
@@ -749,7 +789,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                           border: 'none',
                           borderRadius: '12px',
                           fontWeight: 600,
-                          fontSize: '14px',
+                          fontSize: 'var(--font-base)',
                           cursor: (!newLinkData.name || !newLinkData.url) ? 'not-allowed' : 'pointer',
                           transition: 'all 0.2s',
                           boxShadow: (!newLinkData.name || !newLinkData.url) ? 'none' : '0 4px 6px -1px rgba(59, 130, 246, 0.3), 0 2px 4px -1px rgba(59, 130, 246, 0.15)'
@@ -797,7 +837,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
             gap: '8px'
           }}>
             <div style={{
-              fontSize: '12px',
+              fontSize: 'var(--font-sm)',
               fontWeight: 600,
               color: 'var(--text-secondary)',
               textTransform: 'uppercase',
@@ -814,7 +854,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                 background: 'var(--surface-2)',
                 border: '1px solid var(--border-primary)',
                 color: 'var(--text)',
-                fontSize: '11px',
+                fontSize: 'var(--font-sm)',
                 padding: '2px 6px',
                 borderRadius: '6px',
                 outline: 'none',
@@ -839,8 +879,8 @@ export function ChatContext({ workspaceId, workspaceName }) {
               color: 'var(--text-secondary)',
               gap: '8px'
             }}>
-              <FontAwesomeIcon icon={faSync} spin style={{ fontSize: '20px' }} />
-              <span style={{ fontSize: '12px' }}>Loading...</span>
+              <FontAwesomeIcon icon={faSync} spin style={{ fontSize: 'var(--font-2xl)' }} />
+              <span style={{ fontSize: 'var(--font-sm)' }}>Loading...</span>
             </div>
           ) : chats.length === 0 ? (
             <div style={{
@@ -852,11 +892,11 @@ export function ChatContext({ workspaceId, workspaceName }) {
               textAlign: 'center',
               gap: '8px'
             }}>
-              <div style={{ fontSize: '32px', opacity: 0.3 }}>💬</div>
-              <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text)' }}>
+              <div style={{ fontSize: 'var(--font-4xl)', opacity: 0.3 }}>💬</div>
+              <div style={{ fontSize: 'var(--font-base)', fontWeight: 500, color: 'var(--text)' }}>
                 {filter === 'All' ? 'No chats yet' : `No ${filter} chats`}
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.5 }}>
+              <div style={{ fontSize: 'var(--font-sm)', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.5 }}>
                 Visit AI platforms to start tracking your conversations.
                 <br />
                 <span style={{ opacity: 0.7, fontStyle: 'italic' }}>
@@ -874,7 +914,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                   padding: '8px 16px',
                   borderRadius: '8px',
                   cursor: 'pointer',
-                  fontSize: '12px',
+                  fontSize: 'var(--font-sm)',
                   fontWeight: 500,
                   display: 'flex',
                   alignItems: 'center',
@@ -913,21 +953,23 @@ export function ChatContext({ workspaceId, workspaceName }) {
                       onClick={() => handleChatClick(chat)}
                       style={{
                         cursor: 'pointer',
-                        padding: '12px 16px',
+                        padding: '8px 12px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         borderBottom: index < chats.length - 1 ? '1px solid var(--border-primary)' : 'none',
-                        background: 'rgba(255, 255, 255, 0.02)'
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        minHeight: 'auto'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
-                        <span className="workspace-link-icon" style={{ flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                        <span className="workspace-link-icon" style={{ flexShrink: 0, width: '20px' }}>
                           {faviconUrl ? (
                             <img
                               src={faviconUrl}
                               alt={chat.platform}
                               className="link-favicon"
+                              style={{ width: '16px', height: '16px' }}
                               onError={(e) => {
                                 e.target.style.display = 'none';
                                 e.target.nextSibling.style.display = 'inline';
@@ -936,23 +978,23 @@ export function ChatContext({ workspaceId, workspaceName }) {
                           ) : null}
                           <span
                             className="link-fallback-icon"
-                            style={{ display: faviconUrl ? 'none' : 'inline', fontSize: '14px' }}
+                            style={{ display: faviconUrl ? 'none' : 'inline', fontSize: 'var(--font-xs)' }}
                           >
                             {platform.emoji || '💬'}
                           </span>
                         </span>
                         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                          <span className="workspace-link-text" style={{ fontSize: '14px', fontWeight: 500 }}>
+                          <span className="workspace-link-text" style={{ fontSize: 'var(--font-sm)', fontWeight: 500 }}>
                             {chat.title || 'Untitled Chat'}
                           </span>
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {/* Visual indicator of recency (fading dot) */}
                         <div style={{
-                          width: '6px',
-                          height: '6px',
+                          width: '4px',
+                          height: '4px',
                           borderRadius: '50%',
                           background: 'var(--accent-color, #34C759)',
                           opacity: Math.max(0.2, 1 - (index * 0.1))
@@ -961,7 +1003,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                         <FontAwesomeIcon
                           icon={faExternalLinkAlt}
                           className="workspace-link-external"
-                          style={{ fontSize: '12px', opacity: 0.5 }}
+                          style={{ fontSize: 'var(--font-xs)', opacity: 0.5 }}
                         />
                       </div>
                     </li>
@@ -980,7 +1022,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
                     borderRadius: '8px',
                     color: 'var(--text-secondary)',
                     cursor: 'pointer',
-                    fontSize: '13px',
+                    fontSize: 'var(--font-md)',
                     marginTop: '12px',
                     transition: 'all 0.2s'
                   }}
@@ -1008,7 +1050,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
         backdropFilter: 'blur(16px)',
         borderRadius: '12px',
         border: '1px solid var(--border-primary)',
-        fontSize: '12px',
+        fontSize: 'var(--font-sm)',
         color: 'var(--text-secondary)',
         display: 'flex',
         alignItems: 'center',
@@ -1020,7 +1062,7 @@ export function ChatContext({ workspaceId, workspaceName }) {
           borderRadius: '4px',
           background: 'var(--surface-2)',
           border: '1px solid var(--border-primary)',
-          fontSize: '11px',
+          fontSize: 'var(--font-sm)',
           fontFamily: 'monospace'
         }}>Esc</kbd>
         <span>Back to overview</span>

@@ -338,7 +338,7 @@ export function ActivityFeed() {
             <div style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                 <div style={{
                     padding: '16px 16px 12px 16px',
-                    fontSize: '12px',
+                    fontSize: 'var(--font-sm)',
                     fontWeight: 600,
                     color: '#94A3B8',
                     textTransform: 'uppercase',
@@ -410,7 +410,7 @@ export function ActivityFeed() {
                                 icon={faLink}
                                 style={{
                                     display: 'none',
-                                    fontSize: '18px',
+                                    fontSize: 'var(--font-xl)',
                                     color: 'rgba(96, 165, 250, 0.8)'
                                 }}
                             />
@@ -434,7 +434,7 @@ export function ActivityFeed() {
                                 cursor: 'pointer',
                                 transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                                 flexShrink: 0,
-                                fontSize: '12px',
+                                fontSize: 'var(--font-sm)',
                                 fontWeight: 600,
                                 color: '#94A3B8'
                             }}
@@ -540,7 +540,7 @@ export function ActivityFeed() {
                             }}>
                                 <div>
                                     <div style={{
-                                        fontSize: '28px',
+                                        fontSize: 'var(--font-4xl)',
                                         fontWeight: 700,
                                         color: '#F8FAFC',
                                         fontFamily: 'monospace',
@@ -550,7 +550,7 @@ export function ActivityFeed() {
                                         {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </div>
                                     <div style={{
-                                        fontSize: '12px',
+                                        fontSize: 'var(--font-sm)',
                                         color: '#94A3B8',
                                         marginTop: '4px',
                                         fontWeight: 500
@@ -563,7 +563,7 @@ export function ActivityFeed() {
                                         padding: '4px 8px',
                                         background: 'rgba(255, 255, 255, 0.05)',
                                         borderRadius: '8px',
-                                        fontSize: '11px',
+                                        fontSize: 'var(--font-xs)',
                                         color: '#CBD5E1'
                                     }}>
                                         {region}
@@ -578,7 +578,7 @@ export function ActivityFeed() {
                                             padding: '6px 10px',
                                             borderRadius: '8px',
                                             cursor: 'pointer',
-                                            fontSize: '12px',
+                                            fontSize: 'var(--font-sm)',
                                             fontWeight: 500
                                         }}
                                     >
@@ -594,9 +594,9 @@ export function ActivityFeed() {
                                     textAlign: 'center',
                                     color: '#64748B'
                                 }}>
-                                    <div style={{ fontSize: '24px', marginBottom: '8px', opacity: 0.5 }}>☕</div>
-                                    <div style={{ fontSize: '13px' }}>No upcoming meetings</div>
-                                    <div style={{ fontSize: '11px', marginTop: '8px', color: '#475569' }}>
+                                    <div style={{ fontSize: 'var(--font-3xl)', marginBottom: '8px', opacity: 0.5 }}>☕</div>
+                                    <div style={{ fontSize: 'var(--font-base)' }}>No upcoming meetings</div>
+                                    <div style={{ fontSize: 'var(--font-xs)', marginTop: '8px', color: '#475569' }}>
                                         Open Google Calendar to sync events
                                     </div>
                                 </div>
@@ -650,7 +650,7 @@ export function ActivityFeed() {
                                                     {evt.title}
                                                 </div>
                                                 <div style={{
-                                                    fontSize: '11px',
+                                                    fontSize: 'var(--font-xs)',
                                                     color: '#94A3B8'
                                                 }}>
                                                     {isAllDayEvent ? 'All Day' : evt.time || 'Time TBA'}
@@ -746,7 +746,7 @@ export function ActivityFeed() {
                                                     {item.title}
                                                 </div>
                                                 <div style={{
-                                                    fontSize: '11px',
+                                                    fontSize: 'var(--font-xs)',
                                                     color: 'var(--text-secondary, #64748B)',
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -762,7 +762,7 @@ export function ActivityFeed() {
                                             <div style={{ flexShrink: 0, marginLeft: '8px' }}>
                                                 {isChat ? (
                                                     <div style={{
-                                                        fontSize: '10px',
+                                                        fontSize: 'var(--font-xs)',
                                                         fontWeight: 600,
                                                         color: 'var(--accent-purple, #8B5CF6)',
                                                         background: 'var(--accent-purple-soft, rgba(139, 92, 246, 0.1))',
@@ -775,7 +775,7 @@ export function ActivityFeed() {
                                                     </div>
                                                 ) : isCalendar ? (
                                                     <div style={{
-                                                        fontSize: '10px',
+                                                        fontSize: 'var(--font-xs)',
                                                         fontWeight: 600,
                                                         color: '#10B981',
                                                         background: 'rgba(16, 185, 129, 0.1)',
@@ -788,7 +788,7 @@ export function ActivityFeed() {
                                                     </div>
                                                 ) : (
                                                     <div style={{
-                                                        fontSize: '10px',
+                                                        fontSize: 'var(--font-xs)',
                                                         fontWeight: 600,
                                                         color: 'var(--accent-blue, #3B82F6)',
                                                         background: 'var(--accent-blue-soft, rgba(59, 130, 246, 0.1))',

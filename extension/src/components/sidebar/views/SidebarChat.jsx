@@ -127,7 +127,7 @@ export function SidebarChat() {
                                     {faviconUrl ? (
                                         <img src={faviconUrl} alt="" style={{ width: '16px', height: '16px' }} />
                                     ) : (
-                                        <span style={{ fontSize: '16px' }}>{platform.emoji}</span>
+                                        <span style={{ fontSize: 'var(--font-lg)' }}>{platform.emoji}</span>
                                     )}
                                 </div>
                                 <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -141,7 +141,7 @@ export function SidebarChat() {
                                         {chat.platform} • {formatTime(chat.scrapedAt)}
                                     </div>
                                 </div>
-                                <FontAwesomeIcon icon={faExternalLinkAlt} style={{ color: 'var(--text-muted)', fontSize: '10px' }} />
+                                <FontAwesomeIcon icon={faExternalLinkAlt} style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)' }} />
                             </div>
                         );
                     })

@@ -249,7 +249,7 @@ const ThemesTab = ({
       <h4 style={{
         margin: '0 0 16px 0',
         color: '#e5e7eb',
-        fontSize: '18px',
+        fontSize: 'var(--font-2xl)',
         fontWeight: '600'
       }}>
         Choose Your Theme
@@ -257,7 +257,7 @@ const ThemesTab = ({
       <p style={{
         margin: '0 0 24px 0',
         color: '#9ca3af',
-        fontSize: '14px',
+        fontSize: 'var(--font-base)',
         lineHeight: '1.5'
       }}>
         Select a theme that matches your style. Each theme includes a carefully chosen font family. Changes apply instantly.
@@ -335,7 +335,7 @@ const ThemesTab = ({
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
                     color: 'white',
-                    fontSize: '20px',
+                    fontSize: 'var(--font-3xl)',
                     textShadow: '0 2px 4px rgba(0,0,0,0.5)'
                   }}>
                     🖼️
@@ -354,7 +354,7 @@ const ThemesTab = ({
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: 'white',
-                    fontSize: '10px',
+                    fontSize: 'var(--font-xs)',
                     fontWeight: '600'
                   }}>
                     ✓
@@ -366,7 +366,7 @@ const ThemesTab = ({
                 <h5 style={{
                   margin: '0 0 2px 0',
                   color: '#e5e7eb',
-                  fontSize: '13px',
+                  fontSize: 'var(--font-md)',
                   fontWeight: '600',
                   lineHeight: '1.2'
                 }}>
@@ -375,7 +375,7 @@ const ThemesTab = ({
                 <p style={{
                   margin: '0',
                   color: '#9ca3af',
-                  fontSize: '11px',
+                  fontSize: 'var(--font-xs)',
                   lineHeight: '1.3'
                 }}>
                   {theme.description}
@@ -384,7 +384,7 @@ const ThemesTab = ({
                   <p style={{
                     margin: '2px 0 0 0',
                     color: '#6b7280',
-                    fontSize: '9px',
+                    fontSize: 'var(--font-xs)',
                     fontFamily: themeFontFamily.family,
                     fontStyle: 'italic'
                   }}>
@@ -414,7 +414,7 @@ const ThemesTab = ({
         <h5 style={{
           margin: '0 0 16px 0',
           color: '#e5e7eb',
-          fontSize: '16px',
+          fontSize: 'var(--font-lg)',
           fontWeight: '600'
         }}>
           Typography Settings
@@ -431,7 +431,7 @@ const ThemesTab = ({
           </h4>
           <p style={{
             margin: '0 0 20px 0',
-            fontSize: '14px',
+            fontSize: 'var(--font-base)',
             color: 'var(--text-secondary)',
             lineHeight: '1.5'
           }}>
@@ -485,13 +485,13 @@ const ThemesTab = ({
                     <div style={{
                       fontWeight: '600',
                       color: 'var(--text-primary)',
-                      fontSize: '12px',
+                      fontSize: 'var(--font-sm)',
                       lineHeight: '1.2'
                     }}>
                       {fontOption.name}
                     </div>
                     <div style={{
-                      fontSize: '10px',
+                      fontSize: 'var(--font-xs)',
                       color: 'var(--text-secondary)',
                       marginTop: '1px',
                       lineHeight: '1.2'
@@ -533,7 +533,7 @@ const ThemesTab = ({
             display: 'block',
             marginBottom: '8px',
             color: '#9ca3af',
-            fontSize: '14px',
+            fontSize: 'var(--font-base)',
             fontWeight: '500'
           }}>
             Font Family
@@ -605,7 +605,7 @@ const ThemesTab = ({
                   <div>
                     <div style={{
                       color: fontFamily === font.id ? '#34C759' : '#e5e7eb',
-                      fontSize: '12px',
+                      fontSize: 'var(--font-sm)',
                       fontWeight: '600',
                       lineHeight: '1.2',
                       fontFamily: font.family
@@ -613,7 +613,7 @@ const ThemesTab = ({
                       {font.name}
                     </div>
                     <div style={{
-                      fontSize: '10px',
+                      fontSize: 'var(--font-xs)',
                       color: fontFamily === font.id ? '#34C759' : 'rgba(255, 255, 255, 0.6)',
                       marginTop: '1px',
                       lineHeight: '1.2'
@@ -632,7 +632,7 @@ const ThemesTab = ({
                   pointerEvents: 'none'
                 }}>
                   <div style={{
-                    fontSize: '12px',
+                    fontSize: 'var(--font-sm)',
                     lineHeight: '1.3',
                     fontFamily: font.family
                   }}>
@@ -668,7 +668,7 @@ const ThemesTab = ({
                 color: '#e5e7eb',
                 fontWeight: '500',
                 marginBottom: '12px',
-                fontSize: '14px'
+                fontSize: 'var(--font-base)'
               }}>
                 Choose a Wallpaper
               </label>
@@ -719,7 +719,7 @@ const ThemesTab = ({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '12px',
+                        fontSize: 'var(--font-sm)',
                         color: '#fff'
                       }}>
                         ✓
@@ -732,7 +732,7 @@ const ThemesTab = ({
                       right: 0,
                       background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
                       padding: '6px 8px',
-                      fontSize: '10px',
+                      fontSize: 'var(--font-xs)',
                       color: '#fff',
                       fontWeight: '500'
                     }}>
@@ -742,7 +742,7 @@ const ThemesTab = ({
                 ))}
               </div>
               <div style={{
-                fontSize: '11px',
+                fontSize: 'var(--font-xs)',
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>
@@ -757,7 +757,7 @@ const ThemesTab = ({
                 color: '#e5e7eb',
                 fontWeight: '500',
                 marginBottom: '8px',
-                fontSize: '14px'
+                fontSize: 'var(--font-base)'
               }}>
                 Or Use Custom URL (Optional)
               </label>
@@ -773,7 +773,7 @@ const ThemesTab = ({
                   border: '1px solid rgba(255, 255, 255, 0.1)',
                   borderRadius: '10px',
                   color: '#e5e7eb',
-                  fontSize: '14px',
+                  fontSize: 'var(--font-base)',
                   outline: 'none',
                   transition: 'all 0.2s ease'
                 }}
@@ -787,7 +787,7 @@ const ThemesTab = ({
                 }}
               />
               <div style={{
-                fontSize: '11px',
+                fontSize: 'var(--font-xs)',
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>
@@ -802,7 +802,7 @@ const ThemesTab = ({
                 color: '#e5e7eb',
                 fontWeight: '500',
                 marginBottom: '8px',
-                fontSize: '14px'
+                fontSize: 'var(--font-base)'
               }}>
                 Background Opacity: {Math.round(wallpaperOpacity * 100)}%
               </label>
@@ -824,7 +824,7 @@ const ThemesTab = ({
                 }}
               />
               <div style={{
-                fontSize: '11px',
+                fontSize: 'var(--font-xs)',
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>
@@ -842,7 +842,7 @@ const ThemesTab = ({
               border: '1px solid rgba(255, 255, 255, 0.08)'
             }}>
               <div style={{
-                fontSize: '12px',
+                fontSize: 'var(--font-sm)',
                 color: 'rgba(255, 255, 255, 0.6)',
                 marginBottom: '8px',
                 fontWeight: '500'
@@ -878,7 +878,7 @@ const ThemesTab = ({
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: '#fff',
-                  fontSize: '14px',
+                  fontSize: 'var(--font-base)',
                   fontWeight: '500'
                 }}>
                   Your Dashboard Preview
@@ -897,7 +897,7 @@ const ThemesTab = ({
         border: '1px solid var(--border-primary)'
       }}>
         <div style={{
-          fontSize: '12px',
+          fontSize: 'var(--font-sm)',
           color: 'var(--text-secondary)',
           lineHeight: '1.5'
         }}>

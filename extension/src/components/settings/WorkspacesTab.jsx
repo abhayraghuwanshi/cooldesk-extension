@@ -1,8 +1,7 @@
-import { faFloppyDisk, faFolder, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faFloppyDisk, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React from 'react';
 
-const WorkspacesTab = ({ 
+const WorkspacesTab = ({
   editableWorkspaces,
   handleUpdateWorkspaceField,
   handleSaveWorkspaceRow,
@@ -10,16 +9,16 @@ const WorkspacesTab = ({
   handleOpenCreateWorkspace
 }) => {
   console.log('[WorkspacesTab] Rendering with editableWorkspaces:', editableWorkspaces);
-  
+
   return (
     <div>
       <label>
         <span>Workspaces ({editableWorkspaces?.length || 0})</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {editableWorkspaces?.length === 0 && (
-            <div style={{ 
-              padding: '20px', 
-              textAlign: 'center', 
+            <div style={{
+              padding: '20px',
+              textAlign: 'center',
               color: '#9ca3af',
               background: 'rgba(255, 255, 255, 0.05)',
               borderRadius: '12px',
@@ -61,7 +60,7 @@ const WorkspacesTab = ({
                   borderRadius: '8px',
                   padding: '10px 12px',
                   color: '#e5e7eb',
-                  fontSize: '14px',
+                  fontSize: 'var(--font-base)',
                   outline: 'none'
                 }}
                 placeholder="Description"

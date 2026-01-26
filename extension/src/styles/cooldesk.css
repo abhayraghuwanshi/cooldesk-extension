@@ -99,7 +99,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 1.7em;
+  font-size: var(--font-3xl);
   /* Scales with base font size */
   font-weight: 600;
   color: #FFFFFF;
@@ -113,7 +113,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: var(--font-3xl);
   transition: all 0.2s ease;
 }
 
@@ -171,7 +171,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: var(--font-lg, 14px);
+  font-size: var(--font-base);
   font-weight: 500;
 }
 
@@ -182,7 +182,7 @@
 }
 
 .selector-icon {
-  font-size: var(--font-lg, 14px);
+  font-size: var(--font-base);
   color: #A78BFA;
   flex-shrink: 0;
 }
@@ -196,7 +196,7 @@
 }
 
 .selector-caret {
-  font-size: var(--font-base, 12px);
+  font-size: var(--font-sm);
   color: #64748B;
   flex-shrink: 0;
   transition: transform 0.2s ease;
@@ -236,7 +236,7 @@
 .dropdown-header {
   padding: 14px 16px;
   border-bottom: 1px solid rgba(139, 92, 246, 0.15);
-  font-size: var(--font-base, 12px);
+  font-size: var(--font-sm);
   font-weight: 600;
   color: #94A3B8;
   text-transform: uppercase;
@@ -262,7 +262,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: var(--font-md, 12px);
+  font-size: var(--font-sm);
   text-align: left;
   margin-bottom: 4px;
 }
@@ -284,20 +284,20 @@
 }
 
 .item-icon {
-  font-size: var(--font-md, 12px);
+  font-size: var(--font-sm);
   color: #A78BFA;
   flex-shrink: 0;
 }
 
 .item-emoji {
-  font-size: var(--font-lg, 14px);
+  font-size: var(--font-base);
   flex-shrink: 0;
 }
 
 .item-check {
   margin-left: auto;
   color: #34C759;
-  font-size: var(--font-lg, 14px);
+  font-size: var(--font-base);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -431,7 +431,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   color: var(--text-secondary, #94A3B8);
-  font-size: 14px;
+  font-size: var(--font-base);
   position: relative;
   overflow: hidden;
   margin-right: 0;
@@ -554,7 +554,7 @@
   border: 1px solid rgba(139, 92, 246, 0.3);
   border-radius: 6px;
   color: #A78BFA;
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -672,7 +672,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--font-md);
   font-weight: 500;
   transition: all 0.2s;
 }
@@ -723,7 +723,7 @@
 }
 
 .page-text {
-  font-size: 13px;
+  font-size: var(--font-md);
   color: var(--text-secondary, #9CA3AF);
   font-weight: 500;
 }
@@ -810,7 +810,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: calc(var(--font-2xl) * 1.1);
+  font-size: var(--font-2xl);
   /* Responsive icon size */
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -845,7 +845,7 @@
 }
 
 .workspace-name {
-  font-size: 1.15em;
+  font-size: var(--font-lg);
   /* Scales with base font size */
   font-weight: 600;
   color: #F1F5F9;
@@ -859,7 +859,7 @@
 }
 
 .cooldesk-workspace-card .workspace-count {
-  font-size: 0.9em;
+  font-size: var(--font-md);
   /* Scales with base font size */
   color: var(--text-secondary, #fecaca);
   font-weight: 500;
@@ -905,7 +905,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: var(--font-md, 14px);
+  font-size: var(--font-base);
   color: #CBD5E1;
   padding: 6px 8px;
   border-bottom: none;
@@ -929,7 +929,7 @@
 }
 
 .workspace-link-icon {
-  font-size: var(--font-xs, 10px);
+  font-size: var(--font-xs);
   color: #64748B;
   /* Base size for icons container */
   width: 20px;
@@ -947,7 +947,7 @@
 }
 
 .link-fallback-icon {
-  font-size: 12px;
+  font-size: var(--font-sm);
 }
 
 /* Responsive scaling for larger monitors */
@@ -957,7 +957,7 @@
   }
 
   .link-fallback-icon {
-    font-size: 14px;
+    font-size: var(--font-base);
   }
 }
 
@@ -973,7 +973,7 @@
   }
 
   .link-fallback-icon {
-    font-size: 16px;
+    font-size: var(--font-lg);
   }
 }
 
@@ -982,14 +982,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--font-sm, 14px);
+  font-size: var(--font-sm);
   line-height: 1.3;
   max-width: 100%;
 }
 
 .workspace-link-external {
   opacity: 0;
-  font-size: var(--font-xs, 10px);
+  font-size: var(--font-xs);
   color: var(--accent-color, #60A5FA);
   transition: opacity 0.2s ease;
   margin-left: auto;
@@ -1008,7 +1008,7 @@
   border-radius: 8px;
   padding: 8px 12px;
   color: var(--primary-color, #60A5FA);
-  font-size: 13px;
+  font-size: var(--font-md);
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -1027,7 +1027,7 @@
 }
 
 .workspace-add-url-btn svg {
-  font-size: 12px;
+  font-size: var(--font-sm);
 }
 
 .workspace-add-url-form {
@@ -1047,7 +1047,7 @@
   border-radius: 6px;
   padding: 8px 12px;
   color: #E5E7EB;
-  font-size: 13px;
+  font-size: var(--font-md);
   outline: none;
   transition: all 0.2s ease;
   font-family: inherit;
@@ -1080,7 +1080,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   color: #CBD5E1;
-  font-size: 14px;
+  font-size: var(--font-base);
 }
 
 .workspace-url-btn:hover {
@@ -1126,20 +1126,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: var(--font-3xl);
   color: #64748B;
   margin-bottom: 12px;
 }
 
 .workspace-empty-state p {
-  font-size: 14px;
+  font-size: var(--font-base);
   font-weight: 500;
   color: #94A3B8;
   margin: 0 0 4px 0;
 }
 
 .workspace-empty-state span {
-  font-size: 12px;
+  font-size: var(--font-sm);
   color: #64748B;
 }
 
@@ -1149,7 +1149,7 @@
   border-radius: 6px;
   padding: 6px 10px;
   color: #93C5FD;
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 500;
   text-align: center;
   cursor: pointer;
@@ -1186,7 +1186,7 @@
 }
 
 .create-icon {
-  font-size: 32px;
+  font-size: var(--font-4xl);
   color: #A78BFA;
 }
 
@@ -1231,7 +1231,7 @@
 }
 
 .panel-title {
-  font-size: var(--font-xl, 16px);
+  font-size: var(--font-xl);
   /* Standardized header size */
   font-weight: 600;
   color: #F1F5F9;
@@ -1271,7 +1271,7 @@
   border: none;
   outline: none;
   color: #E5E7EB;
-  font-size: 14px;
+  font-size: var(--font-base);
 }
 
 .quick-access-search input::placeholder {
@@ -1335,13 +1335,13 @@
   align-items: center;
   justify-content: center;
   color: #60A5FA;
-  font-size: 14px;
+  font-size: var(--font-base);
   flex-shrink: 0;
 }
 
 .quick-link-text {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--font-md);
   color: #E5E7EB;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1367,7 +1367,7 @@
 }
 
 .recommended-header {
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 600;
   color: #94A3B8;
   margin-bottom: 10px;
@@ -1386,7 +1386,7 @@
   border: 1px solid rgba(148, 163, 184, 0.25);
   border-radius: 8px;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--font-sm);
   color: #CBD5E1;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1454,7 +1454,7 @@
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 13px;
+  font-size: var(--font-md);
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -1465,7 +1465,7 @@
 }
 
 .chat-title {
-  font-size: var(--font-lg, 14px);
+  font-size: var(--font-base);
   font-weight: 500;
   color: #E5E7EB;
   margin-bottom: 3px;
@@ -1475,7 +1475,7 @@
 }
 
 .chat-time {
-  font-size: var(--font-md, 12px);
+  font-size: var(--font-sm);
   color: #64748B;
 }
 
@@ -1529,7 +1529,7 @@
 }
 
 .tab-title {
-  font-size: 13px;
+  font-size: var(--font-md);
   font-weight: 500;
   color: #E5E7EB;
   overflow: hidden;
@@ -1538,7 +1538,7 @@
 }
 
 .tab-url {
-  font-size: 11px;
+  font-size: var(--font-xs);
   color: #64748B;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1558,7 +1558,7 @@
   border: none;
   padding: 0;
   max-height: none;
-  font-size: 12px;
+  font-size: var(--font-sm);
   width: 100%;
   /* box-sizing: border-box; */
 }
@@ -1578,7 +1578,7 @@
 /* Don't override the new inline styles for textarea - let the component handle it */
 
 .cooldesk-workspace-card .notes-widget input {
-  font-size: 12px;
+  font-size: var(--font-sm);
   padding: 8px;
   background: rgba(15, 23, 42, 0.4);
   border: 1px solid rgba(148, 163, 184, 0.15);
@@ -1588,7 +1588,7 @@
 
 .cooldesk-workspace-card .notes-widget .note-item {
   padding: 6px;
-  font-size: 12px;
+  font-size: var(--font-sm);
   margin-bottom: 4px;
   background: rgba(15, 23, 42, 0.3);
   border-radius: 6px;
@@ -1635,7 +1635,7 @@
 
 .sparkle {
   position: absolute;
-  font-size: 24px;
+  font-size: var(--font-3xl);
   animation: sparkle 2s ease-in-out infinite;
 }
 
@@ -1695,13 +1695,13 @@
   }
 
   .cooldesk-logo {
-    font-size: 28px;
+    font-size: var(--font-4xl);
   }
 
   .cooldesk-logo-icon {
     width: 48px;
     height: 48px;
-    font-size: 28px;
+    font-size: var(--font-4xl);
   }
 
   .cooldesk-workspaces {
@@ -1720,11 +1720,11 @@
   }
 
   .workspace-count {
-    font-size: 13px;
+    font-size: var(--font-md);
   }
 
   .workspace-link {
-    font-size: 13px;
+    font-size: var(--font-md);
   }
 
   .cooldesk-panel {
@@ -1732,7 +1732,7 @@
   }
 
   .panel-title {
-    font-size: 16px;
+    font-size: var(--font-xl);
   }
 
   .cooldesk-search-input {
@@ -1775,16 +1775,16 @@
   }
 
   .workspace-name {
-    font-size: 16px;
+    font-size: var(--font-xl);
   }
 
   .cooldesk-logo {
-    font-size: 2.5em;
+    font-size: var(--font-5xl);
     /* Scale relatively */
   }
 
   .panel-title {
-    font-size: 18px;
+    font-size: var(--font-2xl);
   }
 
   .cooldesk-bottom-grid {
@@ -1913,7 +1913,7 @@
   }
 
   .mascot-character {
-    font-size: 60px;
+    font-size: var(--font-5xl);
   }
 }
 
@@ -1964,7 +1964,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: var(--font-2xl);
   flex-shrink: 0;
 }
 
@@ -1988,7 +1988,7 @@
 }
 
 .compact-workspace-count {
-  font-size: 12px;
+  font-size: var(--font-sm);
   /* Increased from 10px */
   color: var(--text-secondary, #94A3B8);
   white-space: nowrap;
@@ -2038,7 +2038,7 @@
 }
 
 .compact-url-icon .fallback-icon {
-  font-size: 16px;
+  font-size: var(--font-xl);
   color: #60a5fa;
 }
 
@@ -2078,7 +2078,7 @@
 }
 
 .compact-url-group .fallback-icon {
-  font-size: 14px;
+  font-size: var(--font-base);
   color: #60a5fa;
   flex-shrink: 0;
 }
@@ -2105,7 +2105,7 @@
 }
 
 .compact-group-count {
-  font-size: 11px;
+  font-size: var(--font-xs);
   /* Increased from 9px */
   color: var(--text-secondary, #94A3B8);
   white-space: nowrap;
@@ -2119,7 +2119,7 @@
   border-radius: 6px;
   background: rgba(148, 163, 184, 0.15);
   border: 1px solid rgba(148, 163, 184, 0.25);
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 600;
   color: var(--text-secondary, #94A3B8);
   cursor: pointer;
@@ -2145,7 +2145,7 @@
   padding: 8px;
   transition: all 0.2s ease;
   opacity: 0;
-  font-size: 14px;
+  font-size: var(--font-base);
   flex-shrink: 0;
 }
 
@@ -2189,7 +2189,7 @@
 }
 
 .cooldesk-workspace-card.compact .workspace-logo {
-  font-size: 1em;
+  font-size: var(--font-xl);
 }
 
 /* List View Mode */
@@ -2260,7 +2260,7 @@
 }
 
 .pagination-info {
-  font-size: 13px;
+  font-size: var(--font-md);
   color: #94A3B8;
   font-weight: 500;
 }
@@ -2414,7 +2414,7 @@
   .cooldesk-logo-icon {
     width: 28px;
     height: 28px;
-    font-size: 14px;
+    font-size: var(--font-base);
   }
 
   .cooldesk-header {
@@ -2431,7 +2431,7 @@
   }
 
   .cooldesk-search-input {
-    font-size: 13px;
+    font-size: var(--font-md);
   }
 
   .overview-dashboard-grid {
@@ -2496,11 +2496,11 @@
 
   /* Smaller text */
   .cooldesk-list-view .cooldesk-workspace-card.compact .workspace-info>div:first-child {
-    font-size: 12px !important;
+    font-size: var(--font-sm) !important;
   }
 
   .cooldesk-list-view .cooldesk-workspace-card.compact .workspace-info>div:last-child {
-    font-size: 10px !important;
+    font-size: var(--font-xs) !important;
   }
 
   /* Icons container wraps to second row */
@@ -2569,11 +2569,11 @@
   }
 
   .compact-workspace-name {
-    font-size: 18px;
+    font-size: var(--font-2xl);
   }
 
   .compact-workspace-count {
-    font-size: 13px;
+    font-size: var(--font-md);
   }
 
   .compact-icons-container {
@@ -2605,16 +2605,16 @@
   }
 
   .compact-group-label {
-    font-size: 13px;
+    font-size: var(--font-md);
   }
 
   .compact-group-count {
-    font-size: 11px;
+    font-size: var(--font-xs);
   }
 
   .compact-more-btn {
     height: 36px;
-    font-size: 13px;
+    font-size: var(--font-md);
     padding: 6px 12px;
   }
 }
@@ -2634,11 +2634,11 @@
   }
 
   .compact-workspace-name {
-    font-size: 16px;
+    font-size: var(--font-xl);
   }
 
   .compact-workspace-count {
-    font-size: 12px;
+    font-size: var(--font-sm);
   }
 
   .compact-icons-container {
@@ -2670,16 +2670,16 @@
   }
 
   .compact-group-label {
-    font-size: 12px;
+    font-size: var(--font-sm);
   }
 
   .compact-group-count {
-    font-size: 10px;
+    font-size: var(--font-xs);
   }
 
   .compact-more-btn {
     height: 32px;
-    font-size: 12px;
+    font-size: var(--font-sm);
   }
 }
 
@@ -2702,7 +2702,7 @@
   }
 
   .compact-workspace-count {
-    font-size: 11px;
+    font-size: var(--font-xs);
   }
 
   .compact-url-icon {
@@ -2727,7 +2727,7 @@
   }
 
   .compact-group-label {
-    font-size: 11px;
+    font-size: var(--font-xs);
   }
 }
 
@@ -2746,7 +2746,7 @@
   }
 
   .compact-workspace-name {
-    font-size: 14px;
+    font-size: var(--font-base);
   }
 
   .compact-icons-container {
@@ -2785,7 +2785,7 @@
   .compact-workspace-icon {
     width: 32px;
     height: 32px;
-    font-size: 16px;
+    font-size: var(--font-xl);
     border-radius: 8px;
   }
 
@@ -2795,7 +2795,7 @@
   }
 
   .compact-workspace-name {
-    font-size: 12px;
+    font-size: var(--font-sm);
   }
 
   .compact-workspace-count {
@@ -2813,12 +2813,12 @@
   }
 
   .compact-url-icon img {
-    width: 24px;
-    height: 24px;
+    width: var(--font-3xl);
+    height: var(--font-3xl);
   }
 
   .compact-url-icon .fallback-icon {
-    font-size: 12px;
+    font-size: var(--font-sm);
   }
 
   .compact-url-group {
@@ -2830,27 +2830,27 @@
   }
 
   .compact-url-group img {
-    width: 18px;
-    height: 18px;
+    width: var(--font-2xl);
+    height: var(--font-2xl);
   }
 
   .compact-group-label {
-    font-size: 9px;
+    font-size: var(--font-xs);
   }
 
   .compact-group-count {
-    font-size: 8px;
+    font-size: var(--font-xs);
   }
 
   .compact-more-btn {
     height: 26px;
-    font-size: 10px;
+    font-size: var(--font-xs);
     padding: 3px 6px;
   }
 
   .compact-action-btn {
     padding: 6px;
-    font-size: 12px;
+    font-size: var(--font-sm);
   }
 }
 
@@ -2864,7 +2864,7 @@
   .compact-workspace-icon {
     width: 30px;
     height: 30px;
-    font-size: 14px;
+    font-size: var(--font-base);
     border-radius: 8px;
   }
 
@@ -2874,7 +2874,7 @@
   }
 
   .compact-workspace-name {
-    font-size: 11px;
+    font-size: var(--font-xs);
   }
 
   .compact-workspace-count {
@@ -2892,8 +2892,8 @@
   }
 
   .compact-url-icon img {
-    width: 22px;
-    height: 22px;
+    width: var(--font-xl);
+    height: var(--font-xl);
   }
 
   .compact-url-group {
@@ -2905,21 +2905,21 @@
   }
 
   .compact-url-group img {
-    width: 16px;
-    height: 16px;
+    width: var(--font-lg);
+    height: var(--font-lg);
   }
 
   .compact-group-label {
-    font-size: 9px;
+    font-size: var(--font-xs);
   }
 
   .compact-group-count {
-    font-size: 8px;
+    font-size: var(--font-xs);
   }
 
   .compact-more-btn {
     height: 24px;
-    font-size: 9px;
+    font-size: var(--font-xs);
     padding: 2px 5px;
   }
 }
@@ -2934,7 +2934,7 @@
   .compact-workspace-icon {
     width: 32px;
     height: 32px;
-    font-size: 16px;
+    font-size: var(--font-xl);
     border-radius: 8px;
   }
 
@@ -2972,7 +2972,7 @@
   }
 
   .compact-group-label {
-    font-size: 11px;
+    font-size: var(--font-xs);
   }
 
   .compact-group-count {
@@ -2981,7 +2981,7 @@
 
   .compact-more-btn {
     height: 28px;
-    font-size: 10px;
+    font-size: var(--font-xs);
     padding: 4px 8px;
   }
 
@@ -3001,7 +3001,7 @@
   .compact-workspace-icon {
     width: 30px;
     height: 30px;
-    font-size: 14px;
+    font-size: var(--font-base);
     border-radius: 8px;
   }
 
@@ -3030,7 +3030,7 @@
   }
 
   .compact-url-icon .fallback-icon {
-    font-size: 14px;
+    font-size: var(--font-base);
   }
 
   .compact-url-group {
@@ -3048,7 +3048,7 @@
   }
 
   .compact-group-label {
-    font-size: 10px;
+    font-size: var(--font-xs);
     font-weight: 600;
   }
 
@@ -3058,7 +3058,7 @@
 
   .compact-more-btn {
     height: 26px;
-    font-size: 10px;
+    font-size: var(--font-xs);
     padding: 4px 8px;
     border-radius: 6px;
   }
@@ -3078,7 +3078,7 @@
   .compact-workspace-icon {
     width: 28px;
     height: 28px;
-    font-size: 13px;
+    font-size: var(--font-md);
     border-radius: 7px;
   }
 
@@ -3110,12 +3110,12 @@
   }
 
   .compact-group-label {
-    font-size: 9px;
+    font-size: var(--font-xs);
   }
 
   .compact-more-btn {
     height: 24px;
-    font-size: 9px;
+    font-size: var(--font-xs);
     padding: 3px 6px;
   }
 }
@@ -3130,7 +3130,7 @@
   .compact-workspace-icon {
     width: 26px;
     height: 26px;
-    font-size: 12px;
+    font-size: var(--font-sm);
     border-radius: 6px;
   }
 
@@ -3162,12 +3162,12 @@
   }
 
   .compact-group-label {
-    font-size: 8px;
+    font-size: var(--font-xs);
   }
 
   .compact-more-btn {
     height: 22px;
-    font-size: 8px;
+    font-size: var(--font-xs);
     padding: 2px 5px;
   }
 }

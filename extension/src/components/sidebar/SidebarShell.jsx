@@ -102,13 +102,13 @@ export function SidebarShell({ activeView, onViewChange, children }) {
                         <FontAwesomeIcon
                             icon={item.icon}
                             style={{
-                                fontSize: '18px',
+                                fontSize: 'var(--font-2xl)',
                                 color: activeView === item.id ? 'var(--text)' : 'var(--text-secondary)',
                                 filter: activeView === item.id ? 'drop-shadow(0 0 8px var(--accent-primary))' : 'none'
                             }}
                         />
                         <span style={{
-                            fontSize: '9px',
+                            fontSize: 'var(--font-xs)',
                             fontWeight: 500,
                             color: activeView === item.id ? 'var(--text)' : 'var(--text-secondary)'
                         }}>

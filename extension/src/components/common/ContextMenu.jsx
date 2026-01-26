@@ -1,8 +1,8 @@
-import { faBookmark, faCopy, faExternalLinkAlt, faFolder, faFolderPlus, faStickyNote, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faFolder, faStickyNote, faThumbtack, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { listWorkspaces, addUrlToWorkspace } from '../../db/index.js';
+import { addUrlToWorkspace, listWorkspaces } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils/helpers';
 
 export function ContextMenu({
@@ -218,7 +218,7 @@ export function ContextMenu({
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: '12px',
+            fontSize: 'var(--font-sm)',
             color: 'var(--text-primary, #ffffff)',
             fontWeight: '500',
             whiteSpace: 'nowrap',
@@ -228,7 +228,7 @@ export function ContextMenu({
             {title || 'Link'}
           </div>
           <div style={{
-            fontSize: '10px',
+            fontSize: 'var(--font-xs)',
             color: 'var(--text-secondary, rgba(255, 255, 255, 0.6))',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -259,7 +259,7 @@ export function ContextMenu({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   color: 'var(--text-primary, #ffffff)',
-                  fontSize: '14px',
+                  fontSize: 'var(--font-base)',
                   transition: 'background-color 0.1s ease',
                   textAlign: 'left'
                 }}
@@ -275,7 +275,7 @@ export function ContextMenu({
                     icon={action.icon}
                     style={{
                       color: action.color || 'var(--text-secondary, rgba(255, 255, 255, 0.7))',
-                      fontSize: '14px',
+                      fontSize: 'var(--font-base)',
                       width: '14px'
                     }}
                   />
@@ -283,7 +283,7 @@ export function ContextMenu({
                 </div>
                 {action.hasSubmenu && (
                   <span style={{
-                    fontSize: '12px',
+                    fontSize: 'var(--font-sm)',
                     color: 'var(--text-secondary, rgba(255, 255, 255, 0.7))'
                   }}>
                     ▶
@@ -305,7 +305,7 @@ export function ContextMenu({
           }}>
             <div style={{
               padding: '10px 12px 8px 12px',
-              fontSize: '11px',
+              fontSize: 'var(--font-xs)',
               color: 'var(--text-secondary, rgba(255, 255, 255, 0.7))',
               fontWeight: '600',
               borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
@@ -318,7 +318,7 @@ export function ContextMenu({
               <div style={{
                 padding: '20px',
                 textAlign: 'center',
-                fontSize: '12px',
+                fontSize: 'var(--font-sm)',
                 color: 'var(--text-secondary, rgba(255, 255, 255, 0.6))'
               }}>
                 Loading...
@@ -327,7 +327,7 @@ export function ContextMenu({
               <div style={{
                 padding: '20px',
                 textAlign: 'center',
-                fontSize: '12px',
+                fontSize: 'var(--font-sm)',
                 color: 'var(--text-secondary, rgba(255, 255, 255, 0.6))'
               }}>
                 No workspaces available
@@ -347,7 +347,7 @@ export function ContextMenu({
                     alignItems: 'center',
                     gap: '10px',
                     color: 'var(--text-primary, #ffffff)',
-                    fontSize: '13px',
+                    fontSize: 'var(--font-md)',
                     transition: 'background-color 0.1s ease',
                     textAlign: 'left'
                   }}
@@ -366,7 +366,7 @@ export function ContextMenu({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '10px',
+                    fontSize: 'var(--font-xs)',
                     flexShrink: 0
                   }}>
                     📁
@@ -382,7 +382,7 @@ export function ContextMenu({
                       {workspace.name || 'Untitled Workspace'}
                     </div>
                     <div style={{
-                      fontSize: '11px',
+                      fontSize: 'var(--font-xs)',
                       color: 'var(--text-secondary, rgba(255, 255, 255, 0.6))',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',

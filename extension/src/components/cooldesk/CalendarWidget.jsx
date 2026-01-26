@@ -90,7 +90,7 @@ export function CalendarWidget() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                         <div style={{
-                            fontSize: '32px',
+                            fontSize: 'var(--font-5xl)',
                             fontWeight: 700,
                             color: '#F8FAFC',
                             fontFamily: 'monospace', // Or a nice sans-serif depending on global styles
@@ -100,7 +100,7 @@ export function CalendarWidget() {
                             {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                         <div style={{
-                            fontSize: '13px',
+                            fontSize: 'var(--font-md)',
                             color: '#94A3B8',
                             marginTop: '4px',
                             fontWeight: 500
@@ -119,7 +119,7 @@ export function CalendarWidget() {
                             padding: '4px 8px',
                             background: 'rgba(255, 255, 255, 0.05)',
                             borderRadius: '12px',
-                            fontSize: '11px',
+                            fontSize: 'var(--font-xs)',
                             color: '#CBD5E1',
                             display: 'flex',
                             alignItems: 'center',
@@ -139,7 +139,7 @@ export function CalendarWidget() {
                 alignItems: 'center'
             }}>
                 <div style={{
-                    fontSize: '12px',
+                    fontSize: 'var(--font-sm)',
                     fontWeight: 600,
                     textTransform: 'uppercase',
                     color: '#64748B',
@@ -148,8 +148,8 @@ export function CalendarWidget() {
                     Upcoming Events
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={triggerScrape} title="Sync" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B', fontSize: '14px' }}>↻</button>
-                    <a href="https://calendar.google.com" target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#3B82F6', fontSize: '12px', fontWeight: 600 }}>View All</a>
+                    <button onClick={triggerScrape} title="Sync" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B', fontSize: 'var(--font-base)' }}>↻</button>
+                    <a href="https://calendar.google.com" target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: '#3B82F6', fontSize: 'var(--font-sm)', fontWeight: 600 }}>View All</a>
                 </div>
             </div>
 
@@ -169,11 +169,11 @@ export function CalendarWidget() {
                     }}>
                         {!loading ? (
                             <>
-                                <div style={{ fontSize: '24px', opacity: 0.5 }}>☕</div>
-                                <div style={{ fontSize: '13px' }}>No upcoming meetings</div>
+                                <div style={{ fontSize: 'var(--font-3xl)', opacity: 0.5 }}>☕</div>
+                                <div style={{ fontSize: 'var(--font-md)' }}>No upcoming meetings</div>
                             </>
                         ) : (
-                            <div style={{ color: '#94A3B8', fontSize: '13px' }}>Checking for meetings...</div>
+                            <div style={{ color: '#94A3B8', fontSize: 'var(--font-md)' }}>Checking for meetings...</div>
                         )}
                     </div>
                 ) : (
@@ -206,7 +206,7 @@ export function CalendarWidget() {
                                         <span style={{
                                             color: '#E2E8F0',
                                             fontWeight: 600,
-                                            fontSize: '13px',
+                                            fontSize: 'var(--font-sm)',
                                             lineHeight: '1.4'
                                         }}>
                                             {evt.title}
@@ -222,7 +222,7 @@ export function CalendarWidget() {
                                     }}>
                                         {isAllDayEvent ? (
                                             <span style={{
-                                                fontSize: '10px',
+                                                fontSize: 'var(--font-xs)',
                                                 fontWeight: 600,
                                                 color: '#10B981',
                                                 background: 'rgba(16, 185, 129, 0.1)',
@@ -234,7 +234,7 @@ export function CalendarWidget() {
                                         ) : (
                                             <span style={{
                                                 color: '#94A3B8',
-                                                fontSize: '11px',
+                                                fontSize: 'var(--font-xs)',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 gap: '4px'
@@ -249,7 +249,7 @@ export function CalendarWidget() {
                                                 target="_blank"
                                                 rel="noreferrer"
                                                 style={{
-                                                    fontSize: '10px',
+                                                    fontSize: 'var(--font-xs)',
                                                     background: 'rgba(59, 130, 246, 0.1)',
                                                     color: '#60A5FA',
                                                     padding: '2px 8px',

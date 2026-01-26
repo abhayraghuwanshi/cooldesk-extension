@@ -483,7 +483,7 @@ export function NotesCanvas({ workspaceId }) {
             onError={(e) => e.target.style.display = 'none'}
           />
         ) : (
-          <FontAwesomeIcon icon={faStickyNote} style={{ fontSize: '10px', opacity: 0.5 }} />
+          <FontAwesomeIcon icon={faStickyNote} style={{ fontSize: 'var(--font-xs)', opacity: 0.5 }} />
         )}
         <span>{note.title || 'Untitled Note'}</span>
       </div>
@@ -506,7 +506,7 @@ export function NotesCanvas({ workspaceId }) {
             padding: '2px',
             color: '#ef4444',
             cursor: 'pointer',
-            fontSize: '10px'
+            fontSize: 'var(--font-xs)'
           }}
         >
           <FontAwesomeIcon icon={faTrash} />
@@ -867,7 +867,7 @@ export function NotesCanvas({ workspaceId }) {
                 className="icon-btn"
                 style={{
                   padding: '6px',
-                  fontSize: '12px',
+                  fontSize: 'var(--font-sm)',
                   background: 'var(--surface-3)',
                   border: '1px solid var(--border-primary)',
                   color: 'var(--text)',
@@ -905,20 +905,20 @@ export function NotesCanvas({ workspaceId }) {
                   <FontAwesomeIcon
                     icon={faChevronRight}
                     style={{
-                      fontSize: '10px',
+                      fontSize: 'var(--font-xs)',
                       transition: 'transform 0.2s',
                       transform: expandedFolders.has('Highlights') ? 'rotate(90deg)' : 'rotate(0deg)',
                       opacity: 0.7
                     }}
                   />
-                  <FontAwesomeIcon icon={faHighlighter} style={{ fontSize: '14px', opacity: 0.8 }} />
+                  <FontAwesomeIcon icon={faHighlighter} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
                   <span style={{ flex: 1 }}>Highlights</span>
                   <span className="note-count">{highlights.length}</span>
                 </div>
                 {expandedFolders.has('Highlights') && (
                   <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     {highlights.length === 0 ? (
-                      <div style={{ padding: '8px', fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>No highlights</div>
+                      <div style={{ padding: '8px', fontSize: 'var(--font-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>No highlights</div>
                     ) : (
                       highlights.map(note => renderSidebarNoteItem(note))
                     )}
@@ -947,20 +947,20 @@ export function NotesCanvas({ workspaceId }) {
                   <FontAwesomeIcon
                     icon={faChevronRight}
                     style={{
-                      fontSize: '10px',
+                      fontSize: 'var(--font-xs)',
                       transition: 'transform 0.2s',
                       transform: expandedFolders.has('URL Notes') ? 'rotate(90deg)' : 'rotate(0deg)',
                       opacity: 0.7
                     }}
                   />
-                  <FontAwesomeIcon icon={faLink} style={{ fontSize: '14px', opacity: 0.8 }} />
+                  <FontAwesomeIcon icon={faLink} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
                   <span style={{ flex: 1 }}>URL Notes</span>
                   <span className="note-count">{urlNotes.length}</span>
                 </div>
                 {expandedFolders.has('URL Notes') && (
                   <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     {urlNotes.length === 0 ? (
-                      <div style={{ padding: '8px', fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>No URL notes</div>
+                      <div style={{ padding: '8px', fontSize: 'var(--font-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>No URL notes</div>
                     ) : (
                       urlNotes.map(note => renderSidebarNoteItem(note))
                     )}
@@ -1003,13 +1003,13 @@ export function NotesCanvas({ workspaceId }) {
                         <FontAwesomeIcon
                           icon={faChevronRight}
                           style={{
-                            fontSize: '10px',
+                            fontSize: 'var(--font-xs)',
                             transition: 'transform 0.2s',
                             transform: expandedFolders.has(folderName) ? 'rotate(90deg)' : 'rotate(0deg)',
                             opacity: 0.7
                           }}
                         />
-                        <FontAwesomeIcon icon={folderName === 'Uncategorized' ? faStickyNote : faFolder} style={{ fontSize: '14px', opacity: 0.8 }} />
+                        <FontAwesomeIcon icon={folderName === 'Uncategorized' ? faStickyNote : faFolder} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderName}</span>
                         <span className="note-count">{folderNotes.length}</span>
 
@@ -1031,7 +1031,7 @@ export function NotesCanvas({ workspaceId }) {
                           }}
                           title={`New note in ${folderName}`}
                         >
-                          <FontAwesomeIcon icon={faPlus} style={{ fontSize: '10px' }} />
+                          <FontAwesomeIcon icon={faPlus} style={{ fontSize: 'var(--font-xs)' }} />
                         </button>
                       </div>
 
@@ -1083,14 +1083,14 @@ export function NotesCanvas({ workspaceId }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '18px',
+                    fontSize: 'var(--font-2xl)',
                     color: 'var(--accent-blue)'
                   }}>
                     <FontAwesomeIcon icon={faLink} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
-                      fontSize: '10px',
+                      fontSize: 'var(--font-xs)',
                       color: 'var(--text-secondary)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.05em',
@@ -1104,7 +1104,7 @@ export function NotesCanvas({ workspaceId }) {
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
-                        fontSize: '13px',
+                        fontSize: 'var(--font-md)',
                         color: 'var(--accent-blue)',
                         textDecoration: 'none',
                         fontWeight: 500,
@@ -1165,7 +1165,7 @@ export function NotesCanvas({ workspaceId }) {
                       top: '50%',
                       transform: 'translateY(-50%)',
                       color: 'var(--text-muted)',
-                      fontSize: '12px',
+                      fontSize: 'var(--font-sm)',
                       pointerEvents: 'none'
                     }}
                   />
@@ -1182,7 +1182,7 @@ export function NotesCanvas({ workspaceId }) {
                       background: 'var(--surface-2)',
                       border: '1px solid var(--border-primary)',
                       color: 'var(--text)',
-                      fontSize: '13px',
+                      fontSize: 'var(--font-md)',
                       height: '36px',
                       boxSizing: 'border-box',
                       outline: 'none',
@@ -1229,7 +1229,7 @@ export function NotesCanvas({ workspaceId }) {
                     background: 'var(--surface-2)',
                     border: '1px solid var(--border-primary)',
                     color: 'var(--text)',
-                    fontSize: '16px',
+                    fontSize: 'var(--font-xl)',
                     fontWeight: 600,
                     height: '36px',
                     boxSizing: 'border-box',
@@ -1265,7 +1265,7 @@ export function NotesCanvas({ workspaceId }) {
                       height: '36px',
                       flexShrink: 0,
                       fontWeight: 600,
-                      fontSize: '12px',
+                      fontSize: 'var(--font-sm)',
                       boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                       minWidth: '80px',
                       justifyContent: 'center',
@@ -1280,8 +1280,8 @@ export function NotesCanvas({ workspaceId }) {
                       e.currentTarget.style.transform = 'translateY(0)';
                     }}
                   >
-                    <FontAwesomeIcon icon={faSync} style={{ fontSize: '12px' }} />
-                    <span style={{ fontSize: '12px' }}>Share</span>
+                    <FontAwesomeIcon icon={faSync} style={{ fontSize: 'var(--font-sm)' }} />
+                    <span style={{ fontSize: 'var(--font-sm)' }}>Share</span>
                   </button>
                 )}
               </div>
@@ -1340,7 +1340,7 @@ export function NotesCanvas({ workspaceId }) {
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                fontSize: '12px',
+                fontSize: 'var(--font-sm)',
                 color: 'var(--text-secondary)',
                 padding: '8px 0',
                 flexShrink: 0
@@ -1361,8 +1361,8 @@ export function NotesCanvas({ workspaceId }) {
               gap: '20px',
               textAlign: 'center'
             }}>
-              <div style={{ fontSize: '64px', opacity: 0.3 }}><FontAwesomeIcon icon={faStickyNote} /></div>
-              <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: 'var(--text)' }}>Select a Note</h3>
+              <div style={{ fontSize: 'var(--font-5xl)', opacity: 0.3 }}><FontAwesomeIcon icon={faStickyNote} /></div>
+              <h3 style={{ margin: 0, fontSize: 'var(--font-2xl)', fontWeight: 600, color: 'var(--text)' }}>Select a Note</h3>
               <button
                 onClick={createNewNote}
                 className="notes-new-btn"
@@ -1372,7 +1372,7 @@ export function NotesCanvas({ workspaceId }) {
                   background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
                   border: 'none',
                   color: 'white',
-                  fontSize: '14px',
+                  fontSize: 'var(--font-base)',
                   fontWeight: 500,
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
@@ -1423,7 +1423,7 @@ export function NotesCanvas({ workspaceId }) {
           >
             <h3 style={{
               margin: '0 0 12px 0',
-              fontSize: '18px',
+              fontSize: 'var(--font-2xl)',
               fontWeight: 600,
               color: 'var(--text-primary)'
             }}>
@@ -1431,7 +1431,7 @@ export function NotesCanvas({ workspaceId }) {
             </h3>
             <p style={{
               margin: '0 0 24px 0',
-              fontSize: '14px',
+              fontSize: 'var(--font-base)',
               color: 'var(--text-secondary)',
               lineHeight: '1.5'
             }}>
@@ -1450,7 +1450,7 @@ export function NotesCanvas({ workspaceId }) {
                   background: 'var(--surface-2)',
                   border: '1px solid var(--border-primary)',
                   color: 'var(--text-primary)',
-                  fontSize: '14px',
+                  fontSize: 'var(--font-base)',
                   fontWeight: 500,
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
@@ -1475,7 +1475,7 @@ export function NotesCanvas({ workspaceId }) {
                   background: 'var(--accent-error)',
                   border: 'none',
                   color: 'white',
-                  fontSize: '14px',
+                  fontSize: 'var(--font-base)',
                   fontWeight: 500,
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'

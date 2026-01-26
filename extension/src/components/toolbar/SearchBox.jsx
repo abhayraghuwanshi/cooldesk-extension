@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SearchModal } from '../popups/SearchModal.jsx';
 
 export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
@@ -92,7 +92,7 @@ export function SearchBox({ search, setSearch, openInSidePanel, focusSignal }) {
                     </svg>
                     <span style={{
                         color: search ? 'var(--text-primary, rgba(255, 255, 255, 0.9))' : 'var(--text-secondary, rgba(255, 255, 255, 0.5))',
-                        fontSize: 14,
+                        fontSize: 'var(--font-base)',
                         flex: 1,
                         textAlign: 'left',
                         minWidth: 0,

@@ -128,7 +128,7 @@ export function MobileHome({ onOpenApp, onSearch }) {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                fontSize: '24px',
+                                fontSize: 'var(--font-3xl)',
                                 color: '#fff',
                                 border: '1px solid rgba(255,255,255,0.2)'
                             }}>
@@ -137,7 +137,7 @@ export function MobileHome({ onOpenApp, onSearch }) {
 
                             {/* App Label */}
                             <span style={{
-                                fontSize: '11px',
+                                fontSize: 'var(--font-xs)',
                                 color: 'var(--text)',
                                 fontWeight: 500,
                                 textShadow: '0 1px 2px rgba(0,0,0,0.5)'
@@ -188,16 +188,16 @@ export function MobileHome({ onOpenApp, onSearch }) {
                                 />
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ color: 'var(--text)', fontSize: '13px', fontWeight: 500, truncate: true, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <div style={{ color: 'var(--text)', fontSize: 'var(--font-md)', fontWeight: 500, truncate: true, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {link.title || link.url}
                                 </div>
-                                <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
+                                <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-xs)' }}>
                                     {link.workspaceName}
                                 </div>
                             </div>
                         </div>
                     )) : (
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '12px', textAlign: 'center', padding: '10px 0' }}>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-sm)', textAlign: 'center', padding: '10px 0' }}>
                             Save links to spaces to see them here
                         </div>
                     )}
@@ -242,17 +242,17 @@ export function MobileHome({ onOpenApp, onSearch }) {
                                 width: '32px', height: '32px', borderRadius: '8px',
                                 background: ws.color || 'var(--surface-3)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '16px'
+                                fontSize: 'var(--font-xl)'
                             }}>
                                 {ws.icon || '📁'}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ color: 'var(--text)', fontSize: '13px', fontWeight: 500, truncate: true }}>{ws.name}</div>
-                                <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{ws.urls?.length || 0} items</div>
+                                <div style={{ color: 'var(--text)', fontSize: 'var(--font-md)', fontWeight: 500, truncate: true }}>{ws.name}</div>
+                                <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-xs)' }}>{ws.urls?.length || 0} items</div>
                             </div>
                         </div>
                     )) : (
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '12px', textAlign: 'center', padding: '20px 0' }}>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-sm)', textAlign: 'center', padding: '20px 0' }}>
                             No recent activity
                         </div>
                     )}

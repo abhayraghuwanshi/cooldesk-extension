@@ -141,7 +141,7 @@ export default function NoticeBoard({ teamId, canWrite }) {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
                     }}>
-                        <FontAwesomeIcon icon={faMapPin} style={{ color: '#fff', fontSize: 18 }} />
+                        <FontAwesomeIcon icon={faMapPin} style={{ color: '#fff', fontSize: 'var(--font-2xl)' }} />
                     </div>
                     <div>
                         <h2 style={{ fontSize: 'var(--font-2xl)', fontWeight: 700, margin: 0, color: '#fff' }}>

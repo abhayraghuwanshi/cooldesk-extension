@@ -59,7 +59,7 @@ class ErrorBoundary extends React.Component {
         <div className="error" style={{ marginTop: 8 }}>
           <div>Something went wrong while rendering this section.</div>
           {this.state.error && (
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
+            <div style={{ marginTop: 6, fontSize: 'var(--font-sm)', opacity: 0.9 }}>
               {String(this.state.error.message || this.state.error)}
             </div>
           )}
