@@ -172,16 +172,20 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   // Hyper-Spatial: Global Fluid Navigation (Two-finger scroll)
   useEffect(() => {
     const GESTURE_TIMEOUT = 150; // Ms before considering gesture ended
-    const MIN_SWITCH_COOLDOWN = 300; // Minimum ms between auto-hops to prevent flying to end
+    const MIN_SWITCH_COOLDOWN = 600; // Increased to 600ms to prevent double-skipping
 
     const handleWheel = (e) => {
+      // Ignore zoom gestures (pinch-to-zoom sends Ctrl + Wheel)
+      if (e.ctrlKey) return;
+
       const isMouseWheel = e.deltaMode !== 0; // 1 = lines, 2 = pages (mouse wheel)
-      const THRESHOLD = isMouseWheel ? 50 : 200; // Increased for trackpads to require more energy
+      const THRESHOLD = isMouseWheel ? 50 : 300; // Increased for trackpads to require more energy
       const NEUTRAL_THRESHOLD = isMouseWheel ? 10 : 20;
-      const VELOCITY_DECAY_THRESHOLD = isMouseWheel ? 40 : 80; // Harder to reset latch during active swipe
+      const VELOCITY_DECAY_THRESHOLD = isMouseWheel ? 40 : 30; // Reduced: must stop almost completely to reset
 
       // Priority 1: Strict Vertical Rejection
-      if (!e.shiftKey && Math.abs(e.deltaX) < Math.abs(e.deltaY) * 0.5) {
+      // Increased to 0.85 to strict requirement for horizontal movement
+      if (!e.shiftKey && Math.abs(e.deltaX) < Math.abs(e.deltaY) * 0.85) {
         wheelStateRef.current.accumulator = 0;
         return;
       }
@@ -225,7 +229,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       state.accumulator += delta;
 
       if (Math.abs(state.accumulator) > THRESHOLD) {
-        e.preventDefault();
+        if (e.cancelable) e.preventDefault();
 
         const faces = ['chat', 'workspace', 'overview', 'tabs', 'team', 'notes'];
         const currentIndex = faces.indexOf(currentFace);

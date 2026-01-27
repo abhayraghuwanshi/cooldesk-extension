@@ -567,15 +567,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     return () => clearTimeout(timeoutId);
   }, [searchValue]);
 
-  // Focus search input on mount and global shortcuts
   useEffect(() => {
-    // Single focus attempt on mount
-    const focusTimeout = setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus({ preventScroll: true });
-      }
-    }, 100);
-
+    // Global shortcuts
     const handleGlobalKeys = (e) => {
       // Focus on '/' if not in an input
       if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
@@ -591,7 +584,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     window.addEventListener('keydown', handleGlobalKeys);
 
     return () => {
-      clearTimeout(focusTimeout);
       window.removeEventListener('keydown', handleGlobalKeys);
     };
   }, []);

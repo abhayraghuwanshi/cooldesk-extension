@@ -1,69 +1,128 @@
-import { faArrowRight, faComments, faSync } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faLink, faPlus, faSync, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils/helpers.js';
 
-// Platform configuration matching AIChats.jsx
-const PLATFORM_CONFIG = {
-  'ChatGPT': {
-    url: 'https://chat.openai.com',
-    emoji: '💬',
-  },
-  'Claude': {
-    url: 'https://claude.ai',
-    emoji: '🤖',
-  },
-  'Gemini': {
-    url: 'https://gemini.google.com',
-    emoji: '💎',
-  },
-  'Grok': {
-    url: 'https://x.com',
-    emoji: '🚀',
-  },
-  'Perplexity': {
-    url: 'https://www.perplexity.ai',
-    emoji: '🔍',
-  },
+// Platform configuration for styling
+const PLATFORM_STYLES = {
+  'ChatGPT': { color: 'rgba(16, 163, 127, 0.15)', borderColor: 'rgba(16, 163, 127, 0.3)', textColor: '#6EE7B7', hoverBg: 'rgba(16, 163, 127, 0.25)', hoverBorder: 'rgba(16, 163, 127, 0.5)' },
+  'Claude': { color: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)', textColor: '#C4B5FD', hoverBg: 'rgba(139, 92, 246, 0.25)', hoverBorder: 'rgba(139, 92, 246, 0.5)' },
+  'Gemini': { color: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)', textColor: '#93C5FD', hoverBg: 'rgba(59, 130, 246, 0.25)', hoverBorder: 'rgba(59, 130, 246, 0.5)' },
+  'Grok': { color: 'rgba(251, 146, 60, 0.15)', borderColor: 'rgba(251, 146, 60, 0.3)', textColor: '#FCA5A5', hoverBg: 'rgba(251, 146, 60, 0.25)', hoverBorder: 'rgba(251, 146, 60, 0.5)' },
+  'Perplexity': { color: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#A7F3D0', hoverBg: 'rgba(16, 185, 129, 0.25)', hoverBorder: 'rgba(16, 185, 129, 0.5)' },
 };
 
-const AI_PLATFORMS = [
-  { name: 'ChatGPT', url: 'https://chat.openai.com', color: 'rgba(16, 163, 127, 0.15)', borderColor: 'rgba(16, 163, 127, 0.3)', textColor: '#6EE7B7', hoverBg: 'rgba(16, 163, 127, 0.25)', hoverBorder: 'rgba(16, 163, 127, 0.5)' },
-  { name: 'Claude', url: 'https://claude.ai', color: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)', textColor: '#C4B5FD', hoverBg: 'rgba(139, 92, 246, 0.25)', hoverBorder: 'rgba(139, 92, 246, 0.5)' },
-  { name: 'Gemini', url: 'https://gemini.google.com', color: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)', textColor: '#93C5FD', hoverBg: 'rgba(59, 130, 246, 0.25)', hoverBorder: 'rgba(59, 130, 246, 0.5)' },
-  { name: 'Grok', url: 'https://x.com', color: 'rgba(251, 146, 60, 0.15)', borderColor: 'rgba(251, 146, 60, 0.3)', textColor: '#FCA5A5', hoverBg: 'rgba(251, 146, 60, 0.25)', hoverBorder: 'rgba(251, 146, 60, 0.5)' },
-  { name: 'Perplexity', url: 'https://www.perplexity.ai', color: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#A7F3D0', hoverBg: 'rgba(16, 185, 129, 0.25)', hoverBorder: 'rgba(16, 185, 129, 0.5)' },
-];
+// Default style for unknown platforms
+const DEFAULT_PLATFORM_STYLE = {
+  color: 'rgba(100, 116, 139, 0.15)',
+  borderColor: 'rgba(100, 116, 139, 0.3)',
+  textColor: '#94A3B8',
+  hoverBg: 'rgba(100, 116, 139, 0.25)',
+  hoverBorder: 'rgba(100, 116, 139, 0.5)'
+};
+
+// Storage key for saved links
+const SAVED_LINKS_KEY = 'projectLinkScraper_savedLinks';
 
 export function RecentChats({ maxItems = 5 }) {
   const [chats, setChats] = useState([]);
+  const [allScrapedChats, setAllScrapedChats] = useState([]); // Store all chats for filtering
+  const [savedLinks, setSavedLinks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAddLink, setShowAddLink] = useState(false);
+  const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [newLinkTitle, setNewLinkTitle] = useState('');
+  const [scrapedPlatforms, setScrapedPlatforms] = useState([]);
+  const [activePlatformFilter, setActivePlatformFilter] = useState(null); // Filter by platform
+
+  // Load saved links from storage
+  const loadSavedLinks = useCallback(() => {
+    try {
+      const stored = localStorage.getItem(SAVED_LINKS_KEY);
+      if (stored) {
+        setSavedLinks(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error('[LinkScraper] Error loading saved links:', error);
+    }
+  }, []);
+
+  // Save link to storage
+  const saveLink = useCallback((url, title) => {
+    try {
+      const newLink = {
+        id: Date.now().toString(),
+        url,
+        title: title || new URL(url).hostname,
+        savedAt: Date.now(),
+        type: 'manual'
+      };
+      const updated = [newLink, ...savedLinks];
+      setSavedLinks(updated);
+      localStorage.setItem(SAVED_LINKS_KEY, JSON.stringify(updated));
+      setNewLinkUrl('');
+      setNewLinkTitle('');
+      setShowAddLink(false);
+    } catch (error) {
+      console.error('[LinkScraper] Error saving link:', error);
+    }
+  }, [savedLinks]);
+
+  // Delete saved link
+  const deleteLink = useCallback((linkId) => {
+    const updated = savedLinks.filter(l => l.id !== linkId);
+    setSavedLinks(updated);
+    localStorage.setItem(SAVED_LINKS_KEY, JSON.stringify(updated));
+  }, [savedLinks]);
 
   const loadChats = useCallback(async () => {
     try {
       setLoading(true);
-      console.log('[RecentChats] Starting to load chats...');
       const response = await listScrapedChats({
         sortBy: 'scrapedAt',
         sortOrder: 'desc',
       });
 
-      console.log('[RecentChats] Raw response:', response);
-      console.log('[RecentChats] Response type:', typeof response);
-      console.log('[RecentChats] Is Array:', Array.isArray(response));
-
       const allChats = response?.data || response || [];
-      console.log('[RecentChats] All chats:', allChats);
-      console.log('[RecentChats] All chats length:', allChats.length);
+      const chatArray = Array.isArray(allChats) ? allChats : [];
 
-      const finalChats = Array.isArray(allChats) ? allChats.slice(0, maxItems) : [];
-      console.log('[RecentChats] Final chats to display:', finalChats);
+      // Store all chats for filtering
+      setAllScrapedChats(chatArray);
 
+      // Show limited chats initially (will be filtered when platform selected)
+      const finalChats = chatArray.slice(0, maxItems);
       setChats(finalChats);
+
+      // Extract unique platforms with their URLs and count for Quick Access
+      const platformMap = new Map();
+      chatArray.forEach(chat => {
+        if (chat.platform && chat.url) {
+          if (!platformMap.has(chat.platform)) {
+            try {
+              const url = new URL(chat.url);
+              platformMap.set(chat.platform, { url: url.origin, count: 1 });
+            } catch {
+              // Invalid URL, skip
+            }
+          } else {
+            platformMap.get(chat.platform).count++;
+          }
+        }
+      });
+
+      // Convert to array with styling and count
+      const platforms = Array.from(platformMap.entries()).map(([name, data]) => ({
+        name,
+        url: data.url,
+        count: data.count,
+        ...(PLATFORM_STYLES[name] || DEFAULT_PLATFORM_STYLE)
+      }));
+      setScrapedPlatforms(platforms);
     } catch (error) {
-      console.error('[RecentChats] Error loading chats:', error);
+      console.error('[LinkScraper] Error loading chats:', error);
       setChats([]);
+      setAllScrapedChats([]);
     } finally {
       setLoading(false);
     }
@@ -71,11 +130,12 @@ export function RecentChats({ maxItems = 5 }) {
 
   useEffect(() => {
     loadChats();
-  }, [loadChats]);
+    loadSavedLinks();
+  }, [loadChats, loadSavedLinks]);
 
-  const handleChatClick = (chat) => {
-    if (chat.url) {
-      window.open(chat.url, '_blank');
+  const handleLinkClick = (url) => {
+    if (url) {
+      window.open(url, '_blank');
     }
   };
 
@@ -97,83 +157,194 @@ export function RecentChats({ maxItems = 5 }) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const getIcon = (platform) => {
-    return PLATFORM_CONFIG[platform]?.emoji || '💬';
-  };
-
-  const getPlatformUrl = (platform) => {
-    return PLATFORM_CONFIG[platform]?.url || null;
+  const getIcon = () => {
+    return '🔗';
   };
 
   if (loading) {
     return (
       <div className="cooldesk-panel">
         <div className="panel-header">
-          <div className="panel-title">Recent Chats</div>
+          <div className="panel-title">Project Links</div>
         </div>
         <div style={{ textAlign: 'center', padding: '30px 16px', color: '#64748B' }}>
           <FontAwesomeIcon icon={faSync} spin style={{ fontSize: 'var(--font-3xl, 20px)', marginBottom: '10px' }} />
-          <div style={{ fontSize: 'var(--font-lg, 14px)' }}>Loading chats...</div>
+          <div style={{ fontSize: 'var(--font-lg, 14px)' }}>Loading links...</div>
         </div>
       </div>
     );
   }
 
+  // When a platform filter is active, show all chats from that platform
+  // Otherwise show recent chats (limited by maxItems)
+  const filteredChats = activePlatformFilter
+    ? allScrapedChats.filter(c => c.platform === activePlatformFilter)
+    : chats;
+
+  // Build links list - saved links first (sorted by save time), then scraped links
+  const sortedSavedLinks = activePlatformFilter
+    ? []
+    : [...savedLinks].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0)).map(l => ({ ...l, source: 'saved' }));
+
+  // Scraped links - preserve original order from database/platform
+  // Don't re-sort - the DB already returns them in scrapedAt desc order
+  // and platforms typically list most recently active first
+  const scrapedLinks = filteredChats.map(c => ({
+    id: c.id,
+    url: c.url,
+    title: c.title,
+    platform: c.platform,
+    source: 'auto'
+  }));
+
+  const allLinks = [...sortedSavedLinks, ...scrapedLinks];
+
   return (
     <div className="cooldesk-panel">
       <div className="panel-header">
         <div className="panel-title">
-          <FontAwesomeIcon icon={faComments} style={{ marginRight: '8px' }} />
-          Recent Chats
+          <FontAwesomeIcon icon={faLink} style={{ marginRight: '8px' }} />
+          {activePlatformFilter ? (
+            <>
+              {activePlatformFilter}
+              <span style={{ fontWeight: 400, opacity: 0.7, marginLeft: '4px' }}>
+                ({allLinks.length})
+              </span>
+            </>
+          ) : 'Project Links'}
         </div>
-        <div className="panel-action" onClick={loadChats} title="Refresh">
-          <FontAwesomeIcon icon={faSync} />
-          <span>Refresh</span>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {activePlatformFilter && (
+            <div
+              className="panel-action"
+              onClick={() => setActivePlatformFilter(null)}
+              title="Show all links"
+              style={{ color: '#FCA5A5' }}
+            >
+              <FontAwesomeIcon icon={faTimes} />
+            </div>
+          )}
+          {!activePlatformFilter && (
+            <div
+              className="panel-action"
+              onClick={() => setShowAddLink(!showAddLink)}
+              title="Add Link"
+              style={{ color: showAddLink ? '#A78BFA' : undefined }}
+            >
+              <FontAwesomeIcon icon={showAddLink ? faTimes : faPlus} />
+            </div>
+          )}
+          <div className="panel-action" onClick={loadChats} title="Refresh">
+            <FontAwesomeIcon icon={faSync} />
+          </div>
         </div>
       </div>
 
-      {chats.length === 0 ? (
+      {/* Add Link Form */}
+      {showAddLink && (
+        <div style={{
+          padding: '12px',
+          background: 'rgba(139, 92, 246, 0.08)',
+          borderRadius: '8px',
+          marginBottom: '12px',
+          border: '1px solid rgba(139, 92, 246, 0.2)'
+        }}>
+          <input
+            type="text"
+            placeholder="Paste URL..."
+            value={newLinkUrl}
+            onChange={(e) => setNewLinkUrl(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              background: 'rgba(30, 41, 59, 0.8)',
+              border: '1px solid rgba(148, 163, 184, 0.2)',
+              borderRadius: '6px',
+              color: '#F1F5F9',
+              fontSize: 'var(--font-sm, 12px)',
+              marginBottom: '8px',
+              outline: 'none'
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newLinkUrl.trim()) {
+                saveLink(newLinkUrl.trim(), newLinkTitle.trim());
+              }
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Title (optional)"
+            value={newLinkTitle}
+            onChange={(e) => setNewLinkTitle(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              background: 'rgba(30, 41, 59, 0.8)',
+              border: '1px solid rgba(148, 163, 184, 0.2)',
+              borderRadius: '6px',
+              color: '#F1F5F9',
+              fontSize: 'var(--font-sm, 12px)',
+              marginBottom: '8px',
+              outline: 'none'
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newLinkUrl.trim()) {
+                saveLink(newLinkUrl.trim(), newLinkTitle.trim());
+              }
+            }}
+          />
+          <button
+            onClick={() => newLinkUrl.trim() && saveLink(newLinkUrl.trim(), newLinkTitle.trim())}
+            disabled={!newLinkUrl.trim()}
+            style={{
+              width: '100%',
+              padding: '8px',
+              background: newLinkUrl.trim() ? 'rgba(139, 92, 246, 0.3)' : 'rgba(100, 116, 139, 0.2)',
+              border: '1px solid',
+              borderColor: newLinkUrl.trim() ? 'rgba(139, 92, 246, 0.5)' : 'rgba(100, 116, 139, 0.3)',
+              borderRadius: '6px',
+              color: newLinkUrl.trim() ? '#A78BFA' : '#64748B',
+              fontSize: 'var(--font-sm, 12px)',
+              fontWeight: 600,
+              cursor: newLinkUrl.trim() ? 'pointer' : 'not-allowed',
+              transition: 'all 0.2s'
+            }}
+          >
+            Save Link
+          </button>
+        </div>
+      )}
+
+      {allLinks.length === 0 ? (
         <div style={{
           textAlign: 'center',
           padding: '30px 16px',
           color: '#64748B',
           fontSize: 'var(--font-lg, 14px)',
         }}>
-          <div style={{ fontSize: 'var(--font-5xl, 28px)', marginBottom: '10px' }}>💬</div>
-          <div>No AI chats yet</div>
+          <div style={{ fontSize: 'var(--font-5xl, 28px)', marginBottom: '10px' }}>🔗</div>
+          <div>No project links yet</div>
           <div style={{ fontSize: 'var(--font-base, 13px)', marginTop: '6px', opacity: 0.7 }}>
-            Visit ChatGPT, Claude, or Gemini to start tracking your chats
-          </div>
-          <div style={{ fontSize: 'var(--font-sm, 12px)', marginTop: '4px', opacity: 0.5, fontStyle: 'italic' }}>
-            Chats will automatically appear here when you visit AI platforms
+            Add links manually or visit AI platforms to auto-collect
           </div>
         </div>
       ) : (
         <ul className="recent-chats-list">
-          {chats.map((chat, index) => {
-            // Get platform base URL instead of chat URL
-            const platformUrl = getPlatformUrl(chat.platform);
-            const faviconUrl = platformUrl ? getFaviconUrl(platformUrl, 20) : null;
-
-            console.log('[RecentChats] Chat item:', {
-              platform: chat.platform,
-              platformUrl,
-              faviconUrl,
-              title: chat.title
-            });
+          {allLinks.map((link, index) => {
+            const faviconUrl = link.url ? getFaviconUrl(link.url, 20) : null;
 
             return (
               <li
-                key={chat.id || index}
+                key={link.id || index}
                 className="recent-chat-item cooldesk-flex"
-                onClick={() => handleChatClick(chat)}
+                onClick={() => handleLinkClick(link.url)}
                 style={{ cursor: 'pointer' }}
               >
                 <div className="chat-icon">
                   {faviconUrl ? (
                     <img
                       src={faviconUrl}
-                      alt={chat.platform || 'Chat'}
+                      alt=""
                       style={{
                         width: '100%',
                         height: '100%',
@@ -182,24 +353,56 @@ export function RecentChats({ maxItems = 5 }) {
                         padding: '2px'
                       }}
                       onError={(e) => {
-                        // Fallback to emoji icon if favicon fails to load
-                        console.error('[RecentChats] Favicon failed to load:', faviconUrl);
                         e.target.style.display = 'none';
-                        e.target.parentElement.textContent = getIcon(chat.platform);
+                        e.target.parentElement.textContent = link.platform ? getIcon(link.platform) : '🔗';
                       }}
                     />
                   ) : (
-                    getIcon(chat.platform)
+                    link.platform ? getIcon(link.platform) : '🔗'
                   )}
                 </div>
                 <div className="chat-content">
                   <div className="chat-title">
-                    {chat.title || 'Untitled Chat'}
+                    {link.title || 'Untitled Link'}
                   </div>
-                  <div className="chat-time">
-                    {formatTime(chat.scrapedAt || chat.lastVisitTime)}
+                  <div className="chat-time" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {link.source === 'saved' ? (
+                      // Show time only for manually saved links
+                      formatTime(link.savedAt)
+                    ) : link.platform ? (
+                      // Show platform badge for scraped links
+                      <span style={{
+                        fontSize: '9px',
+                        background: (PLATFORM_STYLES[link.platform]?.color || 'rgba(100, 116, 139, 0.15)'),
+                        color: (PLATFORM_STYLES[link.platform]?.textColor || '#94A3B8'),
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontWeight: 500
+                      }}>{link.platform}</span>
+                    ) : null}
                   </div>
                 </div>
+                {link.source === 'saved' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteLink(link.id);
+                    }}
+                    className="link-delete-btn"
+                    title="Delete link"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#64748B',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      opacity: 0,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faTrash} style={{ fontSize: '11px' }} />
+                  </button>
+                )}
                 <FontAwesomeIcon
                   icon={faArrowRight}
                   style={{
@@ -216,65 +419,114 @@ export function RecentChats({ maxItems = 5 }) {
         </ul>
       )}
 
-      {/* AI Platform Quick Access */}
-      <div style={{
-        marginTop: '12px',
-        paddingTop: '12px',
-        borderTop: '1px solid rgba(148, 163, 184, 0.15)',
-        flexShrink: 0,
-      }}>
-        <div className="recommended-header" style={{ marginBottom: '10px' }}>Quick Access</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {AI_PLATFORMS.map((platform) => {
-            const faviconUrl = getFaviconUrl(platform.url, 16);
-            return (
+      {/* Quick Access - Show scraped platforms */}
+      {scrapedPlatforms.length > 0 && (
+        <div style={{
+          marginTop: '12px',
+          paddingTop: '12px',
+          borderTop: '1px solid rgba(148, 163, 184, 0.15)',
+          flexShrink: 0,
+        }}>
+          <div className="recommended-header" style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{activePlatformFilter ? `${activePlatformFilter} Links` : 'Quick Access'}</span>
+            {activePlatformFilter && (
               <button
-                key={platform.name}
-                onClick={() => window.open(platform.url, '_blank')}
+                onClick={() => setActivePlatformFilter(null)}
                 style={{
-                  background: platform.color,
-                  border: `1px solid ${platform.borderColor}`,
-                  borderRadius: '6px',
-                  padding: '6px 10px',
-                  color: platform.textColor,
-                  fontSize: 'var(--font-md, 12px)',
-                  fontWeight: 500,
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '4px',
+                  padding: '2px 8px',
+                  color: '#FCA5A5',
+                  fontSize: '10px',
+                  fontWeight: 600,
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = platform.hoverBg;
-                  e.currentTarget.style.borderColor = platform.hoverBorder;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = platform.color;
-                  e.currentTarget.style.borderColor = platform.borderColor;
+                  gap: '4px'
                 }}
               >
-                {faviconUrl && (
-                  <img
-                    src={faviconUrl}
-                    alt={platform.name}
-                    style={{
-                      width: '14px',
-                      height: '14px',
-                      borderRadius: '2px',
-                      flexShrink: 0,
-                    }}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                )}
-                {platform.name}
+                <FontAwesomeIcon icon={faTimes} style={{ fontSize: '8px' }} />
+                Clear
               </button>
-            );
-          })}
+            )}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {scrapedPlatforms.map((platform) => {
+              const faviconUrl = getFaviconUrl(platform.url, 16);
+              const isActive = activePlatformFilter === platform.name;
+              return (
+                <button
+                  key={platform.name}
+                  onClick={() => {
+                    if (isActive) {
+                      // If already active, open the platform URL
+                      window.open(platform.url, '_blank');
+                    } else {
+                      // First click: filter by platform
+                      setActivePlatformFilter(platform.name);
+                    }
+                  }}
+                  style={{
+                    background: isActive ? platform.hoverBg : platform.color,
+                    border: `1px solid ${isActive ? platform.hoverBorder : platform.borderColor}`,
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    color: platform.textColor,
+                    fontSize: 'var(--font-md, 12px)',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: isActive ? `0 0 0 2px ${platform.textColor}40` : 'none',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = platform.hoverBg;
+                      e.currentTarget.style.borderColor = platform.hoverBorder;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = platform.color;
+                      e.currentTarget.style.borderColor = platform.borderColor;
+                    }
+                  }}
+                  title={isActive ? `Click again to open ${platform.name}` : `Show ${platform.count} ${platform.name} links`}
+                >
+                  {faviconUrl && (
+                    <img
+                      src={faviconUrl}
+                      alt={platform.name}
+                      style={{
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '2px',
+                        flexShrink: 0,
+                      }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                  )}
+                  {platform.name}
+                  <span style={{
+                    background: 'rgba(0,0,0,0.2)',
+                    borderRadius: '10px',
+                    padding: '1px 6px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                  }}>
+                    {platform.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* View All Chats - Below Horizontal Line */}
       {/* <div
@@ -304,6 +556,12 @@ export function RecentChats({ maxItems = 5 }) {
       <style jsx>{`
         .recent-chat-item:hover .chat-arrow {
           opacity: 1 !important;
+        }
+        .recent-chat-item:hover .link-delete-btn {
+          opacity: 1 !important;
+        }
+        .link-delete-btn:hover {
+          color: #EF4444 !important;
         }
       `}</style>
     </div>

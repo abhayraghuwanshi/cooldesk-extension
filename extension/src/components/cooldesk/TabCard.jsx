@@ -1,5 +1,5 @@
 
-import { faExternalLinkAlt, faGlobe, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faExternalLinkAlt, faGlobe, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo } from 'react';
 import { getFaviconUrl } from '../../utils/helpers.js';
@@ -114,30 +114,39 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
  * TabGroupCard - Card for displaying grouped tabs by domain
  * Memoized to prevent unnecessary re-renders
  */
-export const TabGroupCard = memo(function TabGroupCard({ domain, tabs = [], onClick, isExpanded = false }) {
+export const TabGroupCard = memo(function TabGroupCard({ domain, tabs = [], onToggleExpand, onTabClick, onTabClose, isExpanded = false }) {
   if (!domain || tabs.length === 0) return null;
 
+  const topTab = tabs[0];
   const colorClass = ICON_COLORS[Math.abs(domain.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
-  const faviconUrl = tabs[0]?.favIconUrl || getFaviconUrl(tabs[0]?.url, 16);
+  // Use top tab's favicon
+  const faviconUrl = topTab?.favIconUrl || getFaviconUrl(topTab?.url, 16);
 
-  const handleCardClick = () => {
-    onClick?.(domain, tabs);
+  // Primary action: Open the top tab (only on header click)
+  const handleHeaderClick = (e) => {
+    e.stopPropagation();
+    onTabClick?.(topTab);
+  };
+
+  // Secondary action: Toggle group expansion
+  const handleExpandClick = (e) => {
+    e.stopPropagation();
+    onToggleExpand?.();
   };
 
   return (
-    <div className={`cooldesk-tab-group-card ${isExpanded ? 'expanded' : ''}`} onClick={handleCardClick}>
-      <div className="tab-group-header">
+    <div className={`cooldesk-tab-group-card ${isExpanded ? 'expanded' : ''}`}>
+      {/* Tab count badge - positioned top right */}
+      <div className="tab-group-count-badge">
+        <span>{tabs.length}</span>
+      </div>
+
+      <div className="tab-group-header" onClick={handleHeaderClick} style={{ cursor: 'pointer' }}>
         <div className={`tab-group-icon ${colorClass}`}>
           {faviconUrl ? (
             <img
               src={faviconUrl}
               alt=""
-              style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '4px',
-                objectFit: 'cover'
-              }}
               onError={(e) => {
                 e.target.style.display = 'none';
                 e.target.nextElementSibling.style.display = 'flex';
@@ -150,67 +159,77 @@ export const TabGroupCard = memo(function TabGroupCard({ domain, tabs = [], onCl
           />
         </div>
         <div className="tab-group-info">
-          <div className="tab-group-domain">{domain}</div>
-          <div className="tab-group-count">{tabs.length} tab{tabs.length !== 1 ? 's' : ''}</div>
+          <div className="tab-group-domain">
+            {domain}
+          </div>
+          <div className="tab-group-subtitle">
+            {topTab.title || 'Untitled'}
+          </div>
         </div>
       </div>
 
+      {/* Expand/Collapse toggle bar */}
+      <button
+        className={`tab-group-expand-btn ${isExpanded ? 'expanded' : ''}`}
+        onClick={handleExpandClick}
+        title={isExpanded ? "Collapse group" : "Show all tabs"}
+      >
+        <span className="expand-btn-text">
+          {isExpanded ? 'Hide tabs' : `Show ${tabs.length} tabs`}
+        </span>
+        <FontAwesomeIcon
+          icon={faChevronDown}
+          className="expand-btn-icon"
+        />
+      </button>
+
       {isExpanded && tabs.length > 0 && (
         <div className="tab-group-tabs">
-          {tabs.slice(0, 5).map((tab, idx) => (
-            <div
-              key={idx}
-              className="tab-group-item"
-              onClick={async (e) => {
-                e.stopPropagation();
-                // Switch to the existing tab instead of opening a new one
-                if (tab.id && typeof chrome !== 'undefined' && chrome?.tabs?.update) {
-                  try {
-                    await chrome.tabs.update(tab.id, { active: true });
-                    if (tab.windowId && chrome?.windows?.update) {
-                      await chrome.windows.update(tab.windowId, { focused: true });
-                    }
-                  } catch (error) {
-                    console.error('[TabGroupCard] Failed to activate tab:', error);
-                  }
-                }
-              }}
-              title={tab.title}
-            >
-              <span className="tab-group-item-icon">
-                {tab.favIconUrl ? (
-                  <img
-                    src={tab.favIconUrl}
-                    alt=""
-                    style={{
-                      width: '14px',
-                      height: '14px',
-                      borderRadius: '3px',
-                      objectFit: 'cover'
-                    }}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.nextElementSibling.style.display = 'inline';
-                    }}
+          {tabs.map((tab, idx) => {
+            const isTop = tab.id === topTab.id;
+            return (
+              <div
+                key={tab.id || idx}
+                className={`tab-group-item ${isTop ? 'is-top' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTabClick?.(tab);
+                }}
+                title={tab.title}
+              >
+                <span className="tab-group-item-icon">
+                  {tab.favIconUrl ? (
+                    <img
+                      src={tab.favIconUrl}
+                      alt=""
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextElementSibling.style.display = 'inline';
+                      }}
+                    />
+                  ) : null}
+                  <FontAwesomeIcon
+                    icon={faGlobe}
+                    style={{ display: tab.favIconUrl ? 'none' : 'inline' }}
                   />
-                ) : null}
-                <FontAwesomeIcon
-                  icon={faGlobe}
-                  style={{ display: tab.favIconUrl ? 'none' : 'inline', fontSize: '10px' }}
-                />
-              </span>
-              <span className="tab-group-item-text">
-                {tab.title || 'Untitled'}
-              </span>
-            </div>
-          ))}
-          {tabs.length > 5 && (
-            <div className="tab-group-item" style={{ opacity: 0.6, fontStyle: 'italic' }}>
-              <span className="tab-group-item-text">
-                +{tabs.length - 5} more...
-              </span>
-            </div>
-          )}
+                </span>
+                <span className="tab-group-item-text">
+                  {tab.title || 'Untitled'}
+                </span>
+                {isTop && <span className="tab-group-item-badge">Current</span>}
+                <button
+                  className="tab-group-item-close"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTabClose?.(tab);
+                  }}
+                  title="Close tab"
+                >
+                  <FontAwesomeIcon icon={faTimes} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

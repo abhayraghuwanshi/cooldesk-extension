@@ -1,4 +1,4 @@
-import { faBrain, faClock, faFilter, faSearch, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
@@ -24,7 +24,6 @@ export function TabManagement() {
   const [autoGroupEnabled, setAutoGroupEnabled] = useState(false);
   const [smartSortEnabled, setSmartSortEnabled] = useState(true);
   const [visibleTabsCount, setVisibleTabsCount] = useState(12);
-  const [searchQuery, setSearchQuery] = useState('');
   const [tabActivity, setTabActivity] = useState({});
   const [isFocusMode, setIsFocusMode] = useState(false);
 
@@ -171,22 +170,14 @@ export function TabManagement() {
   const filteredTabs = useMemo(() => {
     let result = tabs;
 
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(tab =>
-        tab.title?.toLowerCase().includes(query) ||
-        tab.url?.toLowerCase().includes(query)
-      );
-    }
-
-    if (isFocusMode && !searchQuery) {
+    if (isFocusMode) {
       // Focus mode: show pinned, active, and top 20% scored tabs
       // For now, let's just show top 15 tabs if focus mode is on
       result = result.slice(0, 15);
     }
 
     return result;
-  }, [tabs, searchQuery, isFocusMode]);
+  }, [tabs, isFocusMode]);
 
   // Get recently active tabs (excluding current active)
   const recentTabs = useMemo(() => {
@@ -209,6 +200,69 @@ export function TabManagement() {
 
     return sorted.length > 0 ? parseInt(sorted[0][0]) : null;
   }, [tabActivity, tabs]);
+
+  // Partition tabs into exclusive buckets to avoid duplication
+  const partitionedTabs = useMemo(() => {
+    // 1. Pinned Tabs (Priority 1)
+    const pinned = filteredTabs.filter(t => t.pinned);
+    const pinnedIds = new Set(pinned.map(t => t.id));
+
+    // 2. Unpinned Tabs
+    const unpinned = filteredTabs.filter(t => !pinnedIds.has(t.id));
+
+    // 3. Grouped Tabs (Priority 2: >1 tab per domain)
+    const groups = {};
+    const singles = [];
+
+    // First pass: organize unpinned by domain
+    const byDomain = {};
+    unpinned.forEach(t => {
+      try {
+        const domain = new URL(t.url).hostname;
+        if (!byDomain[domain]) byDomain[domain] = [];
+        byDomain[domain].push(t);
+      } catch {
+        if (!byDomain['others']) byDomain['others'] = [];
+        byDomain['others'].push(t);
+      }
+    });
+
+    // Identify valid groups vs singles
+    Object.entries(byDomain).forEach(([domain, domainTabs]) => {
+      // Logic: Only group if > 1 tab AND Auto-Group enabled OR domain has > 1 tab (User said "group", imply auto-group behavior or general grouping)
+      // If Auto Group is purely a toggle for display, we check it. 
+      // User said "we have pinned, group", implying existing groups.
+      if (domainTabs.length > 1) {
+        groups[domain] = domainTabs;
+      } else {
+        singles.push(...domainTabs);
+      }
+    });
+
+    // 4. Recent Unique (Priority 3: Top singles by activity)
+    // Sort singles by activity if available
+    const sortedSingles = [...singles].sort((a, b) => {
+      const scoreA = tabActivity[a.id] || 0;
+      const scoreB = tabActivity[b.id] || 0;
+      return scoreB - scoreA;
+    });
+
+    // Take top 8 as "Recent" (active or high score)
+    // Or strictly checks activity existence?
+    // Let's take top 8 regardless, as "Recent/Singles"
+    const recent = sortedSingles.slice(0, 8);
+
+    // 5. Others (Priority 4: The rest)
+    const others = sortedSingles.slice(8);
+
+    return {
+      pinned,
+      grouped: groups,
+      recent,
+      others,
+      hasGroups: Object.keys(groups).length > 0
+    };
+  }, [filteredTabs, tabActivity]);
 
   return (
     <div style={{
@@ -234,26 +288,26 @@ export function TabManagement() {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             onClick={async () => {
-              try {
-                const newState = !smartSortEnabled;
-                await chrome.storage.local.set({ smartSortEnabled: newState });
-                setSmartSortEnabled(newState);
-                console.log('[TabManagement] Smart sort toggled:', newState);
-                refreshTabs(); // Refresh to apply new sorting
-              } catch (error) {
-                console.error('[TabManagement] Smart sort toggle error:', error);
+              const newState = !isFocusMode;
+              setIsFocusMode(newState);
+              // Ensure smart sort is enabled when focus is on
+              if (newState) {
+                setSmartSortEnabled(true);
+                chrome.storage.local.set({ isFocusMode: newState, smartSortEnabled: true });
+              } else {
+                chrome.storage.local.set({ isFocusMode: newState });
               }
             }}
             style={{
-              background: smartSortEnabled
+              background: isFocusMode
                 ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(124, 58, 237, 0.15))'
                 : 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
-              border: smartSortEnabled
+              border: isFocusMode
                 ? '1px solid rgba(139, 92, 246, 0.4)'
                 : '1px solid rgba(100, 116, 139, 0.3)',
               borderRadius: '8px',
               padding: '6px 12px',
-              color: smartSortEnabled ? '#A78BFA' : '#94A3B8',
+              color: isFocusMode ? '#A78BFA' : '#94A3B8',
               cursor: 'pointer',
               fontSize: 'var(--font-sm, 12px)',
               fontWeight: 600,
@@ -263,7 +317,7 @@ export function TabManagement() {
               gap: '6px'
             }}
             onMouseEnter={(e) => {
-              if (smartSortEnabled) {
+              if (isFocusMode) {
                 e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(124, 58, 237, 0.25))';
                 e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.6)';
                 e.currentTarget.style.transform = 'translateY(-1px)';
@@ -274,7 +328,7 @@ export function TabManagement() {
               }
             }}
             onMouseLeave={(e) => {
-              if (smartSortEnabled) {
+              if (isFocusMode) {
                 e.currentTarget.style.background = 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(124, 58, 237, 0.15))';
                 e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
                 e.currentTarget.style.transform = 'translateY(0)';
@@ -284,16 +338,16 @@ export function TabManagement() {
                 e.currentTarget.style.transform = 'translateY(0)';
               }
             }}
-            title={smartSortEnabled
-              ? "Smart sort enabled - Tabs sorted by usage patterns"
-              : "Smart sort disabled - Tabs sorted by window and index"}
+            title={isFocusMode
+              ? "Focus enabled - Showing most relevant tabs"
+              : "Focus disabled - Showing all tabs"}
           >
             <FontAwesomeIcon
               icon={faBrain}
               size="lg"
               style={{ pointerEvents: 'none' }}
             />
-            <span style={{ pointerEvents: 'none' }}>Smart Sort</span>
+            <span style={{ pointerEvents: 'none' }}>Focus</span>
           </button>
           <button
             onClick={async () => {
@@ -366,98 +420,7 @@ export function TabManagement() {
             />
             <span style={{ pointerEvents: 'none' }}>Auto Group</span>
           </button>
-          <button
-            onClick={refreshTabs}
-            style={{
-              background: 'rgba(59, 130, 246, 0.15)',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              borderRadius: '8px',
-              padding: '6px 12px',
-              color: '#60A5FA',
-              cursor: 'pointer',
-              fontSize: 'var(--font-sm, 12px)',
-              fontWeight: 500,
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)';
-              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
-              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-            }}
-          >
-            <FontAwesomeIcon icon={faSync} style={{ pointerEvents: 'none' }} />
-            <span style={{ pointerEvents: 'none' }}>Refresh</span>
-          </button>
         </div>
-      </div>
-
-      {/* Search and Filters */}
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <div style={{
-          flex: 1,
-          position: 'relative',
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.05)',
-          borderRadius: '10px',
-          padding: '2px 8px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <FontAwesomeIcon icon={faSearch} style={{ color: 'var(--text-secondary)', fontSize: '12px' }} />
-          <input
-            type="text"
-            placeholder="Search tabs..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#fff',
-              fontSize: '13px',
-              padding: '6px 0',
-              width: '100%',
-              outline: 'none'
-            }}
-          />
-          {searchQuery && (
-            <FontAwesomeIcon
-              icon={faTimes}
-              onClick={() => setSearchQuery('')}
-              style={{ cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '12px' }}
-            />
-          )}
-        </div>
-        <button
-          onClick={() => {
-            const newState = !isFocusMode;
-            setIsFocusMode(newState);
-            chrome.storage.local.set({ isFocusMode: newState });
-          }}
-          style={{
-            background: isFocusMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-            border: isFocusMode ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255, 255, 255, 0.05)',
-            borderRadius: '10px',
-            padding: '8px 12px',
-            color: isFocusMode ? '#60A5FA' : 'var(--text-secondary)',
-            cursor: 'pointer',
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.2s'
-          }}
-          title={isFocusMode ? "Exit Focus Mode" : "Focus Mode - Show only relevant tabs"}
-        >
-          <FontAwesomeIcon icon={faFilter} />
-          <span>Focus</span>
-        </button>
       </div>
 
       <div style={{
@@ -484,42 +447,8 @@ export function TabManagement() {
           </div>
         ) : (
           <>
-            {/* Recent Activity Section */}
-            {!searchQuery && recentTabs.length > 0 && (
-              <div>
-                <h3 style={{
-                  fontSize: 'var(--font-sm, 12px)',
-                  fontWeight: 600,
-                  color: 'var(--text-secondary, #94A3B8)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <FontAwesomeIcon icon={faClock} style={{ opacity: 0.6 }} />
-                  Recent Activity
-                </h3>
-                <div className="tabs-grid">
-                  {recentTabs.map(tab => (
-                    <TabCard
-                      key={tab.id}
-                      tab={tab}
-                      onClick={handleTabClick}
-                      onClose={handleTabClose}
-                      onPin={handleTabPin}
-                      isPinned={tab.pinned}
-                      isActive={tab.active}
-                      isLastActive={tab.id === lastActiveTabId}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Pinned Tabs Section */}
-            {tabs.filter(tab => tab.pinned).length > 0 && !searchQuery && (
+            {/* 1. Pinned Tabs Section */}
+            {partitionedTabs.pinned.length > 0 && (
               <div>
                 <h3 style={{
                   fontSize: 'var(--font-sm, 12px)',
@@ -529,10 +458,10 @@ export function TabManagement() {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  Pinned ({tabs.filter(tab => tab.pinned).length})
+                  Pinned ({partitionedTabs.pinned.length})
                 </h3>
                 <div className="tabs-grid">
-                  {tabs.filter(tab => tab.pinned).map(tab => (
+                  {partitionedTabs.pinned.map(tab => (
                     <TabCard
                       key={tab.id}
                       tab={tab}
@@ -547,8 +476,8 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* Grouped by Domain Section */}
-            {Object.keys(tabsByDomain()).length > 1 && (
+            {/* 2. Grouped by Domain Section */}
+            {partitionedTabs.hasGroups && (
               <div>
                 <h3 style={{
                   fontSize: 'var(--font-sm, 12px)',
@@ -561,14 +490,15 @@ export function TabManagement() {
                   Grouped by Domain
                 </h3>
                 <div className="tabs-grid">
-                  {Object.entries(tabsByDomain())
-                    .filter(([_, domainTabs]) => domainTabs.length > 1)
+                  {Object.entries(partitionedTabs.grouped)
                     .map(([domain, domainTabs]) => (
                       <TabGroupCard
                         key={domain}
                         domain={domain}
                         tabs={domainTabs}
-                        onClick={() => setExpandedDomain(expandedDomain === domain ? null : domain)}
+                        onToggleExpand={() => setExpandedDomain(expandedDomain === domain ? null : domain)}
+                        onTabClick={handleTabClick}
+                        onTabClose={handleTabClose}
                         isExpanded={expandedDomain === domain}
                       />
                     ))}
@@ -576,97 +506,126 @@ export function TabManagement() {
               </div>
             )}
 
-
-
-            {/* All Tabs Section */}
-            <div>
-              <h3 style={{
-                fontSize: 'var(--font-sm, 12px)',
-                fontWeight: 600,
-                color: 'var(--text-secondary, #94A3B8)',
-                marginBottom: '8px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em'
-              }}>
-                {searchQuery ? `Search Results (${filteredTabs.length})` : `All Tabs (${filteredTabs.length})`}
-              </h3>
-              {filteredTabs.length > 0 ? (
-                <>
-                  <div className="tabs-grid">
-                    {filteredTabs.slice(0, visibleTabsCount).map(tab => (
-                      <TabCard
-                        key={tab.id}
-                        tab={tab}
-                        onClick={handleTabClick}
-                        onClose={handleTabClose}
-                        onPin={handleTabPin}
-                        isPinned={tab.pinned}
-                        isActive={tab.active}
-                        isLastActive={tab.id === lastActiveTabId}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Load More Button */}
-                  {tabs.length > visibleTabsCount && (
-                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
-                      <button
-                        onClick={() => setVisibleTabsCount(prev => prev + 12)}
-                        style={{
-                          background: 'rgba(59, 130, 246, 0.1)',
-                          color: '#60A5FA',
-                          border: '1px solid rgba(59, 130, 246, 0.2)',
-                          padding: '8px 24px',
-                          borderRadius: '20px',
-                          fontSize: '13px',
-                          fontWeight: 500,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
-                          e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.4)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
-                          e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.2)';
-                        }}
-                      >
-                        Show More ({tabs.length - visibleTabsCount} remaining)
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div style={{
+            {/* 3. Recent (Ungrouped) Section */}
+            {partitionedTabs.recent.length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-sm, 12px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
                   display: 'flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '12px',
-                  padding: '40px 20px',
-                  color: 'var(--text-secondary, #64748B)',
-                  textAlign: 'center',
-                  background: 'var(--glass-bg, rgba(30, 41, 59, 0.95))',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(59, 130, 246, 0.2)'
+                  gap: '6px'
                 }}>
-                  <div style={{ fontSize: '48px', opacity: 0.3 }}>📑</div>
-                  <div>
-                    <div style={{
-                      fontSize: 'var(--font-lg, 14px)',
-                      fontWeight: 500,
-                      marginBottom: '8px'
-                    }}>
-                      No Tabs Found
-                    </div>
-                    <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
-                      Open some browser tabs to see them here
-                    </div>
+                  <FontAwesomeIcon icon={faClock} style={{ opacity: 0.6 }} />
+                  Recent
+                </h3>
+                <div className="tabs-grid">
+                  {partitionedTabs.recent.map(tab => (
+                    <TabCard
+                      key={tab.id}
+                      tab={tab}
+                      onClick={handleTabClick}
+                      onClose={handleTabClose}
+                      onPin={handleTabPin}
+                      isPinned={false}
+                      isActive={tab.active}
+                      isLastActive={tab.id === lastActiveTabId}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Other Tabs Section */}
+            {partitionedTabs.others.length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-sm, 12px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  {`Others (${partitionedTabs.others.length})`}
+                </h3>
+                <div className="tabs-grid">
+                  {/* Only show 'others' if not in focus mode, or just user preference? 
+                        Focus mode already slices input `filteredTabs`, so `others` will likely be empty or small.
+                        We can show what remains.
+                    */}
+                  {partitionedTabs.others.slice(0, visibleTabsCount).map(tab => (
+                    <TabCard
+                      key={tab.id}
+                      tab={tab}
+                      onClick={handleTabClick}
+                      onClose={handleTabClose}
+                      onPin={handleTabPin}
+                      isPinned={false}
+                      isActive={tab.active}
+                      isLastActive={false}
+                    />
+                  ))}
+                </div>
+                {/* Load More Button for Others */}
+                {partitionedTabs.others.length > visibleTabsCount && (
+                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+                    <button
+                      onClick={() => setVisibleTabsCount(prev => prev + 12)}
+                      style={{
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        color: '#60A5FA',
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        padding: '8px 24px',
+                        borderRadius: '20px',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Show More ({partitionedTabs.others.length - visibleTabsCount} remaining)
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Empty State */}
+            {filteredTabs.length === 0 && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                padding: '40px 20px',
+                color: 'var(--text-secondary, #64748B)',
+                textAlign: 'center',
+                background: 'var(--glass-bg, rgba(30, 41, 59, 0.95))',
+                borderRadius: '12px',
+                border: '1px solid rgba(59, 130, 246, 0.2)'
+              }}>
+                <div style={{ fontSize: '48px', opacity: 0.3 }}>📑</div>
+                <div>
+                  <div style={{
+                    fontSize: 'var(--font-lg, 14px)',
+                    fontWeight: 500,
+                    marginBottom: '8px'
+                  }}>
+                    No Tabs Found
+                  </div>
+                  <div style={{ fontSize: 'var(--font-sm, 12px)' }}>
+                    Open some browser tabs to see them here
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
           </>
         )}
       </div>

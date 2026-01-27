@@ -1,202 +1,160 @@
-import { faCheck, faExternalLinkAlt, faLink, faPlus, faSync, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faLink, faPlus, faSync, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { listScrapedChats } from '../../db/index.js';
 import { getFaviconUrl } from '../../utils/helpers.js';
+
 /**
- * ChatContext - AI conversation interface bound to workspace
+ * ChatContext - Project Links interface for workspace
  *
  * Features:
- * - Recent chats from workspace context
- * - AI chat suggestions
- * - Workspace-aware prompts
- * - Context strip (notes + URLs)
+ * - Manual link saving with URL + title
+ * - Auto-collected links from scraped AI platforms
+ * - Quick access to scraped platforms
  */
 
-const PLATFORM_CONFIG = {
-  'ChatGPT': { url: 'https://chat.openai.com', emoji: '💬', gradient: 'linear-gradient(135deg, rgba(16, 163, 127, 0.2), rgba(16, 163, 127, 0.05))', borderColor: 'rgba(16, 163, 127, 0.3)', textColor: '#6EE7B7', accentColor: '#10a37f' },
-  'Claude': { url: 'https://claude.ai', emoji: '🤖', gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.05))', borderColor: 'rgba(139, 92, 246, 0.3)', textColor: '#C4B5FD', accentColor: '#8b5cf6' },
-  'Gemini': { url: 'https://gemini.google.com', emoji: '💎', gradient: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.05))', borderColor: 'rgba(59, 130, 246, 0.3)', textColor: '#93C5FD', accentColor: '#3b82f6' },
-  'Grok': { url: 'https://x.com', emoji: '🚀', gradient: 'linear-gradient(135deg, rgba(251, 146, 60, 0.2), rgba(251, 146, 60, 0.05))', borderColor: 'rgba(251, 146, 60, 0.3)', textColor: '#FCA5A5', accentColor: '#fb923c' },
-  'Perplexity': { url: 'https://www.perplexity.ai', emoji: '🔍', gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05))', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#A7F3D0', accentColor: '#10b981' },
-  'AI Studio': { url: 'https://aistudio.google.com', emoji: '🧪', gradient: 'linear-gradient(135deg, rgba(66, 133, 244, 0.2), rgba(66, 133, 244, 0.05))', borderColor: 'rgba(66, 133, 244, 0.3)', textColor: '#8AB4F8', accentColor: '#4285F4' },
-  'Lovable': { url: 'https://lovable.dev', emoji: '💜', gradient: 'linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(167, 139, 250, 0.05))', borderColor: 'rgba(167, 139, 250, 0.3)', textColor: '#C4B5FD', accentColor: '#8b5cf6' },
-  'ElevenLabs': { url: 'https://elevenlabs.io', emoji: '🗣️', gradient: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))', borderColor: 'rgba(255, 255, 255, 0.2)', textColor: '#F3F4F6', accentColor: '#ffffff' },
-  'Suno': { url: 'https://suno.com', emoji: '🎵', gradient: 'linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(236, 72, 153, 0.05))', borderColor: 'rgba(236, 72, 153, 0.3)', textColor: '#F9A8D4', accentColor: '#ec4899' },
-  'Runway': { url: 'https://runwayml.com', emoji: '🎬', gradient: 'linear-gradient(135deg, rgba(250, 204, 21, 0.2), rgba(250, 204, 21, 0.05))', borderColor: 'rgba(250, 204, 21, 0.3)', textColor: '#FDE047', accentColor: '#facc15' },
-  'Luma Dream Machine': { url: 'https://lumalabs.ai/dream-machine', emoji: '🎥', gradient: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05))', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#6EE7B7', accentColor: '#10b981' },
-  'Pika': { url: 'https://pika.art', emoji: '🐇', gradient: 'linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(167, 139, 250, 0.05))', borderColor: 'rgba(167, 139, 250, 0.3)', textColor: '#C4B5FD', accentColor: '#8b5cf6' },
-  // Scraped platforms (from click-to-scrape)
-  'GitHub': { url: 'https://github.com', emoji: '🐙', gradient: 'linear-gradient(135deg, rgba(110, 84, 148, 0.2), rgba(110, 84, 148, 0.05))', borderColor: 'rgba(110, 84, 148, 0.3)', textColor: '#C9B1FF', accentColor: '#6e5494' },
-  'GitLab': { url: 'https://gitlab.com', emoji: '🦊', gradient: 'linear-gradient(135deg, rgba(252, 109, 38, 0.2), rgba(252, 109, 38, 0.05))', borderColor: 'rgba(252, 109, 38, 0.3)', textColor: '#FDBA74', accentColor: '#fc6d26' },
-  'Vercel': { url: 'https://vercel.com', emoji: '▲', gradient: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))', borderColor: 'rgba(255, 255, 255, 0.2)', textColor: '#F3F4F6', accentColor: '#ffffff' },
-  'Notion': { url: 'https://notion.so', emoji: '📓', gradient: 'linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))', borderColor: 'rgba(255, 255, 255, 0.2)', textColor: '#F3F4F6', accentColor: '#ffffff' },
-  'Linear': { url: 'https://linear.app', emoji: '✅', gradient: 'linear-gradient(135deg, rgba(98, 126, 234, 0.2), rgba(98, 126, 234, 0.05))', borderColor: 'rgba(98, 126, 234, 0.3)', textColor: '#A5B4FC', accentColor: '#627eea' },
-  'Figma': { url: 'https://figma.com', emoji: '📐', gradient: 'linear-gradient(135deg, rgba(162, 89, 255, 0.2), rgba(162, 89, 255, 0.05))', borderColor: 'rgba(162, 89, 255, 0.3)', textColor: '#D8B4FE', accentColor: '#a259ff' },
-  'Google Cloud': { url: 'https://console.cloud.google.com', emoji: '☁️', gradient: 'linear-gradient(135deg, rgba(66, 133, 244, 0.2), rgba(66, 133, 244, 0.05))', borderColor: 'rgba(66, 133, 244, 0.3)', textColor: '#93C5FD', accentColor: '#4285f4' },
-  'Firebase': { url: 'https://console.firebase.google.com', emoji: '🔥', gradient: 'linear-gradient(135deg, rgba(255, 196, 0, 0.2), rgba(255, 196, 0, 0.05))', borderColor: 'rgba(255, 196, 0, 0.3)', textColor: '#FDE047', accentColor: '#ffc400' },
-  'Supabase': { url: 'https://supabase.com', emoji: '⚡', gradient: 'linear-gradient(135deg, rgba(62, 207, 142, 0.2), rgba(62, 207, 142, 0.05))', borderColor: 'rgba(62, 207, 142, 0.3)', textColor: '#6EE7B7', accentColor: '#3ecf8e' },
-  'Railway': { url: 'https://railway.app', emoji: '🚂', gradient: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.05))', borderColor: 'rgba(139, 92, 246, 0.3)', textColor: '#C4B5FD', accentColor: '#8b5cf6' },
-  'Render': { url: 'https://render.com', emoji: '🎨', gradient: 'linear-gradient(135deg, rgba(70, 225, 149, 0.2), rgba(70, 225, 149, 0.05))', borderColor: 'rgba(70, 225, 149, 0.3)', textColor: '#6EE7B7', accentColor: '#46e195' },
+// Platform styling configuration
+const PLATFORM_STYLES = {
+  'ChatGPT': { color: 'rgba(16, 163, 127, 0.15)', borderColor: 'rgba(16, 163, 127, 0.3)', textColor: '#6EE7B7', hoverBg: 'rgba(16, 163, 127, 0.25)', hoverBorder: 'rgba(16, 163, 127, 0.5)' },
+  'Claude': { color: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)', textColor: '#C4B5FD', hoverBg: 'rgba(139, 92, 246, 0.25)', hoverBorder: 'rgba(139, 92, 246, 0.5)' },
+  'Gemini': { color: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)', textColor: '#93C5FD', hoverBg: 'rgba(59, 130, 246, 0.25)', hoverBorder: 'rgba(59, 130, 246, 0.5)' },
+  'Grok': { color: 'rgba(251, 146, 60, 0.15)', borderColor: 'rgba(251, 146, 60, 0.3)', textColor: '#FCA5A5', hoverBg: 'rgba(251, 146, 60, 0.25)', hoverBorder: 'rgba(251, 146, 60, 0.5)' },
+  'Perplexity': { color: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#A7F3D0', hoverBg: 'rgba(16, 185, 129, 0.25)', hoverBorder: 'rgba(16, 185, 129, 0.5)' },
+  'AI Studio': { color: 'rgba(66, 133, 244, 0.15)', borderColor: 'rgba(66, 133, 244, 0.3)', textColor: '#93C5FD', hoverBg: 'rgba(66, 133, 244, 0.25)', hoverBorder: 'rgba(66, 133, 244, 0.5)' },
+  'Lovable': { color: 'rgba(167, 139, 250, 0.15)', borderColor: 'rgba(167, 139, 250, 0.3)', textColor: '#C4B5FD', hoverBg: 'rgba(167, 139, 250, 0.25)', hoverBorder: 'rgba(167, 139, 250, 0.5)' },
 };
 
-const POPULAR_TOOLS = [
-  { name: 'Midjourney', url: 'https://www.midjourney.com', emoji: '🎨' },
-  { name: 'Canva', url: 'https://www.canva.com', emoji: '🖌️' },
-  { name: 'Notion', url: 'https://www.notion.so', emoji: '📓' },
-  { name: 'Figma', url: 'https://www.figma.com', emoji: '📐' },
-  { name: 'GitHub', url: 'https://github.com', emoji: '🐙' },
-  { name: 'Linear', url: 'https://linear.app', emoji: '✅' },
-  { name: 'V0.dev', url: 'https://v0.dev', emoji: '⚡' },
-  { name: 'Replit', url: 'https://replit.com', emoji: '💻' },
-  { name: 'StackBlitz', url: 'https://stackblitz.com', emoji: '⚡' },
-  { name: 'Poe', url: 'https://poe.com', emoji: '🤖' },
-  { name: 'HuggingChat', url: 'https://huggingface.co/chat', emoji: '🤗' },
-  { name: 'Weights & Biases', url: 'https://wandb.ai', emoji: '📊' },
-  { name: 'Civitai', url: 'https://civitai.com', emoji: '🖼️' },
-  { name: 'Vectorizer.ai', url: 'https://vectorizer.ai', emoji: '📐' },
-  { name: 'Gamma', url: 'https://gamma.app', emoji: '📑' },
-  { name: 'Tome', url: 'https://tome.app', emoji: '📖' },
-  { name: 'Synthesia', url: 'https://www.synthesia.io', emoji: '🗣️' },
-  { name: 'Descript', url: 'https://www.descript.com', emoji: '🎙️' },
-  { name: 'Fireflies.ai', url: 'https://fireflies.ai', emoji: '📝' },
-  { name: 'Otter.ai', url: 'https://otter.ai', emoji: '🦦' },
-];
+// Default style for unknown platforms
+const DEFAULT_PLATFORM_STYLE = {
+  color: 'rgba(100, 116, 139, 0.15)',
+  borderColor: 'rgba(100, 116, 139, 0.3)',
+  textColor: '#94A3B8',
+  hoverBg: 'rgba(100, 116, 139, 0.25)',
+  hoverBorder: 'rgba(100, 116, 139, 0.5)'
+};
 
-const WORKSPACE_PROMPTS = [
-  { icon: '✨', text: 'Summarize everything I worked on here', action: 'summarize' },
-  { icon: '🔗', text: 'What links are related to my notes?', action: 'relate-links' },
-  { icon: '📋', text: 'Create a plan from my notes', action: 'create-plan' },
-  { icon: '💡', text: 'Suggest next steps for this project', action: 'suggest-next' },
-  { icon: '🎯', text: 'Find patterns in my browsing here', action: 'find-patterns' },
-];
+// Storage key for saved links
+const SAVED_LINKS_KEY = 'chatContext_savedLinks';
 
-export function ChatContext({ workspaceId, workspaceName }) {
+export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
   const [chats, setChats] = useState([]);
+  const [allScrapedChats, setAllScrapedChats] = useState([]); // Store all chats for filtering
+  const [savedLinks, setSavedLinks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState(() => localStorage.getItem('chatFilter') || 'All');
-  const [visibleCount, setVisibleCount] = useState(8);
-  const [availablePlatforms, setAvailablePlatforms] = useState([]); // Dynamic platforms from data
+  const [showAddLink, setShowAddLink] = useState(false);
+  const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [newLinkTitle, setNewLinkTitle] = useState('');
+  const [scrapedPlatforms, setScrapedPlatforms] = useState([]);
+  const [activePlatformFilter, setActivePlatformFilter] = useState(null); // Filter by platform
 
-  // Custom Links State
-  const [customLinks, setCustomLinks] = useState([]);
-  const [isAddingLink, setIsAddingLink] = useState(false);
-  const [activeTab, setActiveTab] = useState('popular'); // 'popular' or 'custom'
-  const [newLinkData, setNewLinkData] = useState({ name: '', url: '', emoji: '' });
-
-  // Load custom links from storage
-  useEffect(() => {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(['chatContextLinks'], (result) => {
-        if (result.chatContextLinks) {
-          setCustomLinks(result.chatContextLinks);
-        }
-      });
+  // Load saved links from storage
+  const loadSavedLinks = useCallback(() => {
+    try {
+      const stored = localStorage.getItem(SAVED_LINKS_KEY);
+      if (stored) {
+        setSavedLinks(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error('[ChatContext] Error loading saved links:', error);
     }
   }, []);
 
-  // Save custom links to storage
-  const saveCustomLinks = (links) => {
-    setCustomLinks(links);
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({ chatContextLinks: links });
+  // Save link to storage
+  const saveLink = useCallback((url, title) => {
+    try {
+      // Ensure URL has protocol
+      let finalUrl = url;
+      if (!/^https?:\/\//i.test(finalUrl)) {
+        finalUrl = 'https://' + finalUrl;
+      }
+
+      const newLink = {
+        id: Date.now().toString(),
+        url: finalUrl,
+        title: title || new URL(finalUrl).hostname,
+        savedAt: Date.now(),
+        type: 'manual'
+      };
+      const updated = [newLink, ...savedLinks];
+      setSavedLinks(updated);
+      localStorage.setItem(SAVED_LINKS_KEY, JSON.stringify(updated));
+      setNewLinkUrl('');
+      setNewLinkTitle('');
+      setShowAddLink(false);
+    } catch (error) {
+      console.error('[ChatContext] Error saving link:', error);
     }
-  };
+  }, [savedLinks]);
 
-  const handleAddPopularTool = (tool) => {
-    const newLink = {
-      id: Date.now().toString(),
-      name: tool.name,
-      url: tool.url,
-      emoji: tool.emoji,
-      isCustom: true
-    };
-    saveCustomLinks([...customLinks, newLink]);
-    setIsAddingLink(false);
-  };
+  // Delete saved link
+  const deleteLink = useCallback((linkId) => {
+    const updated = savedLinks.filter(l => l.id !== linkId);
+    setSavedLinks(updated);
+    localStorage.setItem(SAVED_LINKS_KEY, JSON.stringify(updated));
+  }, [savedLinks]);
 
-  const handleAddCustomLink = (e) => {
-    e.preventDefault();
-    if (!newLinkData.name || !newLinkData.url) return;
-
-    // Ensure URL has protocol
-    let url = newLinkData.url;
-    if (!/^https?:\/\//i.test(url)) {
-      url = 'https://' + url;
-    }
-
-    const newLink = {
-      id: Date.now().toString(),
-      name: newLinkData.name,
-      url: url,
-      emoji: newLinkData.emoji || '🔗',
-      isCustom: true
-    };
-
-    saveCustomLinks([...customLinks, newLink]);
-    setNewLinkData({ name: '', url: '', emoji: '' });
-    setIsAddingLink(false);
-  };
-
-  const handleRemoveLink = (e, linkId) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const updatedLinks = customLinks.filter(link => link.id !== linkId);
-    saveCustomLinks(updatedLinks);
-  };
-
-  useEffect(() => {
-    localStorage.setItem('chatFilter', filter);
-  }, [filter]);
-
-  // Load chats
+  // Load chats from scraped data
   const loadChats = useCallback(async () => {
     try {
       setLoading(true);
-      const queryOptions = {
+      const response = await listScrapedChats({
         sortBy: 'scrapedAt',
         sortOrder: 'desc',
-        limit: 100 // Increased to get more data for platform detection
-      };
-
-      if (filter !== 'All') {
-        queryOptions.platform = filter;
-      }
-
-      const response = await listScrapedChats(queryOptions);
+      });
 
       const allChats = response?.data || response || [];
       const chatArray = Array.isArray(allChats) ? allChats : [];
-      setChats(chatArray);
 
-      // Extract unique platforms from the data (for dynamic filter)
-      if (filter === 'All' && chatArray.length > 0) {
-        const platforms = [...new Set(chatArray.map(c => c.platform).filter(Boolean))];
-        setAvailablePlatforms(platforms);
-      }
+      // Store all chats for filtering
+      setAllScrapedChats(chatArray);
+
+      // Show limited chats initially
+      const finalChats = chatArray.slice(0, maxItems);
+      setChats(finalChats);
+
+      // Extract unique platforms with their URLs and count for Quick Access
+      const platformMap = new Map();
+      chatArray.forEach(chat => {
+        if (chat.platform && chat.url) {
+          if (!platformMap.has(chat.platform)) {
+            try {
+              const url = new URL(chat.url);
+              platformMap.set(chat.platform, { url: url.origin, count: 1 });
+            } catch {
+              // Invalid URL, skip
+            }
+          } else {
+            platformMap.get(chat.platform).count++;
+          }
+        }
+      });
+
+      // Convert to array with styling and count
+      const platforms = Array.from(platformMap.entries()).map(([name, data]) => ({
+        name,
+        url: data.url,
+        count: data.count,
+        ...(PLATFORM_STYLES[name] || DEFAULT_PLATFORM_STYLE)
+      }));
+      setScrapedPlatforms(platforms);
     } catch (error) {
       console.error('[ChatContext] Error loading chats:', error);
       setChats([]);
+      setAllScrapedChats([]);
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [maxItems]);
 
   useEffect(() => {
     loadChats();
-  }, [loadChats]);
+    loadSavedLinks();
+  }, [loadChats, loadSavedLinks]);
 
-  const handleChatClick = (chat) => {
-    if (chat.url) {
-      window.open(chat.url, '_blank');
+  const handleLinkClick = (url) => {
+    if (url) {
+      window.open(url, '_blank');
     }
-  };
-
-  const handlePromptClick = (prompt) => {
-    // Future: Send to AI with workspace context
-    console.log('[ChatContext] Prompt clicked:', prompt.action, 'Workspace:', workspaceName);
-    alert(`AI prompt: "${prompt.text}"\n\nThis will be implemented with workspace context in Phase 2.`);
   };
 
   const formatTime = (timestamp) => {
@@ -217,888 +175,407 @@ export function ChatContext({ workspaceId, workspaceName }) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const triggerScrape = () => {
-    setLoading(true);
-    // Use the new manual trigger that opens tabs if needed
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-      chrome.runtime.sendMessage({ type: 'TRIGGER_MANUAL_CHATS_SCRAPE' }, (response) => {
-        // Re-fetch after delays to allow scrape to start/finish
-        // The background script now opens tabs, so it might take a bit longer
-        setTimeout(loadChats, 3000);
-        setTimeout(loadChats, 8000);
-        setTimeout(loadChats, 15000);
-      });
-    } else {
-      setLoading(false);
-    }
+  const getIcon = () => {
+    return '🔗';
   };
+
+  // When a platform filter is active, show all chats from that platform
+  // Otherwise show recent chats (limited by maxItems)
+  const filteredChats = activePlatformFilter
+    ? allScrapedChats.filter(c => c.platform === activePlatformFilter)
+    : chats;
+
+  // Build links list - saved links first (sorted by save time), then scraped links
+  const sortedSavedLinks = activePlatformFilter
+    ? []
+    : [...savedLinks].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0)).map(l => ({ ...l, source: 'saved' }));
+
+  // Scraped links - sort by scrapedAt descending (most recently active first)
+  const scrapedLinks = [...filteredChats]
+    .sort((a, b) => (b.scrapedAt || 0) - (a.scrapedAt || 0))
+    .map(c => ({
+      id: c.id,
+      url: c.url,
+      title: c.title,
+      platform: c.platform,
+      source: 'auto'
+    }));
+
+  const allLinks = [...sortedSavedLinks, ...scrapedLinks];
+
+  if (loading) {
+    return (
+      <div className="cooldesk-panel" style={{ height: '100%' }}>
+        <div className="panel-header">
+          <div className="panel-title">Project Links</div>
+        </div>
+        <div style={{ textAlign: 'center', padding: '30px 16px', color: '#64748B' }}>
+          <FontAwesomeIcon icon={faSync} spin style={{ fontSize: 'var(--font-3xl, 20px)', marginBottom: '10px' }} />
+          <div style={{ fontSize: 'var(--font-lg, 14px)' }}>Loading links...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      gap: '20px',
+      gap: '16px',
       overflow: 'hidden'
     }}>
-      {/* Header */}
-      {/* <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 20px',
-        background: 'var(--glass-bg)',
-        backdropFilter: 'blur(16px)',
-        borderRadius: '16px',
-        border: '1px solid var(--border-primary)',
-        flexShrink: 0
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <FontAwesomeIcon icon={faComments} style={{ color: 'var(--accent-blue)', fontSize: 'var(--font-3xl)' }} />
-          <h2 style={{ margin: 0, fontSize: 'var(--font-2xl)', fontWeight: 600, color: 'var(--text)' }}>AI Chats</h2>
-          {workspaceName && (
-            <span style={{
-              padding: '4px 12px',
-              borderRadius: '12px',
-              background: 'var(--accent-blue-soft)',
-              border: '1px solid var(--accent-blue-border)',
-              color: 'var(--accent-blue)',
-              fontSize: 'var(--font-sm)',
-              fontWeight: 500
+      {/* Main Links Panel */}
+      <div className="cooldesk-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="panel-header">
+          <div className="panel-title">
+            <FontAwesomeIcon icon={faLink} style={{ marginRight: '8px' }} />
+            {activePlatformFilter ? (
+              <>
+                {activePlatformFilter}
+                <span style={{ fontWeight: 400, opacity: 0.7, marginLeft: '4px' }}>
+                  ({allLinks.length})
+                </span>
+              </>
+            ) : (
+              <>
+                Project Links
+                {workspaceName && (
+                  <span style={{
+                    marginLeft: '8px',
+                    fontSize: 'var(--font-sm)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 400
+                  }}>
+                    — {workspaceName}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {activePlatformFilter && (
+              <div
+                className="panel-action"
+                onClick={() => setActivePlatformFilter(null)}
+                title="Show all links"
+                style={{ color: '#FCA5A5' }}
+              >
+                <FontAwesomeIcon icon={faTimes} />
+              </div>
+            )}
+            {!activePlatformFilter && (
+              <div
+                className="panel-action"
+                onClick={() => setShowAddLink(!showAddLink)}
+                title="Add Link"
+                style={{ color: showAddLink ? '#A78BFA' : undefined }}
+              >
+                <FontAwesomeIcon icon={showAddLink ? faTimes : faPlus} />
+              </div>
+            )}
+            <div className="panel-action" onClick={loadChats} title="Refresh">
+              <FontAwesomeIcon icon={faSync} />
+            </div>
+          </div>
+        </div>
+
+        {/* Add Link Form */}
+        {showAddLink && (
+          <div style={{
+            padding: '12px',
+            background: 'rgba(139, 92, 246, 0.08)',
+            borderRadius: '8px',
+            marginBottom: '12px',
+            border: '1px solid rgba(139, 92, 246, 0.2)'
+          }}>
+            <input
+              type="text"
+              placeholder="Paste URL..."
+              value={newLinkUrl}
+              onChange={(e) => setNewLinkUrl(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 10px',
+                background: 'rgba(30, 41, 59, 0.8)',
+                border: '1px solid rgba(148, 163, 184, 0.2)',
+                borderRadius: '6px',
+                color: '#F1F5F9',
+                fontSize: 'var(--font-sm, 12px)',
+                marginBottom: '8px',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newLinkUrl.trim()) {
+                  saveLink(newLinkUrl.trim(), newLinkTitle.trim());
+                }
+              }}
+              autoFocus
+            />
+            <input
+              type="text"
+              placeholder="Title (optional)"
+              value={newLinkTitle}
+              onChange={(e) => setNewLinkTitle(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 10px',
+                background: 'rgba(30, 41, 59, 0.8)',
+                border: '1px solid rgba(148, 163, 184, 0.2)',
+                borderRadius: '6px',
+                color: '#F1F5F9',
+                fontSize: 'var(--font-sm, 12px)',
+                marginBottom: '8px',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newLinkUrl.trim()) {
+                  saveLink(newLinkUrl.trim(), newLinkTitle.trim());
+                }
+              }}
+            />
+            <button
+              onClick={() => newLinkUrl.trim() && saveLink(newLinkUrl.trim(), newLinkTitle.trim())}
+              disabled={!newLinkUrl.trim()}
+              style={{
+                width: '100%',
+                padding: '8px',
+                background: newLinkUrl.trim() ? 'rgba(139, 92, 246, 0.3)' : 'rgba(100, 116, 139, 0.2)',
+                border: '1px solid',
+                borderColor: newLinkUrl.trim() ? 'rgba(139, 92, 246, 0.5)' : 'rgba(100, 116, 139, 0.3)',
+                borderRadius: '6px',
+                color: newLinkUrl.trim() ? '#A78BFA' : '#64748B',
+                fontSize: 'var(--font-sm, 12px)',
+                fontWeight: 600,
+                cursor: newLinkUrl.trim() ? 'pointer' : 'not-allowed',
+                transition: 'all 0.2s'
+              }}
+            >
+              Save Link
+            </button>
+          </div>
+        )}
+
+        {/* Links List */}
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {allLinks.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '30px 16px',
+              color: '#64748B',
+              fontSize: 'var(--font-lg, 14px)',
             }}>
-              {workspaceName}
-            </span>
+              <div style={{ fontSize: 'var(--font-5xl, 28px)', marginBottom: '10px' }}>🔗</div>
+              <div>No project links yet</div>
+              <div style={{ fontSize: 'var(--font-base, 13px)', marginTop: '6px', opacity: 0.7 }}>
+                Add links manually or visit AI platforms to auto-collect
+              </div>
+            </div>
+          ) : (
+            <ul className="recent-chats-list">
+              {allLinks.map((link, index) => {
+                const faviconUrl = link.url ? getFaviconUrl(link.url, 20) : null;
+
+                return (
+                  <li
+                    key={link.id || index}
+                    className="recent-chat-item cooldesk-flex"
+                    onClick={() => handleLinkClick(link.url)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="chat-icon">
+                      {faviconUrl ? (
+                        <img
+                          src={faviconUrl}
+                          alt=""
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: '4px',
+                            objectFit: 'contain',
+                            padding: '2px'
+                          }}
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.parentElement.textContent = getIcon();
+                          }}
+                        />
+                      ) : (
+                        getIcon()
+                      )}
+                    </div>
+                    <div className="chat-content">
+                      <div className="chat-title">
+                        {link.title || 'Untitled Link'}
+                      </div>
+                      <div className="chat-time" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {link.source === 'saved' ? (
+                          // Show time only for manually saved links
+                          formatTime(link.savedAt)
+                        ) : link.platform ? (
+                          // Show platform badge for scraped links
+                          <span style={{
+                            fontSize: '9px',
+                            background: (PLATFORM_STYLES[link.platform]?.color || 'rgba(100, 116, 139, 0.15)'),
+                            color: (PLATFORM_STYLES[link.platform]?.textColor || '#94A3B8'),
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 500
+                          }}>{link.platform}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    {link.source === 'saved' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteLink(link.id);
+                        }}
+                        className="link-delete-btn"
+                        title="Delete link"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#64748B',
+                          cursor: 'pointer',
+                          padding: '4px',
+                          opacity: 0,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faTrash} style={{ fontSize: '11px' }} />
+                      </button>
+                    )}
+                    <FontAwesomeIcon
+                      icon={faArrowRight}
+                      style={{
+                        color: '#64748B',
+                        fontSize: 'var(--font-xl, 14px)',
+                        opacity: 0,
+                        transition: 'opacity 0.2s ease',
+                      }}
+                      className="chat-arrow"
+                    />
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
 
-        <button onClick={loadChats} style={{
-          background: 'transparent',
-          border: 'none',
-          color: 'var(--text-secondary)',
-          cursor: 'pointer',
-          padding: '8px',
-          borderRadius: '8px',
-          transition: 'all 0.2s ease',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--interactive-hover)';
-            e.currentTarget.style.color = 'var(--text)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'var(--text-secondary)';
-          }}
-          title="Refresh">
-          <FontAwesomeIcon icon={faSync} spin={loading} />
-        </button>
-      </div> */}
-
-      {/* Scrollable Content */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '24px',
-        paddingRight: '4px',
-        minHeight: 0
-      }}>
-        {/* Workspace-aware prompts */}
-        {/* <div>
+        {/* Quick Access - Show scraped platforms */}
+        {scrapedPlatforms.length > 0 && (
           <div style={{
-            fontSize: 'var(--font-sm)',
-            fontWeight: 600,
-            color: 'var(--text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginBottom: '12px',
-            paddingLeft: '4px'
+            marginTop: '12px',
+            paddingTop: '12px',
+            borderTop: '1px solid rgba(148, 163, 184, 0.15)',
+            flexShrink: 0,
           }}>
-            Workspace Suggestions
-          </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: '12px'
-          }}>
-            {WORKSPACE_PROMPTS.map((prompt, index) => (
-              <button
-                key={index}
-                onClick={() => handlePromptClick(prompt)}
-                style={{
-                  padding: '16px',
-                  borderRadius: '12px',
-                  background: 'var(--glass-bg)',
-                  border: '1px solid var(--border-primary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  textAlign: 'left',
-                  color: 'var(--text)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--accent-blue-soft)';
-                  e.currentTarget.style.borderColor = 'var(--accent-blue-border)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'var(--glass-bg)';
-                  e.currentTarget.style.borderColor = 'var(--border-primary)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <span style={{ fontSize: 'var(--font-2xl)' }}>{prompt.icon}</span>
-                <span style={{ fontSize: 'var(--font-md)', fontWeight: 500, flex: 1 }}>{prompt.text}</span>
-              </button>
-            ))}
-          </div>
-        </div> */}
-
-        {/* Quick access platforms */}
-        <div style={{
-          background: 'var(--glass-bg)',
-          backdropFilter: 'blur(16px)',
-          borderRadius: '16px',
-          border: '1px solid var(--border-primary)',
-          padding: '16px',
-          marginBottom: '20px'
-        }}>
-          <div style={{
-            fontSize: 'var(--font-sm)',
-            fontWeight: 600,
-            color: 'var(--text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            marginBottom: '12px',
-            paddingLeft: '4px'
-          }}>
-            Quick Access
-          </div>
-          <ul className="workspace-links" style={{
-            maxHeight: 'none',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: '12px'
-          }}>
-            {Object.entries(PLATFORM_CONFIG).map(([name, config]) => {
-              const faviconUrl = getFaviconUrl(config.url, 32);
-              return (
-                <li
-                  key={name}
-                  className="workspace-link-item"
-                  onClick={() => window.open(config.url, '_blank')}
+            <div className="recommended-header" style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{activePlatformFilter ? `${activePlatformFilter} Links` : 'Quick Access'}</span>
+              {activePlatformFilter && (
+                <button
+                  onClick={() => setActivePlatformFilter(null)}
                   style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    color: '#FCA5A5',
+                    fontSize: '10px',
+                    fontWeight: 600,
                     cursor: 'pointer',
-                    padding: '12px',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    minHeight: '80px',
-                    textAlign: 'center',
-                    background: config.gradient || 'rgba(255, 255, 255, 0.03)',
-                    border: `1px solid ${config.borderColor || 'rgba(255, 255, 255, 0.05)'}`,
-                    borderRadius: '12px',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.borderColor = config.accentColor || 'rgba(59, 130, 246, 0.3)';
-                    e.currentTarget.style.boxShadow = `0 0 15px ${config.accentColor}40`;
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.borderColor = config.borderColor || 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.boxShadow = 'none';
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
                   }}
                 >
-                  <span className="workspace-link-icon" style={{ width: '32px', height: '32px', margin: '0 auto' }}>
-                    {faviconUrl ? (
-                      <img
-                        src={faviconUrl}
-                        alt={name}
-                        className="link-favicon"
-                        style={{ width: '24px', height: '24px' }}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'inline';
-                        }}
-                      />
-                    ) : null}
-                    <FontAwesomeIcon
-                      icon={faLink}
-                      className="link-fallback-icon"
-                      style={{ display: faviconUrl ? 'none' : 'inline', fontSize: 'var(--font-xl)' }}
-                    />
-                  </span>
-                  <span className="workspace-link-text" style={{ fontSize: 'var(--font-sm)', fontWeight: 600, color: '#fff' }}>{name}</span>
-                </li>
-              );
-            })}
-
-            {/* Custom Links */}
-            {customLinks.map((link) => {
-              const faviconUrl = getFaviconUrl(link.url, 32);
-
-              return (
-                <li
-                  key={link.id}
-                  className="workspace-link-item group"
-                  onClick={() => window.open(link.url, '_blank')}
-                  style={{
-                    position: 'relative',
-                    cursor: 'pointer',
-                    padding: '12px',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    minHeight: '80px',
-                    textAlign: 'center',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    borderRadius: '12px',
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                    e.currentTarget.style.boxShadow = '0 0 15px rgba(59, 130, 246, 0.15)';
-                    e.currentTarget.querySelector('.workspace-link-remove').style.opacity = 1;
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.querySelector('.workspace-link-remove').style.opacity = 0;
-                  }}
-                >
-                  <span className="workspace-link-icon" style={{ width: '32px', height: '32px', margin: '0 auto' }}>
+                  <FontAwesomeIcon icon={faTimes} style={{ fontSize: '8px' }} />
+                  Clear
+                </button>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {scrapedPlatforms.map((platform) => {
+                const faviconUrl = getFaviconUrl(platform.url, 16);
+                const isActive = activePlatformFilter === platform.name;
+                return (
+                  <button
+                    key={platform.name}
+                    onClick={() => {
+                      if (isActive) {
+                        // If already active, open the platform URL
+                        window.open(platform.url, '_blank');
+                      } else {
+                        // First click: filter by platform
+                        setActivePlatformFilter(platform.name);
+                      }
+                    }}
+                    style={{
+                      background: isActive ? platform.hoverBg : platform.color,
+                      border: `1px solid ${isActive ? platform.hoverBorder : platform.borderColor}`,
+                      borderRadius: '6px',
+                      padding: '6px 10px',
+                      color: platform.textColor,
+                      fontSize: 'var(--font-md, 12px)',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: isActive ? `0 0 0 2px ${platform.textColor}40` : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = platform.hoverBg;
+                        e.currentTarget.style.borderColor = platform.hoverBorder;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = platform.color;
+                        e.currentTarget.style.borderColor = platform.borderColor;
+                      }
+                    }}
+                    title={isActive ? `Click again to open ${platform.name}` : `Show ${platform.count} ${platform.name} links`}
+                  >
                     {faviconUrl && (
                       <img
                         src={faviconUrl}
-                        alt={link.name}
-                        className="link-favicon"
-                        style={{ display: 'inline', width: '24px', height: '24px', borderRadius: '4px' }}
+                        alt={platform.name}
+                        style={{
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '2px',
+                          flexShrink: 0,
+                        }}
                         onError={(e) => {
                           e.target.style.display = 'none';
-                          const fallback = e.target.nextSibling;
-                          if (fallback) fallback.style.display = 'inline';
                         }}
                       />
                     )}
-
-                    <span
-                      className="link-fallback-icon"
-                      style={{ display: faviconUrl ? 'none' : 'inline', fontSize: 'var(--font-xl)', lineHeight: 1 }}
-                    >
-                      {link.emoji || '🔗'}
+                    {platform.name}
+                    <span style={{
+                      background: 'rgba(0,0,0,0.2)',
+                      borderRadius: '10px',
+                      padding: '1px 6px',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                    }}>
+                      {platform.count}
                     </span>
-                  </span>
-                  <span className="workspace-link-text" style={{ fontSize: 'var(--font-sm)', fontWeight: 600, color: '#fff' }}>{link.name}</span>
-                  <button
-                    onClick={(e) => handleRemoveLink(e, link.id)}
-                    className="workspace-link-remove"
-                    style={{
-                      position: 'absolute',
-                      right: '4px',
-                      top: '4px',
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-secondary)',
-                      opacity: 0,
-                      cursor: 'pointer',
-                      padding: '4px',
-                      borderRadius: '4px',
-                      transition: 'all 0.2s',
-                      zIndex: 2
-                    }}
-                    onMouseEnter={e => e.target.style.background = 'rgba(239, 68, 68, 0.1)'}
-                    onMouseLeave={e => e.target.style.background = 'none'}
-                    title="Remove link"
-                  >
-                    <FontAwesomeIcon icon={faTimes} style={{ fontSize: 'var(--font-sm)' }} />
                   </button>
-                </li>
-              );
-            })}
-
-            {/* Add Link Button - Premium Redesign */}
-            <li
-              className="workspace-link-item add-btn"
-              onClick={() => setIsAddingLink(true)}
-              style={{
-                cursor: 'pointer',
-                padding: '12px',
-                background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01))',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
-                justifyContent: 'center',
-                flexDirection: 'column',
-                gap: '8px',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                minHeight: '80px', // Match other cards height approx
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                e.currentTarget.style.boxShadow = '0 0 15px rgba(59, 130, 246, 0.15)';
-                e.currentTarget.querySelector('.add-icon-wrapper').style.background = 'linear-gradient(135deg, #3b82f6, #60a5fa)';
-                e.currentTarget.querySelector('.add-icon-wrapper').style.color = '#fff';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
-                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-                e.currentTarget.querySelector('.add-icon-wrapper').style.background = 'rgba(255, 255, 255, 0.05)';
-                e.currentTarget.querySelector('.add-icon-wrapper').style.color = 'var(--text-secondary)';
-              }}
-            >
-              <div className="add-icon-wrapper" style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.05)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.3s ease',
-                color: 'var(--text-secondary)'
-              }}>
-                <FontAwesomeIcon icon={faPlus} style={{ fontSize: 'var(--font-base)' }} />
-              </div>
-              <span style={{ fontSize: 'var(--font-sm)', fontWeight: 500, color: 'var(--text-secondary)' }}>Add Shortcut</span>
-            </li>
-          </ul>
-
-          {/* Add Link Modal - Premium Redesign */}
-          {isAddingLink && createPortal(
-            <div style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0, 0, 0, 0.7)',
-              backdropFilter: 'blur(8px)',
-              zIndex: 10000,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }} onClick={() => setIsAddingLink(false)}>
-              <style>{`
-                @keyframes modalIn {
-                  from { opacity: 0; transform: scale(0.95) translateY(10px); }
-                  to { opacity: 1; transform: scale(1) translateY(0); }
-                }
-                .custom-scroll::-webkit-scrollbar {
-                  width: 6px;
-                }
-                .custom-scroll::-webkit-scrollbar-track {
-                  background: transparent;
-                }
-                .custom-scroll::-webkit-scrollbar-thumb {
-                  background: rgba(255, 255, 255, 0.1);
-                  border-radius: 3px;
-                }
-                .custom-scroll::-webkit-scrollbar-thumb:hover {
-                  background: rgba(255, 255, 255, 0.2);
-                }
-              `}</style>
-              <div style={{
-                width: '440px',
-                background: 'rgba(30, 30, 35, 0.95)',
-                borderRadius: '24px',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
-                overflow: 'hidden',
-                animation: 'modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                display: 'flex',
-                flexDirection: 'column'
-              }} onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
-                <div style={{
-                  padding: '20px 24px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  background: 'linear-gradient(to bottom, rgba(255,255,255,0.03), transparent)'
-                }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 'var(--font-2xl)', fontWeight: 600, color: '#fff', letterSpacing: '-0.02em' }}>Add Shortcut</h3>
-                    <p style={{ margin: '4px 0 0 0', fontSize: 'var(--font-md)', color: '#9CA3AF' }}>Pin your favorite tools for quick access</p>
-                  </div>
-                  <button
-                    onClick={() => setIsAddingLink(false)}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: 'none',
-                      color: '#9CA3AF',
-                      cursor: 'pointer',
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'; e.currentTarget.style.color = '#fff'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.color = '#9CA3AF'; }}
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
-                </div>
-
-                {/* Tabs */}
-                <div style={{ padding: '0 24px 20px 24px' }}>
-                  <div style={{
-                    display: 'flex',
-                    background: 'rgba(0, 0, 0, 0.2)',
-                    padding: '4px',
-                    borderRadius: '12px',
-                    gap: '4px'
-                  }}>
-                    {['popular', 'custom'].map((tab) => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        style={{
-                          flex: 1,
-                          padding: '8px',
-                          background: activeTab === tab ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                          border: 'none',
-                          borderRadius: '8px',
-                          color: activeTab === tab ? '#fff' : '#9CA3AF',
-                          cursor: 'pointer',
-                          fontWeight: 500,
-                          fontSize: 'var(--font-md)',
-                          transition: 'all 0.2s',
-                          boxShadow: activeTab === tab ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
-                        }}
-                      >
-                        {tab === 'popular' ? 'Popular Tools' : 'Custom URL'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div className="custom-scroll" style={{ padding: '0 24px 24px 24px', maxHeight: '380px', overflowY: 'auto' }}>
-                  {activeTab === 'popular' ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      {POPULAR_TOOLS.map(tool => {
-                        const isAdded = customLinks.some(l => l.url === tool.url) ||
-                          Object.values(PLATFORM_CONFIG).some(p => p.url === tool.url);
-                        return (
-                          <button
-                            key={tool.name}
-                            onClick={() => !isAdded && handleAddPopularTool(tool)}
-                            disabled={isAdded}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              padding: '12px',
-                              background: isAdded ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.04)',
-                              border: isAdded ? '1px solid transparent' : '1px solid rgba(255, 255, 255, 0.05)',
-                              borderRadius: '12px',
-                              cursor: isAdded ? 'default' : 'pointer',
-                              color: '#fff',
-                              opacity: isAdded ? 0.4 : 1,
-                              textAlign: 'left',
-                              transition: 'all 0.2s',
-                              position: 'relative',
-                              overflow: 'hidden'
-                            }}
-                            onMouseEnter={e => !isAdded && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
-                            onMouseLeave={e => !isAdded && (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)')}
-                          >
-                            <span style={{ fontSize: 'var(--font-3xl)', lineHeight: 1 }}>{tool.emoji}</span>
-                            <span style={{ fontSize: 'var(--font-md)', fontWeight: 500, flex: 1 }}>{tool.name}</span>
-                            {isAdded && <FontAwesomeIcon icon={faCheck} style={{ fontSize: 'var(--font-xs)', color: '#10B981' }} />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <form onSubmit={handleAddCustomLink} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 'var(--font-sm)', fontWeight: 600, color: '#9CA3AF', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Display Name</label>
-                        <input
-                          type="text"
-                          value={newLinkData.name}
-                          onChange={e => setNewLinkData({ ...newLinkData, name: e.target.value })}
-                          placeholder="e.g. Workflow Dashboard"
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            background: 'rgba(0, 0, 0, 0.2)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            borderRadius: '12px',
-                            color: '#fff',
-                            fontSize: 'var(--font-base)',
-                            outline: 'none',
-                            transition: 'all 0.2s',
-                            boxSizing: 'border-box'
-                          }}
-                          onFocus={e => e.target.style.borderColor = 'rgba(59, 130, 246, 0.5)'}
-                          onBlur={e => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
-                          autoFocus
-                        />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 'var(--font-sm)', fontWeight: 600, color: '#9CA3AF', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Destination URL</label>
-                        <input
-                          type="text"
-                          value={newLinkData.url}
-                          onChange={e => setNewLinkData({ ...newLinkData, url: e.target.value })}
-                          placeholder="https://..."
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            background: 'rgba(0, 0, 0, 0.2)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            borderRadius: '12px',
-                            color: '#fff',
-                            fontSize: 'var(--font-base)',
-                            outline: 'none',
-                            transition: 'all 0.2s',
-                            boxSizing: 'border-box'
-                          }}
-                          onFocus={e => e.target.style.borderColor = 'rgba(59, 130, 246, 0.5)'}
-                          onBlur={e => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: 'var(--font-sm)', fontWeight: 600, color: '#9CA3AF', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Icon (Emoji)</label>
-                        <input
-                          type="text"
-                          value={newLinkData.emoji}
-                          onChange={e => setNewLinkData({ ...newLinkData, emoji: e.target.value })}
-                          placeholder="✨"
-                          maxLength={2}
-                          style={{
-                            width: '80px',
-                            padding: '12px',
-                            background: 'rgba(0, 0, 0, 0.2)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            borderRadius: '12px',
-                            color: '#fff',
-                            fontSize: 'var(--font-2xl)',
-                            textAlign: 'center',
-                            outline: 'none',
-                            transition: 'all 0.2s'
-                          }}
-                          onFocus={e => e.target.style.borderColor = 'rgba(59, 130, 246, 0.5)'}
-                          onBlur={e => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={!newLinkData.name || !newLinkData.url}
-                        style={{
-                          marginTop: '12px',
-                          padding: '14px',
-                          background: (!newLinkData.name || !newLinkData.url) ? 'rgba(255, 255, 255, 0.05)' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
-                          color: (!newLinkData.name || !newLinkData.url) ? 'rgba(255, 255, 255, 0.3)' : '#fff',
-                          border: 'none',
-                          borderRadius: '12px',
-                          fontWeight: 600,
-                          fontSize: 'var(--font-base)',
-                          cursor: (!newLinkData.name || !newLinkData.url) ? 'not-allowed' : 'pointer',
-                          transition: 'all 0.2s',
-                          boxShadow: (!newLinkData.name || !newLinkData.url) ? 'none' : '0 4px 6px -1px rgba(59, 130, 246, 0.3), 0 2px 4px -1px rgba(59, 130, 246, 0.15)'
-                        }}
-                        onMouseEnter={e => {
-                          if (newLinkData.name && newLinkData.url) {
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                            e.currentTarget.style.boxShadow = '0 6px 8px -1px rgba(59, 130, 246, 0.4), 0 4px 6px -1px rgba(59, 130, 246, 0.2)';
-                          }
-                        }}
-                        onMouseLeave={e => {
-                          if (newLinkData.name && newLinkData.url) {
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(59, 130, 246, 0.3), 0 2px 4px -1px rgba(59, 130, 246, 0.15)';
-                          }
-                        }}
-                      >
-                        Add to Quick Access
-                      </button>
-                    </form>
-                  )}
-                </div>
-              </div>
-            </div>,
-            document.body
-          )}
-        </div>
-
-
-        <div style={{
-          background: 'var(--glass-bg)',
-          backdropFilter: 'blur(16px)',
-          borderRadius: '16px',
-          border: '1px solid var(--border-primary)',
-          padding: '16px',
-          paddingBottom: '20px'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '12px',
-            paddingRight: '4px',
-            flexWrap: 'wrap',
-            gap: '8px'
-          }}>
-            <div style={{
-              fontSize: 'var(--font-sm)',
-              fontWeight: 600,
-              color: 'var(--text-secondary)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              paddingLeft: '4px'
-            }}>
-              Recent Conversations
+                );
+              })}
             </div>
-
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              style={{
-                background: 'var(--surface-2)',
-                border: '1px solid var(--border-primary)',
-                color: 'var(--text)',
-                fontSize: 'var(--font-sm)',
-                padding: '2px 6px',
-                borderRadius: '6px',
-                outline: 'none',
-                cursor: 'pointer',
-                maxWidth: '120px'
-              }}
-            >
-              <option value="All" style={{ background: '#1e1e1e', color: '#ffffff' }}>All</option>
-              {/* Show platforms that have data first, then others from config */}
-              {availablePlatforms.length > 0 ? (
-                availablePlatforms.map(platform => (
-                  <option key={platform} value={platform} style={{ background: '#1e1e1e', color: '#ffffff' }}>
-                    {platform} {PLATFORM_CONFIG[platform] ? '' : '🔗'}
-                  </option>
-                ))
-              ) : (
-                Object.keys(PLATFORM_CONFIG).map(platform => (
-                  <option key={platform} value={platform} style={{ background: '#1e1e1e', color: '#ffffff' }}>{platform}</option>
-                ))
-              )}
-            </select>
           </div>
-
-          {loading ? (
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '40px 20px',
-              color: 'var(--text-secondary)',
-              gap: '8px'
-            }}>
-              <FontAwesomeIcon icon={faSync} spin style={{ fontSize: 'var(--font-2xl)' }} />
-              <span style={{ fontSize: 'var(--font-sm)' }}>Loading...</span>
-            </div>
-          ) : chats.length === 0 ? (
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '40px 20px',
-              textAlign: 'center',
-              gap: '8px'
-            }}>
-              <div style={{ fontSize: 'var(--font-4xl)', opacity: 0.3 }}>💬</div>
-              <div style={{ fontSize: 'var(--font-base)', fontWeight: 500, color: 'var(--text)' }}>
-                {filter === 'All' ? 'No chats yet' : `No ${filter} chats`}
-              </div>
-              <div style={{ fontSize: 'var(--font-sm)', color: 'var(--text-secondary)', maxWidth: '280px', lineHeight: 1.5 }}>
-                Visit AI platforms to start tracking your conversations.
-                <br />
-                <span style={{ opacity: 0.7, fontStyle: 'italic' }}>
-                  (Note: Some platforms require visiting specific chat URLs to track)
-                </span>
-              </div>
-
-              <button
-                onClick={triggerScrape}
-                style={{
-                  marginTop: '12px',
-                  background: 'rgba(59, 130, 246, 0.1)',
-                  color: '#60A5FA',
-                  border: '1px solid rgba(59, 130, 246, 0.2)',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: 'var(--font-sm)',
-                  fontWeight: 500,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
-                  e.currentTarget.style.transform = 'none';
-                }}
-              >
-                <FontAwesomeIcon icon={faSync} />
-                Fetch Chats
-              </button>
-            </div>
-          ) : (
-            <>
-              <ul className="workspace-links" style={{
-                maxHeight: 'none',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px'
-              }}>
-                {chats.slice(0, visibleCount).map((chat, index) => {
-                  const platform = PLATFORM_CONFIG[chat.platform] || {
-                    // Fallback for dynamically scraped platforms
-                    url: chat.url,
-                    emoji: '🔗',
-                    gradient: 'linear-gradient(135deg, rgba(100, 100, 100, 0.2), rgba(100, 100, 100, 0.05))',
-                    borderColor: 'rgba(100, 100, 100, 0.3)',
-                    textColor: '#9CA3AF',
-                    accentColor: '#6b7280'
-                  };
-                  // Use chat URL for favicon if platform URL not available
-                  const faviconUrl = platform.url ? getFaviconUrl(platform.url, 32) : (chat.url ? getFaviconUrl(chat.url, 32) : null);
-
-                  return (
-                    <li
-                      key={chat.id || index}
-                      className="workspace-link-item"
-                      onClick={() => handleChatClick(chat)}
-                      style={{
-                        cursor: 'pointer',
-                        padding: '8px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        borderBottom: index < chats.length - 1 ? '1px solid var(--border-primary)' : 'none',
-                        background: 'rgba(255, 255, 255, 0.02)',
-                        minHeight: 'auto'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-                        <span className="workspace-link-icon" style={{ flexShrink: 0, width: '20px' }}>
-                          {faviconUrl ? (
-                            <img
-                              src={faviconUrl}
-                              alt={chat.platform}
-                              className="link-favicon"
-                              style={{ width: '16px', height: '16px' }}
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'inline';
-                              }}
-                            />
-                          ) : null}
-                          <span
-                            className="link-fallback-icon"
-                            style={{ display: faviconUrl ? 'none' : 'inline', fontSize: 'var(--font-xs)' }}
-                          >
-                            {platform.emoji || '💬'}
-                          </span>
-                        </span>
-                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                          <span className="workspace-link-text" style={{ fontSize: 'var(--font-sm)', fontWeight: 500 }}>
-                            {chat.title || 'Untitled Chat'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {/* Source indicator */}
-                        {chat.source === 'click-to-scrape' && (
-                          <span
-                            style={{
-                              fontSize: '10px',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              background: 'rgba(59, 130, 246, 0.15)',
-                              color: '#60A5FA',
-                              fontWeight: 500
-                            }}
-                            title="Scraped via click-to-scrape"
-                          >
-                            🔗
-                          </span>
-                        )}
-
-                        {/* Visual indicator of recency (fading dot) */}
-                        <div style={{
-                          width: '4px',
-                          height: '4px',
-                          borderRadius: '50%',
-                          background: chat.source === 'click-to-scrape' ? '#60A5FA' : 'var(--accent-color, #34C759)',
-                          opacity: Math.max(0.2, 1 - (index * 0.1))
-                        }} title="Recency indicator" />
-
-                        <FontAwesomeIcon
-                          icon={faExternalLinkAlt}
-                          className="workspace-link-external"
-                          style={{ fontSize: 'var(--font-xs)', opacity: 0.5 }}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-
-              {chats.length > visibleCount && (
-                <button
-                  onClick={() => setVisibleCount(prev => prev + 10)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid var(--border-primary)',
-                    borderRadius: '8px',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    fontSize: 'var(--font-md)',
-                    marginTop: '12px',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={e => {
-                    e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-                    e.target.style.color = 'var(--text)';
-                  }}
-                  onMouseLeave={e => {
-                    e.target.style.background = 'rgba(255, 255, 255, 0.05)';
-                    e.target.style.color = 'var(--text-secondary)';
-                  }}
-                >
-                  Show more ({chats.length - visibleCount} remaining)
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Footer hints */}
+      {/* Footer hint */}
       <div style={{
         padding: '12px 16px',
         background: 'var(--glass-bg)',
@@ -1121,22 +598,21 @@ export function ChatContext({ workspaceId, workspaceName }) {
           fontFamily: 'monospace'
         }}>Esc</kbd>
         <span>Back to overview</span>
-        <span>•</span>
-        <span>AI responses use workspace context</span>
+        <span style={{ opacity: 0.5 }}>•</span>
+        <span>Links are saved locally</span>
       </div>
 
-      <style>{`
-        @keyframes fadeSlideIn {
-          from {
-            opacity: 0;
-            transform: translateX(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateX(0);
-          }
+      <style jsx>{`
+        .recent-chat-item:hover .chat-arrow {
+          opacity: 1 !important;
+        }
+        .recent-chat-item:hover .link-delete-btn {
+          opacity: 1 !important;
+        }
+        .link-delete-btn:hover {
+          color: #EF4444 !important;
         }
       `}</style>
-    </div >
+    </div>
   );
 }

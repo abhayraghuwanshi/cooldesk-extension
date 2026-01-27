@@ -1011,7 +1011,6 @@ export function NotesCanvas({ workspaceId }) {
                         />
                         <FontAwesomeIcon icon={folderName === 'Uncategorized' ? faStickyNote : faFolder} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderName}</span>
-                        <span className="note-count">{folderNotes.length}</span>
 
                         {/* Quick Add to Folder */}
                         <button
@@ -1027,12 +1026,15 @@ export function NotesCanvas({ workspaceId }) {
                             padding: '4px',
                             cursor: 'pointer',
                             opacity: 0,
-                            transition: 'opacity 0.2s'
+                            transition: 'opacity 0.2s',
+                            marginRight: '4px'
                           }}
                           title={`New note in ${folderName}`}
                         >
                           <FontAwesomeIcon icon={faPlus} style={{ fontSize: 'var(--font-xs)' }} />
                         </button>
+
+                        <span className="note-count">{folderNotes.length}</span>
                       </div>
 
                       {expandedFolders.has(folderName) && (
@@ -1500,6 +1502,20 @@ export function NotesCanvas({ workspaceId }) {
 
 
       <style>{`
+        .note-count {
+          background: rgba(255, 255, 255, 0.08);
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 10px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          min-width: 16px;
+          text-align: center;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
