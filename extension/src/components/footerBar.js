@@ -1429,6 +1429,10 @@ export function injectFooterBar() {
  */
 
 let isSelectMode = false;
+let isSelectionLocked = false;
+let isTableVisible = false; // New state for table view
+let excludedPatterns = new Set(); // New state for path patterns
+let manuallyExcludedUrls = new Set(); // New state for individual URL exclusion
 let selectOverlay = null;
 let selectTooltip = null;
 let highlightedLink = null;
@@ -1981,9 +1985,11 @@ function createSelectOverlay(shadowRoot) {
     z-index: 2147483647;
     box-shadow: 0 8px 32px rgba(0,0,0,0.3);
     display: flex;
-    align-items: center;
     gap: 16px;
     border: 1px solid rgba(255,255,255,0.1);
+    min-width: 320px;
+    max-width: 480px;
+    backdrop-filter: blur(12px);
   `;
   selectTooltip.innerHTML = `
     <span style="display: flex; align-items: center; gap: 8px;">
@@ -2004,6 +2010,27 @@ function createSelectOverlay(shadowRoot) {
   `;
 
   shadowRoot.appendChild(selectTooltip);
+
+  // Initial render content placeholder
+  selectTooltip.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 20px;">🎯</span>
+      <div>
+        <div style="font-weight: 600;">Link Selector Mode</div>
+        <div style="font-size: 12px; opacity: 0.8;">Hover links to preview • Click to lock & filter</div>
+      </div>
+    </div>
+    <button id="cooldesk-scrape-cancel" style="
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-left: 16px;
+    ">Exit (Esc)</button>
+  `;
 
   // Cancel button handler
   const cancelBtn = selectTooltip.querySelector('#cooldesk-scrape-cancel');
@@ -2101,160 +2128,511 @@ function extractUrlPattern(selectorInfo) {
   }
 }
 
+
+
+
+
 /**
- * Highlight link on hover
+ * Check if URL matches a pattern key (supporting * wildcards)
  */
-function highlightLink(element) {
-  unhighlightLink();
+function urlMatchesPattern(urlStr, patternKey) {
+  try {
+    const url = new URL(urlStr);
+    const urlSegments = url.pathname.split('/').filter(Boolean);
+    const patternSegments = patternKey.split('/').filter(Boolean);
 
-  const link = element?.tagName === 'A' ? element : element?.closest('a');
-  if (!link) return;
+    if (urlSegments.length !== patternSegments.length) return false;
 
-  highlightedLink = link;
-  link.style.outline = '3px solid #00d9ff';
-  link.style.outlineOffset = '2px';
-  link.style.backgroundColor = 'rgba(0, 217, 255, 0.15)';
-  link.style.borderRadius = '4px';
+    for (let i = 0; i < patternSegments.length; i++) {
+      const p = patternSegments[i];
+      const u = urlSegments[i];
+      if (p !== '*' && p !== u) return false;
+    }
+    return true;
+  } catch { return false; }
+}
 
-  // Update tooltip with preview
-  const title = extractLinkTitle(link) || 'No title';
-  const selectorInfo = generateLinkSelector(link);
-  pendingSelectorInfo = selectorInfo;
-  const domains = extractDomainsPreview(selectorInfo);
-  const urlPattern = extractUrlPattern(selectorInfo);
+/**
+ * Analyze URL path patterns using statistical variance
+ */
+function analyzePathPatterns(links) {
+  try {
+    const parsed = links.map(l => {
+      try {
+        return new URL(l.url).pathname.split('/').filter(Boolean);
+      } catch { return []; }
+    }).filter(p => p.length > 0);
 
-  // Calculate count excluding excluded domains
-  const includedCount = domains
-    .filter(([domain]) => !excludedDomains.has(domain))
-    .reduce((sum, [, cnt]) => sum + cnt, 0);
+    if (parsed.length === 0) return [];
 
-  if (selectTooltip) {
-    // Build domains list with checkboxes
-    let domainsHtml = '';
-    if (domains.length > 0) {
-      const domainItems = domains.map(([domain, cnt]) => {
-        const isChecked = !excludedDomains.has(domain);
-        const shortDomain = domain.length > 35 ? domain.substring(0, 32) + '...' : domain;
-        return `
-          <label data-domain="${domain}" style="
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 8px;
-            background: ${isChecked ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)'};
-            border: 1px solid ${isChecked ? 'rgba(16, 185, 129, 0.4)' : 'rgba(255,255,255,0.1)'};
-            border-radius: 6px;
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.15s;
-            opacity: ${isChecked ? '1' : '0.5'};
-          ">
-            <input type="checkbox" ${isChecked ? 'checked' : ''} data-domain="${domain}" style="
-              width: 14px;
-              height: 14px;
-              cursor: pointer;
-              accent-color: #10b981;
-            "/>
-            <span style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${domain}">${shortDomain}</span>
-            <span style="opacity: 0.6; flex-shrink: 0;">(${cnt})</span>
-          </label>
-        `;
-      }).join('');
-      domainsHtml = `
-        <div style="margin-top: 8px;">
-          <div style="font-size: 10px; opacity: 0.6; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
-            <span>Select domains to scrape:</span>
-            <span style="display: flex; gap: 8px;">
-              <a href="#" id="cooldesk-select-all" style="color: #00d9ff; text-decoration: none;">All</a>
-              <a href="#" id="cooldesk-select-none" style="color: #ff4757; text-decoration: none;">None</a>
-            </span>
-          </div>
-          <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 450px; max-height: 120px; overflow-y: auto;">
-            ${domainItems}
-          </div>
-        </div>
-      `;
+    const maxDepth = Math.max(...parsed.map(p => p.length));
+    const variableIndices = new Set();
+    const total = parsed.length;
+
+    // Detect variable positions
+    for (let i = 0; i < maxDepth; i++) {
+      const values = parsed.map(p => p[i]).filter(v => v !== undefined);
+      const unique = new Set(values);
+
+      // Heuristics for "Variable Segment":
+      // 1. Looks like an ID (UUID, Long Number, Hash)
+      // 2. High Cardinality (> 3 unique values AND > 10% of total)
+      // 3. (Optional) If we consistently see different slugs
+
+      let isIdLike = false;
+      // Check sample of values for ID-traits
+      const sample = Array.from(unique).slice(0, 5);
+      if (sample.some(s => /^[0-9a-f]{8}-[0-9a-f]{4}/.test(s) || (/^\d+$/.test(s) && s.length > 3))) {
+        isIdLike = true;
+      }
+
+      const uniqueRatio = unique.size / (values.length || 1);
+
+      if (isIdLike || (unique.size > 2 && uniqueRatio > 0.1)) {
+        variableIndices.add(i);
+      }
     }
 
-    // Build CSS selector preview
-    const selectorPreview = selectorInfo?.full
-      ? (selectorInfo.full.length > 40 ? selectorInfo.full.substring(0, 37) + '...' : selectorInfo.full)
-      : 'a[href]';
+    // specific hack: if index 0 is high variance? maybe keeps it?
+    // usually we want to group by resource. 
 
-    selectTooltip.innerHTML = `
-      <div style="flex: 1; min-width: 0;">
-        <div style="font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 18px;">🎯</span>
-          <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">"${title.substring(0, 35)}${title.length > 35 ? '...' : ''}"</span>
-        </div>
-        <div style="font-size: 12px; opacity: 0.8; margin-bottom: 4px;">
-          <strong style="color: #00d9ff;">${includedCount}</strong> links selected
-          ${domains.length > 0 ? `<span style="opacity: 0.5; font-size: 11px;"> from ${domains.filter(([d]) => !excludedDomains.has(d)).length}/${domains.length} domains</span>` : ''}
-        </div>
-        ${urlPattern ? `
-        <div style="font-size: 11px; opacity: 0.6; margin-bottom: 4px;">
-          <span style="color: #a78bfa;">URL:</span> <code style="background: rgba(255,255,255,0.1); padding: 1px 4px; border-radius: 2px;">${urlPattern}</code>
-        </div>
-        ` : ''}
-        <div style="font-size: 10px; opacity: 0.5; font-family: monospace;">
-          <span style="color: #fbbf24;">CSS:</span> ${selectorPreview}
-        </div>
-        ${domainsHtml}
-      </div>
-      <button id="cooldesk-scrape-cancel" style="
-        background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
-        border: none;
-        color: white;
-        padding: 8px 16px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 500;
-        flex-shrink: 0;
-        align-self: flex-start;
-      ">Cancel</button>
-    `;
-
-    // Add event listeners for checkboxes
-    selectTooltip.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-      checkbox.addEventListener('change', (e) => {
-        e.stopPropagation();
-        const domain = checkbox.dataset.domain;
-        if (checkbox.checked) {
-          excludedDomains.delete(domain);
-        } else {
-          excludedDomains.add(domain);
-        }
-        // Re-render tooltip with updated state
-        highlightLink(highlightedLink);
-      });
+    const patterns = new Map();
+    parsed.forEach(segments => {
+      // Reconstruct path with wildcards
+      const keyParts = segments.map((s, i) => variableIndices.has(i) ? '*' : s);
+      const key = '/' + keyParts.join('/');
+      patterns.set(key, (patterns.get(key) || 0) + 1);
     });
 
-    // Select All / None handlers
-    const selectAll = selectTooltip.querySelector('#cooldesk-select-all');
-    const selectNone = selectTooltip.querySelector('#cooldesk-select-none');
+    return Array.from(patterns.entries()).sort((a, b) => b[1] - a[1]);
+  } catch (e) {
+    console.warn('Pattern analysis failed', e);
+    return [];
+  }
+}
 
-    if (selectAll) {
-      selectAll.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        excludedDomains.clear();
-        highlightLink(highlightedLink);
-      };
+/**
+ * Render usage stats and actions in tooltip
+ */
+function renderTooltipContent(link, selectorInfo, domains, includedCount, title, urlPattern) {
+  if (!selectTooltip) return;
+
+  // Defaults
+  let finalLinks = [];
+  let finalCount = includedCount || 0;
+  let showPatterns = false;
+  let domainsHtml = '';
+  let patternsHtml = '';
+  let tableHtml = '';
+
+  try {
+    // Ensure state sets exist
+    if (!excludedDomains) excludedDomains = new Set();
+    if (!excludedPatterns) excludedPatterns = new Set();
+
+    if (selectorInfo && selectorInfo.full) {
+      // 1. Filter by Domain first
+      const domainFilteredLinks = scrapeWithSelector(selectorInfo.full, excludedDomains);
+
+      // 2. Analyze Patterns
+      const patterns = analyzePathPatterns(domainFilteredLinks);
+      showPatterns = patterns.length > 1;
+
+      // 3. Calculate final count (filtering by patterns)
+      finalLinks = domainFilteredLinks.filter(l => {
+        if (excludedPatterns.size > 0) {
+          for (const pattern of excludedPatterns) {
+            if (urlMatchesPattern(l.url, pattern)) return false;
+          }
+        }
+        return true;
+      });
+      finalCount = finalLinks.length;
+
+      // --- Generate Filter HTML ---
+
+      // A. Domain Filters
+      if (domains.length > 0) {
+        // Show if not locked OR if multiple domains exist (so you can filter)
+        if (!isSelectionLocked || domains.length > 1) {
+          const domainItems = domains.map(([domain, cnt]) => {
+            const isChecked = !excludedDomains.has(domain);
+            const shortDomain = domain.length > 26 ? domain.substring(0, 24) + '...' : domain;
+            return `
+                <label data-domain="${domain}" class="cooldesk-domain-item" style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 6px 8px;
+                    background: ${isChecked ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.03)'};
+                    border: 1px solid ${isChecked ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255,255,255,0.08)'};
+                    border-radius: 6px;
+                    font-size: 11px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    user-select: none;
+                    opacity: ${isChecked ? '1' : '0.6'};
+                ">
+                    <input type="checkbox" ${isChecked ? 'checked' : ''} data-domain="${domain}" style="
+                    width: 14px; height: 14px; cursor: pointer; accent-color: #10b981; outline: none;
+                    "/>
+                    <span style="flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">${shortDomain}</span>
+                    <span style="opacity: 0.6;">${cnt}</span>
+                </label>
+                `;
+          }).join('');
+
+          domainsHtml = `
+                <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 10px; opacity: 0.7; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Filter Domains
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto;">
+                    ${domainItems}
+                </div>
+                </div>
+            `;
+        }
+      }
+
+      // B. Pattern Filters
+      if (showPatterns) {
+        const patternItems = patterns.map(([pattern, cnt]) => {
+          const isChecked = !excludedPatterns.has(pattern);
+          return `
+              <label data-pattern="${pattern}" class="cooldesk-pattern-item" style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 8px;
+                background: ${isChecked ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255,255,255,0.03)'};
+                border: 1px solid ${isChecked ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255,255,255,0.08)'};
+                border-radius: 6px;
+                font-size: 11px;
+                cursor: pointer;
+                transition: all 0.2s;
+                user-select: none;
+                opacity: ${isChecked ? '1' : '0.6'};
+              ">
+                <input type="checkbox" ${isChecked ? 'checked' : ''} data-pattern="${pattern}" style="
+                  width: 14px; height: 14px; cursor: pointer; accent-color: #6366f1; outline: none;
+                "/>
+                <div style="flex: 1; overflow: hidden;">
+                  <div style="white-space: nowrap; text-overflow: ellipsis; font-family: monospace; color: #a5b4fc;">${pattern}</div>
+                </div>
+                <span style="opacity: 0.6;">${cnt}</span>
+              </label>
+          `;
+        }).join('');
+
+        patternsHtml = `
+          <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 10px; opacity: 0.7; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+               <span>Filter URL Patterns</span>
+               ${isSelectionLocked ? `<a href="#" id="cooldesk-reset-patterns" style="color: #a5b4fc; text-decoration: none;">Reset</a>` : ''}
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px; max-height: 140px; overflow-y: auto;">
+              ${patternItems}
+            </div>
+          </div>
+        `;
+      }
+
+      // C. Table View
+      if (isTableVisible && isSelectionLocked) {
+        const rows = finalLinks.slice(0, 100).map((l, i) => `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding: 6px; font-size: 11px; opacity: 0.7;">${i + 1}</td>
+            <td style="padding: 6px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;" title="${l.title}">${l.title || 'No Title'}</td>
+            <td style="padding: 6px; font-size: 11px; color: #60a5fa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;" title="${l.url}">${l.url}</td>
+          </tr>
+        `).join('');
+
+        tableHtml = `
+          <div style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <strong style="font-size: 12px;">Data Preview (${finalLinks.length})</strong>
+              <div style="display: flex; gap: 8px;">
+                <button id="cooldesk-export-csv" style="padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 4px; font-size: 10px; cursor: pointer;">CSV</button>
+                <button id="cooldesk-export-json" style="padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 4px; font-size: 10px; cursor: pointer;">JSON</button>
+              </div>
+            </div>
+            <div style="max-height: 250px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+              <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead style="position: sticky; top: 0; background: #1f2937;">
+                  <tr>
+                    <th style="padding: 6px; font-size: 10px; color: #9ca3af; width: 30px;">#</th>
+                    <th style="padding: 6px; font-size: 10px; color: #9ca3af;">Title</th>
+                    <th style="padding: 6px; font-size: 10px; color: #9ca3af;">URL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows}
+                </tbody>
+              </table>
+              ${finalLinks.length > 100 ? '<div style="padding: 8px; text-align: center; font-size: 10px; opacity: 0.5;">Showing first 100 rows</div>' : ''}
+            </div>
+          </div>
+        `;
+        selectTooltip.style.maxWidth = '650px';
+      } else {
+        selectTooltip.style.maxWidth = '480px';
+      }
     }
+  } catch (err) {
+    console.error('[CoolDesk] Error calculating tooltip stats:', err);
+    // Continue with defaults so at least basic info is shown
+  }
 
-    if (selectNone) {
-      selectNone.onclick = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        domains.forEach(([domain]) => excludedDomains.add(domain));
-        highlightLink(highlightedLink);
-      };
-    }
+  // --- Render to DOM ---
+  const headerColor = isSelectionLocked ? '#10b981' : '#60a5fa';
+  const headerIcon = isSelectionLocked ? '🔒' : '🎯';
+  const headerText = isSelectionLocked ? 'Selection Locked' : 'Preview Mode';
 
-    selectTooltip.querySelector('#cooldesk-scrape-cancel').onclick = (e) => {
+  selectTooltip.innerHTML = `
+      <div style="flex: 1; min-width: 0;">
+        <div style="
+          font-weight: 600; 
+          margin-bottom: 8px; 
+          display: flex; 
+          align-items: center; 
+          gap: 8px; 
+          color: ${headerColor}; 
+          text-transform: uppercase; 
+          letter-spacing: 0.5px; 
+          font-size: 11px;
+        ">
+          <span style="font-size: 14px;">${headerIcon}</span>
+          <span>${headerText}</span>
+        </div>
+        
+        <div style="margin-bottom: 8px;">
+          <div style="font-size: 15px; font-weight: 600; color: white; display: flex; align-items: center; gap: 8px;">
+             ${title.length > 40 ? title.substring(0, 40) + '...' : title}
+          </div>
+        </div>
+
+        <div style="
+          background: rgba(0,0,0,0.2);
+          padding: 10px;
+          border-radius: 8px;
+          margin-bottom: 4px;
+          border: 1px solid rgba(255,255,255,0.05);
+        ">
+          <div style="font-size: 13px; margin-bottom: 4px; display: flex; align-items: baseline; gap: 6px;">
+            <strong style="color: white; font-size: 16px;">${finalCount}</strong> 
+            <span style="opacity: 0.8;">links found</span>
+            ${domains.length > 0 ? `<span style="opacity: 0.5; font-size: 11px;">from ${domains.length} domains</span>` : ''}
+          </div>
+          
+          ${urlPattern ? `
+          <div style="font-size: 11px; opacity: 0.6; margin-top: 4px; display: flex; gap: 6px;">
+            <span style="color: #a78bfa;">Pattern:</span> 
+            <code style="font-family: 'Menlo', monospace;">${urlPattern}</code>
+          </div>
+          ` : ''}
+        </div>
+
+        ${domainsHtml}
+        ${patternsHtml}
+        ${tableHtml}
+      </div>
+      
+      <div style="
+        display: flex; 
+        flex-direction: column; 
+        gap: 8px; 
+        margin-left: 16px; 
+        padding-left: 16px; 
+        border-left: 1px solid rgba(255,255,255,0.1);
+        justify-content: flex-start;
+      ">
+        ${isSelectionLocked ? `
+          <button id="cooldesk-scrape-confirm" class="cooldesk-btn-primary" style="
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            transition: transform 0.1s;
+          ">Confirm & Send</button>
+          
+          <button id="cooldesk-toggle-table" style="
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+          ">
+            <span>${isTableVisible ? 'Hide Table' : 'Show Table'}</span>
+          </button>
+
+          <button id="cooldesk-scrape-unlock" style="
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            opacity: 0.8;
+          ">Unlock / Edit</button>
+        ` : `
+          <div style="
+            font-size: 11px; 
+            opacity: 0.5; 
+            text-align: center; 
+            font-style: italic;
+            max-width: 80px;
+          ">
+            Click link<br>to lock<br>& filter
+          </div>
+        `}
+        
+        <button id="cooldesk-scrape-cancel" style="
+          background: transparent;
+          border: none;
+          color: #ff4757;
+          padding: 4px;
+          cursor: pointer;
+          font-size: 12px;
+          margin-top: ${isSelectionLocked ? '4px' : '8px'};
+          opacity: 0.8;
+          text-decoration: underline;
+        ">Cancel Mode</button>
+      </div>
+    `;
+
+  // --- Attach Listeners ---
+
+  // Checkboxes for Domains
+  selectTooltip.querySelectorAll('.cooldesk-domain-item input').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const domain = checkbox.dataset.domain;
+      if (checkbox.checked) excludedDomains.delete(domain);
+      else excludedDomains.add(domain);
+      // Recalculate
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    });
+  });
+
+  // Checkboxes for Patterns
+  selectTooltip.querySelectorAll('.cooldesk-pattern-item input').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const pattern = checkbox.dataset.pattern;
+      if (checkbox.checked) excludedPatterns.delete(pattern);
+      else excludedPatterns.add(pattern);
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    });
+  });
+
+  // Reset Patterns
+  const resetPatternsBtn = selectTooltip.querySelector('#cooldesk-reset-patterns');
+  if (resetPatternsBtn) {
+    resetPatternsBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      excludedPatterns.clear();
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    };
+  }
+
+  // Export Buttons
+  const csvBtn = selectTooltip.querySelector('#cooldesk-export-csv');
+  if (csvBtn) {
+    csvBtn.onclick = (e) => {
+      e.stopPropagation();
+      const csv = 'Title,URL\n' + finalLinks.map(l => `"${(l.title || '').replace(/"/g, '""')}","${l.url}"`).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `scraped_links_${Date.now()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  }
+
+  const jsonBtn = selectTooltip.querySelector('#cooldesk-export-json');
+  if (jsonBtn) {
+    jsonBtn.onclick = (e) => {
+      e.stopPropagation();
+      const blob = new Blob([JSON.stringify(finalLinks, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `scraped_links_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  }
+
+  // Toggle Table
+  const toggleTableBtn = selectTooltip.querySelector('#cooldesk-toggle-table');
+  if (toggleTableBtn) {
+    toggleTableBtn.onclick = (e) => {
+      e.stopPropagation();
+      isTableVisible = !isTableVisible;
+      renderTooltipContent(link, selectorInfo, domains, finalCount, title, urlPattern);
+    };
+  }
+
+  // Cancel
+  const cancelBtn = selectTooltip.querySelector('#cooldesk-scrape-cancel');
+  if (cancelBtn) {
+    cancelBtn.onclick = (e) => {
       e.stopPropagation();
       exitLinkSelectMode();
+    };
+  }
+
+  // Unlock
+  const unlockBtn = selectTooltip.querySelector('#cooldesk-scrape-unlock');
+  if (unlockBtn) {
+    unlockBtn.onclick = (e) => {
+      e.stopPropagation();
+      isSelectionLocked = false;
+      isTableVisible = false; // Reset table
+      highlightLink(link);
+    };
+  }
+
+  // Confirm
+  const confirmBtn = selectTooltip.querySelector('#cooldesk-scrape-confirm');
+  if (confirmBtn) {
+    confirmBtn.onclick = (e) => {
+      e.stopPropagation();
+
+      const outputSelector = selectorInfo; // captured from closure
+
+      // UI Feedback
+      confirmBtn.textContent = 'Sending...';
+      confirmBtn.style.opacity = '0.7';
+
+      // Use filtered links (finalLinks) instead of re-scraping
+      const results = finalLinks;
+
+      if (currentShowNotification) {
+        currentShowNotification(`✓ Scraped ${results.length} links!`, '#10b981');
+      }
+
+      // Send
+      sendScrapedLinks(results, outputSelector);
+
+      // Exit
+      setTimeout(() => exitLinkSelectMode(), 500);
     };
   }
 }
@@ -2273,14 +2651,97 @@ function unhighlightLink() {
 }
 
 /**
+ * Highlight link on hover (or update if locked)
+ */
+function highlightLink(element) {
+  // If locked, we only update if it is the same link (re-render)
+  // or do nothing if trying to highlight new link
+  if (isSelectionLocked) {
+    if (element !== highlightedLink) return;
+  } else {
+    // Normal hover mode: unhighlight previous
+    unhighlightLink();
+  }
+
+  const link = element?.tagName === 'A' ? element : element?.closest('a');
+  if (!link) return;
+
+  highlightedLink = link;
+  const isLocked = isSelectionLocked;
+
+  // Styles
+  link.style.outline = isLocked ? '3px solid #10b981' : '3px solid #60a5fa'; // Green if locked, Blue if hover
+  link.style.outlineOffset = '2px';
+  link.style.backgroundColor = isLocked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(96, 165, 250, 0.15)';
+  link.style.borderRadius = '4px';
+
+  // Update tooltip with preview
+  const title = extractLinkTitle(link) || 'No title';
+  const selectorInfo = generateLinkSelector(link);
+  pendingSelectorInfo = selectorInfo;
+  const domains = extractDomainsPreview(selectorInfo);
+  const urlPattern = extractUrlPattern(selectorInfo);
+
+  // Calculate count excluding excluded domains
+  const includedCount = domains
+    .filter(([domain]) => !excludedDomains.has(domain))
+    .reduce((sum, [, cnt]) => sum + cnt, 0);
+
+  renderTooltipContent(link, selectorInfo, domains, includedCount, title, urlPattern);
+}
+
+/**
  * Handle mouse move in select mode
  */
 function handleSelectMouseMove(e) {
   if (!isSelectMode) return;
+
+  // If locked, prevent hovering other links
+  if (isSelectionLocked) return;
+
   const element = document.elementFromPoint(e.clientX, e.clientY);
+
+  // Optimize: prevent re-processing if still on the same link
+  const link = element?.tagName === 'A' ? element : element?.closest('a');
+  if (link && link === highlightedLink) return;
+
   if (element && !selectTooltip?.contains(element)) {
     highlightLink(element);
   }
+}
+
+/**
+ * Check if event source is internal (our UI)
+ */
+function checkIsInternal(e) {
+  try {
+    const path = e.composedPath();
+    return path.some(el => {
+      // Check for our specific elements
+      if (el === selectTooltip) return true;
+      if (el instanceof Element && el.id === 'cooldesk-floating-button') return true;
+
+      // Check containment if tooltip exists
+      if (selectTooltip && el instanceof Node && selectTooltip.contains(el)) return true;
+
+      return false;
+    });
+  } catch (err) {
+    return false; // Fail safe: assume external if check fails
+  }
+}
+
+/**
+ * Blocking handler for non-click mouse events
+ */
+function handleBlocker(e) {
+  if (!isSelectMode) return;
+
+  if (checkIsInternal(e)) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
 }
 
 /**
@@ -2289,49 +2750,40 @@ function handleSelectMouseMove(e) {
 function handleSelectClick(e) {
   if (!isSelectMode) return;
 
-  // Ignore clicks on tooltip
-  if (selectTooltip?.contains(e.target)) return;
+  // 1. Check if internal UI click (allow default behavior like checkboxes)
+  if (checkIsInternal(e)) return;
 
+  // 2. Prevent Navigation/Action absolutely
   e.preventDefault();
   e.stopPropagation();
+  e.stopImmediatePropagation();
+
+  // 3. Locked Logic (return after blocking)
+  if (isSelectionLocked) {
+    if (selectTooltip) {
+      // Visual pulse
+      selectTooltip.style.transition = 'transform 0.1s';
+      selectTooltip.style.transform = 'translateX(-50%) scale(1.02)';
+      setTimeout(() => selectTooltip.style.transform = 'translateX(-50%) scale(1)', 100);
+    }
+    return;
+  }
 
   const element = document.elementFromPoint(e.clientX, e.clientY);
   const link = element?.tagName === 'A' ? element : element?.closest('a');
 
   if (!link) {
-    if (currentShowNotification) {
-      currentShowNotification('Please click on a link', '#ff4757');
-    }
+    // Just block clicks on non-links silently
     return;
   }
 
-  // Use pending selector info if available (from hover), otherwise generate
-  const selectorInfo = pendingSelectorInfo || generateLinkSelector(link);
-  if (!selectorInfo) {
-    if (currentShowNotification) {
-      currentShowNotification('Could not generate selector', '#ff4757');
-    }
-    return;
-  }
-
-  // Save selector for this domain
-  saveSelectorForDomain(selectorInfo);
-
-  // Capture excluded domains before exiting (which resets state)
-  const domainsToExclude = new Set(excludedDomains);
-
-  // Exit select mode
-  exitLinkSelectMode();
-
-  // Scrape links with domain filtering
-  const results = scrapeWithSelector(selectorInfo.full, domainsToExclude);
+  // LOCK SELECTION
+  isSelectionLocked = true;
+  highlightLink(link); // Re-render in locked state
 
   if (currentShowNotification) {
-    currentShowNotification(`✓ Scraped ${results.length} links!`, '#10b981');
+    currentShowNotification('Selection Locked. Review & Confirm.', '#10b981', 3000);
   }
-
-  // Send to background
-  sendScrapedLinks(results, selectorInfo);
 }
 
 /**
@@ -2345,6 +2797,9 @@ function handleSelectKeyDown(e) {
   }
 }
 
+/**
+ * Send scraped links to background
+ */
 /**
  * Send scraped links to background
  */
@@ -2364,6 +2819,23 @@ async function sendScrapedLinks(links, selectorInfo) {
     console.log(`[CoolDesk Scraper] Sent ${links.length} links to background`);
   } catch (error) {
     console.error('[CoolDesk Scraper] Failed to send links:', error);
+
+    // Handle context invalidation (common during dev/updates)
+    const isInvalidated = error.message && error.message.includes('Extension context invalidated');
+
+    if (isInvalidated) {
+      const msg = 'Extension updated. Please refresh the page.';
+      if (currentShowNotification) {
+        currentShowNotification(msg, '#ef4444', 0); // 0 or long duration
+      } else {
+        // Fallback for auto-scrape or missing notifier
+        console.warn('[CoolDesk] ' + msg);
+      }
+    } else {
+      if (currentShowNotification) {
+        currentShowNotification('Failed to send data. Check console.', '#ef4444');
+      }
+    }
   }
 }
 
@@ -2379,9 +2851,11 @@ function enterLinkSelectMode(shadowRoot, showNotification) {
 
   createSelectOverlay(shadowRoot);
 
-  // Add event listeners to document (not shadow DOM)
+  // Add event listeners to document (capture phase for maximum priority)
   document.addEventListener('mousemove', handleSelectMouseMove, true);
   document.addEventListener('click', handleSelectClick, true);
+  document.addEventListener('mousedown', handleBlocker, true);
+  document.addEventListener('mouseup', handleBlocker, true);
   document.addEventListener('keydown', handleSelectKeyDown, true);
 
   console.log('[CoolDesk Scraper] Select mode activated');
@@ -2394,11 +2868,17 @@ function exitLinkSelectMode() {
   if (!isSelectMode) return;
 
   isSelectMode = false;
+  isSelectionLocked = false;
+  isTableVisible = false;
+  excludedPatterns.clear();
+  manuallyExcludedUrls.clear();
   unhighlightLink();
   removeSelectOverlay();
 
   document.removeEventListener('mousemove', handleSelectMouseMove, true);
   document.removeEventListener('click', handleSelectClick, true);
+  document.removeEventListener('mousedown', handleBlocker, true);
+  document.removeEventListener('mouseup', handleBlocker, true);
   document.removeEventListener('keydown', handleSelectKeyDown, true);
 
   currentShadowRoot = null;
