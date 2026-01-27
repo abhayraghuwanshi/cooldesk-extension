@@ -1,8 +1,9 @@
-import { faBookmark, faChartLine, faList, faSearch, faShare, faThLarge } from '@fortawesome/free-solid-svg-icons';
+import { faBookmark, faChartLine, faSearch } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
 import '../../styles/cooldesk.css';
+import { defaultFontFamily } from '../../utils/fontUtils';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import { WorkspaceCard } from './WorkspaceCard';
 
@@ -18,6 +19,39 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
+
+const modeConfigs = {
+    work: {
+        label: 'Deep Work',
+        theme: '#3b82f6', // Professional Blue
+        activeCategories: ['productivity', 'ai', 'utilities', 'finance', 'work', 'business', 'office', 'code', 'dev', 'management', 'project'],
+        behavior: {
+            allowNotifications: false,
+            autoHideDock: true,
+            greeting: "Focus Time. What's the priority?"
+        }
+    },
+    entertainment: {
+        label: 'Chill Mode',
+        theme: '#f43f5e', // Rose/Red
+        activeCategories: ['entertainment', 'social', 'food', 'shopping', 'media', 'game', 'gaming', 'music', 'video'],
+        behavior: {
+            allowNotifications: true,
+            autoHideDock: false,
+            greeting: "Time to unwind."
+        }
+    },
+    study: {
+        label: 'Research & Learn',
+        theme: '#8b5cf6', // Deep Purple
+        activeCategories: ['education', 'information', 'ai', 'design', 'research', 'learn', 'study', 'book', 'reading', 'news', 'science'],
+        behavior: {
+            allowNotifications: false,
+            autoHideDock: false,
+            greeting: "Knowledge is power."
+        }
+    }
+};
 
 export function WorkspaceList({
     savedWorkspaces = [],
@@ -44,6 +78,7 @@ export function WorkspaceList({
     const [hoveredBookmark, setHoveredBookmark] = useState(null);
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false); // New state
+    const [activeMode, setActiveMode] = useState('all');
 
     const pinned = useMemo(() => savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name)), [savedWorkspaces, pinnedWorkspaces]);
     const unpinned = useMemo(() => savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name)), [savedWorkspaces, pinnedWorkspaces]);
@@ -183,6 +218,23 @@ export function WorkspaceList({
         });
     }, [unpinned, isSortingByActivity, workspaceScores]);
 
+    // Filter unpinned workspaces based on active mode
+    const filteredUnpinned = useMemo(() => {
+        if (activeMode === 'all') return sortedUnpinned;
+
+        const config = modeConfigs[activeMode];
+        if (!config) return sortedUnpinned;
+
+        return sortedUnpinned.filter(workspace => {
+            const name = workspace.name.toLowerCase();
+            // Check if name contains any of the active categories (simple inclusion + word boundary check for robustness)
+            // Or if we should rely solely on inclusion just like in WorkspaceCard
+            return config.activeCategories.some(cat =>
+                name === cat || name.includes(cat + ' ') || name.includes(' ' + cat) || name.includes(cat) // broad match for now as names can be arbitrary
+            );
+        });
+    }, [sortedUnpinned, activeMode]);
+
     useEffect(() => {
         try {
             localStorage.setItem('cooldesk_view_mode', viewMode);
@@ -265,17 +317,18 @@ export function WorkspaceList({
             overflow: 'hidden' // Parent manages layout, child scrolls
         }}>
             {/* Header - Fixed at Top */}
-            <div style={{
+            {/* <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexShrink: 0,
                 paddingRight: '4px'
             }}>
-                <h2 style={{
-                    fontSize: 'var(--font-xl, 16px)',
+                <h3 style={{
+                    fontSize: 'var(--font-2xl, 20px)',
                     fontWeight: 600,
                     color: 'var(--text-primary, #F1F5F9)',
+                    fontFamily: defaultFontFamily,
                     margin: 0
                 }}>
                     Workspaces
@@ -287,18 +340,7 @@ export function WorkspaceList({
                     }}>
                         ({savedWorkspaces.length})
                     </span>
-                </h2>
-                {/* <div style={{
-                    fontSize: 'var(--font-sm)',
-                    fontWeight: 600,
-                    color: 'var(--text-secondary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    paddingLeft: '4px'
-                }}>
-                    Workspaces
-                </div> */}
-
+                </h3>
                 <div className="view-toggle" style={{ display: 'flex', gap: 8 }}>
                     <button
                         className="view-toggle-btn"
@@ -333,7 +375,7 @@ export function WorkspaceList({
                         <FontAwesomeIcon icon={faList} />
                     </button>
                 </div>
-            </div>
+            </div> */}
 
             {/* Scrollable Content Area */}
             <div style={{
@@ -351,9 +393,10 @@ export function WorkspaceList({
                         {pinned.length > 0 && (
                             <div>
                                 <h3 style={{
-                                    fontSize: 'var(--font-sm, 12px)',
+                                    fontSize: 'var(--font-2xl, 20px)',
                                     fontWeight: 600,
                                     color: 'var(--text-secondary, #94A3B8)',
+                                    fontFamily: defaultFontFamily,
                                     marginBottom: '12px',
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
@@ -361,7 +404,7 @@ export function WorkspaceList({
                                     alignItems: 'center',
                                     gap: '6px'
                                 }}>
-                                    📌 Pinned ({pinned.length})
+                                    Pinned ({pinned.length})
                                 </h3>
                                 <div
                                     className={viewMode === 'list' ? 'cooldesk-list-view' : ''}
@@ -396,16 +439,94 @@ export function WorkspaceList({
                         {/* All Workspaces Section */}
                         {unpinned.length > 0 && (
                             <div>
-                                <h3 style={{
-                                    fontSize: 'var(--font-sm, 12px)',
-                                    fontWeight: 600,
-                                    color: 'var(--text-secondary, #94A3B8)',
-                                    marginBottom: '12px',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.05em'
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    marginBottom: '12px'
                                 }}>
-                                    All Workspaces ({unpinned.length})
-                                </h3>
+                                    <h3 style={{
+                                        fontSize: 'var(--font-2xl, 20px)',
+                                        fontWeight: 600,
+                                        color: 'var(--text-secondary, #94A3B8)',
+                                        fontFamily: defaultFontFamily,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.05em',
+                                        margin: 0
+                                    }}>
+                                        {activeMode === 'all' ? 'All Workspaces' : modeConfigs[activeMode].label} ({filteredUnpinned.length})
+                                    </h3>
+                                </div>
+
+                                {/* Mode Filters */}
+                                <div style={{
+                                    display: 'flex',
+                                    gap: '8px',
+                                    overflowX: 'auto',
+                                    paddingBottom: '12px',
+                                    marginBottom: '4px',
+                                    scrollbarWidth: 'none'  // Hide scrollbar for Firefox
+                                }}>
+                                    <button
+                                        onClick={() => setActiveMode('all')}
+                                        style={{
+                                            padding: '6px 12px',
+                                            borderRadius: '20px',
+                                            fontSize: 'var(--font-2xl, 20px)',
+                                            fontWeight: 500,
+                                            border: '1px solid',
+                                            cursor: 'pointer',
+                                            whiteSpace: 'nowrap',
+                                            transition: 'all 0.2s ease',
+                                            background: activeMode === 'all' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                            borderColor: activeMode === 'all' ? 'var(--text-primary)' : 'var(--border-primary)',
+                                            color: activeMode === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)'
+                                        }}
+                                    >
+                                        Show All
+                                    </button>
+                                    {Object.entries(modeConfigs).map(([key, config]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => setActiveMode(key)}
+                                            style={{
+                                                padding: '6px 12px',
+                                                borderRadius: '20px',
+                                                fontSize: '12px',
+                                                fontWeight: 500,
+                                                border: '1px solid',
+                                                cursor: 'pointer',
+                                                whiteSpace: 'nowrap',
+                                                transition: 'all 0.2s ease',
+                                                background: activeMode === key ? `${config.theme}20` : 'transparent',
+                                                borderColor: activeMode === key ? config.theme : 'var(--border-primary)',
+                                                color: activeMode === key ? config.theme : 'var(--text-secondary)'
+                                            }}
+                                        >
+                                            {config.label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Mode Greeting/Behavior hint */}
+                                {activeMode !== 'all' && (
+                                    <div style={{
+                                        fontSize: 'var(--font-base, 16px)',
+                                        color: modeConfigs[activeMode].theme,
+                                        marginBottom: '16px',
+                                        padding: '8px 12px',
+                                        background: `${modeConfigs[activeMode].theme}10`,
+                                        borderRadius: '8px',
+                                        border: `1px solid ${modeConfigs[activeMode].theme}20`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }}>
+                                        <span>✨</span>
+                                        {modeConfigs[activeMode].behavior.greeting}
+                                    </div>
+                                )}
+
                                 <div
                                     className={viewMode === 'list' ? 'cooldesk-list-view' : ''}
                                     style={viewMode === 'grid' ? {
@@ -418,7 +539,7 @@ export function WorkspaceList({
                                         gap: '4px'
                                     }}
                                 >
-                                    {sortedUnpinned.slice(0, workspaceLimit).map((workspace) => (
+                                    {filteredUnpinned.slice(0, workspaceLimit).map((workspace) => (
                                         <WorkspaceCard
                                             key={workspace.id}
                                             workspace={workspace}
@@ -435,7 +556,8 @@ export function WorkspaceList({
                                 </div>
 
                                 {/* Show More Button */}
-                                {unpinned.length > workspaceLimit && (
+                                {/* Show More Button */}
+                                {filteredUnpinned.length > workspaceLimit && (
                                     <button
                                         onClick={() => setWorkspaceLimit(prev => prev + 6)}
                                         style={{
@@ -466,7 +588,7 @@ export function WorkspaceList({
                                             e.currentTarget.style.transform = 'translateY(0)';
                                         }}
                                     >
-                                        Show More ({unpinned.length - workspaceLimit} remaining)
+                                        Show More ({filteredUnpinned.length - workspaceLimit} remaining)
                                     </button>
                                 )}
                             </div>
@@ -485,6 +607,7 @@ export function WorkspaceList({
                                         fontSize: 'var(--font-sm, 12px)',
                                         fontWeight: 600,
                                         color: 'var(--text-secondary, #94A3B8)',
+                                        fontFamily: defaultFontFamily,
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.05em',
                                         margin: 0,

@@ -861,6 +861,7 @@ export function NotesCanvas({ workspaceId }) {
               alignItems: 'center',
               justifyContent: 'space-between'
             }}>
+
               <span className="sidebar-title" style={{ padding: 0 }}>Notes</span>
               <button
                 onClick={createNewNote}

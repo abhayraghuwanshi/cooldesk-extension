@@ -1,4 +1,4 @@
-import { faArrowRight, faLink, faPlus, faSync, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faPlus, faSync, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
@@ -229,7 +229,7 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
       <div className="cooldesk-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="panel-header">
           <div className="panel-title">
-            <FontAwesomeIcon icon={faLink} style={{ marginRight: '8px' }} />
+            {/* <FontAwesomeIcon icon={faLink} style={{ marginRight: '8px' }} /> */}
             {activePlatformFilter ? (
               <>
                 {activePlatformFilter}
@@ -238,19 +238,16 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
                 </span>
               </>
             ) : (
-              <>
+              <h3 style={{
+                fontSize: 'var(--font-2xl, 20px)',
+                fontWeight: 600,
+                color: 'var(--text-primary, #F1F5F9)',
+                // fontFamily: defaultFontFamily,
+                marginBottom: '16px',
+                marginTop: 0
+              }}>
                 Project Links
-                {workspaceName && (
-                  <span style={{
-                    marginLeft: '8px',
-                    fontSize: 'var(--font-sm)',
-                    color: 'var(--text-secondary)',
-                    fontWeight: 400
-                  }}>
-                    — {workspaceName}
-                  </span>
-                )}
-              </>
+              </h3>
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>

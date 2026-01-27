@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
 import '../../styles/cooldesk.css';
+import { defaultFontFamily } from '../../utils/fontUtils';
 import { sortWorkspacesByActivity } from '../../utils/ranking.js';
 import { NotesWidget } from './NotesWidget';
 import { WorkspaceCard } from './WorkspaceCard';
@@ -140,6 +141,7 @@ export function OverviewDashboard({
                         fontSize: 'var(--font-2xl, 20px)',
                         fontWeight: 600,
                         color: 'var(--text-primary, #F1F5F9)',
+                        fontFamily: defaultFontFamily,
                         marginBottom: '16px',
                         marginTop: 0
                     }}>
@@ -190,6 +192,7 @@ export function OverviewDashboard({
                         fontSize: 'var(--font-2xl, 20px)',
                         fontWeight: 600,
                         color: 'var(--text-primary, #F1F5F9)',
+                        fontFamily: defaultFontFamily,
                         marginBottom: '16px',
                         marginTop: 0
                     }}>

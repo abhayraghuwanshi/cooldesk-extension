@@ -276,7 +276,7 @@ export function TabManagement() {
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>
-        <h2 style={{
+        {/* <h3 style={{
           fontSize: 'var(--font-2xl, 16px)',
           fontWeight: 600,
           color: 'var(--text-primary, #F1F5F9)',
@@ -284,7 +284,7 @@ export function TabManagement() {
         }}>
           Browser Tabs
           {tabs.length > 0 && <span style={{ fontSize: '13px', color: 'var(--text-secondary)', marginLeft: '8px', fontWeight: 400 }}>({tabs.length})</span>}
-        </h2>
+        </h3> */}
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             onClick={async () => {
@@ -451,7 +451,7 @@ export function TabManagement() {
             {partitionedTabs.pinned.length > 0 && (
               <div>
                 <h3 style={{
-                  fontSize: 'var(--font-sm, 12px)',
+                  fontSize: 'var(--font-2xl, 20px)',
                   fontWeight: 600,
                   color: 'var(--text-secondary, #94A3B8)',
                   marginBottom: '8px',
@@ -480,7 +480,7 @@ export function TabManagement() {
             {partitionedTabs.hasGroups && (
               <div>
                 <h3 style={{
-                  fontSize: 'var(--font-sm, 12px)',
+                  fontSize: 'var(--font-2xl, 20px)',
                   fontWeight: 600,
                   color: 'var(--text-secondary, #94A3B8)',
                   marginBottom: '8px',
@@ -510,7 +510,7 @@ export function TabManagement() {
             {partitionedTabs.recent.length > 0 && (
               <div>
                 <h3 style={{
-                  fontSize: 'var(--font-sm, 12px)',
+                  fontSize: 'var(--font-2xl, 20px)',
                   fontWeight: 600,
                   color: 'var(--text-secondary, #94A3B8)',
                   marginBottom: '8px',
@@ -544,7 +544,7 @@ export function TabManagement() {
             {partitionedTabs.others.length > 0 && (
               <div>
                 <h3 style={{
-                  fontSize: 'var(--font-sm, 12px)',
+                  fontSize: 'var(--font-2xl, 20px)',
                   fontWeight: 600,
                   color: 'var(--text-secondary, #94A3B8)',
                   marginBottom: '8px',
