@@ -478,7 +478,7 @@ export function WorkspaceList({
                                             cursor: 'pointer',
                                             whiteSpace: 'nowrap',
                                             transition: 'all 0.2s ease',
-                                            background: activeMode === 'all' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                                            // background: activeMode === 'all' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
                                             borderColor: activeMode === 'all' ? 'var(--text-primary)' : 'var(--border-primary)',
                                             color: activeMode === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)'
                                         }}
@@ -492,13 +492,13 @@ export function WorkspaceList({
                                             style={{
                                                 padding: '6px 12px',
                                                 borderRadius: '20px',
-                                                fontSize: '12px',
+                                                fontSize: 'var(--font-2xl, 20px)',
                                                 fontWeight: 500,
                                                 border: '1px solid',
                                                 cursor: 'pointer',
                                                 whiteSpace: 'nowrap',
                                                 transition: 'all 0.2s ease',
-                                                background: activeMode === key ? `${config.theme}20` : 'transparent',
+                                                // background: activeMode === key ? `${config.theme}20` : 'transparent',
                                                 borderColor: activeMode === key ? config.theme : 'var(--border-primary)',
                                                 color: activeMode === key ? config.theme : 'var(--text-secondary)'
                                             }}

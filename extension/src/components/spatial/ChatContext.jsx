@@ -2,6 +2,7 @@ import { faArrowRight, faPlus, faSync, faTimes, faTrash } from '@fortawesome/fre
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
+import { defaultFontFamily } from '../../utils/fontUtils';
 import { getFaviconUrl } from '../../utils/helpers.js';
 
 /**
@@ -241,10 +242,14 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
               <h3 style={{
                 fontSize: 'var(--font-2xl, 20px)',
                 fontWeight: 600,
-                color: 'var(--text-primary, #F1F5F9)',
-                // fontFamily: defaultFontFamily,
-                marginBottom: '16px',
-                marginTop: 0
+                color: 'var(--text-secondary, #94A3B8)',
+                fontFamily: defaultFontFamily,
+                marginBottom: '12px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
               }}>
                 Project Links
               </h3>

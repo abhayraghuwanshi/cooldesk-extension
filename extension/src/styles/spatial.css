@@ -828,7 +828,8 @@
 
 .chat-title {
   font-size: var(--font-lg, 14px);
-  font-weight: 500;
+  /* font-weight: 500; */
+  font-family: var(--font-family);
   color: var(--text-primary, #E5E7EB);
   margin-bottom: 4px;
   overflow: hidden;

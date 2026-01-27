@@ -1245,6 +1245,16 @@
   justify-content: space-between;
   margin-bottom: 14px;
   flex-shrink: 0;
+  font-size: var(--font-2xl, 20px);
+  font-weight: 600;
+  color: var(--text-secondary, #94A3B8);
+  font-family: var(--font-family, 'Inter', sans-serif);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .panel-title {
@@ -1482,8 +1492,9 @@
 }
 
 .chat-title {
-  font-size: var(--font-base);
-  font-weight: 500;
+  font-size: var(--font-sm);
+  font-family: var(--font-family);
+  /* font-weight: 500; */
   color: #E5E7EB;
   margin-bottom: 3px;
   overflow: hidden;
