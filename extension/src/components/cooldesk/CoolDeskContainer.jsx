@@ -416,6 +416,7 @@ export function CoolDeskContainer({
         onOpen={() => handleOpenAddModal(null)}
         onClose={handleCloseAddModal}
         initialWorkspace={addModalState.initialWorkspace}
+        data-onboarding="global-add-btn"
       />
     </div >
   );

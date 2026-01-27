@@ -268,8 +268,10 @@ export function TabManagement() {
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      gap: '16px',
-      height: '100%'
+      height: '100%',
+      borderRadius: 16,
+      overflow: 'hidden',
+      border: '1px solid transparent'
     }}>
       <div style={{
         display: 'flex',

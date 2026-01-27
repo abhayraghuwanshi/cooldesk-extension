@@ -407,9 +407,46 @@ class P2PStorageService {
     }
 
     /**
+     * Get all items from the shared list as a plain array
+     * @param {string} teamId
+     * @returns {Promise<Array>} Array of items
+     */
+    async getTeamItems(teamId) {
+        if (!this.docs.has(teamId)) {
+            await this.initializeTeamStorage(teamId);
+        }
+        const yArray = this.getSharedItems(teamId);
+        return yArray.toArray();
+    }
+
+    /**
+     * Update an existing item in the shared list
+     * @param {string} teamId
+     * @param {string} itemId - The ID of the item to update
+     * @param {object} updatedItem - The updated item data
+     */
+    async updateItemInTeam(teamId, itemId, updatedItem) {
+        if (!this.docs.has(teamId)) {
+            await this.initializeTeamStorage(teamId);
+        }
+        const yArray = this.getSharedItems(teamId);
+        const items = yArray.toArray();
+        const index = items.findIndex(item => item.id === itemId);
+
+        if (index !== -1) {
+            yArray.delete(index, 1);
+            yArray.insert(index, [{ ...updatedItem, id: itemId }]);
+            console.log(`[P2P Storage] Updated item in team ${teamId}:`, updatedItem);
+            return true;
+        }
+        console.warn(`[P2P Storage] Item ${itemId} not found in team ${teamId}`);
+        return false;
+    }
+
+    /**
      * Add an item to the shared list
-     * @param {string} teamId 
-     * @param {object} item 
+     * @param {string} teamId
+     * @param {object} item
      */
     async addItemToTeam(teamId, item) {
         // Ensure storage is initialized
@@ -418,8 +455,14 @@ class P2PStorageService {
         }
 
         const yArray = this.getSharedItems(teamId);
-        yArray.push([item]);
-        console.log(`[P2P Storage] Added item to team ${teamId}:`, item);
+        // Ensure item has an ID for tracking/deduplication
+        const itemWithId = {
+            ...item,
+            id: item.id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        };
+        yArray.push([itemWithId]);
+        console.log(`[P2P Storage] Added item to team ${teamId}:`, itemWithId);
+        return itemWithId;
     }
 
     /**

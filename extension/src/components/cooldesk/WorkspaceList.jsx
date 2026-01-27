@@ -1,6 +1,6 @@
-import { faBookmark, faChartLine, faSearch } from '@fortawesome/free-solid-svg-icons';
+import { faBookmark, faBriefcase, faChartLine, faGamepad, faGraduationCap, faSearch } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
@@ -23,32 +23,35 @@ function debounce(func, wait) {
 const modeConfigs = {
     work: {
         label: 'Deep Work',
+        icon: faBriefcase,
         theme: '#3b82f6', // Professional Blue
         activeCategories: ['productivity', 'ai', 'utilities', 'finance', 'work', 'business', 'office', 'code', 'dev', 'management', 'project'],
         behavior: {
             allowNotifications: false,
             autoHideDock: true,
-            greeting: "Focus Time. What's the priority?"
+            greeting: "Focus Time"
         }
     },
     entertainment: {
         label: 'Chill Mode',
+        icon: faGamepad, // or faCoffee
         theme: '#f43f5e', // Rose/Red
         activeCategories: ['entertainment', 'social', 'food', 'shopping', 'media', 'game', 'gaming', 'music', 'video'],
         behavior: {
             allowNotifications: true,
             autoHideDock: false,
-            greeting: "Time to unwind."
+            greeting: "Time to Unwind"
         }
     },
     study: {
-        label: 'Research & Learn',
+        label: 'Learning',
+        icon: faGraduationCap, // or faBook
         theme: '#8b5cf6', // Deep Purple
         activeCategories: ['education', 'information', 'ai', 'design', 'research', 'learn', 'study', 'book', 'reading', 'news', 'science'],
         behavior: {
             allowNotifications: false,
             autoHideDock: false,
-            greeting: "Knowledge is power."
+            greeting: "Knowledge Mode"
         }
     }
 };
@@ -79,6 +82,13 @@ export function WorkspaceList({
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false); // New state
     const [activeMode, setActiveMode] = useState('all');
+    const [isPending, startTransition] = useTransition();
+
+    const handleModeChange = useCallback((mode) => {
+        startTransition(() => {
+            setActiveMode(mode);
+        });
+    }, []);
 
     const pinned = useMemo(() => savedWorkspaces.filter(ws => pinnedWorkspaces.includes(ws.name)), [savedWorkspaces, pinnedWorkspaces]);
     const unpinned = useMemo(() => savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name)), [savedWorkspaces, pinnedWorkspaces]);
@@ -225,13 +235,18 @@ export function WorkspaceList({
         const config = modeConfigs[activeMode];
         if (!config) return sortedUnpinned;
 
+        // Optimization: Create a regex for faster matching if categories are stable
+        // For now, we'll keep the logic but ensure it's efficient
+        const activeCategories = config.activeCategories;
+
         return sortedUnpinned.filter(workspace => {
             const name = workspace.name.toLowerCase();
-            // Check if name contains any of the active categories (simple inclusion + word boundary check for robustness)
-            // Or if we should rely solely on inclusion just like in WorkspaceCard
-            return config.activeCategories.some(cat =>
-                name === cat || name.includes(cat + ' ') || name.includes(' ' + cat) || name.includes(cat) // broad match for now as names can be arbitrary
-            );
+            // Optimized check: Use basic includes for performance, it's usually sufficient for this use case
+            // If stricter matching is needed, we can revert or use regex
+            for (let i = 0; i < activeCategories.length; i++) {
+                if (name.includes(activeCategories[i])) return true;
+            }
+            return false;
         });
     }, [sortedUnpinned, activeMode]);
 
@@ -459,73 +474,75 @@ export function WorkspaceList({
                                 </div>
 
                                 {/* Mode Filters */}
+                                {/* Mode Selector - Premium Redesign */}
                                 <div style={{
-                                    display: 'flex',
-                                    gap: '8px',
-                                    overflowX: 'auto',
-                                    paddingBottom: '12px',
-                                    marginBottom: '4px',
-                                    scrollbarWidth: 'none'  // Hide scrollbar for Firefox
+                                    marginBottom: '20px',
+                                    padding: '0 4px'
                                 }}>
-                                    <button
-                                        onClick={() => setActiveMode('all')}
-                                        style={{
-                                            padding: '6px 12px',
-                                            borderRadius: '20px',
-                                            fontSize: 'var(--font-2xl, 20px)',
-                                            fontWeight: 500,
-                                            border: '1px solid',
-                                            cursor: 'pointer',
-                                            whiteSpace: 'nowrap',
-                                            transition: 'all 0.2s ease',
-                                            // background: activeMode === 'all' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                                            borderColor: activeMode === 'all' ? 'var(--text-primary)' : 'var(--border-primary)',
-                                            color: activeMode === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)'
-                                        }}
-                                    >
-                                        Show All
-                                    </button>
-                                    {Object.entries(modeConfigs).map(([key, config]) => (
+                                    <div className="mode-selector-container">
                                         <button
-                                            key={key}
-                                            onClick={() => setActiveMode(key)}
-                                            style={{
-                                                padding: '6px 12px',
-                                                borderRadius: '20px',
-                                                fontSize: 'var(--font-2xl, 20px)',
-                                                fontWeight: 500,
-                                                border: '1px solid',
-                                                cursor: 'pointer',
-                                                whiteSpace: 'nowrap',
-                                                transition: 'all 0.2s ease',
-                                                // background: activeMode === key ? `${config.theme}20` : 'transparent',
-                                                borderColor: activeMode === key ? config.theme : 'var(--border-primary)',
-                                                color: activeMode === key ? config.theme : 'var(--text-secondary)'
-                                            }}
+                                            className={`mode-item ${activeMode === 'all' ? 'active' : ''}`}
+                                            onClick={() => handleModeChange('all')}
+                                            title="All Workspaces"
                                         >
-                                            {config.label}
+                                            <span className="mode-icon">
+                                                <span style={{ fontSize: '14px', fontWeight: 700 }}>ALL</span>
+                                            </span>
+                                            {activeMode === 'all' && <span className="mode-label">All</span>}
                                         </button>
-                                    ))}
-                                </div>
 
-                                {/* Mode Greeting/Behavior hint */}
-                                {activeMode !== 'all' && (
-                                    <div style={{
-                                        fontSize: 'var(--font-base, 16px)',
-                                        color: modeConfigs[activeMode].theme,
-                                        marginBottom: '16px',
-                                        padding: '8px 12px',
-                                        background: `${modeConfigs[activeMode].theme}10`,
-                                        borderRadius: '8px',
-                                        border: `1px solid ${modeConfigs[activeMode].theme}20`,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px'
-                                    }}>
-                                        <span>✨</span>
-                                        {modeConfigs[activeMode].behavior.greeting}
+                                        {Object.entries(modeConfigs).map(([key, config]) => {
+                                            const isActive = activeMode === key;
+                                            return (
+                                                <button
+                                                    key={key}
+                                                    className={`mode-item ${isActive ? 'active' : ''}`}
+                                                    onClick={() => handleModeChange(key)}
+                                                    title={config.label}
+                                                    style={{
+                                                        '--mode-color': config.theme
+                                                    }}
+                                                >
+                                                    <span className="mode-icon">
+                                                        <FontAwesomeIcon icon={config.icon} />
+                                                    </span>
+                                                    {isActive && <span className="mode-label">{config.label}</span>}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
-                                )}
+
+                                    {/* Active Mode Greeting */}
+                                    <div style={{
+                                        height: activeMode !== 'all' ? '30px' : '0',
+                                        overflow: 'hidden',
+                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        opacity: activeMode !== 'all' ? 1 : 0,
+                                        transform: activeMode !== 'all' ? 'translateY(0)' : 'translateY(-10px)',
+                                        marginTop: activeMode !== 'all' ? '8px' : '0'
+                                    }}>
+                                        {activeMode !== 'all' && (
+                                            <div style={{
+                                                fontSize: '13px',
+                                                color: modeConfigs[activeMode].theme,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px',
+                                                fontWeight: 500,
+                                                paddingLeft: '4px'
+                                            }}>
+                                                <span style={{
+                                                    width: '6px',
+                                                    height: '6px',
+                                                    borderRadius: '50%',
+                                                    background: modeConfigs[activeMode].theme,
+                                                    display: 'inline-block'
+                                                }}></span>
+                                                {modeConfigs[activeMode].behavior.greeting}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
                                 <div
                                     className={viewMode === 'list' ? 'cooldesk-list-view' : ''}

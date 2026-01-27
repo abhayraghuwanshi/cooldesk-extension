@@ -132,7 +132,14 @@ export function OverviewDashboard({
     const displayedWorkspaces = recentWorkspaces.length > 0 ? recentWorkspaces : (isLoading ? [] : savedWorkspaces.slice(0, 4));
 
     return (
-        <div className="overview-dashboard-grid">
+        <div className="overview-dashboard-grid" style={{
+            height: '100%',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            borderRadius: 16,
+            border: '1px solid transparent',
+            paddingRight: '4px'
+        }}>
             {/* Left Column: Workspaces + Notes */}
             <div className="overview-left-column">
                 {/* Workspaces Section */}
@@ -151,13 +158,15 @@ export function OverviewDashboard({
                     }}>
                         Recent Workspaces
                     </h3>
-                    <div className="cooldesk-list-view" style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '2px',
-                        overflow: 'visible',
-                        minHeight: '200px' // Optimization: Reserve space to prevent layout shift
-                    }}>
+                    <div className="cooldesk-list-view"
+                        data-onboarding="workspace-list"
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px',
+                            overflow: 'visible',
+                            minHeight: '200px' // Optimization: Reserve space to prevent layout shift
+                        }}>
                         {isLoading && displayedWorkspaces.length === 0 ? (
                             <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
                                 Loading recent activity...
@@ -173,6 +182,7 @@ export function OverviewDashboard({
                                     compact={true}
                                     isPinned={pinnedWorkspaces.includes(workspace.name)}
                                     onAddUrl={onAddUrl}
+                                    data-onboarding="workspace-card"
                                 />
                             ))
                         ) : (
@@ -206,7 +216,7 @@ export function OverviewDashboard({
                     }}>
                         Quick Notes
                     </h3>
-                    <div className="cooldesk-workspace-card overview-notes-card">
+                    <div className="cooldesk-workspace-card overview-notes-card" data-onboarding="notes-widget">
                         <div className="workspace-card-header">
                             <div className="workspace-icon purple">
                                 <FontAwesomeIcon icon={faStickyNote} />

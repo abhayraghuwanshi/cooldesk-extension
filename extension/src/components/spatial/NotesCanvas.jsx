@@ -859,7 +859,8 @@ export function NotesCanvas({ workspaceId }) {
               padding: '16px 16px 12px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between'
+              justifyContent: 'space-between',
+              fontSize: 'var(--font-2xl)',
             }}>
 
               <span className="sidebar-title" style={{ padding: 0 }}>Notes</span>

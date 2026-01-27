@@ -100,7 +100,7 @@ const CATEGORY_ICONS = {
 };
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
-export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl }) {
+export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, ...rest }) {
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
@@ -425,6 +425,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
       className={`cooldesk-workspace-card ${isActive ? 'active' : ''} ${compact ? 'compact' : ''}`}
       onClick={handleCardClick}
       style={{ position: 'relative' }}
+      {...rest}
     >
       {compact ? (
         /* macOS Dock-Style List View - Using CSS Classes */
@@ -539,6 +540,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               }}
               className="compact-action-btn workspace-add-btn"
               title="Add URL"
+              data-onboarding="add-link-btn"
             >
               <FontAwesomeIcon icon={faPlus} />
             </button>
@@ -594,6 +596,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   }}
                   className="workspace-add-btn"
                   title="Add URL to Workspace"
+                  data-onboarding="add-link-btn"
                   style={{
                     background: 'transparent',
                     border: 'none',

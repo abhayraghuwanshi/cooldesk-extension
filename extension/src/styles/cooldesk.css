@@ -2498,8 +2498,9 @@
   }
 
   .overview-activity-column {
-    display: none;
-    /* Hide activity feed in sidebar mode to save space */
+    display: flex;
+    min-height: 300px;
+    margin-bottom: 20px;
   }
 
   /* Sidebar workspace cards - vertical layout with title on top */

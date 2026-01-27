@@ -156,6 +156,7 @@ import { initializeData } from './data.js';
 import '../utils/realTimeCategorizor.js'; // Auto-starts real-time categorization
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
+import { handleGetTabActivity } from './tabCleanup.js';
 
 
 

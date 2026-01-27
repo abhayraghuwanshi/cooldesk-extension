@@ -1050,6 +1050,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           onNavigate(navigationMap[query]);
           setSearchValue('');
           setActivePill(null);
+          setCommandSuggestions([]);
+          setSearchSuggestions([]);
+          setSelectedSuggestionIndex(-1);
           return;
         }
 
@@ -1065,6 +1068,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             }
             setSearchValue('');
             setActivePill(null);
+            setCommandSuggestions([]);
+            setSearchSuggestions([]);
+            setSelectedSuggestionIndex(-1);
           }
           return;
         }
@@ -1084,6 +1090,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
         setSearchValue('');
         setActivePill(null);
+        setCommandSuggestions([]);
+        setSearchSuggestions([]);
+        setSelectedSuggestionIndex(-1);
       } catch (error) {
         console.error('[CoolSearch] Command execution error:', error);
         setCommandFeedback({
@@ -1109,6 +1118,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           disposition: 'NEW_TAB'
         });
         setSearchValue('');
+        setCommandSuggestions([]);
+        setSearchSuggestions([]);
+        setSelectedSuggestionIndex(-1);
         return;
       } else {
         url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
@@ -1123,6 +1135,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     }
 
     setSearchValue('');
+    setCommandSuggestions([]);
+    setSearchSuggestions([]);
+    setSelectedSuggestionIndex(-1);
   }, [searchValue, activePill, onNavigate, commandExecutor]);
 
   const onSelectSuggestion = React.useCallback(async (item) => {

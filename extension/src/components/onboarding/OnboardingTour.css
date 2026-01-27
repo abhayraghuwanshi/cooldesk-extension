@@ -1,171 +1,234 @@
-/* Onboarding Tour Styles */
+/* Onboarding Tour Styles - Industry Grade */
 
 .onboarding-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(0.5px);
+  /* Reduced opacity */
+  /* backdrop-filter: blur(4px); Removed blur for clarity */
   z-index: 9998;
-  animation: fadeIn 0.3s ease;
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  background: radial-gradient(circle at center, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.6) 100%);
+  /* Vignette effect */
 }
 
-.onboarding-spotlight {
-  position: fixed;
-  pointer-events: none;
-  z-index: 9999;
-  animation: pulse 2s ease-in-out infinite;
+/* ... existing tooltip styles ... */
+
+.onboarding-highlight {
+  position: relative;
+  z-index: 9999 !important;
+  box-shadow:
+    0 0 0 4px rgba(59, 130, 246, 0.5),
+    0 0 0 1000px rgba(0, 0, 0, 0.4);
+  /* Lighter spotlight overlay */
+  border-radius: 8px;
+  transition: all 0.4s smooth;
+  animation: highlightPulse 2s infinite;
+  pointer-events: auto !important;
 }
 
 .onboarding-tooltip {
   position: fixed;
-  width: 320px;
+  width: 340px;
   max-width: 90vw;
-  background: var(--background-primary, #1a1a1f);
-  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  padding: 20px;
+  background: rgba(20, 20, 25, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow:
+    0 20px 40px -10px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  /* Inner border ring */
+  padding: 24px;
   z-index: 10000;
-  animation: slideIn 0.3s ease;
+  animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #fff;
+  transition: top 0.4s cubic-bezier(0.16, 1, 0.3, 1), left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Gradient Border Effect */
+.onboarding-tooltip::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .onboarding-tooltip.center {
-  top: 50%;
-  left: 50%;
+  top: 50% !important;
+  left: 50% !important;
   transform: translate(-50%, -50%);
+  position: fixed !important;
 }
 
 .onboarding-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 28px;
-  height: 28px;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
   border: none;
-  color: var(--text-secondary, #999);
+  color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 50%;
   transition: all 0.2s ease;
   font-size: 14px;
+  z-index: 2;
 }
 
 .onboarding-close:hover {
-  background: var(--interactive-hover, rgba(255, 255, 255, 0.1));
-  color: var(--text, #e5e7eb);
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  transform: rotate(90deg);
 }
 
 .onboarding-content {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.onboarding-step-indicator {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(96, 165, 250, 0.9);
+  /* Blue-400 */
+  margin-bottom: 8px;
+  font-weight: 600;
 }
 
 .onboarding-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text, #e5e7eb);
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
   margin: 0 0 12px 0;
-  padding-right: 24px;
+  padding-right: 32px;
+  background: linear-gradient(to right, #fff, #cbd5e1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.3;
 }
 
 .onboarding-description {
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.6;
-  color: var(--text-secondary, #999);
+  color: rgba(255, 255, 255, 0.7);
   margin: 0;
 }
 
 .onboarding-footer {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
-.onboarding-progress {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+.onboarding-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
 }
 
-.progress-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--border-primary, rgba(255, 255, 255, 0.2));
-  transition: all 0.3s ease;
-}
-
-.progress-dot.active {
-  width: 24px;
-  border-radius: 4px;
-  background: #667eea;
-}
-
-.progress-dot.completed {
-  background: #667eea;
-  opacity: 0.5;
+.onboarding-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  border-radius: 2px;
+  transition: width 0.4s ease;
 }
 
 .onboarding-actions {
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .onboarding-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  border-radius: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   border: none;
   font-family: inherit;
+  position: relative;
+  overflow: hidden;
 }
 
 .onboarding-btn.primary {
-  background: #667eea;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   color: white;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
 .onboarding-btn.primary:hover {
-  background: #5568d3;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(59, 130, 246, 0.4);
+}
+
+.onboarding-btn.primary:active {
+  transform: translateY(0);
 }
 
 .onboarding-btn.secondary {
   background: transparent;
-  color: var(--text-secondary, #999);
-  border: 1px solid var(--border-primary, rgba(255, 255, 255, 0.1));
+  color: rgba(255, 255, 255, 0.6);
+  padding: 10px 12px;
 }
 
 .onboarding-btn.secondary:hover {
-  background: var(--interactive-hover, rgba(255, 255, 255, 0.05));
-  color: var(--text, #e5e7eb);
-  border-color: var(--border-accent, rgba(255, 255, 255, 0.2));
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* Highlight effect for targeted elements */
 .onboarding-highlight {
   position: relative;
-  z-index: 9999;
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.5), 0 0 0 8px rgba(102, 126, 234, 0.2);
+  z-index: 10001 !important;
+  /* Above tooltip backdrop but below tooltip? No, tooltip is 10000 */
+  /* Wait, if backdrop is 9998, highlight should be 9999 */
+  /* Tooltip is 10000. */
+  z-index: 9999 !important;
+  box-shadow:
+    0 0 0 4px rgba(59, 130, 246, 0.5),
+    0 0 0 1000px rgba(0, 0, 0, 0.6);
+  /* Spotlight effect via massive shadow */
   border-radius: 8px;
-  animation: highlightPulse 2s ease-in-out infinite;
+  transition: all 0.4s smooth;
+  animation: highlightPulse 2s infinite;
+  pointer-events: auto !important;
+  /* Ensure clickable */
 }
 
-/* Animations */
+/* Fix for spotlight clipping */
+/* If element is inside overflow:hidden, this shadow trick breaks. 
+   But user asked for industry grade.
+   A fast alternative effectively requires a real hole-punch overlay or stacking context manipulation.
+   Given constraint, we stick to shadow or border.
+*/
+
 @keyframes fadeIn {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -174,29 +237,222 @@
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(10px) scale(0.95);
   }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes highlightPulse {
+  0% {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 0 1000px rgba(0, 0, 0, 0.6);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 0 0 1000px rgba(0, 0, 0, 0.6);
+  }
+
+  100% {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5), 0 0 0 1000px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Chat Log Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
+/* Custom Scrollbar for Chat Log */
+.onboarding-chat-log::-webkit-scrollbar {
+  width: 4px;
+}
+
+.onboarding-chat-log::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.onboarding-chat-log::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.onboarding-chat-log::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* --- MAGICAL ENTRANCES (Controlled by Tour) --- */
+
+/* Step: Search */
+body.onboarding-active.step-search .cooldesk-search-container {
+  animation: searchPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes searchPop {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
   }
-  50% {
-    opacity: 0.7;
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
 }
 
-@keyframes highlightPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.5), 0 0 0 8px rgba(102, 126, 234, 0.2);
+/* Step: Tabs - Stagger children */
+/* Step: Tabs - Stagger children */
+/* Note: activeFace needs to be 'tabs' for this to be visible */
+body.onboarding-active.step-tabs .cooldesk-tab-card {
+  animation: staggerIn 0.5s ease backwards;
+}
+
+/* Stagger delay logic would ideally be in JS, but we can do a general effect */
+body.onboarding-active.step-tabs .cooldesk-tab-group-card {
+  animation: staggerIn 0.5s ease backwards 0.2s;
+}
+
+/* Step: Workspaces - Stagger cards */
+body.onboarding-active.step-workspaces .cooldesk-workspace-card {
+  animation: staggerIn 0.5s ease backwards 0.2s;
+  /* Base delay delay */
+}
+
+/* Stagger first 8 items */
+body.onboarding-active.step-workspaces .cooldesk-workspace-card:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+body.onboarding-active.step-workspaces .cooldesk-workspace-card:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+body.onboarding-active.step-workspaces .cooldesk-workspace-card:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+body.onboarding-active.step-workspaces .cooldesk-workspace-card:nth-child(4) {
+  animation-delay: 0.4s;
+}
+
+body.onboarding-active.step-workspaces .cooldesk-workspace-card:nth-child(5) {
+  animation-delay: 0.5s;
+}
+
+body.onboarding-active.step-workspaces .cooldesk-workspace-card:nth-child(6) {
+  animation-delay: 0.6s;
+}
+
+body.onboarding-active.step-workspaces .cooldesk-workspace-card:nth-child(7) {
+  animation-delay: 0.7s;
+}
+
+body.onboarding-active.step-workspaces .cooldesk-workspace-card:nth-child(8) {
+  animation-delay: 0.8s;
+}
+
+@keyframes staggerIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
   }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- CINEMATIC GLOW (Professional Trailer Effect) --- */
+
+/* 1. Dramatic Vignette Overlay */
+body.onboarding-active::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9998;
+  /* Below tooltip/cursor but above app */
+  /* Dramatic dark edges with subtle blue tint */
+  box-shadow: inset 0 0 150px rgba(0, 0, 0, 0.9), inset 0 0 50px rgba(59, 130, 246, 0.1);
+  background: radial-gradient(circle at center, transparent 40%, rgba(0, 0, 0, 0.4) 100%);
+  animation: vignetteBreath 4s ease-in-out infinite alternate;
+}
+
+@keyframes vignetteBreath {
+  0% {
+    box-shadow: inset 0 0 150px rgba(0, 0, 0, 0.9);
+  }
+
+  100% {
+    box-shadow: inset 0 0 200px rgba(0, 0, 0, 0.95);
+  }
+}
+
+/* 2. Ambient Core Pulse (Behind the Grid) */
+body.onboarding-active::after {
+  content: '';
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80vw;
+  height: 80vh;
+  /* Soft, multi-color ambient glow */
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 30%, transparent 70%);
+  z-index: -1;
+  /* Behind everything */
+  pointer-events: none;
+  filter: blur(60px);
+  animation: cinematicPulse 8s ease-in-out infinite;
+}
+
+@keyframes cinematicPulse {
+
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
   50% {
-    box-shadow: 0 0 0 6px rgba(102, 126, 234, 0.6), 0 0 0 12px rgba(102, 126, 234, 0.3);
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+/* Step: Magic Button */
+body.onboarding-active.step-magic [data-onboarding="global-add-btn"] {
+  animation: magicPulse 2s infinite;
+}
+
+@keyframes magicPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
+    transform: scale(1);
+  }
+
+  70% {
+    box-shadow: 0 0 0 20px rgba(99, 102, 241, 0);
+    transform: scale(1.1);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    transform: scale(1);
   }
 }
 
@@ -206,19 +462,6 @@
     width: calc(100vw - 32px);
     left: 16px !important;
     right: 16px !important;
-  }
-
-  .onboarding-tooltip.center {
-    transform: translate(0, -50%);
-    left: 16px !important;
-  }
-
-  .onboarding-actions {
-    flex-direction: column;
-  }
-
-  .onboarding-btn {
-    width: 100%;
-    justify-content: center;
+    bottom: 16px !important;
   }
 }

@@ -481,7 +481,7 @@
 .sidebar-title {
   padding: 16px 0;
   /* Vertical only */
-  font-size: var(--font-base, 12px);
+  font-size: var(--font-2xl, 16px);
   font-weight: 600;
   color: #94A3B8;
   text-transform: uppercase;

@@ -1,18 +1,64 @@
-import { faArrowRight, faCheck, faHourglass, faPlus, faSignInAlt, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faCheck, faCopy, faHourglass, faLink, faPlus, faSignInAlt, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { teamManager } from '../../services/p2p/teamManager';
 
-export function CreateTeamModal({ isOpen, onClose }) {
-    const [mode, setMode] = useState('create'); // 'create' or 'join'
-    const [teamName, setTeamName] = useState('');
+export function CreateTeamModal({ isOpen, onClose, initialTeamName = '', initialMode = 'create' }) {
+    const [mode, setMode] = useState(initialMode); // 'create' or 'join'
+    const [teamName, setTeamName] = useState(initialTeamName);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [generatedSecret, setGeneratedSecret] = useState('');
+    const [shareLink, setShareLink] = useState('');
+    const [linkCopied, setLinkCopied] = useState(false);
+
+    // Update state when props change (for deep link handling)
+    useEffect(() => {
+        if (initialTeamName) {
+            setTeamName(initialTeamName);
+            setMode('join');
+        }
+    }, [initialTeamName]);
 
     if (!isOpen) return null;
+
+    // Generate shareable invite code (simple base64 encoded team name)
+    const generateShareLink = (teamNameStr) => {
+        const encoded = btoa(teamNameStr.trim());
+        return `cooldesk-invite:${encoded}`;
+    };
+
+    // Parse invite code if pasted in team name field
+    const handleTeamNameChange = (value) => {
+        // Check if it's an invite code
+        if (value.startsWith('cooldesk-invite:')) {
+            try {
+                const encoded = value.replace('cooldesk-invite:', '');
+                const decoded = atob(encoded);
+                setTeamName(decoded);
+                // Auto-switch to join mode if pasting an invite
+                if (mode === 'create') {
+                    setMode('join');
+                }
+                return;
+            } catch (e) {
+                // Not a valid invite code, use as-is
+            }
+        }
+        setTeamName(value);
+    };
+
+    const copyShareLink = async () => {
+        try {
+            await navigator.clipboard.writeText(shareLink);
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy link:', err);
+        }
+    };
 
     const generateSecret = () => {
         // Generate a CD-key style secret: XXXX-XXXX-XXXX-XXXX
@@ -52,15 +98,12 @@ export function CreateTeamModal({ isOpen, onClose }) {
             // Create team
             await teamManager.addTeam(teamName.trim(), secret);
 
-            setSuccess(`Team "${teamName}" created! Share the team name with others to let them request to join.`);
-            setTeamName('');
+            // Generate share link
+            const link = generateShareLink(teamName);
+            setShareLink(link);
 
-            // Close after 2 seconds
-            setTimeout(() => {
-                onClose();
-                setSuccess('');
-                setGeneratedSecret('');
-            }, 2000);
+            setSuccess(`Team "${teamName}" created! Share the invite link with others to let them request to join.`);
+            // Don't clear teamName so the share link section can use it
         } catch (err) {
             setError(err.message);
         } finally {
@@ -80,16 +123,14 @@ export function CreateTeamModal({ isOpen, onClose }) {
 
         setIsLoading(true);
         try {
-            // Generate team ID from name (same way as when creating)
-            // Note: We don't have the secret, so we use a discovery mechanism
-            // For now, we'll use a hash of just the team name for discovery
-            const teamId = `team_${teamName.trim().toLowerCase().replace(/\s+/g, '_')}`;
+            // Use the discovery room ID format that matches requestService.js
+            const discoveryRoomId = `discovery_${teamName.trim().toLowerCase().replace(/\s+/g, '_')}`;
 
             // Import request service
             const { p2pRequestService } = await import('../../services/p2p/requestService');
 
-            // Send join request
-            await p2pRequestService.sendJoinRequest(teamName.trim(), teamId);
+            // Send join request to the discovery room
+            await p2pRequestService.sendJoinRequest(teamName.trim(), discoveryRoomId);
 
             setSuccess(`Join request sent to "${teamName}"! Waiting for admin approval...`);
 
@@ -219,11 +260,11 @@ export function CreateTeamModal({ isOpen, onClose }) {
                             <div style={{ fontSize: 13, color: mode === 'create' ? '#bfdbfe' : '#a7f3d0', lineHeight: 1.5 }}>
                                 {mode === 'create' ? (
                                     <>
-                                        <strong>Creating a team:</strong> Just enter a name. The secret is auto-generated. Share the team name with others so they can request to join!
+                                        <strong>Creating a team:</strong> Just enter a name. You'll get an invite code to share with teammates!
                                     </>
                                 ) : (
                                     <>
-                                        <strong>Joining a team:</strong> Enter the team name and send a join request. The admin will approve and assign your role.
+                                        <strong>Joining a team:</strong> Paste the invite code or enter the team name. The admin will approve your request.
                                     </>
                                 )}
                             </div>
@@ -237,9 +278,9 @@ export function CreateTeamModal({ isOpen, onClose }) {
                             <input
                                 type="text"
                                 value={teamName}
-                                onChange={e => setTeamName(e.target.value)}
-                                placeholder={mode === 'create' ? 'e.g. Work Squad' : 'Enter team name'}
-                                disabled={isLoading}
+                                onChange={e => handleTeamNameChange(e.target.value)}
+                                placeholder={mode === 'create' ? 'e.g. Work Squad' : 'Enter team name or paste invite code'}
+                                disabled={isLoading || (shareLink && mode === 'create')}
                                 style={{
                                     width: '100%', padding: '12px 16px', borderRadius: 10,
                                     background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
@@ -274,47 +315,127 @@ export function CreateTeamModal({ isOpen, onClose }) {
                             </div>
                         )}
 
+                        {/* Share Link Section - Only show after team creation */}
+                        {shareLink && mode === 'create' && (
+                            <div style={{
+                                background: 'rgba(139, 92, 246, 0.1)',
+                                border: '1px solid rgba(139, 92, 246, 0.2)',
+                                borderRadius: 12, padding: 16
+                            }}>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: 8,
+                                    marginBottom: 12, color: '#a78bfa', fontSize: 13, fontWeight: 600
+                                }}>
+                                    <FontAwesomeIcon icon={faLink} />
+                                    Invite Link
+                                </div>
+                                <div style={{
+                                    display: 'flex', gap: 8, alignItems: 'center'
+                                }}>
+                                    <input
+                                        type="text"
+                                        value={shareLink}
+                                        readOnly
+                                        style={{
+                                            flex: 1, padding: '10px 12px', borderRadius: 8,
+                                            background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(139, 92, 246, 0.3)',
+                                            color: '#e9d5ff', fontSize: 12, outline: 'none',
+                                            fontFamily: 'monospace'
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={copyShareLink}
+                                        style={{
+                                            padding: '10px 16px', borderRadius: 8,
+                                            background: linkCopied ? '#10b981' : '#8b5cf6',
+                                            border: 'none', color: '#fff', fontSize: 13, fontWeight: 600,
+                                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                                            transition: 'background 0.2s',
+                                            minWidth: 90
+                                        }}
+                                    >
+                                        <FontAwesomeIcon icon={linkCopied ? faCheck : faCopy} />
+                                        {linkCopied ? 'Copied!' : 'Copy'}
+                                    </button>
+                                </div>
+                                <div style={{
+                                    marginTop: 10, fontSize: 11, color: '#94a3b8', lineHeight: 1.4
+                                }}>
+                                    Share this link with teammates. When they click it, they'll be able to request to join your team.
+                                </div>
+                            </div>
+                        )}
+
                         {/* Action Buttons */}
                         <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                            <button
-                                type="button"
-                                onClick={onClose}
-                                disabled={isLoading}
-                                style={{
-                                    flex: 1, padding: '12px', borderRadius: 10,
-                                    background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
-                                    color: '#fff', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer',
-                                    fontSize: 14, opacity: isLoading ? 0.5 : 1
-                                }}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={isLoading}
-                                style={{
-                                    flex: 2, padding: '12px', borderRadius: 10,
-                                    background: mode === 'create' ? '#3b82f6' : '#10b981',
-                                    border: 'none',
-                                    color: '#fff', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer',
-                                    fontSize: 14,
-                                    boxShadow: mode === 'create' ? '0 4px 12px rgba(59, 130, 246, 0.3)' : '0 4px 12px rgba(16, 185, 129, 0.3)',
-                                    opacity: isLoading ? 0.7 : 1,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
-                                }}
-                            >
-                                {isLoading ? (
-                                    <>
-                                        <FontAwesomeIcon icon={faHourglass} spin />
-                                        {mode === 'create' ? 'Creating...' : 'Sending...'}
-                                    </>
-                                ) : (
-                                    <>
-                                        {mode === 'create' ? 'Create Team' : 'Send Request'}
-                                        <FontAwesomeIcon icon={faArrowRight} />
-                                    </>
-                                )}
-                            </button>
+                            {shareLink && mode === 'create' ? (
+                                /* Show Done button after team is created */
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        onClose();
+                                        setSuccess('');
+                                        setShareLink('');
+                                        setTeamName('');
+                                        setGeneratedSecret('');
+                                    }}
+                                    style={{
+                                        flex: 1, padding: '12px', borderRadius: 10,
+                                        background: '#10b981',
+                                        border: 'none',
+                                        color: '#fff', fontWeight: 600, cursor: 'pointer',
+                                        fontSize: 14,
+                                        boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                                    }}
+                                >
+                                    <FontAwesomeIcon icon={faCheck} />
+                                    Done
+                                </button>
+                            ) : (
+                                <>
+                                    <button
+                                        type="button"
+                                        onClick={onClose}
+                                        disabled={isLoading}
+                                        style={{
+                                            flex: 1, padding: '12px', borderRadius: 10,
+                                            background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
+                                            color: '#fff', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer',
+                                            fontSize: 14, opacity: isLoading ? 0.5 : 1
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isLoading}
+                                        style={{
+                                            flex: 2, padding: '12px', borderRadius: 10,
+                                            background: mode === 'create' ? '#3b82f6' : '#10b981',
+                                            border: 'none',
+                                            color: '#fff', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer',
+                                            fontSize: 14,
+                                            boxShadow: mode === 'create' ? '0 4px 12px rgba(59, 130, 246, 0.3)' : '0 4px 12px rgba(16, 185, 129, 0.3)',
+                                            opacity: isLoading ? 0.7 : 1,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                                        }}
+                                    >
+                                        {isLoading ? (
+                                            <>
+                                                <FontAwesomeIcon icon={faHourglass} spin />
+                                                {mode === 'create' ? 'Creating...' : 'Sending...'}
+                                            </>
+                                        ) : (
+                                            <>
+                                                {mode === 'create' ? 'Create Team' : 'Send Request'}
+                                                <FontAwesomeIcon icon={faArrowRight} />
+                                            </>
+                                        )}
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </form>
                 </div>

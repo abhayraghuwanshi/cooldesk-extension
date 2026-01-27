@@ -80,17 +80,19 @@ export default function TeamView({ team: propTeam }) {
         if (!activeTeamId) return;
 
         const activeTeam = teams.find(t => t.id === activeTeamId);
-        if (!activeTeam || !activeTeam.isOwner) return; // Only admins listen
+        if (!activeTeam || !activeTeam.createdByMe) return; // Only admins listen
 
         const setupRequestListener = async () => {
             const { p2pStorage } = await import('../../services/p2p/storageService');
             const { p2pSyncService } = await import('../../services/p2p/syncService');
             const { p2pRequestService } = await import('../../services/p2p/requestService');
 
-            // Connect to discovery room
-            const discoveryRoomId = `discovery_${activeTeam.name.toLowerCase().replace(/\s+/g, '_')}`;
+            // Connect to discovery room - use normalized team name for both roomId and encryption key
+            const normalizedTeamName = activeTeam.name.toLowerCase().replace(/\s+/g, '_');
+            const discoveryRoomId = `discovery_${normalizedTeamName}`;
             await p2pStorage.initializeTeamStorage(discoveryRoomId);
-            await p2pSyncService.connectTeam(discoveryRoomId, activeTeam.name);
+            // Use normalized name as encryption key to match requesters
+            await p2pSyncService.connectTeam(discoveryRoomId, normalizedTeamName);
 
             console.log('[TeamView] Admin connected to discovery room:', discoveryRoomId);
 
@@ -134,6 +136,13 @@ export default function TeamView({ team: propTeam }) {
             console.log('[TeamView] Initializing storage for:', activeTeamId);
             // We assume storage is initialized (or we init it now)
             await p2pStorage.initializeTeamStorage(activeTeamId);
+
+            // Connect to P2P sync network for this team
+            const activeTeam = teams.find(t => t.id === activeTeamId);
+            if (activeTeam) {
+                await p2pSyncService.connectTeam(activeTeamId, activeTeam.encryptionKey);
+                console.log('[TeamView] Connected to P2P sync for team:', activeTeam.name);
+            }
 
             // 1. Data Loading
             pArray = p2pStorage.getSharedItems(activeTeamId);
@@ -366,8 +375,7 @@ export default function TeamView({ team: propTeam }) {
         <div style={{
             display: 'flex', height: '100%', color: '#fff',
             borderRadius: 16, overflow: 'hidden',
-            border: '1px solid rgba(255,255,255,0.1)',
-            background: 'rgba(0,0,0,0.2)' // consistent background
+            border: '1px solid rgba(255,255,255,0.1)'
         }}>
             {/* Sidebar */}
             <div className="team-view-sidebar" style={{
@@ -378,7 +386,7 @@ export default function TeamView({ team: propTeam }) {
                 paddingLeft: '4px',
                 transition: 'width 0.3s ease'
             }}>
-                <div className="sidebar-header" style={{ padding: '16px', fontSize: 'var(--font-sm)', fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div className="sidebar-header" style={{ padding: '16px', fontSize: 'var(--font-2xl)', fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     <span className="sidebar-text">Your Spaces</span>
                     <span className="sidebar-icon-only">
                         <FontAwesomeIcon icon={faUsers} />
@@ -1005,6 +1013,7 @@ style.textContent = `
     }
             .sidebar-text {
                 display: inline;
+                font-size: var(--font-2xl);
     }
 
             @media (max-width: 800px) {

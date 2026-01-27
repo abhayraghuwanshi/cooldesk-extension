@@ -23,7 +23,9 @@ class P2PRequestService {
 
         // Use a discovery room based on team name (not secret)
         // This allows requesters to connect without knowing the secret
-        const discoveryRoomId = `discovery_${teamName.toLowerCase().replace(/\s+/g, '_')}`;
+        // IMPORTANT: Use normalized team name for both roomId and encryption key
+        const normalizedTeamName = teamName.toLowerCase().replace(/\s+/g, '_');
+        const discoveryRoomId = `discovery_${normalizedTeamName}`;
 
         const request = {
             id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -43,8 +45,8 @@ class P2PRequestService {
         // Initialize storage for discovery room
         await p2pStorage.initializeTeamStorage(discoveryRoomId);
 
-        // Connect to discovery room with a simple key (team name)
-        await p2pSyncService.connectTeam(discoveryRoomId, teamName);
+        // Connect to discovery room with normalized name as encryption key (must match admin's key)
+        await p2pSyncService.connectTeam(discoveryRoomId, normalizedTeamName);
 
         // Wait a bit for connection to establish
         await new Promise(resolve => setTimeout(resolve, 1000));

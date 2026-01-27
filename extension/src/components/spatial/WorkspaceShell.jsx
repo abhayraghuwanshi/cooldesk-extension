@@ -285,6 +285,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             onClick={() => navigateToFace('chat')}
             onMouseEnter={() => setHoveredFace('chat')}
             title="Chat (Ctrl + 1)"
+            data-onboarding="nav-chat"
           >
             <FontAwesomeIcon icon={faComments} className="face-icon" />
           </button>
@@ -293,6 +294,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             onClick={() => navigateToFace('workspace')}
             onMouseEnter={() => setHoveredFace('workspace')}
             title="Collections (Ctrl + 2)"
+            data-onboarding="nav-collections"
           >
             <FontAwesomeIcon icon={faFolder} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
           </button>
@@ -301,6 +303,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             onClick={() => navigateToFace('overview')}
             onMouseEnter={() => setHoveredFace('overview')}
             title="Overview (Ctrl + 3)"
+            data-onboarding="nav-overview"
           >
             <FontAwesomeIcon icon={faHome} className="face-icon" />
           </button>
@@ -309,6 +312,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             onClick={() => navigateToFace('tabs')}
             onMouseEnter={() => setHoveredFace('tabs')}
             title="Tabs (Ctrl + 4)"
+            data-onboarding="nav-tabs"
           >
             <FontAwesomeIcon icon={faTh} className="face-icon" />
           </button>
@@ -317,6 +321,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             onClick={() => navigateToFace('team')}
             onMouseEnter={() => setHoveredFace('team')}
             title="Spaces (Ctrl + 5)"
+            data-onboarding="nav-team"
           >
             <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
           </button>
@@ -325,6 +330,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
             onClick={() => navigateToFace('notes')}
             onMouseEnter={() => setHoveredFace('notes')}
             title="Notes (Ctrl + 6)"
+            data-onboarding="nav-notes"
           >
             <FontAwesomeIcon icon={faStickyNote} className="face-icon" />
           </button>

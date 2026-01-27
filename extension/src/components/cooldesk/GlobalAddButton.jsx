@@ -23,7 +23,8 @@ export function GlobalAddButton({
   isOpen: externalIsOpen,
   onOpen: externalOnOpen,
   onClose: externalOnClose,
-  initialWorkspace
+  initialWorkspace,
+  ...rest
 }) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isControlled = externalIsOpen !== undefined;
@@ -186,6 +187,7 @@ export function GlobalAddButton({
         className="global-add-button"
         onClick={handleOpen}
         title="Quick Add"
+        {...rest}
         style={{
           position: 'fixed',
           bottom: '24px',
