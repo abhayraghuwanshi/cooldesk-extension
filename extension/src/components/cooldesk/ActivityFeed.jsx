@@ -708,10 +708,10 @@ export function ActivityFeed() {
                                         >
                                             {/* Icon */}
                                             <div style={{
-                                                width: '36px', height: '36px',
+                                                // width: '36px', height: '36px',
                                                 borderRadius: isChat ? '12px' : '8px',
-                                                background: isChat ? 'var(--accent-purple-soft, rgba(139, 92, 246, 0.15))' : isCalendar ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent-blue-soft, rgba(96, 165, 250, 0.15))',
-                                                border: isChat ? '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))' : isCalendar ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid var(--accent-blue-border, rgba(96, 165, 250, 0.2))',
+                                                // background: isChat ? 'var(--accent-purple-soft, rgba(139, 92, 246, 0.15))' : isCalendar ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent-blue-soft, rgba(96, 165, 250, 0.15))',
+                                                // border: isChat ? '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))' : isCalendar ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid var(--accent-blue-border, rgba(96, 165, 250, 0.2))',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 fontSize: '18px',
                                                 flexShrink: 0,

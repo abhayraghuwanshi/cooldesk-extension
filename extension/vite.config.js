@@ -46,6 +46,10 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
+      target: 'esnext', // Use modern JS
+      modulePreload: {
+        polyfill: true,
+      },
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         input: {
@@ -55,22 +59,29 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: (id) => {
             if (id.includes('node_modules')) {
+              // Core React Bundle (Safe to split)
               if (id.includes('react') || id.includes('react-dom')) {
                 return 'vendor-react';
               }
+
+              // Utils & Styles
               if (id.includes('fontawesome')) {
-                return 'vendor-fontawesome';
+                return 'vendor-styles';
               }
-              if (id.includes('lodash') || id.includes('date-fns')) {
-                return 'vendor-utils'; // Common utilities if present
-              }
+
+              // Note: Tiptap and YJS are tightly coupled. Keeping them in the main vendor chunk
+              // prevents "Cannot access 'X' before initialization" errors due to circular deps.
+
               return 'vendor'; // All other node_modules
             }
           }
         }
       }
     },
-    esbuild: { drop: ['console', 'debugger'] },
+    esbuild: {
+      drop: ['console', 'debugger'],
+      legalComments: 'none'
+    },
     define: {
       'global': 'window',
     },
