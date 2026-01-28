@@ -5,6 +5,7 @@ class P2PStorageService {
     constructor() {
         this.docs = new Map(); // teamId -> Y.Doc
         this.providers = new Map(); // teamId -> IndexeddbPersistence
+        this.initPromises = new Map(); // teamId -> Promise (to prevent concurrent initialization)
     }
 
     /**
@@ -13,10 +14,34 @@ class P2PStorageService {
      * @returns {Promise<Y.Doc>} - The initialized Yjs document
      */
     async initializeTeamStorage(teamId) {
+        // Return existing doc if already initialized
         if (this.docs.has(teamId)) {
             return this.docs.get(teamId);
         }
 
+        // If initialization is already in progress, wait for it
+        if (this.initPromises.has(teamId)) {
+            return this.initPromises.get(teamId);
+        }
+
+        // Create and store the initialization promise to prevent concurrent inits
+        const initPromise = this._doInitialize(teamId);
+        this.initPromises.set(teamId, initPromise);
+
+        try {
+            const ydoc = await initPromise;
+            return ydoc;
+        } finally {
+            // Clean up the promise after initialization completes (success or failure)
+            this.initPromises.delete(teamId);
+        }
+    }
+
+    /**
+     * Internal method to actually initialize storage
+     * @private
+     */
+    async _doInitialize(teamId) {
         console.log(`[P2P Storage] Initializing storage for team: ${teamId}`);
 
         // Create a Yjs document
@@ -153,7 +178,9 @@ class P2PStorageService {
                 name: member.name, // Always update username in case it changed
                 color: member.color || existingMember.color,
                 lastSeen: Date.now(),
-                isAdmin: member.isAdmin !== undefined ? member.isAdmin : existingMember.isAdmin
+                isAdmin: member.isAdmin !== undefined ? member.isAdmin : existingMember.isAdmin,
+                isWriter: member.isWriter !== undefined ? member.isWriter : existingMember.isWriter,
+                writerSignature: member.writerSignature !== undefined ? member.writerSignature : existingMember.writerSignature
             });
         } else {
             // Add new member
@@ -164,9 +191,11 @@ class P2PStorageService {
                 color: member.color,
                 joinedAt: Date.now(),
                 lastSeen: Date.now(),
-                isAdmin: member.isAdmin || false
+                isAdmin: member.isAdmin || false,
+                isWriter: member.isWriter || false,
+                writerSignature: member.writerSignature || null
             });
-            console.log(`[P2P Storage] Added new member to team ${teamId}:`, member.name, member.isAdmin ? '(Admin)' : '');
+            console.log(`[P2P Storage] Added new member to team ${teamId}:`, member.name, member.isAdmin ? '(Admin)' : member.isWriter ? '(Writer)' : '(Viewer)');
         }
     }
 

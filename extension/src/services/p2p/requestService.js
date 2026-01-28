@@ -171,22 +171,37 @@ class P2PRequestService {
             approval.writerSignature = signature;
         }
 
-        // Broadcast approval via awareness
+        // Broadcast approval via awareness on the DISCOVERY ROOM
+        // The requester is connected to the discovery room, not the actual team yet
+        const discoveryRoomId = request.teamId; // This is already the discovery room ID from the request
+
         const { p2pSyncService } = await import('./syncService');
-        const provider = p2pSyncService.providers.get(teamId);
+        const { p2pStorage } = await import('./storageService');
+
+        // Ensure we're connected to the discovery room
+        const normalizedTeamName = request.teamName.toLowerCase().replace(/\s+/g, '_');
+        await p2pStorage.initializeTeamStorage(discoveryRoomId);
+        await p2pSyncService.connectTeam(discoveryRoomId, normalizedTeamName);
+
+        // Wait a bit for connection
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const provider = p2pSyncService.providers.get(discoveryRoomId);
 
         if (provider && provider.awareness) {
+            console.log('[P2P Request] Broadcasting approval to discovery room:', discoveryRoomId);
             // Set approval in awareness (will be picked up by requester)
             provider.awareness.setLocalStateField('joinApproval', approval);
 
-            // Clear after 5 seconds
+            // Clear after 10 seconds (increased to give requester more time)
             setTimeout(() => {
                 provider.awareness.setLocalStateField('joinApproval', null);
-            }, 5000);
+            }, 10000);
+        } else {
+            console.warn('[P2P Request] No provider available for discovery room:', discoveryRoomId);
         }
 
-        // Add member to team
-        const { p2pStorage } = await import('./storageService');
+        // Add member to team (p2pStorage already imported above)
         p2pStorage.addMemberToTeam(teamId, {
             name: request.username,
             isAdmin: false,
@@ -217,20 +232,33 @@ class P2PRequestService {
             type: 'JOIN_DENIED',
             requestId: request.id,
             teamId,
+            teamName: request.teamName,
             deniedBy: await userProfileService.getUsername(),
             timestamp: Date.now()
         };
 
-        // Broadcast denial
+        // Broadcast denial on the DISCOVERY ROOM where requester is connected
+        const discoveryRoomId = request.teamId;
+
         const { p2pSyncService } = await import('./syncService');
-        const provider = p2pSyncService.providers.get(teamId);
+        const { p2pStorage } = await import('./storageService');
+
+        // Ensure we're connected to the discovery room
+        const normalizedTeamName = request.teamName.toLowerCase().replace(/\s+/g, '_');
+        await p2pStorage.initializeTeamStorage(discoveryRoomId);
+        await p2pSyncService.connectTeam(discoveryRoomId, normalizedTeamName);
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const provider = p2pSyncService.providers.get(discoveryRoomId);
 
         if (provider && provider.awareness) {
+            console.log('[P2P Request] Broadcasting denial to discovery room:', discoveryRoomId);
             provider.awareness.setLocalStateField('joinDenial', denial);
 
             setTimeout(() => {
                 provider.awareness.setLocalStateField('joinDenial', null);
-            }, 5000);
+            }, 10000);
         }
 
         // Remove from pending
@@ -249,24 +277,32 @@ class P2PRequestService {
     listenForApproval(callback) {
         this.approvalListeners.push(callback);
 
+        // Track seen responses to avoid duplicate callbacks
+        const seenResponses = new Set();
+        let intervalId = null;
+
         // Set up global awareness listener for all teams
         const setupListener = async () => {
             const { p2pSyncService } = await import('./syncService');
 
             // Listen on all active providers
             const checkApprovals = () => {
-                p2pSyncService.providers.forEach((provider, teamId) => {
+                p2pSyncService.providers.forEach((provider, roomId) => {
                     if (provider.awareness) {
                         const states = provider.awareness.getStates();
 
                         states.forEach((state) => {
                             // Check for approval
-                            if (state.joinApproval) {
+                            if (state.joinApproval && !seenResponses.has(state.joinApproval.requestId)) {
+                                console.log('[P2P Request] Received approval:', state.joinApproval);
+                                seenResponses.add(state.joinApproval.requestId);
                                 callback({ type: 'approved', data: state.joinApproval });
                             }
 
                             // Check for denial
-                            if (state.joinDenial) {
+                            if (state.joinDenial && !seenResponses.has(state.joinDenial.requestId)) {
+                                console.log('[P2P Request] Received denial:', state.joinDenial);
+                                seenResponses.add(state.joinDenial.requestId);
                                 callback({ type: 'denied', data: state.joinDenial });
                             }
                         });
@@ -275,9 +311,7 @@ class P2PRequestService {
             };
 
             // Check periodically
-            const interval = setInterval(checkApprovals, 500);
-
-            return () => clearInterval(interval);
+            intervalId = setInterval(checkApprovals, 500);
         };
 
         setupListener();
@@ -287,6 +321,9 @@ class P2PRequestService {
             const index = this.approvalListeners.indexOf(callback);
             if (index > -1) {
                 this.approvalListeners.splice(index, 1);
+            }
+            if (intervalId) {
+                clearInterval(intervalId);
             }
         };
     }

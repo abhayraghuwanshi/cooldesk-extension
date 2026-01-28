@@ -78,10 +78,10 @@ function findListContainer(link) {
 
       // Bonus for semantic containers
       if (current.tagName === 'NAV' ||
-          current.tagName === 'UL' ||
-          current.tagName === 'OL' ||
-          current.getAttribute('role') === 'navigation' ||
-          current.getAttribute('role') === 'menu') {
+        current.tagName === 'UL' ||
+        current.tagName === 'OL' ||
+        current.getAttribute('role') === 'navigation' ||
+        current.getAttribute('role') === 'menu') {
         if (score > bestScore) {
           bestScore = score;
           bestContainer = current;
@@ -294,7 +294,21 @@ function createOverlay() {
     gap: 12px;
   `;
   tooltip.innerHTML = `
-    <span>🎯 Click on any link you want to scrape</span>
+    <div style="display: flex; align-items: center; gap: 8px; margin-right: 8px; padding-right: 8px; border-right: 1px solid rgba(255,255,255,0.2);">
+      <label style="font-size: 12px; opacity: 0.8;">Limit:</label>
+      <input type="number" id="click-to-scrape-limit" value="20" min="1" style="
+        width: 50px;
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(255,255,255,0.2);
+        color: white;
+        border-radius: 4px;
+        padding: 2px 4px;
+        font-size: 12px;
+      " />
+    </div>
+    <div id="click-to-scrape-status">
+      <span>🎯 Click on any link you want to scrape</span>
+    </div>
     <button id="click-to-scrape-cancel" style="
       background: #ff4757;
       border: none;
@@ -303,6 +317,7 @@ function createOverlay() {
       border-radius: 4px;
       cursor: pointer;
       font-size: 12px;
+      margin-left: auto;
     ">Cancel (Esc)</button>
   `;
 
@@ -351,23 +366,14 @@ function highlightElement(element) {
   const title = extractTitle(link) || 'No title';
   const linkCount = estimateSimilarLinks(link);
 
-  if (tooltip) {
-    tooltip.innerHTML = `
-      <div style="flex: 1;">
-        <div style="font-weight: 600; margin-bottom: 4px;">🎯 "${title.substring(0, 40)}${title.length > 40 ? '...' : ''}"</div>
-        <div style="font-size: 12px; opacity: 0.8;">~${linkCount} similar links will be scraped</div>
-      </div>
-      <button id="click-to-scrape-cancel" style="
-        background: #ff4757;
-        border: none;
-        color: white;
-        padding: 6px 12px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-      ">Cancel</button>
-    `;
-    document.getElementById('click-to-scrape-cancel').addEventListener('click', exitSelectMode);
+  const statusEl = document.getElementById('click-to-scrape-status');
+  if (statusEl) {
+    statusEl.innerHTML = `
+        <div style="flex: 1;">
+          <div style="font-weight: 600; margin-bottom: 4px;">🎯 "${title.substring(0, 40)}${title.length > 40 ? '...' : ''}"</div>
+          <div style="font-size: 12px; opacity: 0.8;">~${linkCount} similar links will be scraped</div>
+        </div>
+      `;
   }
 }
 
@@ -444,8 +450,12 @@ function handleClick(e) {
   // Exit select mode
   exitSelectMode();
 
+  // Get limit from input
+  const limitInput = document.getElementById('click-to-scrape-limit');
+  const limit = limitInput ? parseInt(limitInput.value, 10) : 0;
+
   // Scrape using the new selector
-  const results = scrapeWithSelector(selectorInfo.full);
+  const results = scrapeWithSelector(selectorInfo.full, limit);
 
   showToast(`Found ${results.length} links!`, 'success');
 
@@ -560,7 +570,7 @@ async function deleteSelectorForDomain() {
 /**
  * Scrape links using a CSS selector
  */
-function scrapeWithSelector(selector) {
+function scrapeWithSelector(selector, limit = 0) {
   const links = [];
   const seenUrls = new Set();
 
@@ -568,7 +578,15 @@ function scrapeWithSelector(selector) {
     const elements = document.querySelectorAll(selector);
     console.log(`[ClickToScrape] Found ${elements.length} elements with selector: ${selector}`);
 
-    for (const el of elements) {
+    let elementList = Array.from(elements);
+
+    // Apply limit if specified (take latest/last items as they are usually new)
+    if (limit > 0 && elementList.length > limit) {
+      console.log(`[ClickToScrape] Limiting to last ${limit} items (from ${elementList.length})`);
+      elementList = elementList.slice(-limit);
+    } // turbo
+
+    for (const el of elementList) {
       // Get the link element
       const link = el.tagName === 'A' ? el : el.querySelector('a[href]');
       if (!link) continue;

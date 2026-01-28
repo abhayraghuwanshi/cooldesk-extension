@@ -182,6 +182,7 @@ export function ActivityFeed() {
         }
 
         // 3. Fetch Calendar Events
+        /*
         try {
             if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
                 const calResult = await chrome.storage.local.get(['calendar_events']);
@@ -200,6 +201,7 @@ export function ActivityFeed() {
         } catch (e) {
             console.error('Failed to load calendar items', e);
         }
+        */
 
         // Sort combined feed by timestamp (newest first)
         return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
@@ -220,7 +222,7 @@ export function ActivityFeed() {
     useEffect(() => {
         const loadAll = async () => {
             setIsLoading(true);
-            const [links, feed] = await Promise.all([loadQuickLinks(), loadFeed(), loadCalendarEvents()]);
+            const [links, feed] = await Promise.all([loadQuickLinks(), loadFeed()]);
             setQuickLinks(links);
             setFeedItems(feed);
             setIsLoading(false);
@@ -241,9 +243,11 @@ export function ActivityFeed() {
                 // Listen to storage changes for chat and calendar updates
                 if (chrome.storage) {
                     const storageListener = (changes) => {
+                        /*
                         if (changes.calendar_events) {
                             setCalendarEvents(changes.calendar_events.newValue || []);
                         }
+                        */
                         debouncedUpdate();
                     };
                     chrome.storage.onChanged.addListener(storageListener);
@@ -476,7 +480,7 @@ export function ActivityFeed() {
                         gap: '4px',
                         position: 'relative'
                     }}>
-                        {['all', 'calendar', 'chats', 'tabs'].map(tab => (
+                        {['all', 'chats', 'tabs'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}

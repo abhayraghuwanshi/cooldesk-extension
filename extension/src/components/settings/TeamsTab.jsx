@@ -501,8 +501,8 @@ export default function TeamsTab() {
                                         </div>
                                     ) : (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                            {members.map(member => (
-                                                <div key={member.id} style={{
+                                            {members.map((member, index) => (
+                                                <div key={member.id || member.name || index} style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     gap: 10,
@@ -588,7 +588,7 @@ export default function TeamsTab() {
                                                             {member.isOnline && <span style={{ marginLeft: 6, fontSize: 'var(--font-xs)', color: '#34d399', fontWeight: 600 }}>● Online</span>}
                                                         </div>
                                                         <div style={{ fontSize: 'var(--font-xs)', opacity: 0.4, fontFamily: 'monospace' }}>
-                                                            ID: {member.id.toString().substring(0, 8)}
+                                                            ID: {member.id ? String(member.id).substring(0, 8) : 'N/A'}
                                                         </div>
                                                     </div>
                                                     <div style={{

@@ -6,6 +6,7 @@ import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { sortWorkspacesByActivity } from '../../utils/ranking.js';
 import { NotesWidget } from './NotesWidget';
+import { PomodoroWidget } from './PomodoroWidget';
 import { WorkspaceCard } from './WorkspaceCard';
 
 // Lazy load ActivityFeed as it's not critical for LCP (Largest Contentful Paint)
@@ -99,7 +100,7 @@ export function OverviewDashboard({
                 // Use the Activity Score algorithm to sort
                 const sorted = await sortWorkspacesByActivity(savedWorkspaces, getAnalytics);
 
-                const top4 = sorted.slice(0, 4);
+                const top4 = sorted.slice(0, 2);
                 if (isMounted) {
                     setRecentWorkspaces(top4);
                     setIsLoading(false);
@@ -111,7 +112,7 @@ export function OverviewDashboard({
                 console.error('Error sorting workspaces:', error);
                 if (isMounted) {
                     // Fallback to default order
-                    setRecentWorkspaces(savedWorkspaces.slice(0, 4));
+                    setRecentWorkspaces(savedWorkspaces.slice(0, 2));
                     setIsLoading(false);
                 }
             }
@@ -129,7 +130,7 @@ export function OverviewDashboard({
     }, [workspacesHash]); // Depend on hash, not array reference, to avoid loops if array is recreated but identical
 
     // Use recent workspaces if loaded, otherwise fallback or empty
-    const displayedWorkspaces = recentWorkspaces.length > 0 ? recentWorkspaces : (isLoading ? [] : savedWorkspaces.slice(0, 4));
+    const displayedWorkspaces = recentWorkspaces.length > 0 ? recentWorkspaces : (isLoading ? [] : savedWorkspaces.slice(0, 2));
 
     return (
         <div className="overview-dashboard-grid" style={{
@@ -142,6 +143,24 @@ export function OverviewDashboard({
         }}>
             {/* Left Column: Workspaces + Notes */}
             <div className="overview-left-column">
+                {/* Pomodoro Widget Section */}
+                <div className="    " style={{ marginTop: '24px' }}>
+                    <h3 style={{
+                        fontSize: 'var(--font-2xl, 20px)',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary, #94A3B8)',
+                        fontFamily: defaultFontFamily,
+                        marginBottom: '12px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                    }}>
+                        Focus Timer
+                    </h3>
+                    <PomodoroWidget />
+                </div>
                 {/* Workspaces Section */}
                 <div>
                     <h3 style={{
@@ -165,7 +184,7 @@ export function OverviewDashboard({
                             flexDirection: 'column',
                             gap: '2px',
                             overflow: 'visible',
-                            minHeight: '200px' // Optimization: Reserve space to prevent layout shift
+                            minHeight: '160px' // Optimization: Reserve space to prevent layout shift
                         }}>
                         {isLoading && displayedWorkspaces.length === 0 ? (
                             <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
@@ -237,6 +256,8 @@ export function OverviewDashboard({
                         </div>
                     </div>
                 </div>
+
+
             </div>
 
             {/* Right Column: Unified Activity Feed (includes Calendar tab) */}

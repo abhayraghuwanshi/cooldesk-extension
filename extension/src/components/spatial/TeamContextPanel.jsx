@@ -1,4 +1,4 @@
-import { faBan, faBullseye, faCheck, faExclamationTriangle, faFire, faPause, faPen, faPlay, faWifi } from '@fortawesome/free-solid-svg-icons';
+import { faBullseye, faCheck, faExclamationTriangle, faFire, faPause, faPen, faPlay, faWifi } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
@@ -8,10 +8,10 @@ export default function TeamContextPanel({ teamId, canWrite }) {
     console.log('[TeamContext] Component rendered with teamId:', teamId);
 
     const [context, setContext] = useState({
-        sprintGoal: '',
-        incident: '',
+        communityGoal: '',
+        importantNotice: '',
         todaysFocus: '',
-        deploymentFreeze: false
+        communityAlert: false
     });
     const [isEditing, setIsEditing] = useState(false);
     const [isSyncPaused, setIsSyncPaused] = useState(false);
@@ -37,10 +37,10 @@ export default function TeamContextPanel({ teamId, canWrite }) {
 
             const updateState = () => {
                 const newContext = {
-                    sprintGoal: pMap.get('sprintGoal') || '',
-                    incident: pMap.get('incident') || '',
+                    communityGoal: pMap.get('communityGoal') || '',
+                    importantNotice: pMap.get('importantNotice') || '',
                     todaysFocus: pMap.get('todaysFocus') || '',
-                    deploymentFreeze: pMap.get('deploymentFreeze') || false
+                    communityAlert: pMap.get('communityAlert') || false
                 };
                 console.log('[TeamContext] Updating state:', newContext);
                 setContext(newContext);
@@ -66,20 +66,20 @@ export default function TeamContextPanel({ teamId, canWrite }) {
 
     const handleSave = () => {
         if (mapRef.current) {
-            mapRef.current.set('sprintGoal', context.sprintGoal);
-            mapRef.current.set('incident', context.incident);
+            mapRef.current.set('communityGoal', context.communityGoal);
+            mapRef.current.set('importantNotice', context.importantNotice);
             mapRef.current.set('todaysFocus', context.todaysFocus);
-            mapRef.current.set('deploymentFreeze', context.deploymentFreeze);
+            mapRef.current.set('communityAlert', context.communityAlert);
         }
         setIsEditing(false);
     };
 
-    const toggleFreeze = () => {
+    const toggleAlert = () => {
         if (mapRef.current) {
-            const newVal = !context.deploymentFreeze;
-            mapRef.current.set('deploymentFreeze', newVal);
+            const newVal = !context.communityAlert;
+            mapRef.current.set('communityAlert', newVal);
             // Optimistic update handled by observer, but good UX to feel instant
-            setContext(prev => ({ ...prev, deploymentFreeze: newVal }));
+            setContext(prev => ({ ...prev, communityAlert: newVal }));
         }
     };
 
@@ -110,10 +110,10 @@ export default function TeamContextPanel({ teamId, canWrite }) {
             margin: '16px',
             background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.4) 100%)',
             borderRadius: 20,
-            border: context.deploymentFreeze
+            border: context.communityAlert
                 ? '1px solid rgba(239, 68, 68, 0.4)'
                 : '1px solid rgba(255,255,255,0.08)',
-            boxShadow: context.deploymentFreeze
+            boxShadow: context.communityAlert
                 ? '0 0 0 1px rgba(239, 68, 68, 0.2), 0 12px 32px rgba(239, 68, 68, 0.15)'
                 : '0 8px 32px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.05)',
             overflow: 'hidden',
@@ -131,10 +131,10 @@ export default function TeamContextPanel({ teamId, canWrite }) {
             {/* Header Status Bar */}
             <div style={{
                 padding: '16px 20px',
-                background: context.deploymentFreeze
+                background: context.communityAlert
                     ? 'linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)'
                     : 'rgba(255,255,255,0.02)',
-                borderBottom: context.deploymentFreeze
+                borderBottom: context.communityAlert
                     ? '1px solid rgba(239, 68, 68, 0.2)'
                     : '1px solid rgba(255,255,255,0.06)',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -144,20 +144,22 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <div style={{
                         fontSize: 'var(--font-sm)', fontWeight: 700, letterSpacing: '0.08em',
-                        color: context.deploymentFreeze ? '#fca5a5' : 'rgba(255,255,255,0.5)',
+                        color: context.communityAlert ? '#fca5a5' : 'rgba(255,255,255,0.5)',
                         textTransform: 'uppercase',
                         display: 'flex', alignItems: 'center', gap: 8
                     }}>
                         <div style={{
                             width: 6, height: 6, borderRadius: '50%',
-                            background: context.deploymentFreeze ? '#ef4444' : '#10b981',
-                            boxShadow: context.deploymentFreeze ? '0 0 8px #ef4444' : '0 0 8px #10b981'
+                            background: context.communityAlert ? '#ef4444' : '#10b981',
+                            boxShadow: context.communityAlert ? '0 0 8px #ef4444' : '0 0 8px #10b981'
                         }} />
                         Space Context
                     </div>
                 </div>
 
-                {context.deploymentFreeze && (
+
+
+                {context.communityAlert && (
                     <div style={{
                         position: 'absolute', left: '50%', transform: 'translateX(-50%)',
                         fontSize: 'var(--font-base)', fontWeight: 800, color: '#fee2e2',
@@ -170,8 +172,8 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                         whiteSpace: 'nowrap',
                         zIndex: 10
                     }}>
-                        <FontAwesomeIcon icon={faBan} />
-                        FREEZE
+                        <FontAwesomeIcon icon={faExclamationTriangle} />
+                        COMMUNITY ALERT
                     </div>
                 )}
 
@@ -232,13 +234,13 @@ export default function TeamContextPanel({ teamId, canWrite }) {
             <div style={{
                 padding: '20px',
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
+                gridTemplateColumns: 'repeat(2, 1fr)',
                 gap: 16,
                 position: 'relative',
                 zIndex: 1
             }}>
 
-                {/* Sprint Goal Card */}
+                {/* Community Goal Card */}
                 <div style={{
                     background: 'rgba(0,0,0,0.2)',
                     borderRadius: 16,
@@ -255,14 +257,14 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                         }}>
                             <FontAwesomeIcon icon={faBullseye} style={{ color: '#fff', fontSize: 'var(--font-xl)' }} />
                         </div>
-                        <span style={{ fontSize: 'var(--font-base)', fontWeight: 700, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Current Sprint Goal</span>
+                        <span style={{ fontSize: 'var(--font-base)', fontWeight: 700, color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.02em' }}>Community Goal</span>
                     </div>
 
                     {isEditing ? (
                         <textarea
-                            value={context.sprintGoal}
-                            onChange={e => setContext({ ...context, sprintGoal: e.target.value })}
-                            placeholder="What's the main goal for this sprint?"
+                            value={context.communityGoal}
+                            onChange={e => setContext({ ...context, communityGoal: e.target.value })}
+                            placeholder="What's our main goal right now?"
                             rows={3}
                             style={{
                                 background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(59, 130, 246, 0.3)',
@@ -275,10 +277,10 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                         <div style={{
                             fontSize: 'var(--font-2xl)', color: '#e2e8f0', lineHeight: 1.6, fontWeight: 500
                         }}>
-                            {context.sprintGoal ? (
-                                context.sprintGoal
+                            {context.communityGoal ? (
+                                context.communityGoal
                             ) : (
-                                <span style={{ opacity: 0.4, fontStyle: 'italic', fontSize: 'var(--font-xl)' }}>No sprint goal set yet...</span>
+                                <span style={{ opacity: 0.4, fontStyle: 'italic', fontSize: 'var(--font-xl)' }}>No goal set yet...</span>
                             )}
                         </div>
                     )}
@@ -308,7 +310,7 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                         <textarea
                             value={context.todaysFocus}
                             onChange={e => setContext({ ...context, todaysFocus: e.target.value })}
-                            placeholder="What is the team executing on today?"
+                            placeholder="What are we focusing on today?"
                             rows={3}
                             style={{
                                 background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(245, 158, 11, 0.3)',
@@ -330,8 +332,8 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                     )}
                 </div>
 
-                {/* Incident Status */}
-                {(context.incident || isEditing) && (
+                {/* Important Notice */}
+                {(context.importantNotice || isEditing) && (
                     <div style={{
                         gridColumn: '1 / -1',
                         marginTop: 8,
@@ -342,13 +344,13 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                         {isEditing ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 <label style={{ fontSize: 'var(--font-sm)', fontWeight: 700, color: '#fda4af', textTransform: 'uppercase' }}>
-                                    Active Incident / Blocker
+                                    Important Notice
                                 </label>
                                 <input
                                     type="text"
-                                    value={context.incident}
-                                    onChange={e => setContext({ ...context, incident: e.target.value })}
-                                    placeholder="Describe any active incidents or blockers..."
+                                    value={context.importantNotice}
+                                    onChange={e => setContext({ ...context, importantNotice: e.target.value })}
+                                    placeholder="Add an important announcement..."
                                     style={{
                                         background: 'rgba(69, 10, 10, 0.3)', border: '1px solid rgba(239, 68, 68, 0.3)',
                                         borderRadius: 10, padding: '12px 16px', color: '#fca5a5', fontSize: 'var(--font-xl)',
@@ -380,10 +382,10 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                                 </div>
                                 <div>
                                     <div style={{ fontSize: 'var(--font-xs)', fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', marginBottom: 2 }}>
-                                        Active Incident
+                                        Notice
                                     </div>
                                     <div style={{ fontSize: 'var(--font-xl)', color: '#fecaca', fontWeight: 500 }}>
-                                        {context.incident}
+                                        {context.importantNotice}
                                     </div>
                                 </div>
                             </div>
@@ -392,51 +394,53 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                 )}
             </div>
 
-            {/* Editing Footer: Freeze Flag Toggle */}
-            {isEditing && (
-                <div style={{
-                    padding: '16px 24px',
-                    background: 'rgba(0,0,0,0.3)',
-                    borderTop: '1px solid rgba(255,255,255,0.05)',
-                    display: 'flex', alignItems: 'center', gap: 16
-                }}>
-                    <label style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        cursor: 'pointer', userSelect: 'none',
-                        padding: '8px 16px', background: 'rgba(255,255,255,0.05)',
-                        borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)',
-                        transition: 'all 0.2s'
-                    }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                    >
-                        <div style={{
-                            width: 20, height: 20, borderRadius: 4,
-                            border: context.deploymentFreeze ? 'none' : '2px solid rgba(255,255,255,0.3)',
-                            background: context.deploymentFreeze ? '#ef4444' : 'transparent',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                            {context.deploymentFreeze && <FontAwesomeIcon icon={faCheck} style={{ color: '#fff', fontSize: 'var(--font-sm)' }} />}
+            {/* Editing Footer: Alert Toggle */}
+            {
+                isEditing && (
+                    <div style={{
+                        padding: '16px 24px',
+                        background: 'rgba(0,0,0,0.3)',
+                        borderTop: '1px solid rgba(255,255,255,0.05)',
+                        display: 'flex', alignItems: 'center', gap: 16
+                    }}>
+                        <label style={{
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            cursor: 'pointer', userSelect: 'none',
+                            padding: '8px 16px', background: 'rgba(255,255,255,0.05)',
+                            borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)',
+                            transition: 'all 0.2s'
+                        }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                        >
+                            <div style={{
+                                width: 20, height: 20, borderRadius: 4,
+                                border: context.communityAlert ? 'none' : '2px solid rgba(255,255,255,0.3)',
+                                background: context.communityAlert ? '#ef4444' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                {context.communityAlert && <FontAwesomeIcon icon={faCheck} style={{ color: '#fff', fontSize: 'var(--font-sm)' }} />}
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={context.communityAlert}
+                                onChange={e => setContext({ ...context, communityAlert: e.target.checked })}
+                                style={{ display: 'none' }}
+                            />
+                            <span style={{
+                                fontSize: 'var(--font-xl)',
+                                color: context.communityAlert ? '#ef4444' : '#94a3b8',
+                                fontWeight: 600
+                            }}>
+                                Enable Community Alert
+                            </span>
+                        </label>
+                        <div style={{ fontSize: 'var(--font-base)', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                            This will highlight an important announcement.
                         </div>
-                        <input
-                            type="checkbox"
-                            checked={context.deploymentFreeze}
-                            onChange={e => setContext({ ...context, deploymentFreeze: e.target.checked })}
-                            style={{ display: 'none' }}
-                        />
-                        <span style={{
-                            fontSize: 'var(--font-xl)',
-                            color: context.deploymentFreeze ? '#ef4444' : '#94a3b8',
-                            fontWeight: 600
-                        }}>
-                            Enable Deployment Freeze
-                        </span>
-                    </label>
-                    <div style={{ fontSize: 'var(--font-base)', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
-                        This will show a prominent warning on the board.
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <style>{`
                 @keyframes pulse-freeze {
@@ -450,6 +454,6 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                     100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
                 }
             `}</style>
-        </div>
+        </div >
     );
 }

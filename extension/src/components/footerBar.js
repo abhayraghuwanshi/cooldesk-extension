@@ -1456,6 +1456,7 @@ let currentShadowRoot = null;
 let currentShowNotification = null;
 let pendingSelectorInfo = null;
 let excludedDomains = new Set();
+let scrapeLimit = 50; // Default limit for scraped items
 
 /**
  * Get hostname for storage key
@@ -2240,6 +2241,7 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
   let domainsHtml = '';
   let patternsHtml = '';
   let tableHtml = '';
+  let totalAvailable = 0;
 
   try {
     // Ensure state sets exist
@@ -2263,6 +2265,14 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
         }
         return true;
       });
+
+      totalAvailable = finalLinks.length;
+
+      // 4. Apply Limit (slice from end for newest)
+      if (scrapeLimit > 0 && finalLinks.length > scrapeLimit) {
+        finalLinks = finalLinks.slice(-scrapeLimit);
+      }
+
       finalCount = finalLinks.length;
 
       // --- Generate Filter HTML ---
@@ -2435,10 +2445,28 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
           margin-bottom: 4px;
           border: 1px solid rgba(255,255,255,0.05);
         ">
-          <div style="font-size: 13px; margin-bottom: 4px; display: flex; align-items: baseline; gap: 6px;">
-            <strong style="color: white; font-size: 16px;">${finalCount}</strong> 
-            <span style="opacity: 0.8;">links found</span>
-            ${domains.length > 0 ? `<span style="opacity: 0.5; font-size: 11px;">from ${domains.length} domains</span>` : ''}
+          <div style="font-size: 13px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <strong style="color: white; font-size: 16px;">${finalCount}</strong> 
+              <span style="opacity: 0.8;">links</span>
+              ${scrapeLimit > 0 && finalCount < totalAvailable ? `<span style="opacity: 0.5; font-size: 11px;">(of ${totalAvailable})</span>` : ''}
+              ${domains.length > 0 ? `<span style="opacity: 0.5; font-size: 11px; margin-left: 4px;">from ${domains.length} domains</span>` : ''}
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">
+              <span style="font-size: 10px; opacity: 0.7; text-transform: uppercase;">Limit</span>
+              <input id="cooldesk-scrape-limit" type="number" min="0" step="10" value="${scrapeLimit}" style="
+                width: 40px;
+                background: transparent;
+                border: none;
+                color: white;
+                font-family: inherit;
+                font-size: 11px;
+                text-align: right;
+                outline: none;
+                padding: 0;
+              " title="Set to 0 for unlimited" />
+            </div>
           </div>
           
           ${urlPattern ? `
@@ -2603,6 +2631,19 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
       isTableVisible = !isTableVisible;
       renderTooltipContent(link, selectorInfo, domains, finalCount, title, urlPattern);
     };
+  }
+
+  // Limit Input
+  const limitInput = selectTooltip.querySelector('#cooldesk-scrape-limit');
+  if (limitInput) {
+    limitInput.onchange = (e) => {
+      e.stopPropagation();
+      const val = parseInt(e.target.value, 10);
+      scrapeLimit = isNaN(val) ? 0 : val;
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    };
+    limitInput.onclick = (e) => e.stopPropagation();
+    limitInput.onkeydown = (e) => e.stopPropagation(); // Allow typing
   }
 
   // Cancel

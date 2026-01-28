@@ -19,7 +19,6 @@ import {
   deleteUrlNote,
   getSettings,
   listAllUrlNotes,
-  saveSettings,
   saveUrlNote
 } from '../../db/index.js';
 import { p2pStorage } from '../../services/p2p/storageService';
@@ -71,7 +70,7 @@ const SidebarNoteItem = memo(({ note, isActive, onSelect, onDelete }) => (
 ));
 
 // Default notes to help users understand CoolDesk features
-const DEFAULT_NOTES = [
+/* const DEFAULT_NOTES = [
   {
     id: 'guide_welcome',
     title: 'Welcome to CoolDesk',
@@ -152,21 +151,10 @@ const DEFAULT_NOTES = [
 <h2>Themes</h2>
 <p>Customize CoolDesk with different themes! Go to settings to switch between light, dark, and accent color themes.</p>`
   }
-];
+]; */
 
-// Function to create default notes for first-time users
-const createDefaultNotes = async () => {
-  const now = Date.now();
-  for (let i = 0; i < DEFAULT_NOTES.length; i++) {
-    const note = DEFAULT_NOTES[i];
-    await dbUpsertNote({
-      ...note,
-      createdAt: now - (i * 1000), // Stagger creation times so they appear in order
-      updatedAt: now - (i * 1000)
-    });
-  }
-  console.log('[NotesCanvas] Created default guide notes');
-};
+
+
 
 // Cache key for instant load
 const CACHE_KEY = 'cool_notes_cache_v1';
@@ -324,17 +312,14 @@ export function NotesCanvas({ workspaceId }) {
       const allRegularNotes = Array.isArray(rawRegularNotes) ? rawRegularNotes : [];
       const allUrlNotes = Array.isArray(rawUrlNotes) ? rawUrlNotes : [];
 
-      // 1. Handle Default Notes (if needed)
+      // 1. Handle Default Notes (Removed - moved to Team Manager)
+      /*
       if (allRegularNotes.length === 0 && !settings?.defaultNotesCreated) {
         console.log('[NotesCanvas] Creating default notes...');
-        await createDefaultNotes();
+        // await createDefaultNotes();
         await saveSettings({ ...settings, defaultNotesCreated: true });
-
-        // Quick re-fetch regular notes
-        const reFetchResult = await dbListNotes();
-        const reFetchedNotes = reFetchResult?.data || reFetchResult || [];
-        allRegularNotes.push(...(Array.isArray(reFetchedNotes) ? reFetchedNotes : []));
       }
+      */
 
       // 2. Process Regular Notes (Desktop/Workspace notes)
       const workspaceNotes = allRegularNotes.filter(note => {

@@ -196,18 +196,25 @@ export default function TeamView({ team: propTeam }) {
             try {
                 const members = p2pStorage.getSharedMembers(activeTeamId);
                 const checkPrivileges = async () => {
-                    const me = members?.get(username);
-                    if (!me) return;
-
                     // 1. If I am Admin (locally validated), I can write
                     const currentTeam = teams.find(t => t.id === activeTeamId);
                     if (currentTeam?.createdByMe) {
+                        console.log('[TeamView] User is Admin - granting write access');
                         setCanWrite(true);
                         // Self-healing: Ensure shared state matches
-                        if (!me.isAdmin) {
+                        const me = members?.get(username);
+                        if (me && !me.isAdmin) {
                             console.log('[TeamView] Self-repairing Admin status');
                             p2pStorage.addMemberToTeam(activeTeamId, { name: username, isAdmin: true });
                         }
+                        return;
+                    }
+
+                    // Non-admin users: check member record
+                    const me = members?.get(username);
+                    if (!me) {
+                        console.log('[TeamView] User not found in members list - no write access');
+                        setCanWrite(false);
                         return;
                     }
 
@@ -218,6 +225,7 @@ export default function TeamView({ team: propTeam }) {
                             const { cryptoUtils } = await import('../../services/p2p/cryptoUtils');
                             const isValid = cryptoUtils.verify(`WRITER:${username}`, me.writerSignature, publicKey);
                             if (isValid) {
+                                console.log('[TeamView] User has valid writer signature - granting write access');
                                 setCanWrite(true);
                                 return;
                             } else {
@@ -226,7 +234,8 @@ export default function TeamView({ team: propTeam }) {
                         }
                     }
 
-                    // Default to false
+                    // Default to false for viewers/readers
+                    console.log('[TeamView] User is viewer/reader - no write access');
                     setCanWrite(false);
                 };
                 checkPrivileges();
@@ -469,7 +478,7 @@ export default function TeamView({ team: propTeam }) {
                         title="Create Team"
                     >
                         <FontAwesomeIcon icon={faPlus} />
-                        <span className="sidebar-text">Create Space</span>
+                        <span className="sidebar-text">Create/Join</span>
                     </button>
                 </div>
             </div>

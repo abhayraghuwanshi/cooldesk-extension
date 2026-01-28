@@ -140,8 +140,24 @@ export function CreateTeamModal({ isOpen, onClose, initialTeamName = '', initial
                     const approval = response.data;
 
                     // Auto-join the team with the provided secret
+                    // IMPORTANT: Set createdByMe: false since we're joining, not creating
                     const { teamManager } = await import('../../services/p2p/teamManager');
-                    await teamManager.addTeam(approval.teamName, approval.teamSecret);
+                    const team = await teamManager.addTeam(approval.teamName, approval.teamSecret, { createdByMe: false });
+
+                    // Initialize storage and register ourselves as a member with our role
+                    const { p2pStorage } = await import('../../services/p2p/storageService');
+                    const { userProfileService } = await import('../../services/p2p/userProfileService');
+
+                    await p2pStorage.initializeTeamStorage(team.id);
+                    const username = await userProfileService.getUsername();
+
+                    // Add ourselves to the team's member list with our assigned role
+                    p2pStorage.addMemberToTeam(team.id, {
+                        name: username,
+                        isAdmin: false,
+                        isWriter: approval.role === 'writer',
+                        writerSignature: approval.writerSignature || null
+                    });
 
                     setSuccess(`✓ Approved as ${approval.role === 'writer' ? 'Writer' : 'Viewer'}! Joining team...`);
 
