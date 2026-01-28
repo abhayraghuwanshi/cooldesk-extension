@@ -108,12 +108,33 @@ export function setupRealTimeCategorizor() {
         sessionUrlCache.delete(it.next().value);
       }
 
-      // 2. Chat Platform Check (Skip auto-creation for known chat apps, let specific parsers handle if needed)
-      const chatDomains = ['chat.openai.com', 'chatgpt.com', 'claude.ai', 'gemini.google.com', 'perplexity.ai'];
+      // 2. Platform-Specific URL Check (Skip all platform-specific URLs - let scrapper handle them)
+      // This includes: GitHub, Figma, Notion, ChatGPT, Claude, Gemini, Perplexity, etc.
       try {
         const hostname = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
-        if (chatDomains.some(d => hostname.endsWith(d))) {
-          // console.log(`[RealTime] Skipping auto-workspace for chat: ${hostname}`);
+
+        // Skip if GenericUrlParser has a specific config for this domain
+        // These are handled by the scrapper, not real-time categorization
+        if (!GenericUrlParser.shouldUseGenericCategorization(url)) {
+          // console.log(`[RealTime] Skipping platform-specific URL for scrapper: ${hostname}`);
+          return;
+        }
+      } catch { return; }
+
+      // Also skip common development and productivity platforms not in GenericUrlParser config
+      const skipDomains = [
+        'github.com', 'gitlab.com', 'bitbucket.org',  // Code hosting
+        'figma.com', 'canva.com', 'miro.com',         // Design tools
+        'notion.so', 'coda.io', 'airtable.com',      // Productivity
+        'slack.com', 'discord.com', 'teams.microsoft.com', // Communication
+        'trello.com', 'asana.com', 'linear.app', 'jira.atlassian.com', // Project management
+        'vercel.com', 'netlify.com', 'heroku.com',   // Deployment
+        'stackoverflow.com', 'reddit.com',           // Q&A / Forums
+      ];
+      try {
+        const hostname = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+        if (skipDomains.some(d => hostname === d || hostname.endsWith('.' + d))) {
+          // console.log(`[RealTime] Skipping known platform for scrapper: ${hostname}`);
           return;
         }
       } catch { return; }

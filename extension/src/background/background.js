@@ -154,9 +154,9 @@ import {
 import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
 import '../utils/realTimeCategorizor.js'; // Auto-starts real-time categorization
+import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
-import { handleGetTabActivity } from './tabCleanup.js';
 
 
 
@@ -321,14 +321,6 @@ async function main() {
     initializeWorkspaces();
   } catch (e) {
     console.error('[Background] Error initializing Workspaces module:', e);
-  }
-
-  // Initialize Project Context module (session tracking + project detection)
-  try {
-    // initializeProjectContext();
-    console.log('[Background] ✅ Project context initialized');
-  } catch (e) {
-    console.error('[Background] Error initializing Project Context module:', e);
   }
 
   // Real-time categorization DISABLED - using scraping mechanism instead

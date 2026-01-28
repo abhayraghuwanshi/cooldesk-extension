@@ -94,41 +94,104 @@
     margin-bottom: 0.3rem;
 }
 
-/* Task Lists (Checkboxes) */
-ul[data-type="taskList"] {
-    list-style: none;
-    padding: 0;
-    margin: 0.5rem 0;
+/* Task Lists (Checkboxes) - Aggressive Reset for Tailwind/Prose */
+ul[data-type="taskList"],
+.ProseMirror ul[data-type="taskList"] {
+    list-style: none !important;
+    padding: 0 !important;
+    margin: 0.5rem 0 !important;
 }
 
-li[data-type="taskItem"] {
-    display: flex;
-    align-items: flex-start;
-    margin-bottom: 0.4rem;
+/* CSS Grid Layout for Task Items - The Robust Fix */
+li[data-type="taskItem"],
+.ProseMirror ul[data-type="taskList"] li[data-type="taskItem"] {
+    list-style: none !important;
+    list-style-type: none !important;
+    display: grid !important;
+    grid-template-columns: 24px 1fr !important;
+    /* Fixed width for checkbox, rest for text */
+    grid-template-areas: "checkbox content";
+    align-items: start !important;
+    margin-bottom: 0.4rem !important;
+    padding-left: 0 !important;
+    gap: 0;
 }
 
 li[data-type="taskItem"] input[type="checkbox"] {
-    margin-right: 0.8rem;
-    margin-top: 0.45rem;
+    grid-area: checkbox;
+    margin: 0;
+    margin-top: 0.35rem;
+    /* Align with first line of text */
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    /* Visual Styles */
+    appearance: none;
+    -webkit-appearance: none;
     cursor: pointer;
-    accent-color: var(--accent-primary);
-    width: 16px;
-    height: 16px;
-    opacity: 0.8;
+    border: 2px solid var(--text-muted, #64748B);
+    border-radius: 6px;
+    background-color: transparent;
+    position: relative;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 2;
+}
+
+li[data-type="taskItem"] input[type="checkbox"]:hover {
+    border-color: var(--accent-primary, #8B5CF6);
+    background-color: rgba(139, 92, 246, 0.1);
+}
+
+li[data-type="taskItem"] input[type="checkbox"]:checked {
+    background-color: var(--accent-primary, #8B5CF6);
+    border-color: var(--accent-primary, #8B5CF6);
+}
+
+li[data-type="taskItem"] input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    top: 2px;
 }
 
 li[data-type="taskItem"] label {
+    grid-area: checkbox;
     margin: 0;
+    margin-top: 0.35rem;
+    width: 18px;
+    height: 18px;
     display: flex;
     align-items: center;
-    user-select: none;
+    justify-content: center;
+    pointer-events: none;
 }
 
+/* Fix task item text alignment */
 li[data-type="taskItem"] div {
-    flex: 1;
+    grid-area: content;
+    min-width: 0;
+    display: block !important;
+    /* Let text flow naturally in its column */
 }
 
-/* Links */
+li[data-type="taskItem"] div p {
+    margin: 0 !important;
+    line-height: 1.5;
+    width: 100%;
+    display: block !important;
+}
+
+
+
+/* Link Styles */
 .ProseMirror a {
     color: var(--accent-blue);
     text-decoration: none;

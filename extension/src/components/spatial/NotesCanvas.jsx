@@ -271,6 +271,39 @@ export function NotesCanvas({ workspaceId }) {
       setUrlNotes(uniqueUrlNotes);
       setHighlights(uniqueHighlights);
 
+      // Restore UI State
+      try {
+        const lastActiveId = localStorage.getItem('cool_notes_active_id');
+        const lastActiveFolder = localStorage.getItem('cool_notes_active_folder');
+
+        if (lastActiveId) {
+          const allNotes = [...workspaceNotes, ...uniqueUrlNotes, ...uniqueHighlights];
+          const found = allNotes.find(n => n.id === lastActiveId);
+          if (found) {
+            setActiveNote(found);
+            setNoteContent(found.text || '');
+            setNoteTitle(found.title || '');
+            setNoteFolder(found.folder || '');
+            setNoteUrl(found.url || '');
+            setIsEditing(true);
+
+            // Restore folder view if needed
+            if (found.folder) {
+              setActiveFolder(found.folder);
+              setExpandedFolders(prev => new Set([...prev, found.folder]));
+            } else if (lastActiveFolder) {
+              setActiveFolder(lastActiveFolder);
+              setExpandedFolders(prev => new Set([...prev, lastActiveFolder]));
+            }
+          }
+        } else if (lastActiveFolder) {
+          setActiveFolder(lastActiveFolder);
+          setExpandedFolders(prev => new Set([...prev, lastActiveFolder]));
+        }
+      } catch (e) {
+        console.warn('[NotesCanvas] Failed to restore UI state:', e);
+      }
+
     } catch (error) {
       console.error('[NotesCanvas] Error loading data:', error);
       // Fallback to empty states

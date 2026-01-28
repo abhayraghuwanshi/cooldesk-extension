@@ -160,6 +160,15 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       }
 
       if (e.key === 'Escape') {
+        if (isInput) {
+          e.target.blur();
+          return;
+        }
+        // In Notes view, Escape should not navigate away (allow it for local UI like modals)
+        if (currentFace === 'notes') {
+          return;
+        }
+
         e.preventDefault();
         navigateToFace('overview');
       }

@@ -282,6 +282,15 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     // ... logic continuation handled below by copying ...
   });
 
+  // Memoized update functions to prevent loops
+  const updateCommandSuggestions = React.useCallback((suggestions) => {
+    setCommandSuggestions(suggestions);
+  }, []);
+
+  const updateSearchSuggestions = React.useCallback((suggestions) => {
+    setSearchSuggestions(suggestions);
+  }, []);
+
   // Re-implementing the main search effect efficiently
   useEffect(() => {
     // 1. Handle Active Pill (Synchronous / Local)
@@ -290,7 +299,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
       // Multi-Stage Destination Picker
       if (activePill.stage === 'DESTINATION') {
-        // Use cached workspaces if available
         const processDestinations = (workspaces) => {
           const cards = workspaces.map(ws => ({
             command: `${activePill.prefix} ${ws.name}`,
@@ -299,7 +307,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             icon: '📁',
             category: 'Select Destination'
           })).filter(c => c.title.toLowerCase().includes(query));
-          setCommandSuggestions(cards);
+          updateCommandSuggestions(cards);
         };
 
         if (workspacesCache.current) {
@@ -311,14 +319,13 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             processDestinations(ws);
           });
         }
-        setSearchSuggestions([]);
+        updateSearchSuggestions([]);
         setSelectedSuggestionIndex(-1);
         return;
       }
 
       let pillSuggestions = [];
       if (activePill.prefix === '/add') {
-        // ... existing static logic ...
         if (currentTab) {
           pillSuggestions.push({
             command: `/add tab ${currentTab.url}`,
@@ -341,7 +348,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       } else if (activePill.prefix === '/notes') {
         pillSuggestions = [
           { command: '/notes view', title: 'View All Notes', description: 'Open the full notes manager', icon: '📚', category: 'Nav' },
-          { command: '/notes last', title: 'Open Last Note', description: 'Instantly resume your latest thought', icon: '🔖', category: 'Nav' }
+          { command: '/notes last', title: 'Open Last Note', description: 'Instantly resume your latest thought', icon: '🔖', category: 'Nav' },
+          { command: '/notes create', title: 'Create New Note', description: 'Start a new empty note', icon: '📝', category: 'Action' }
         ];
       }
 
@@ -352,22 +360,17 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           (s.description?.toLowerCase().includes(query))
         );
 
-      setCommandSuggestions(filtered);
-      setSearchSuggestions([]);
+      updateCommandSuggestions(filtered);
+      updateSearchSuggestions([]);
       setSelectedSuggestionIndex(-1);
       return;
     }
 
     // 2. Handle Slash Commands
     if (searchValue.startsWith('/')) {
-      // ... (Keep existing slash command logic mostly as is, but optimize fetches) ...
-      // For now, to avoid massive diff, I'm refactoring the main search part primarily.
-      // Let's rely on the fact that slash commands are less frequent than typing.
-      // But we should use cache for predictive actions.
-
       const query = searchValue.slice(1).toLowerCase();
+
       const fetchFlattenedSuggestions = async () => {
-        // ... static commands ...
         const navigationCommands = [
           { command: '/notes', title: 'Notes Manager', description: 'Navigate to Notes view', icon: '📝', category: 'Nav' },
           { command: '/workspace', title: 'Workspaces', description: 'Navigate to Workspace view', icon: '💼', category: 'Nav' },
@@ -391,7 +394,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           });
         }
 
-        // ... (rest of logic) ...
         const predictiveActions = [
           { command: '/save', title: 'Save All Tabs', description: 'Snapshot all tabs to workspace', icon: '💾', category: 'Action' },
           { command: '/share community', title: 'Share Work', description: 'Post to community hub', icon: '🌍', category: 'Action' },
@@ -399,19 +401,18 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           { command: '/add workspace', title: 'New Workspace', description: 'Create project space', icon: '📁', category: 'Action' }
         ];
 
-        const allOptions = [...quickSaves, ...predictiveActions, ...navigationCommands];
-        // ... (sorting logic) ...
+        let allOptions = [...quickSaves, ...predictiveActions, ...navigationCommands];
+
         if (query === '') {
-          setCommandSuggestions(allOptions.slice(0, 10));
+          updateCommandSuggestions(allOptions.slice(0, 10));
         } else {
           const matches = allOptions.filter(opt => {
             const searchStr = `${opt.title} ${opt.command} ${opt.category}`.toLowerCase();
             return searchStr.includes(query) ||
               query.split('').every((char, i) => searchStr.indexOf(char, i) !== -1);
           });
-          // ... sort ...
+
           matches.sort((a, b) => {
-            // ... existing sort logic ...
             const aTitle = (a.title || '').toLowerCase();
             const bTitle = (b.title || '').toLowerCase();
             const aCmd = a.command.toLowerCase();
@@ -428,7 +429,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             if (aPrio !== bPrio) return aPrio - bPrio;
             return aTitle.localeCompare(bTitle);
           });
-          setCommandSuggestions(matches.slice(0, 10));
+          updateCommandSuggestions(matches.slice(0, 10));
+
           // Ghost text logic
           if (matches.length > 0 && query.length > 0) {
             const firstMatch = matches[0].command;
@@ -444,7 +446,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       };
 
       fetchFlattenedSuggestions();
-      setSearchSuggestions([]);
+      updateSearchSuggestions([]);
       setSelectedSuggestionIndex(-1);
       return;
     }
@@ -452,8 +454,10 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     // Clear autocomplete hint for non-slash commands
     setAutocompleteHint('');
 
-    if (searchValue.startsWith('!') || searchValue.length < 2 || /^https?:\/\//i.test(searchValue)) {
-      setSearchSuggestions([]);
+    // If input is effectively empty or just command triggers, clear everything
+    if (!searchValue || searchValue.trim() === '' || searchValue.startsWith('!') || searchValue.length < 2 || /^https?:\/\//i.test(searchValue)) {
+      updateSearchSuggestions([]);
+      updateCommandSuggestions([]);
       return;
     }
 
@@ -487,13 +491,12 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           });
         }
 
-        // 2. Search history (lower priority)
+        // 2. Search history (Optimized: Max 20 results)
         try {
           if (chrome?.history?.search) {
-            // ... (keep history search) ...
             const historyResults = await chrome.history.search({
               text: query,
-              maxResults: 50,
+              maxResults: 20, // Reduced from 50
               startTime: 0
             });
             if (historyResults && historyResults.length > 0) {
@@ -547,25 +550,22 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         });
 
         const finalSuggestions = allSuggestions.slice(0, 8);
-        setSearchSuggestions(finalSuggestions);
+        updateSearchSuggestions(finalSuggestions);
       } catch (error) {
         console.warn('[CoolSearch] Failed to fetch suggestions:', error);
-        setSearchSuggestions([]);
+        updateSearchSuggestions([]);
       }
     };
 
-    // Increased debounce time for performance (300ms)
-    // Use requestIdleCallback if available for non-critical updates? 
-    // No, standard debounce is fine, but ensure it clears properly.
+    // Stable debounce update
     const timeoutId = setTimeout(() => {
-      // Wrap in startTransition if we were in React 18+ explicitly (we are in 19 so it's good practice)
       React.startTransition(() => {
         fetchSuggestions();
       });
     }, 250);
 
     return () => clearTimeout(timeoutId);
-  }, [searchValue]);
+  }, [searchValue, activePill, updateCommandSuggestions, updateSearchSuggestions]);
 
   useEffect(() => {
     // Global shortcuts
@@ -919,6 +919,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         setActivePill({ label: supportedPills[trimmed], prefix: trimmed });
         setSearchValue('');
         setAutocompleteHint('');
+        setCommandSuggestions([]); // Clear suggestions
         return;
       }
     }
@@ -926,7 +927,11 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     setSearchValue(value);
 
     // Clear autocomplete if empty
-    if (!value) setAutocompleteHint('');
+    if (!value) {
+      setAutocompleteHint('');
+      setCommandSuggestions([]); // Explicitly clear
+      setSearchSuggestions([]); // Explicitly clear
+    }
 
     // Clear command feedback when user starts typing again
     if (commandFeedback && commandFeedback.type === 'help') {
@@ -1046,8 +1051,19 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           '/overview': 'overview'
         };
 
-        if (navigationMap[query] && onNavigate) {
-          onNavigate(navigationMap[query]);
+        const ALIAS_MAP = {
+          '/o': 'overview',
+          '/n': 'notes',
+          '/w': 'workspace',
+          '/c': 'chat',
+          '/t': 'tabs',
+          '/tm': 'team'
+        };
+
+        const target = navigationMap[query] || ALIAS_MAP[query];
+
+        if (target && onNavigate) {
+          onNavigate(target);
           setSearchValue('');
           setActivePill(null);
           setCommandSuggestions([]);
@@ -1491,16 +1507,18 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           {autocompleteHint && autocompleteHint !== searchValue && (
             <div style={{
               position: 'absolute',
-              left: '8px', // Match input padding
+              left: '0', // Match input padding (which is 0 horizontal)
               top: '50%',
               transform: 'translateY(-50%)',
-              fontSize: '15px',
+              fontSize: 'var(--font-lg)', // Match CSS variable
               fontWeight: 500,
+              letterSpacing: '-0.01em', // Match CSS
               pointerEvents: 'none',
               zIndex: 1,
               whiteSpace: 'pre',
               fontFamily: 'inherit',
-              display: 'flex'
+              display: 'flex',
+              color: 'transparent' // Base text transparent to avoid artifacts
             }}>
               {/* Invisible spacer matching typed text */}
               <span style={{

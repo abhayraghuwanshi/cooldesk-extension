@@ -400,7 +400,7 @@ export function CoolDeskContainer({
 
         {/* Face 6: Notes (Far Right) */}
         <Face index="notes">
-          <Suspense fallback={null}>
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-500">Loading Notes...</div>}>
             <NotesCanvas workspaceId={currentWorkspace?.id} />
           </Suspense>
         </Face>

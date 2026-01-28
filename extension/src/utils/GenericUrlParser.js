@@ -501,66 +501,6 @@ export class GenericUrlParser {
       /\/maintenance/,
       /\/status/,
 
-      // Specific known problematic patterns from Claude
-      /claude\.ai\/login/,
-      /claude\.ai\/oauth/,
-      /claude\.ai\/settings/,
-      /claude\.ai\/recents/,
-      /claude\.ai\/new$/,
-      /claude\.ai\/upgrade/,
-
-      // ChatGPT URLs with unnecessary parameters
-      /chatgpt\.com\/\?model=/,
-      /chatgpt\.com\/\?q=undefined/,
-      /chat\.openai\.com\/\?model=/,
-
-      // GitHub auxiliary URLs that are not useful for workspaces
-      /github\.com\/.*\/tree\//,
-      /github\.com\/.*\/blob\//,
-      /github\.com\/.*\/commits\//,
-      /github\.com\/.*\/commit\//,
-      /github\.com\/.*\/branches/,
-      /github\.com\/.*\/tags/,
-      /github\.com\/.*\/releases/,
-      /github\.com\/.*\/issues\//,
-      /github\.com\/.*\/pull\//,
-      /github\.com\/.*\/actions/,
-      /github\.com\/.*\/security/,
-      /github\.com\/.*\/insights/,
-      /github\.com\/.*\/settings/,
-      /github\.com\/.*\/network/,
-      /github\.com\/.*\/graphs/,
-      /github\.com\/.*\/pulse/,
-      /github\.com\/.*\/wiki/,
-      /github\.com\/.*\/projects/,
-      /github\.com\/.*\/compare/,
-      /github\.com\/.*\/stargazers/,
-      /github\.com\/.*\/watchers/,
-      /github\.com\/.*\/forks/,
-      /\?tab=readme/,
-      /\?tab=code/,
-      /\?tab=issues/,
-      /\?tab=pulls/,
-      /\?tab=actions/,
-      /\?tab=projects/,
-      /\?tab=wiki/,
-      /\?tab=security/,
-      /\?tab=insights/,
-      /\?tab=settings/,
-      /\?tab=overview/,
-      /\?tab=repositories/,
-      /\?tab=stars/,
-      /\?tab=followers/,
-      /\?tab=following/,
-      /\?tab=packages/,
-      /\?tab=sponsors/,
-      /github\.com\/.*\?.*from=.*&to=/,  // Date range parameters like ?from=2024-12-01&to=2024-12-31
-      /github\.com\/.*\?.*type=source/,   // Repository type filters
-      /github\.com\/.*\?.*sort=updated/,  // Sorting parameters
-      /github\.com\/.*\?.*q=/,            // Search query parameters
-      /#start-of-content$/,
-      /#readme$/,
-
       // Generic OAuth providers
       /auth0\.com/,
       /okta\.com/,
@@ -573,23 +513,6 @@ export class GenericUrlParser {
       /token=/,
       /nonce=/,
       /session=/,
-
-      // Notion view parameters that create duplicates
-      /notion\.so\/.*\?pvs=/,           // Private view parameters like ?pvs=12
-      /notion\.so\/.*\?showMoveTo=/,    // Move dialog parameters
-      /notion\.so\/.*\?.*&pvs=/,        // pvs in combination with other params
-      /notion\.so\/.*\?.*&showMoveTo=/, // showMoveTo in combination
-      /notion\.so\/.*showMoveTo=/,      // showMoveTo anywhere in query string
-
-      // Figma view parameters that create duplicates
-      /figma\.com\/.*\?node-id=/,       // Node selection parameters
-      /figma\.com\/.*\?t=/,             // View/frame parameters 
-      /figma\.com\/.*\?p=/,             // Prototype parameters
-      /figma\.com\/.*\?fuid=/,          // User ID parameters
-      /figma\.com\/.*\?.*&node-id=/,    // node-id in combination
-      /figma\.com\/.*\?.*&t=/,          // t parameter in combination
-      /figma\.com\/.*\?.*&p=/,          // p parameter in combination
-      /figma\.com\/.*\?.*&fuid=/,       // fuid parameter in combination
     ];
 
     return excludePatterns.some(pattern => pattern.test(url));

@@ -240,6 +240,21 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
                     >
                         <FontAwesomeIcon icon={faCode} />
                     </button>
+                    <div style={{ width: '1px', background: 'var(--border-secondary)', margin: '0 2px' }} />
+                    <button
+                        onClick={() => editor.chain().focus().toggleBulletList().run()}
+                        className={editor.isActive('bulletList') ? 'is-active' : ''}
+                        title="Bullet List"
+                    >
+                        <FontAwesomeIcon icon={faListUl} />
+                    </button>
+                    <button
+                        onClick={() => editor.chain().focus().toggleTaskList().run()}
+                        className={editor.isActive('taskList') ? 'is-active' : ''}
+                        title="Task List"
+                    >
+                        <FontAwesomeIcon icon={faCheckSquare} />
+                    </button>
                 </BubbleMenu>
             )}
 

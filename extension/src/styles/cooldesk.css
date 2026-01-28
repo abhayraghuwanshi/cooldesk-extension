@@ -2592,6 +2592,61 @@
 }
 
 /* ============================================
+   MODE SELECTOR - ALL, Deep Work, Chill Mode, etc.
+   ============================================ */
+
+.mode-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--glass-bg, rgba(30, 41, 59, 0.5));
+  border-radius: 12px;
+  border: 1px solid var(--border-primary, rgba(148, 163, 184, 0.15));
+}
+
+.mode-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary, #94A3B8);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  font-size: var(--font-sm, 13px);
+  font-weight: 500;
+}
+
+.mode-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary, #E5E7EB);
+}
+
+.mode-item.active {
+  background: rgba(var(--mode-color-rgb, 59, 130, 246), 0.15);
+  border-color: var(--mode-color, #3B82F6);
+  color: var(--mode-color, #3B82F6);
+}
+
+.mode-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.mode-label {
+  font-size: var(--font-sm, 13px);
+  white-space: nowrap;
+}
+
+/* ============================================
    RESPONSIVE COMPACT CARD BREAKPOINTS
    Supports: 4K (3840px), QHD (2560px), FHD (1920px),
    Laptop (1440px), Tablet (1024px), Sidebar (500px)
