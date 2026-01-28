@@ -304,10 +304,10 @@ export function NotesCanvas({ workspaceId }) {
   }, []);
 
   // Consolidated data loading
-  const fetchAllData = useCallback(async () => {
+  const fetchAllData = useCallback(async (showLoadingSpinner = true) => {
     try {
-      setLoading(true);
-      console.log('[NotesCanvas] Starting consolidated data fetch...');
+      if (showLoadingSpinner) setLoading(true);
+      console.log('[NotesCanvas] Starting consolidated data fetch...', showLoadingSpinner ? '(blocking)' : '(background)');
 
       const startTime = Date.now();
 
@@ -388,25 +388,25 @@ export function NotesCanvas({ workspaceId }) {
           const allNotes = [...workspaceNotes, ...uniqueUrlNotes, ...uniqueHighlights];
           const found = allNotes.find(n => n.id === lastActiveId);
           if (found) {
-            setActiveNote(found);
-            setNoteContent(found.text || '');
-            setNoteTitle(found.title || '');
-            setNoteFolder(found.folder || '');
-            setNoteUrl(found.url || '');
-            setIsEditing(true);
-
-            // Restore folder view if needed
-            if (found.folder) {
-              setActiveFolder(found.folder);
-              setExpandedFolders(prev => new Set([...prev, found.folder]));
-            } else if (lastActiveFolder) {
-              setActiveFolder(lastActiveFolder);
-              setExpandedFolders(prev => new Set([...prev, lastActiveFolder]));
+            // Only update active note if it changed or wasn't set (avoid interrupting user if they started typing)
+            // But here we are just syncing with DB.
+            // If we already have an active note (optimistic), we might want to keep it unless the DB version is newer?
+            // For now, simpler is better: update if found.
+            if (!activeNote || activeNote.id !== found.id) {
+              setActiveNote(found);
+              setNoteContent(found.text || '');
+              setNoteTitle(found.title || '');
+              setNoteFolder(found.folder || '');
+              setNoteUrl(found.url || '');
+              setIsEditing(true);
             }
           }
         } else if (lastActiveFolder) {
-          setActiveFolder(lastActiveFolder);
-          setExpandedFolders(prev => new Set([...prev, lastActiveFolder]));
+          // Only force folder if valid
+          if (!activeFolder) {
+            setActiveFolder(lastActiveFolder);
+            setExpandedFolders(prev => new Set([...prev, lastActiveFolder]));
+          }
         }
       } catch (e) {
         console.warn('[NotesCanvas] Failed to restore UI state:', e);
@@ -421,7 +421,7 @@ export function NotesCanvas({ workspaceId }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeFolder, activeNote]);
 
   // Data loading aliases defined above
   const loadNotes = fetchAllData;
@@ -430,8 +430,9 @@ export function NotesCanvas({ workspaceId }) {
 
   // Initial Load
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    // If we have cached data, perform a silent background update
+    fetchAllData(!cachedData);
+  }, [fetchAllData, cachedData]);
 
   // Listen for shared notes from the team
   useEffect(() => {

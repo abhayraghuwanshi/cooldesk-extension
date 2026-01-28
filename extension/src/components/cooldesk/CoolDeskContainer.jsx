@@ -296,6 +296,71 @@ export function CoolDeskContainer({
     }
   };
 
+  // Track visited faces to lazy load heavy components
+  const [visitedFaces, setVisitedFaces] = useState(() => {
+    // Initialize with current face (usually 'overview')
+    const initial = new Set(['overview']);
+    // Check which one is active and add it
+    try {
+      const active = localStorage.getItem('cooldesk-active-face') || 'overview';
+      initial.add(active);
+    } catch { }
+    return initial;
+  });
+
+  // Helper to check if a face should be rendered
+  const shouldRenderFace = (faceName) => {
+    return visitedFaces.has(faceName) || activeFace === faceName;
+  };
+
+  // Update visited faces when navigation occurs
+  useEffect(() => {
+    if (!visitedFaces.has(activeFace)) {
+      setVisitedFaces(prev => {
+        const next = new Set(prev);
+        next.add(activeFace);
+        return next;
+      });
+    }
+  }, [activeFace, visitedFaces]);
+
+  // Warmup other faces after idle (optional, 4s delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setVisitedFaces(prev => {
+        // Preload commonly used faces if not already there
+        if (prev.has('notes') && prev.has('team')) return prev;
+        const next = new Set(prev);
+        // Speculatively load notes after user is settled
+        // next.add('notes'); 
+        return next;
+      });
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Lazy Initialize P2P Sync (only if Notes or Team is visited)
+  const [p2pInitialized, setP2pInitialized] = useState(false);
+  useEffect(() => {
+    if (p2pInitialized) return;
+
+    // Check if we need P2P
+    const needsP2P = visitedFaces.has('notes') || visitedFaces.has('team');
+
+    if (needsP2P) {
+      console.log('[CoolDesk] Initializing P2P Service (Lazy)...');
+      // Dynamic import to avoid loading the module on startup
+      import('../../services/p2p/syncService').then(({ p2pSyncService }) => {
+        p2pSyncService.init().catch(err => {
+          console.warn('Failed to initialize P2P Sync:', err);
+        });
+      }).catch(err => {
+        console.warn('Failed to load P2P Sync service:', err);
+      });
+      setP2pInitialized(true);
+    }
+  }, [visitedFaces, p2pInitialized]);
+
   return (
     <div className={`cooldesk-container ${themeClass}`}>
       {/* Wallpaper Background Overlay (Blur) handled by React, Image handled by Body CSS */}
@@ -321,6 +386,9 @@ export function CoolDeskContainer({
               src={logo}
               alt="CoolDesk Logo"
               className="cooldesk-logo-icon"
+              width="48"
+              height="48"
+              decoding="async"
               style={{
                 objectFit: 'contain'
               }}
@@ -348,27 +416,31 @@ export function CoolDeskContainer({
       <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange}>
         {/* Face 1: Chat (Far Left) */}
         <Face index="chat">
-          <Suspense fallback={null}>
-            <ChatContext
-              workspaceId={currentWorkspace?.id}
-              workspaceName={currentWorkspace?.name || 'All Workspaces'}
-            />
-          </Suspense>
+          {shouldRenderFace('chat') && (
+            <Suspense fallback={null}>
+              <ChatContext
+                workspaceId={currentWorkspace?.id}
+                workspaceName={currentWorkspace?.name || 'All Workspaces'}
+              />
+            </Suspense>
+          )}
         </Face>
 
         {/* Face 2: Workspace Details (Left) - Shows ALL Workspaces */}
         <Face index="workspace">
-          <Suspense fallback={<div style={{ padding: 20, color: '#64748B', textAlign: 'center' }}>Loading...</div>}>
-            <WorkspaceList
-              savedWorkspaces={savedWorkspaces}
-              onWorkspaceClick={handleWorkspaceClick}
-              activeWorkspaceId={currentWorkspace?.id}
-              expandedWorkspaceId={expandedWorkspace?.id}
-              pinnedWorkspaces={pinnedWorkspaces}
-              onTogglePin={onTogglePin}
-              onAddUrl={handleOpenAddModal}
-            />
-          </Suspense>
+          {shouldRenderFace('workspace') && (
+            <Suspense fallback={<div style={{ padding: 20, color: '#64748B', textAlign: 'center' }}>Loading...</div>}>
+              <WorkspaceList
+                savedWorkspaces={savedWorkspaces}
+                onWorkspaceClick={handleWorkspaceClick}
+                activeWorkspaceId={currentWorkspace?.id}
+                expandedWorkspaceId={expandedWorkspace?.id}
+                pinnedWorkspaces={pinnedWorkspaces}
+                onTogglePin={onTogglePin}
+                onAddUrl={handleOpenAddModal}
+              />
+            </Suspense>
+          )}
         </Face>
 
         {/* Face 3: Overview (Center) */}
@@ -386,23 +458,29 @@ export function CoolDeskContainer({
 
         {/* Face 4: Tabs (Right) */}
         <Face index="tabs">
-          <Suspense fallback={null}>
-            <TabManagement />
-          </Suspense>
+          {shouldRenderFace('tabs') && (
+            <Suspense fallback={null}>
+              <TabManagement />
+            </Suspense>
+          )}
         </Face>
 
         {/* Face 5: Team (Further Right) */}
         <Face index="team">
-          <Suspense fallback={null}>
-            <TeamView />
-          </Suspense>
+          {shouldRenderFace('team') && (
+            <Suspense fallback={null}>
+              <TeamView />
+            </Suspense>
+          )}
         </Face>
 
         {/* Face 6: Notes (Far Right) */}
         <Face index="notes">
-          <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-500">Loading Notes...</div>}>
-            <NotesCanvas workspaceId={currentWorkspace?.id} />
-          </Suspense>
+          {shouldRenderFace('notes') && (
+            <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-500">Loading Notes...</div>}>
+              <NotesCanvas workspaceId={currentWorkspace?.id} />
+            </Suspense>
+          )}
         </Face>
       </WorkspaceShell>
 

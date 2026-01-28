@@ -93,7 +93,7 @@ export const listWorkspaces = withErrorHandling(async (options = {}) => {
         results = await new Promise((resolve, reject) => {
             request.onsuccess = () => {
                 const res = request.result || []
-                console.log(`[Unified API] listWorkspaces raw count: ${res.length}`)
+                // console.log(`[Unified API] listWorkspaces raw count: ${res.length}`)
                 resolve(res)
             }
             request.onerror = () => reject(request.error)

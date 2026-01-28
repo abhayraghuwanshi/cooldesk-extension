@@ -163,7 +163,14 @@ export class GenericUrlParser {
     // Process items with existing titles and optional history enrichment
     const browserAPI = typeof chrome !== 'undefined' ? chrome : null;
 
-    for (const item of items) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      // INP OPTIMIZATION: Yield to main thread every 20 items to avoid freezing UI
+      if (i % 20 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
       // Extract URL, title, and timing info from item (support both string URLs and item objects)
       const url = typeof item === 'string' ? item : item.url;
       const existingTitle = typeof item === 'object' ? item.title : null;

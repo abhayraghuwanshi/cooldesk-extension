@@ -436,11 +436,11 @@ async function main() {
   })
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    console.log('[Background Debug] Received message:', msg);
-    console.log('[Background Debug] Message sender:', sender);
+    // console.log('[Background Debug] Received message:', msg);
+    // console.log('[Background Debug] Message sender:', sender);
 
     // Temporarily disable keepalive connection mechanism to prevent connection errors
-    console.log('[Background Debug] Keepalive connection mechanism disabled to prevent connection errors');
+    // console.log('[Background Debug] Keepalive connection mechanism disabled to prevent connection errors');
 
     const cleanup = () => {
       try {

@@ -150,7 +150,7 @@ button:focus-visible {
   background: transparent;
   border-left: 2px solid transparent;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  /* transition: background 0.15s ease, border-color 0.15s ease; */
   display: flex;
   align-items: center;
   gap: 8px;

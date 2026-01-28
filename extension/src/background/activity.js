@@ -366,7 +366,7 @@ async function accumulateTime(url, now = Date.now()) {
 
     // Enhanced URL validation
     if (!isValidTrackingUrl(url)) {
-        console.log('[Activity Debug] Skipping invalid URL:', url);
+        // console.log('[Activity Debug] Skipping invalid URL:', url);
         return;
     }
 
@@ -377,7 +377,7 @@ async function accumulateTime(url, now = Date.now()) {
 
     // Debug logging for tracking
     if (delta > 1000) {
-        console.log(`[Activity Debug] Tracking ${delta}ms for ${cleaned} (Active: ${currentActive.url === url})`);
+        // console.log(`[Activity Debug] Tracking ${delta}ms for ${cleaned} (Active: ${currentActive.url === url})`);
     }
 
     // Initialize activity data if needed
@@ -744,23 +744,23 @@ export function initializeActivityTracking() {
 // Handle activity messages from content scripts
 export function handleActivityMessage(msg, sender) {
     if (!sender.tab?.url || !msg.type) {
-        console.log('[Activity Debug] Skipping message - missing URL or type:', { hasUrl: !!sender.tab?.url, hasType: !!msg.type });
+        // console.log('[Activity Debug] Skipping message - missing URL or type:', { hasUrl: !!sender.tab?.url, hasType: !!msg.type });
         return;
     }
 
     // Enhanced URL validation
     if (!isValidTrackingUrl(sender.tab.url)) {
-        console.log('[Activity Debug] Skipping message - invalid tracking URL:', sender.tab.url);
+        // console.log('[Activity Debug] Skipping message - invalid tracking URL:', sender.tab.url);
         return;
     }
 
     const cleaned = cleanUrl(sender.tab.url);
     if (!cleaned) {
-        console.log('[Activity Debug] Skipping message - could not clean URL:', sender.tab.url);
+        // console.log('[Activity Debug] Skipping message - could not clean URL:', sender.tab.url);
         return;
     }
 
-    console.log('[Activity Debug] Processing activity for URL:', cleaned, 'type:', msg.type);
+    // console.log('[Activity Debug] Processing activity for URL:', cleaned, 'type:', msg.type);
 
     if (!activityData[cleaned]) {
         activityData[cleaned] = initActivityData(sender.tab.url);
@@ -788,7 +788,7 @@ export function handleActivityMessage(msg, sender) {
             isAudioSite: isAudioStreamingSite(cleaned),
             tabSessionId: tabSessionId
         });
-        console.log('[Activity Debug] Created/continued tab session for:', cleaned, 'tabId:', sender.tab.id);
+        // console.log('[Activity Debug] Created/continued tab session for:', cleaned, 'tabId:', sender.tab.id);
     }
     const sessionEvent = sessionEvents.get(cleaned);
 

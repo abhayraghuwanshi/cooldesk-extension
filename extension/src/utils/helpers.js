@@ -97,7 +97,7 @@ export const getFaviconUrl = (url, size = 32, favIconUrl = null) => {
       'google.com': 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png',
       'search.google.com': 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png',
       'analytics.google.com': 'https://www.gstatic.com/analytics-suite/header/suite/v2/ic_analytics.svg',
-      'calendar.google.com': 'https://ssl.gstatic.com/calendar/images/favicons/calendar_2020q4_32dp.png',
+      // 'calendar.google.com': 'https://ssl.gstatic.com/calendar/images/favicons/calendar_2020q4_32dp.png', // 404
       'drive.google.com': 'https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_32dp.png',
       'docs.google.com': 'https://ssl.gstatic.com/docs/documents/images/kix-favicon7.ico',
       'sheets.google.com': 'https://ssl.gstatic.com/docs/spreadsheets/favicon3.ico',

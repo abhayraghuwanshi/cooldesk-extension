@@ -16,7 +16,6 @@ import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspa
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
 import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
-import { p2pSyncService } from './services/p2p/syncService';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
@@ -418,9 +417,34 @@ export default function App() {
           return;
         }
 
-        // Compute dataset hash
-        const dataHash = JSON.stringify(urls.slice().sort()).slice(0, 50);
+        // Compute dataset hash (Simple deterministic string hash)
+        const sortedUrls = urls.slice().sort();
+        const dataString = sortedUrls.join('|');
+        // Simple hash function for the string
+        let hash = 0;
+        for (let i = 0; i < dataString.length; i++) {
+          const char = dataString.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash; // Convert to 32bit integer
+        }
+        const dataHash = String(hash);
+
         const lastHash = ui?.lastAutoCreateHash;
+
+        console.log('[AutoCreate] Hash Check:', {
+          hasLastHash: !!lastHash,
+          lastHash,
+          currentHash: dataHash,
+          urlCount: urls.length,
+          match: lastHash === dataHash
+        });
+
+        // OPTIMIZATION: Skip expensive parsing if data hasn't changed
+        if (lastHash && lastHash === dataHash) {
+          console.log('[AutoCreate] Data unchanged (Robust Hash), skipping processing');
+          return;
+        }
+
         // URL times already built above
         const workspacesResult = await listWorkspaces();
         const existingWorkspaces = workspacesResult?.success ? workspacesResult.data : [];
@@ -519,8 +543,16 @@ export default function App() {
 
         // Remember that we processed this data set and advance per-category checkpoints
         const maxMapObj = (() => { try { return Object.fromEntries(maxTimeByCategory); } catch { return {}; } })();
+
+        // Use partial update to avoid race conditions (do not spread ...ui)
+        // We re-fetch or use necessary fields for the merge, but passed object should NOT have id: 'default'
         const mergedCategoryLastCheck = { ...(ui?.categoryLastCheck || ui?.data?.categoryLastCheck || {}), ...maxMapObj };
-        await saveUIState({ ...ui, lastAutoCreateHash: dataHash, categoryLastCheck: mergedCategoryLastCheck });
+
+        console.log('[AutoCreate] Saving new hash:', dataHash);
+        await saveUIState({
+          lastAutoCreateHash: dataHash,
+          categoryLastCheck: mergedCategoryLastCheck
+        });
       } catch (error) {
         console.warn('Failed to auto-create platform workspaces:', error);
       }
@@ -708,12 +740,7 @@ export default function App() {
     return () => { };
   }, []);
 
-  // Initialize P2P Sync Service
-  useEffect(() => {
-    p2pSyncService.init().catch(err => {
-      console.warn('Failed to initialize P2P Sync:', err);
-    });
-  }, []);
+
 
   // Prefill search from URL (?q=...) when opened in side panel or new tab
   useEffect(() => {

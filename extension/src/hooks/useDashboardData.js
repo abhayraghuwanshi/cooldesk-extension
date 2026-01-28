@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
+import { listAllUrls, listWorkspaces } from '../db/index.js';
 import { getHostDashboard, setHostDashboard, setHostUrls } from '../services/extensionApi';
-import { listWorkspaces, listAllUrls } from '../db/index.js';
 
 const normalize = (dashboardData) => {
   const bookmarks = (dashboardData?.bookmarks || []).map((b) => ({ ...b, type: 'Bookmark' }))
@@ -102,11 +102,44 @@ const synthesizeFromWorkspaces = async () => {
   }
 }
 
+// Cache key for instant dashboard load
+const DASHBOARD_CACHE_KEY = 'cool_dashboard_cache_v1';
+
 export function useDashboardData() {
-  const [data, setData] = useState([])
-  const [loadingInitial, setLoadingInitial] = useState(true)
+  // Initialize from cache synchronously to prevent blank flash
+  const [data, setData] = useState(() => {
+    try {
+      const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      console.warn('[useDashboardData] Failed to parse cache', e);
+    }
+    return [];
+  });
+
+  // Set loading to false immediately if we have cached data
+  const [loadingInitial, setLoadingInitial] = useState(() => {
+    try {
+      return !localStorage.getItem(DASHBOARD_CACHE_KEY);
+    } catch {
+      return true;
+    }
+  });
+
   const [refreshing, setRefreshing] = useState(false)
   const [populating, setPopulating] = useState(false)
+
+  // Helper to update state and cache simultaneously
+  const updateData = (newData) => {
+    setData(newData);
+    try {
+      localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(newData));
+    } catch (e) {
+      console.warn('[useDashboardData] Failed to update cache', e);
+    }
+  };
 
   // Phase 1: Fast path from local storage with TTL check (if available)
   const loadFastFromStorage = async () => {
@@ -123,7 +156,7 @@ export function useDashboardData() {
         if (expired && data) {
           console.log('[useDashboardData] Cache expired, will refresh in background');
         }
-      } catch { 
+      } catch {
         // Fallback to regular storage if TTL helper fails
         try {
           const res = await chrome.storage.local.get(['dashboardData'])
@@ -141,8 +174,13 @@ export function useDashboardData() {
         try { await setHostDashboard(synthesized) } catch { }
       }
     }
-    setData(arr)
+
+    // Update data and cache
+    updateData(arr);
+
+    // Only verify loading state if we didn't have cache initially
     setLoadingInitial(false)
+
     // If we already have data locally (items/history/bookmarks), mirror it to the host
     if (arr.length && dashboardData) {
       try { await setHostDashboard(dashboardData) } catch { /* ignore */ }
@@ -176,7 +214,7 @@ export function useDashboardData() {
 
     if (dashboardData && ((dashboardData.history && dashboardData.history.length) || (dashboardData.bookmarks && dashboardData.bookmarks.length))) {
       const arr = normalize(dashboardData)
-      setData(arr)
+      updateData(arr)
       // Mirror enriched dashboard to host so Electron renderer can show categories
       try {
         await setHostDashboard(dashboardData)
@@ -194,7 +232,7 @@ export function useDashboardData() {
         const synthesized = await synthesizeFromWorkspaces();
         const arr = normalize(synthesized);
         if (arr.length) {
-          setData(arr);
+          updateData(arr);
           try { await setHostDashboard(synthesized) } catch { }
         }
       } catch { }
@@ -214,7 +252,7 @@ export function useDashboardData() {
         if (req.dashboardData) {
           try {
             const arr = normalize(req.dashboardData);
-            setData(arr);
+            updateData(arr);
             // Mirror to host in the background (non-blocking)
             try { setHostDashboard(req.dashboardData); } catch { /* ignore */ }
           } catch { /* ignore */ }

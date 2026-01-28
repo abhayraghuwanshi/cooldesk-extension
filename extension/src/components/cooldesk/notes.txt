@@ -1,0 +1,103 @@
+[Activity Debug] Skipping invalid URL: chrome://newtab/
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'E86104888EEFADDFC2EFF3A7E6B113FF', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'E86104888EEFADDFC2EFF3A7E6B113FF', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+realTimeCategorizor-Oy_6OJEe.js:1 [RealTime] 🚀 Initializing Real-Time Categorizor...
+extensionApi-DMOdjac_.js:1 [Unified DB] Opening database: cooldesk-unified-db v2
+main-ByBGBuwx.js:48 [CoolDesk] Module loaded. OverviewDashboard: ƒ qt({savedWorkspaces:p=[],onWorkspaceClick:e,activeWorkspaceId:t,expandedWorkspaceId:r,onAddNote:a,pinnedWorkspaces:o=[],onAddUrl:d}){const[f,b]=i.useState(()=>{try{const h=localStorage.getItem("coold…
+main-ByBGBuwx.js:48 [App] Wallpaper enabled changed to: true
+extensionApi-DMOdjac_.js:1 [Unified DB] Successfully opened database
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'B1E1739DB99E21A20B705A20AC3BB155', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+main-ByBGBuwx.js:48 [CoolDesk] Initializing P2P Service (Lazy)...
+index-BipgzIzV.js:2 Applied base font size: 16px with scale variables
+index-BipgzIzV.js:2 Applied font family: Roboto
+main-ByBGBuwx.js:50 [App] Persisting workspace change: {activeTab: 'workspace', workspace: ''}
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'E86104888EEFADDFC2EFF3A7E6B113FF', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'B1E1739DB99E21A20B705A20AC3BB155', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'E86104888EEFADDFC2EFF3A7E6B113FF', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+realTimeCategorizor-Oy_6OJEe.js:1 [RealTime] Workspace cache initialized with 8 items
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'B1E1739DB99E21A20B705A20AC3BB155', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'E86104888EEFADDFC2EFF3A7E6B113FF', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'B1E1739DB99E21A20B705A20AC3BB155', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'E86104888EEFADDFC2EFF3A7E6B113FF', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'B1E1739DB99E21A20B705A20AC3BB155', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+syncService-DGTAEGnB.js:1 [TabCoordinator] Initialized with tabId: tab_1769593946375_gllck55bfzo
+main-ByBGBuwx.js:50 [App] Initial restoration, UI data: {success: true, lastAutoCreateHash: '["chrome-extension://dolmgalgldegfddhnafmganlbhkga', categoryLastCheck: {…}, id: 'default', lastActiveTab: 'saved', …}
+index-BipgzIzV.js:2 [Team Manager] Initialized with teams: 1
+main-ByBGBuwx.js:48 [synthesizeFromWorkspaces] loaded workspaces: 0 {success: true, data: Array(8)}
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+NotesCanvas-DedaQenp.js:53 [NotesCanvas] Starting consolidated data fetch...
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'B1E1739DB99E21A20B705A20AC3BB155', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+main-ByBGBuwx.js:50 [App] Persisting workspace change: {activeTab: 'saved', workspace: 'Education'}
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+index-BipgzIzV.js:2 [Team Manager] Initialized with teams: 1
+syncService-DGTAEGnB.js:1 [P2P Sync] Connecting to team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b...
+syncService-DGTAEGnB.js:1 [TabCoordinator] Initializing team: 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+syncService-DGTAEGnB.js:1 [TabCoordinator] Starting election for team: 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'B1E1739DB99E21A20B705A20AC3BB155', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+syncService-DGTAEGnB.js:1 [TabCoordinator] Leader announced: tab_1769588296208_hx5tvubzu44
+main-ByBGBuwx.js:48 [synthesizeFromWorkspaces] url docs: 0
+main-ByBGBuwx.js:48 [synthesizeFromWorkspaces] generated bookmarks: 0 []
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'B1E1739DB99E21A20B705A20AC3BB155', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+NotesCanvas-DedaQenp.js:53 [NotesCanvas] Data loaded in 229ms
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
+main-ByBGBuwx.js:50 [App] Workspace persisted successfully
+syncService-DGTAEGnB.js:1 [P2P Sync] Tab coordination initialized
+storageService-KIe388Kl.js:2 [P2P Storage] Initializing storage for team: 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+main-ByBGBuwx.js:50 [App] Full UI state: {success: true, data: {…}}
+main-ByBGBuwx.js:50 [App] UI data: {id: 'default', success: true, lastAutoCreateHash: '["chrome-extension://dolmgalgldegfddhnafmganlbhkga', categoryLastCheck: {…}, lastActiveTab: 'workspace', …}
+main-ByBGBuwx.js:50 [App] Workspace restoration check: {currentWorkspace: 'Education', savedLastWorkspace: '', availableWorkspaces: Array(8)}
+storageService-KIe388Kl.js:2 [P2P Storage] Team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b synced with local storage
+syncService-DGTAEGnB.js:1 [P2P Sync] Leadership check: {isLeader: false, isLeaderTab: false, leaderId: 'tab_1769588296208_hx5tvubzu44', tabId: 'tab_1769593946375_gllck55bfzo'}
+syncService-DGTAEGnB.js:1 [P2P Sync] This tab is a follower, waiting for leader
+main-ByBGBuwx.js:50 [App] Workspace persisted successfully
+main-ByBGBuwx.js:48 [AutoCreate] Hash Check: {hasLastHash: false, lastHash: undefined, currentHash: '831523042', urlCount: 356, match: false}
+realTimeCategorizor-Oy_6OJEe.js:1 [GenericUrlParser] createWorkspacesFromUrls processing: 290 URLs
+realTimeCategorizor-Oy_6OJEe.js:1 [GenericUrlParser] parseMultiple result: {totalGroups: 0, chatgptGroups: 0, stats: {…}}
+realTimeCategorizor-Oy_6OJEe.js:1 [GenericUrlParser] createWorkspacesFromUrls got 0 groups
+realTimeCategorizor-Oy_6OJEe.js:1 [RealTime] ✅ Setup listeners complete. Waiting for tab events...
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {type: 'GET_TAB_ACTIVITY'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'E86104888EEFADDFC2EFF3A7E6B113FF', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+background.js-DgHcaVpQ.js:142 [Background Debug] Received message: {action: 'getWorkspaceData'}
+background.js-DgHcaVpQ.js:142 [Background Debug] Message sender: {id: 'dolmgalgldegfddhnafmganlbhkgapoj', url: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj/index.html', origin: 'chrome-extension://dolmgalgldegfddhnafmganlbhkgapoj', frameId: 0, documentId: 'B1E1739DB99E21A20B705A20AC3BB155', …}
+background.js-DgHcaVpQ.js:142 [Background Debug] Keepalive connection mechanism disabled to prevent connection errors
+extensionApi-CZUTJviN.js:1 [Unified API] listWorkspaces raw count: 8
