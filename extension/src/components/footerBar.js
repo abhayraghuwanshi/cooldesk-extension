@@ -193,7 +193,7 @@ export function injectFooterBar() {
         margin-right: 16px; /* Align visually with center of toggle btn */
       }
 
-      .floating-container:hover .action-btn {
+      .floating-container.expanded .action-btn {
         opacity: 1;
         transform: translateY(0) scale(1);
         pointer-events: auto;
@@ -799,19 +799,28 @@ export function injectFooterBar() {
       }
     };
 
-    // Click handler
+    // Click handler - toggle menu expansion
     toggleBtn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
 
-      // Prevent double-clicks while processing
-      if (toggleBtn.classList.contains('loading')) return;
+      // Toggle expanded state
+      container.classList.toggle('expanded');
 
       // Visual feedback
       toggleBtn.style.transform = 'translateX(-2px) scale(0.95)';
       setTimeout(() => {
         toggleBtn.style.transform = '';
       }, 150);
+    });
+
+    // Double-click handler - open side panel
+    toggleBtn.addEventListener('dblclick', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Prevent double-clicks while processing
+      if (toggleBtn.classList.contains('loading')) return;
 
       // Add loading state
       toggleBtn.classList.add('loading');
@@ -829,6 +838,13 @@ export function injectFooterBar() {
         setTimeout(() => {
           toggleBtn.classList.remove('loading');
         }, 500);
+      }
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!host.contains(e.target)) {
+        container.classList.remove('expanded');
       }
     });
 

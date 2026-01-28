@@ -78,13 +78,13 @@
 }
 
 /* Lists */
-.ProseMirror ul,
+.ProseMirror ul:not([data-type="taskList"]),
 .ProseMirror ol {
     padding: 0 1.5rem;
     margin: 0.5rem 0 0.5rem 0.5rem;
 }
 
-.ProseMirror ul li {
+.ProseMirror ul:not([data-type="taskList"]) li {
     list-style-type: disc;
     margin-bottom: 0.3rem;
 }
@@ -98,95 +98,104 @@
 ul[data-type="taskList"],
 .ProseMirror ul[data-type="taskList"] {
     list-style: none !important;
+    list-style-type: none !important;
     padding: 0 !important;
+    padding-left: 0 !important;
     margin: 0.5rem 0 !important;
+    margin-left: 0 !important;
 }
 
-/* CSS Grid Layout for Task Items - The Robust Fix */
-li[data-type="taskItem"],
-.ProseMirror ul[data-type="taskList"] li[data-type="taskItem"] {
+/* Hide bullet marker on task list items */
+ul[data-type="taskList"] li::marker,
+.ProseMirror ul[data-type="taskList"] li::marker {
+    content: none !important;
+    display: none !important;
+}
+
+/* Task Items - Flexbox Layout for checkbox + text on same line */
+/* Target li elements inside taskList (they have data-checked attribute) */
+ul[data-type="taskList"] > li,
+.ProseMirror ul[data-type="taskList"] > li {
     list-style: none !important;
     list-style-type: none !important;
-    display: grid !important;
-    grid-template-columns: 24px 1fr !important;
-    /* Fixed width for checkbox, rest for text */
-    grid-template-areas: "checkbox content";
-    align-items: start !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
     margin-bottom: 0.4rem !important;
     padding-left: 0 !important;
-    gap: 0;
+    margin-left: 0 !important;
 }
 
-li[data-type="taskItem"] input[type="checkbox"] {
-    grid-area: checkbox;
-    margin: 0;
-    margin-top: 0.35rem;
-    /* Align with first line of text */
+/* Label wrapping the checkbox */
+ul[data-type="taskList"] > li > label {
     flex-shrink: 0;
-    width: 18px;
-    height: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin: 0;
+    margin-top: 0.2rem;
+    width: 20px;
+    height: 20px;
+}
+
+/* Checkbox styling */
+ul[data-type="taskList"] li input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    margin: 0 !important;
+    padding: 0 !important;
 
     /* Visual Styles */
-    appearance: none;
-    -webkit-appearance: none;
-    cursor: pointer;
-    border: 2px solid var(--text-muted, #64748B);
-    border-radius: 6px;
-    background-color: transparent;
-    position: relative;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 2;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    cursor: pointer !important;
+    border: 2px solid var(--text-muted, #64748B) !important;
+    border-radius: 4px !important;
+    background-color: var(--surface-2, #1e1e1e) !important;
+    position: relative !important;
+    display: inline-block !important;
+    vertical-align: middle !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    pointer-events: auto !important;
 }
 
-li[data-type="taskItem"] input[type="checkbox"]:hover {
-    border-color: var(--accent-primary, #8B5CF6);
-    background-color: rgba(139, 92, 246, 0.1);
+ul[data-type="taskList"] li input[type="checkbox"]:hover {
+    border-color: var(--accent-primary, #8B5CF6) !important;
+    background-color: rgba(139, 92, 246, 0.15) !important;
 }
 
-li[data-type="taskItem"] input[type="checkbox"]:checked {
-    background-color: var(--accent-primary, #8B5CF6);
-    border-color: var(--accent-primary, #8B5CF6);
+ul[data-type="taskList"] li input[type="checkbox"]:checked {
+    background-color: var(--accent-primary, #8B5CF6) !important;
+    border-color: var(--accent-primary, #8B5CF6) !important;
 }
 
-li[data-type="taskItem"] input[type="checkbox"]:checked::after {
-    content: '';
-    position: absolute;
-    width: 4px;
-    height: 8px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-    top: 2px;
+ul[data-type="taskList"] li input[type="checkbox"]:checked::after {
+    content: '' !important;
+    position: absolute !important;
+    width: 5px !important;
+    height: 9px !important;
+    border: solid white !important;
+    border-width: 0 2px 2px 0 !important;
+    transform: rotate(45deg) !important;
+    top: 1px !important;
+    left: 5px !important;
+    display: block !important;
 }
 
-li[data-type="taskItem"] label {
-    grid-area: checkbox;
-    margin: 0;
-    margin-top: 0.35rem;
-    width: 18px;
-    height: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-}
-
-/* Fix task item text alignment */
-li[data-type="taskItem"] div {
-    grid-area: content;
+/* Content div - text area next to checkbox */
+ul[data-type="taskList"] > li > div {
+    flex: 1;
     min-width: 0;
-    display: block !important;
-    /* Let text flow naturally in its column */
 }
 
-li[data-type="taskItem"] div p {
+ul[data-type="taskList"] > li > div p {
     margin: 0 !important;
-    line-height: 1.5;
-    width: 100%;
-    display: block !important;
+    line-height: 1.6;
 }
 
 

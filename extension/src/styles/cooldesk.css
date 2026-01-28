@@ -778,11 +778,28 @@
   transform: translateY(0);
 }
 
+/* Grid view action buttons - Hidden by default, show on hover with blur effect */
+.workspace-pin-btn,
+.workspace-delete-btn,
+.workspace-add-btn {
+  background: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  border-radius: 8px !important;
+  opacity: 0 !important;
+  visibility: hidden;
+  transform: scale(0.8);
+  transition: all 0.25s ease !important;
+}
+
 /* Show pin, add, and delete buttons on hover in list view */
 .cooldesk-workspace-card.compact:hover .workspace-pin-btn,
 .cooldesk-workspace-card.compact:hover .workspace-delete-btn,
 .cooldesk-workspace-card.compact:hover .workspace-add-btn {
   opacity: 1 !important;
+  visibility: visible;
+  transform: scale(1);
 }
 
 /* Show pin, add, and delete buttons on hover in grid view */
@@ -790,6 +807,36 @@
 .cooldesk-workspace-card:hover .workspace-delete-btn,
 .cooldesk-workspace-card:hover .workspace-add-btn {
   opacity: 1 !important;
+  visibility: visible;
+  transform: scale(1);
+}
+
+/* Keep pinned button visible when pinned */
+.workspace-pin-btn.pinned {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: scale(1) !important;
+  background: rgba(253, 224, 71, 0.15) !important;
+  border-color: rgba(253, 224, 71, 0.3) !important;
+}
+
+/* Hover states for grid buttons */
+.workspace-add-btn:hover {
+  background: rgba(96, 165, 250, 0.2) !important;
+  border-color: rgba(96, 165, 250, 0.4) !important;
+  transform: scale(1.1) !important;
+}
+
+.workspace-pin-btn:hover {
+  background: rgba(253, 224, 71, 0.2) !important;
+  border-color: rgba(253, 224, 71, 0.4) !important;
+  transform: scale(1.1) !important;
+}
+
+.workspace-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.2) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  transform: scale(1.1) !important;
 }
 
 .workspace-card-header {
@@ -1995,8 +2042,9 @@
 
 /* Compact Workspace Icon */
 .compact-workspace-icon {
-  width: 44px;
-  height: 44px;
+  /* Use font variable for responsive sizing: ~3x the base font size */
+  width: calc(var(--font-3xl) * 1.8);
+  height: calc(var(--font-3xl) * 1.8);
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -2045,8 +2093,9 @@
 
 /* Single URL Icon (not grouped) */
 .compact-url-icon {
-  width: 44px;
-  height: 44px;
+  /* Use font variable for responsive sizing */
+  width: calc(var(--font-3xl) * 1.8);
+  height: calc(var(--font-3xl) * 1.8);
   border-radius: 12px;
   /* background: #fff; */
   border: 1px solid rgba(148, 163, 184, 0.25);
@@ -2067,8 +2116,9 @@
 }
 
 .compact-url-icon img {
-  width: 30px;
-  height: 30px;
+  /* Use font variable for responsive sizing */
+  width: calc(var(--font-2xl) * 1.4);
+  height: calc(var(--font-2xl) * 1.4);
   border-radius: 4px;
   object-fit: cover;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
@@ -2086,9 +2136,10 @@
 
 /* Grouped URL Pill */
 .compact-url-group {
-  min-width: 80px;
-  max-width: 130px;
-  height: 44px;
+  /* Use font variable for responsive sizing */
+  min-width: calc(var(--font-3xl) * 3.2);
+  max-width: calc(var(--font-3xl) * 5.2);
+  height: calc(var(--font-3xl) * 1.8);
   border-radius: 12px;
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.18) 0%, rgba(99, 102, 241, 0.12) 100%);
   border: 1px solid rgba(59, 130, 246, 0.35);
@@ -2111,8 +2162,9 @@
 }
 
 .compact-url-group img {
-  width: 24px;
-  height: 24px;
+  /* Use font variable for responsive sizing */
+  width: calc(var(--font-xl) * 1.5);
+  height: calc(var(--font-xl) * 1.5);
   border-radius: 6px;
   object-fit: cover;
   flex-shrink: 0;
@@ -2135,8 +2187,7 @@
 }
 
 .compact-group-label {
-  font-size: 12px;
-  /* Increased from 11px */
+  font-size: var(--font-sm);
   font-weight: 600;
   color: var(--text-primary, #F1F5F9);
   white-space: nowrap;
@@ -2168,7 +2219,8 @@
   flex-shrink: 0;
   white-space: nowrap;
   transition: all 0.2s ease;
-  height: 44px;
+  /* Use font variable for responsive sizing */
+  height: calc(var(--font-3xl) * 1.8);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2179,47 +2231,70 @@
   color: var(--text-primary, #E5E7EB);
 }
 
-/* Action Buttons (Pin/Delete) */
+/* Action Buttons (Pin/Delete/Add) - Hidden by default, show on hover with blur effect */
 .compact-action-btn {
-  background: transparent;
-  border: none;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
   cursor: pointer;
   padding: 8px;
-  transition: all 0.2s ease;
-  opacity: 0.3;
+  transition: all 0.25s ease;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.8);
   font-size: var(--font-base);
   flex-shrink: 0;
 }
 
 .cooldesk-workspace-card.compact:hover .compact-action-btn {
   opacity: 1;
+  visibility: visible;
+  transform: scale(1);
 }
 
 .compact-action-btn.pin-btn {
-  color: rgba(148, 163, 184, 0.4);
+  color: rgba(148, 163, 184, 0.7);
   margin-left: auto;
 }
 
 .compact-action-btn.pin-btn.pinned {
   color: #FDE047;
+  opacity: 1;
+  visibility: visible;
+  transform: scale(1);
+  background: rgba(253, 224, 71, 0.15);
+  border-color: rgba(253, 224, 71, 0.3);
 }
 
 .compact-action-btn.pin-btn:hover {
   color: #FDE047;
-  opacity: 1;
+  background: rgba(253, 224, 71, 0.2);
+  border-color: rgba(253, 224, 71, 0.4);
+  transform: scale(1.1);
+}
+
+.compact-action-btn.workspace-add-btn {
+  color: rgba(96, 165, 250, 0.7);
+}
+
+.compact-action-btn.workspace-add-btn:hover {
+  color: #60A5FA;
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.4);
+  transform: scale(1.1);
 }
 
 .compact-action-btn.delete-btn {
-  color: rgba(239, 68, 68, 0.4);
+  color: rgba(239, 68, 68, 0.7);
 }
 
 .compact-action-btn.delete-btn:hover {
   color: #EF4444;
-  opacity: 1;
-}
-
-.cooldesk-workspace-card.compact:hover .compact-action-btn {
-  opacity: 1;
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  transform: scale(1.1);
 }
 
 /* Legacy compact styles for backward compatibility */
