@@ -19,11 +19,12 @@ import TaskList from '@tiptap/extension-task-list';
 import Underline from '@tiptap/extension-underline';
 import { BubbleMenu, EditorContent, FloatingMenu, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import './TiptapEditor.css';
-// ... imports
 
 const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) => {
+    // Debounce timer ref for onChange
+    const debounceRef = useRef(null);
 
     const extensions = useMemo(() => [
         StarterKit.configure({
@@ -78,12 +79,22 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
         onChangeRef.current = onChange;
     }, [onChange]);
 
+    // Debounced onChange handler to reduce INP
+    const debouncedOnChange = useCallback((html) => {
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+        }
+        debounceRef.current = setTimeout(() => {
+            onChangeRef.current(html);
+        }, 150); // 150ms debounce for better INP
+    }, []);
+
     const editor = useEditor({
         extensions,
         content: content, // Initial content only
         editable: isEditable,
         onUpdate: ({ editor }) => {
-            onChangeRef.current(editor.getHTML());
+            debouncedOnChange(editor.getHTML());
         },
         editorProps,
     }, []); // Stable dependency array

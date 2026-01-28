@@ -571,7 +571,10 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     // Global shortcuts
     const handleGlobalKeys = (e) => {
       // Focus on '/' if not in an input
-      if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+      if (e.key === '/' &&
+        document.activeElement.tagName !== 'INPUT' &&
+        document.activeElement.tagName !== 'TEXTAREA' &&
+        !document.activeElement.isContentEditable) {
         e.preventDefault();
         inputRef.current?.focus();
       }

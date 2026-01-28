@@ -335,6 +335,10 @@ class P2PStorageService {
 
             // Collect all members and identify duplicates
             membersMap.forEach((member, key) => {
+                if (!member || !member.id) {
+                    console.warn(`[P2P Storage] Found invalid member in team ${teamId}:`, member);
+                    return;
+                }
                 const memberId = member.id.toString();
 
                 if (uniqueMembers.has(memberId)) {

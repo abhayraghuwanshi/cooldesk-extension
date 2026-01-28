@@ -1,4 +1,12 @@
-/* Editor Container */
+/* Performance optimizations */
+.tiptap-editor-container *,
+.tiptap-editor-container *::before,
+.tiptap-editor-container *::after {
+    /* Use GPU acceleration for transforms */
+    will-change: auto;
+}
+
+/* Optimize transitions - only animate specific properties */
 .tiptap-editor-container {
     display: flex;
     flex-direction: column;
@@ -8,6 +16,8 @@
     /* Font smoothing for premium feel */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Contain layout calculations */
+    contain: layout style;
 }
 
 /* Main Content Area */
@@ -17,6 +27,9 @@
     outline: none;
     padding: 0 4px 40px 4px;
     /* Space for scrolling */
+    /* Optimize scrolling performance */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* ProseMirror Core Styles */

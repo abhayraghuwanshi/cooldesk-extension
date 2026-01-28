@@ -11,7 +11,7 @@
   faTrash
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   deleteNote as dbDeleteNote,
   listNotes as dbListNotes,
@@ -27,6 +27,48 @@ import { teamManager } from '../../services/p2p/teamManager';
 import { getFaviconUrl } from '../../utils/helpers';
 import { ShareNoteModal } from '../popups/ShareNoteModal';
 import TiptapEditor from './editor/TiptapEditor';
+
+// Memoized sidebar note item component for better performance
+const SidebarNoteItem = memo(({ note, isActive, onSelect, onDelete }) => (
+  <div
+    onClick={() => onSelect(note)}
+    className={`notes-list-item ${isActive ? 'active' : ''}`}
+  >
+    <div style={{
+      flex: 1,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    }}>
+      {note.url ? (
+        <img
+          src={getFaviconUrl(note.url, 16)}
+          alt=""
+          style={{ width: '14px', height: '14px', borderRadius: '3px', flexShrink: 0 }}
+          onError={(e) => e.target.style.display = 'none'}
+        />
+      ) : (
+        <FontAwesomeIcon icon={faStickyNote} style={{ fontSize: 'var(--font-xs)', opacity: 0.5 }} />
+      )}
+      <span>{note.title || 'Untitled Note'}</span>
+    </div>
+
+    <div className="note-hover-actions">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(note);
+        }}
+        className="icon-btn-danger"
+      >
+        <FontAwesomeIcon icon={faTrash} />
+      </button>
+    </div>
+  </div>
+));
 
 // Default notes to help users understand CoolDesk features
 const DEFAULT_NOTES = [
@@ -126,23 +168,78 @@ const createDefaultNotes = async () => {
   console.log('[NotesCanvas] Created default guide notes');
 };
 
+// Cache key for instant load
+const CACHE_KEY = 'cool_notes_cache_v1';
+
 export function NotesCanvas({ workspaceId }) {
-  const [notes, setNotes] = useState([]);
-  const [urlNotes, setUrlNotes] = useState([]);
-  const [highlights, setHighlights] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeNote, setActiveNote] = useState(null);
-  const [noteContent, setNoteContent] = useState('');
-  const [noteTitle, setNoteTitle] = useState('');
-  const [noteFolder, setNoteFolder] = useState('');
-  const [activeFolder, setActiveFolder] = useState('All Notes');
-  const [expandedFolders, setExpandedFolders] = useState(new Set(['All Notes']));
+  // Try to load from cache synchronously to prevent checking "loading" state
+  const cachedData = useMemo(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      console.warn('Failed to load notes from cache', e);
+    }
+    return null;
+  }, []);
+
+  const [notes, setNotes] = useState(cachedData?.notes || []);
+  const [urlNotes, setUrlNotes] = useState(cachedData?.urlNotes || []);
+  const [highlights, setHighlights] = useState(cachedData?.highlights || []);
+  // If we have cached data, we are NOT loading from a UI perspective (optimistic)
+  // We still fetch in background, but user sees content immediately.
+  const [loading, setLoading] = useState(!cachedData);
+
+  // Derive initial active note state synchronously from cache
+  const initialUIState = useMemo(() => {
+    if (!cachedData) return { activeNote: null, isEditing: false };
+
+    try {
+      const lastActiveId = localStorage.getItem('cool_notes_active_id');
+      const lastActiveFolder = localStorage.getItem('cool_notes_active_folder');
+
+      const allNotes = [...(cachedData.notes || []), ...(cachedData.urlNotes || []), ...(cachedData.highlights || [])];
+      const found = lastActiveId ? allNotes.find(n => n.id === lastActiveId) : null;
+
+      if (found) {
+        return {
+          activeNote: found,
+          noteContent: found.text || '',
+          noteTitle: found.title || '',
+          noteFolder: found.folder || '',
+          noteUrl: found.url || '',
+          isEditing: true,
+          activeFolder: found.folder || lastActiveFolder || 'All Notes',
+          expandedFolders: found.folder ? new Set(['All Notes', found.folder]) : new Set(['All Notes', lastActiveFolder].filter(Boolean))
+        };
+      } else if (lastActiveFolder) {
+        return {
+          activeNote: null,
+          isEditing: false,
+          activeFolder: lastActiveFolder,
+          expandedFolders: new Set(['All Notes', lastActiveFolder])
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to restore UI state from cache', e);
+    }
+    return { activeNote: null, isEditing: false };
+  }, [cachedData]);
+
+  const [activeNote, setActiveNote] = useState(initialUIState.activeNote);
+  const [noteContent, setNoteContent] = useState(initialUIState.noteContent || '');
+  const [noteTitle, setNoteTitle] = useState(initialUIState.noteTitle || '');
+  const [noteFolder, setNoteFolder] = useState(initialUIState.noteFolder || '');
+  const [activeFolder, setActiveFolder] = useState(initialUIState.activeFolder || 'All Notes');
+  const [expandedFolders, setExpandedFolders] = useState(initialUIState.expandedFolders || new Set(['All Notes']));
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState('saved');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSidebar, setShowSidebar] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [noteUrl, setNoteUrl] = useState('');
+  const [isEditing, setIsEditing] = useState(initialUIState.isEditing || false);
+  const [noteUrl, setNoteUrl] = useState(initialUIState.noteUrl || '');
   const [activeTeam, setActiveTeam] = useState(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [deleteConfirmNote, setDeleteConfirmNote] = useState(null);
@@ -271,6 +368,17 @@ export function NotesCanvas({ workspaceId }) {
       setUrlNotes(uniqueUrlNotes);
       setHighlights(uniqueHighlights);
 
+      // Update Cache for next load (Instant Load)
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          notes: workspaceNotes,
+          urlNotes: uniqueUrlNotes,
+          highlights: uniqueHighlights
+        }));
+      } catch (e) {
+        console.warn('[NotesCanvas] Failed to update cache', e);
+      }
+
       // Restore UI State
       try {
         const lastActiveId = localStorage.getItem('cool_notes_active_id');
@@ -377,9 +485,13 @@ export function NotesCanvas({ workspaceId }) {
       }
     };
 
-    initAndSubscribe();
+    // Defer P2P initialization to avoid blocking main thread during initial render
+    const timer = setTimeout(() => {
+      initAndSubscribe();
+    }, 2000);
 
     return () => {
+      clearTimeout(timer);
       isMounted = false;
       unsubscribe();
     };
@@ -414,6 +526,16 @@ export function NotesCanvas({ workspaceId }) {
     return a.localeCompare(b);
   }), [notes]);
 
+  // Memoize workspace folders calculation to avoid re-calculation on every render
+  const sortedWorkspaceFolders = useMemo(() => {
+    // Get unique folders from regular notes, excluding empty/null
+    const workspaceFolders = [...new Set(notes.map(n => n.folder || 'Uncategorized'))].sort();
+    // Ensure Uncategorized is last
+    const sortedFolders = workspaceFolders.filter(f => f !== 'Uncategorized');
+    if (workspaceFolders.includes('Uncategorized')) sortedFolders.push('Uncategorized');
+    return sortedFolders;
+  }, [notes]);
+
   // Filtered notes - show specific lists based on active folder
   const filteredNotes = useMemo(() => {
     if (activeFolder === 'URL Notes') {
@@ -441,7 +563,7 @@ export function NotesCanvas({ workspaceId }) {
   };
 
   // Create note in specific folder
-  const createNewNoteInFolder = (folder) => {
+  const createNewNoteInFolder = useCallback((folder) => {
     setActiveNote(null);
     setNoteContent('');
     setNoteTitle('');
@@ -459,96 +581,11 @@ export function NotesCanvas({ workspaceId }) {
       editorRef.current?.focus();
       if (editorRef.current) editorRef.current.innerHTML = '';
     }, 100);
-  };
+  }, [expandedFolders]);
 
-  // Render sidebar note item
-  const renderSidebarNoteItem = (note) => (
-    <div
-      key={note.id}
-      onClick={() => selectNote(note)}
-      className={`notes-list-item ${activeNote?.id === note.id ? 'active' : ''}`}
-      style={{
-        padding: '6px 12px 6px 36px', // Indented
-        borderRadius: '6px',
-        marginBottom: '1px',
-        background: activeNote?.id === note.id ? 'var(--accent-blue-soft)' : 'transparent',
-        borderLeft: activeNote?.id === note.id ? '2px solid var(--accent-blue)' : '2px solid transparent',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        position: 'relative',
-        fontSize: 'var(--font-sm)',
-        color: activeNote?.id === note.id ? 'var(--text)' : '#e2e8f0'
-      }}
-      onMouseEnter={(e) => {
-        if (activeNote?.id !== note.id) {
-          e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-          e.currentTarget.style.color = 'var(--text)';
-        }
-        const hoverEl = e.currentTarget.querySelector('.note-hover-actions');
-        if (hoverEl) hoverEl.style.opacity = '1';
-      }}
-      onMouseLeave={(e) => {
-        if (activeNote?.id !== note.id) {
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color = 'var(--text-secondary)';
-        }
-        const hoverEl = e.currentTarget.querySelector('.note-hover-actions');
-        if (hoverEl) hoverEl.style.opacity = '0';
-      }}
-    >
-      <div style={{
-        flex: 1,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px'
-      }}>
-        {note.url ? (
-          <img
-            src={getFaviconUrl(note.url, 16)}
-            alt=""
-            style={{ width: '14px', height: '14px', borderRadius: '3px', flexShrink: 0 }}
-            onError={(e) => e.target.style.display = 'none'}
-          />
-        ) : (
-          <FontAwesomeIcon icon={faStickyNote} style={{ fontSize: 'var(--font-xs)', opacity: 0.5 }} />
-        )}
-        <span>{note.title || 'Untitled Note'}</span>
-      </div>
 
-      <div className="note-hover-actions" style={{
-        opacity: 0,
-        display: 'flex',
-        gap: '4px',
-        transition: 'opacity 0.2s'
-      }}>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setDeleteConfirmNote(note);
-          }}
-          className="icon-btn-danger"
-          style={{
-            background: 'none',
-            border: 'none',
-            padding: '2px',
-            color: '#ef4444',
-            cursor: 'pointer',
-            fontSize: 'var(--font-xs)'
-          }}
-        >
-          <FontAwesomeIcon icon={faTrash} />
-        </button>
-      </div>
-    </div>
-  );
 
-  // Auto-save note (workspace or URL note)
+  // Auto-save note (workspace or URL note) - optimized to avoid array.find
   const saveNote = useCallback(async (content, noteId = null) => {
     // Avoid saving empty new notes
     if (!content.trim() && !noteId) return;
@@ -561,23 +598,27 @@ export function NotesCanvas({ workspaceId }) {
       const currentTitle = titleRef.current || extractTitle(content);
       const currentFolder = folderRef.current;
       const currentUrl = urlRef.current;
+      const now = Date.now();
 
       if (isUrlNote) {
-        // Save as URL note
+        // Use activeNote's createdAt if editing existing note
+        const createdAt = noteId && activeNote?.id === noteId ? activeNote.createdAt : now;
+
         const urlNote = {
-          id: noteId || `url_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id: noteId || `url_${now}_${Math.random().toString(36).slice(2, 8)}`,
           url: currentUrl || activeNote?.url || '',
           text: content,
           title: currentTitle,
           folder: 'URL Notes',
           type: 'url',
-          createdAt: noteId ? (urlNotes.find(n => n.id === noteId)?.createdAt || Date.now()) : Date.now(),
-          updatedAt: Date.now()
+          createdAt,
+          updatedAt: now
         };
 
-        await saveUrlNote(urlNote);
+        // Don't await - fire and forget for better INP
+        saveUrlNote(urlNote).catch(err => console.error('[NotesCanvas] Error saving URL note:', err));
 
-        // Update state optimistically instead of full reload
+        // Update state optimistically
         setUrlNotes(prev => {
           const existing = prev.findIndex(n => n.id === urlNote.id);
           if (existing >= 0) {
@@ -592,20 +633,23 @@ export function NotesCanvas({ workspaceId }) {
           setActiveNote(urlNote);
         }
       } else {
-        // Save as regular workspace note
+        // Use activeNote's createdAt if editing existing note
+        const createdAt = noteId && activeNote?.id === noteId ? activeNote.createdAt : now;
+
         const note = {
-          id: noteId || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id: noteId || `${now}_${Math.random().toString(36).slice(2, 8)}`,
           text: content,
           title: currentTitle,
           folder: currentFolder,
           type: 'richtext',
-          createdAt: noteId ? (notes.find(n => n.id === noteId)?.createdAt || Date.now()) : Date.now(),
-          updatedAt: Date.now()
+          createdAt,
+          updatedAt: now
         };
 
-        await dbUpsertNote(note);
+        // Don't await - fire and forget for better INP
+        dbUpsertNote(note).catch(err => console.error('[NotesCanvas] Error saving note:', err));
 
-        // Update state optimistically instead of full reload
+        // Update state optimistically
         setNotes(prev => {
           const existing = prev.findIndex(n => n.id === note.id);
           if (existing >= 0) {
@@ -627,7 +671,7 @@ export function NotesCanvas({ workspaceId }) {
       console.error('[NotesCanvas] Error saving note:', error);
       setAutoSaveStatus('error');
     }
-  }, [notes, urlNotes, activeNote, activeFolder]);
+  }, [activeNote, activeFolder]);
 
   // Refs and Sync Effects moved to top
 
@@ -778,7 +822,7 @@ export function NotesCanvas({ workspaceId }) {
 
 
   // Delete note (workspace or URL note)
-  const handleDeleteNote = async (noteId) => {
+  const handleDeleteNote = useCallback(async (noteId) => {
     try {
       const isUrlNote = activeFolder === 'URL Notes' || activeNote?.url;
 
@@ -799,10 +843,10 @@ export function NotesCanvas({ workspaceId }) {
     } catch (error) {
       console.error('[NotesCanvas] Error deleting note:', error);
     }
-  };
+  }, [activeFolder, activeNote, loadNotes, loadUrlNotes]);
 
   // Select note (workspace or URL note)
-  const selectNote = (note) => {
+  const selectNote = useCallback((note) => {
     setActiveNote(note);
     setNoteContent(note.text || '');
     setNoteTitle(note.title || '');
@@ -815,10 +859,10 @@ export function NotesCanvas({ workspaceId }) {
     if (window.innerWidth < 800) {
       setShowSidebar(false);
     }
-  };
+  }, []);
 
   // Create new note
-  const createNewNote = () => {
+  const createNewNote = useCallback(() => {
     // Cannot create new notes in URL Notes folder - they come from web pages
     if (activeFolder === 'URL Notes') {
       alert('URL notes are created automatically when you add notes to web pages. Switch to a different folder to create a workspace note.');
@@ -837,14 +881,26 @@ export function NotesCanvas({ workspaceId }) {
       editorRef.current?.focus();
       if (editorRef.current) editorRef.current.innerHTML = '';
     }, 100);
-  };
+  }, [activeFolder]);
 
-  const getWordCount = (html) => {
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    const text = temp.textContent || temp.innerText || '';
+  const getWordCount = useCallback((html) => {
+    if (!html) return 0;
+    // Strip HTML tags using regex - faster than creating DOM elements
+    const text = html.replace(/<[^>]*>/g, ' ');
     return text.trim().split(/\s+/).filter(word => word.length > 0).length;
-  };
+  }, []);
+
+  // Render sidebar note item using memoized component
+  // UseCallback dependencies must be defined before this!
+  const renderSidebarNoteItem = useCallback((note) => (
+    <SidebarNoteItem
+      key={note.id}
+      note={note}
+      isActive={activeNote?.id === note.id}
+      onSelect={selectNote}
+      onDelete={setDeleteConfirmNote}
+    />
+  ), [activeNote?.id, selectNote]);
 
   if (loading) {
     return (
@@ -1003,84 +1059,75 @@ export function NotesCanvas({ workspaceId }) {
                 )}
               </div>
 
-              {/* Regular Folders */}
-              {(() => {
-                // Get unique folders from regular notes, excluding empty/null
-                const workspaceFolders = [...new Set(notes.map(n => n.folder || 'Uncategorized'))].sort();
-                // Ensure Uncategorized is last
-                const sortedFolders = workspaceFolders.filter(f => f !== 'Uncategorized');
-                if (workspaceFolders.includes('Uncategorized')) sortedFolders.push('Uncategorized');
+              {sortedWorkspaceFolders.map(folderName => {
+                const folderNotes = notes.filter(n => (n.folder || 'Uncategorized') === folderName);
+                if (folderNotes.length === 0) return null;
 
-                return sortedFolders.map(folderName => {
-                  const folderNotes = notes.filter(n => (n.folder || 'Uncategorized') === folderName);
-                  if (folderNotes.length === 0) return null;
-
-                  return (
-                    <div className="folder-group" key={folderName}>
-                      <div
-                        className={`folder-header ${expandedFolders.has(folderName) ? 'expanded' : ''}`}
-                        onClick={() => toggleFolder(folderName)}
+                return (
+                  <div className="folder-group" key={folderName}>
+                    <div
+                      className={`folder-header ${expandedFolders.has(folderName) ? 'expanded' : ''}`}
+                      onClick={() => toggleFolder(folderName)}
+                      style={{
+                        padding: '8px 10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        color: '#e2e8f0',
+                        fontWeight: 600,
+                        fontSize: 'var(--font-sm)',
+                        userSelect: 'none'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <FontAwesomeIcon
+                        icon={faChevronRight}
                         style={{
-                          padding: '8px 10px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          cursor: 'pointer',
-                          borderRadius: '8px',
-                          color: '#e2e8f0',
-                          fontWeight: 600,
-                          fontSize: 'var(--font-sm)',
-                          userSelect: 'none'
+                          fontSize: 'var(--font-xs)',
+                          transition: 'transform 0.2s',
+                          transform: expandedFolders.has(folderName) ? 'rotate(90deg)' : 'rotate(0deg)',
+                          opacity: 0.7
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      />
+                      <FontAwesomeIcon icon={folderName === 'Uncategorized' ? faStickyNote : faFolder} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderName}</span>
+
+                      {/* Quick Add to Folder */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          createNewNoteInFolder(folderName);
+                        }}
+                        className="folder-add-btn"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'inherit',
+                          padding: '4px',
+                          cursor: 'pointer',
+                          opacity: 0,
+                          transition: 'opacity 0.2s',
+                          marginRight: '4px'
+                        }}
+                        title={`New note in ${folderName}`}
                       >
-                        <FontAwesomeIcon
-                          icon={faChevronRight}
-                          style={{
-                            fontSize: 'var(--font-xs)',
-                            transition: 'transform 0.2s',
-                            transform: expandedFolders.has(folderName) ? 'rotate(90deg)' : 'rotate(0deg)',
-                            opacity: 0.7
-                          }}
-                        />
-                        <FontAwesomeIcon icon={folderName === 'Uncategorized' ? faStickyNote : faFolder} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderName}</span>
+                        <FontAwesomeIcon icon={faPlus} style={{ fontSize: 'var(--font-xs)' }} />
+                      </button>
 
-                        {/* Quick Add to Folder */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            createNewNoteInFolder(folderName);
-                          }}
-                          className="folder-add-btn"
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'inherit',
-                            padding: '4px',
-                            cursor: 'pointer',
-                            opacity: 0,
-                            transition: 'opacity 0.2s',
-                            marginRight: '4px'
-                          }}
-                          title={`New note in ${folderName}`}
-                        >
-                          <FontAwesomeIcon icon={faPlus} style={{ fontSize: 'var(--font-xs)' }} />
-                        </button>
-
-                        <span className="note-count">{folderNotes.length}</span>
-                      </div>
-
-                      {expandedFolders.has(folderName) && (
-                        <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          {folderNotes.map(note => renderSidebarNoteItem(note))}
-                        </div>
-                      )}
+                      <span className="note-count">{folderNotes.length}</span>
                     </div>
-                  );
-                });
-              })()}
+
+                    {expandedFolders.has(folderName) && (
+                      <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        {folderNotes.map(note => renderSidebarNoteItem(note))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

@@ -141,3 +141,52 @@ button:focus-visible {
 }
 
 /* Removed conflicting mobile responsive rules - now handled in JavaScript */
+
+/* Notes Sidebar Item Styles Optimized */
+.notes-list-item {
+  padding: 6px 12px 6px 36px;
+  border-radius: 6px;
+  margin-bottom: 1px;
+  background: transparent;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  font-size: 0.875rem;
+  /* var(--font-sm) */
+  color: #e2e8f0;
+}
+
+.notes-list-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text, #fff);
+}
+
+.notes-list-item.active {
+  background: var(--accent-blue-soft, rgba(59, 130, 246, 0.15));
+  border-left-color: var(--accent-blue, #3b82f6);
+  color: var(--text, #fff);
+}
+
+.notes-list-item .note-hover-actions {
+  opacity: 0;
+  display: flex;
+  gap: 4px;
+  transition: opacity 0.15s;
+}
+
+.notes-list-item:hover .note-hover-actions {
+  opacity: 1;
+}
+
+.icon-btn-danger {
+  background: none;
+  border: none;
+  padding: 2px;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
