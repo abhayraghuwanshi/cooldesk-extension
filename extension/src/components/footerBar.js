@@ -1516,6 +1516,11 @@ let isTableVisible = false; // New state for table view
 let excludedPatterns = new Set(); // New state for path patterns
 let includedPatterns = new Set(); // New state for path patterns (whitelist)
 let manuallyExcludedUrls = new Set(); // New state for individual URL exclusion
+// State for auto-scrape observers
+let autoScrapeObserver = null;
+let lastAutoScrapeUrl = '';
+let autoScrapeTimeout = null;
+let isObserverActive = false;
 let selectOverlay = null;
 let selectTooltip = null;
 let highlightedLink = null;
@@ -3146,10 +3151,74 @@ async function autoScrapeIfConfigured() {
       sendScrapedLinks(links, config);
     }
 
+    // Setup persistent observers for SPA navigation and dynamic updates
+    if (!isObserverActive) {
+      setupAutoScrapeObservers(config);
+    }
+
     return links;
   } catch (error) {
     console.error('[CoolDesk Scraper] Auto-scrape failed:', error);
     return null;
+  }
+}
+
+/**
+ * Setup observers for dynamic content changes
+ */
+function setupAutoScrapeObservers(config) {
+  if (isObserverActive) return;
+  isObserverActive = true;
+  lastAutoScrapeUrl = window.location.href;
+
+  console.log('[CoolDesk Scraper] Setting up dynamic observers for', config.container || 'document');
+
+  const debouncedScrape = () => {
+    if (autoScrapeTimeout) clearTimeout(autoScrapeTimeout);
+    autoScrapeTimeout = setTimeout(() => {
+      console.log('[CoolDesk Scraper] Dynamic update detected, re-scraping...');
+      autoScrapeIfConfigured();
+    }, 4000); // 4s debounce to allow titles to settle
+  };
+
+  // 1. URL Change Polling (reliable for SPAs)
+  setInterval(() => {
+    if (window.location.href !== lastAutoScrapeUrl) {
+      lastAutoScrapeUrl = window.location.href;
+      console.log('[CoolDesk Scraper] URL changed, triggering scrape...');
+      debouncedScrape();
+    }
+  }, 2000);
+
+  // 2. DOM Mutation Observer (for sidebar updates/renames)
+  if (config.container || config.selector) {
+    try {
+      // Use container if available, else try to find common parent of selector
+      const targetSelector = config.container || 'body';
+      const targetNode = document.querySelector(targetSelector) || document.body;
+
+      autoScrapeObserver = new MutationObserver((mutations) => {
+        // Filter for meaningful changes (text updates or added nodes)
+        const meaningful = mutations.some(m =>
+          m.type === 'childList' ||
+          (m.type === 'characterData' && m.target.parentNode.tagName !== 'STYLE' && m.target.parentNode.tagName !== 'SCRIPT')
+        );
+
+        if (meaningful) {
+          debouncedScrape();
+        }
+      });
+
+      autoScrapeObserver.observe(targetNode, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: false
+      });
+      console.log('[CoolDesk Scraper] DOM Observer attached to', targetSelector);
+    } catch (e) {
+      console.warn('[CoolDesk Scraper] Failed to attach DOM observer:', e);
+    }
   }
 }
 
