@@ -1085,30 +1085,45 @@ async function main() {
               request.onerror = () => reject(request.error);
             });
 
-            const existingIds = new Set(existingLinks.map(l => l.chatId || l.linkId));
+            const existingMap = new Map(existingLinks.map(l => [l.chatId || l.linkId, l]));
 
-            // Filter to only new links
-            const newLinks = result.links.filter(link => {
+            // Filter to new or updated links (title change)
+            const linksToSave = result.links.filter(link => {
               const id = link.linkId || link.chatId;
-              return id && !existingIds.has(id);
+              if (!id) return false;
+
+              // If new, save it
+              if (!existingMap.has(id)) return true;
+
+              // If title changed, save it
+              const existing = existingMap.get(id);
+              if (existing.title !== link.title) return true;
+
+              return false;
             });
 
-            console.log(`[Background] Found ${existingLinks.length} existing, ${newLinks.length} new links`);
+            console.log(`[Background] Found ${existingLinks.length} existing, ${linksToSave.length} to save (new/updated)`);
 
-            if (newLinks.length > 0) {
-              // Store new links in IndexedDB (use chatId field for compatibility)
+            if (linksToSave.length > 0) {
+              // Store new/updated links in IndexedDB
               const writeTx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS, DB_CONFIG.STORES.UI_STATE], 'readwrite');
               const writeStore = writeTx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
 
-              for (const link of newLinks) {
-                // Normalize to use chatId as key (for compatibility with existing store)
+              for (const link of linksToSave) {
+                const id = link.linkId || link.chatId;
+                const existing = existingMap.get(id);
+
+                // Preserve original scrapedAt if updating, unless it's a very old entry? 
+                // Actually, if we update title, we probably want to update timestamp to bring it to top?
+                // Let's stick to updating timestamp so it feels "fresh".
+
                 const entry = {
-                  chatId: link.linkId || link.chatId,
+                  chatId: id,
                   url: link.url,
                   title: link.title,
                   platform: result.platform,
                   hostname: result.hostname,
-                  scrapedAt: link.scrapedAt || Date.now(),
+                  scrapedAt: Date.now(), // Always bump timestamp on update so it floats to top
                   source: 'click-to-scrape'
                 };
                 writeStore.put(entry);
@@ -1528,8 +1543,8 @@ async function main() {
           console.log(`[Background] Found ${targetTabs.length} chat tabs to scrape`);
           let triggeredCount = 0;
 
-          // Send scrape command to each tab
-          const promises = targetTabs.map(async (tab) => {
+          // Send scrape command to each tab sequentially with delay to avoid CPU spike
+          for (const tab of targetTabs) {
             try {
               // Check if we can inject/message this tab
               await chrome.tabs.sendMessage(tab.id, { type: 'SCRAPE_NEW_CHATS' });
@@ -1538,9 +1553,9 @@ async function main() {
             } catch (e) {
               console.log(`[Background] Failed to trigger scrape on tab ${tab.id} (may need reload):`, e);
             }
-          });
-
-          await Promise.all(promises);
+            // Add small delay between triggers
+            await new Promise(r => setTimeout(r, 1500));
+          }
 
           sendResponse({
             success: true,
@@ -1592,6 +1607,8 @@ async function main() {
               });
               openedCount++;
             }
+            // Add significant delay between opening heavy AI apps
+            await new Promise(r => setTimeout(r, 2000));
           }
 
           sendResponse({ success: true, openedCount });

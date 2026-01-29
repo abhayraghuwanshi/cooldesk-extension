@@ -1444,10 +1444,77 @@ export function injectFooterBar() {
  * Allows users to click on any link to scrape all similar links
  */
 
+/**
+ * Predefined Selectors for common platforms
+ * Allows auto-scraping without manual selection
+ */
+const PREDEFINED_SELECTORS = {
+  // GitHub
+  'github.com': [
+    // File list
+    {
+      selector: '.js-navigation-container .js-navigation-item .js-navigation-open[href]',
+      container: '.js-navigation-container',
+      links: '.js-navigation-item .js-navigation-open[href]',
+      description: 'GitHub File List',
+      scrapeLimit: 100
+    },
+    // Issue/PR list
+    {
+      selector: '.js-issue-row .js-navigation-open[href]',
+      container: '.js-navigation-container',
+      links: '.js-issue-row .js-navigation-open[href]',
+      description: 'GitHub Issues/PRs',
+      scrapeLimit: 50
+    }
+  ],
+  // Hacker News
+  'news.ycombinator.com': [
+    {
+      selector: '.athing .titleline > a',
+      container: '#hnmain',
+      links: '.athing .titleline > a',
+      description: 'Hacker News Stories',
+      scrapeLimit: 30
+    }
+  ],
+  // Stack Overflow
+  'stackoverflow.com': [
+    {
+      selector: '.s-post-summary--content-title a.s-link',
+      container: '#questions',
+      links: '.s-post-summary--content-title a.s-link',
+      description: 'StackOverflow Questions',
+      scrapeLimit: 50
+    }
+  ],
+  // YouTube (Generic fallback, hard due to Shadow DOM but worth a try)
+  'youtube.com': [
+    {
+      selector: 'ytd-rich-grid-media #video-title-link',
+      container: 'ytd-rich-grid-renderer',
+      links: '#video-title-link',
+      description: 'YouTube Home Videos',
+      scrapeLimit: 20
+    }
+  ],
+  // Wikipedia
+  'wikipedia.org': [
+    {
+      selector: '#mw-content-text ul li a[href^="/wiki/"]:not(.new)',
+      container: '#mw-content-text',
+      links: 'ul li a[href^="/wiki/"]:not(.new)',
+      description: 'Wikipedia List Links',
+      scrapeLimit: 100
+    }
+  ]
+};
+
 let isSelectMode = false;
 let isSelectionLocked = false;
 let isTableVisible = false; // New state for table view
 let excludedPatterns = new Set(); // New state for path patterns
+let includedPatterns = new Set(); // New state for path patterns (whitelist)
 let manuallyExcludedUrls = new Set(); // New state for individual URL exclusion
 let selectOverlay = null;
 let selectTooltip = null;
@@ -1960,25 +2027,97 @@ function detectPlatformName() {
 }
 
 /**
- * Save selector for domain
+ * Save selector for domain with filters
  */
 async function saveSelectorForDomain(selectorInfo) {
   const hostKey = getHostKey();
   try {
     const result = await chrome.storage.local.get('domainSelectors');
     const selectors = result.domainSelectors || {};
-    selectors[hostKey] = {
+
+    // Create new config object
+    const newConfig = {
       selector: selectorInfo.full,
       container: selectorInfo.container,
       links: selectorInfo.links,
       sample: selectorInfo.sample,
       savedAt: Date.now(),
+      // Save filters
+      excludedDomains: Array.from(selectorInfo.excludedDomains || []),
+      excludedPatterns: Array.from(selectorInfo.excludedPatterns || []),
+      includedPatterns: Array.from(selectorInfo.includedPatterns || []),
+      scrapeLimit: selectorInfo.scrapeLimit || 0
     };
+
+    selectors[hostKey] = newConfig;
+
     await chrome.storage.local.set({ domainSelectors: selectors });
-    console.log(`[CoolDesk Scraper] Saved selector for ${hostKey}:`, selectorInfo.full);
+    console.log(`[CoolDesk Scraper] Saved selector & filters for ${hostKey}:`, newConfig);
   } catch (error) {
     console.error('[CoolDesk Scraper] Failed to save selector:', error);
   }
+}
+
+/**
+ * Process raw links with filters
+ * Centralized logic for filtering links by domain, pattern, and limit
+ */
+function processScrapedLinks(rawLinks, settings = {}) {
+  const {
+    excludedDomains = new Set(),
+    excludedPatterns = new Set(),
+    includedPatterns = new Set(),
+    scrapeLimit = 0
+  } = settings;
+
+  // Ensure sets
+  const exDomains = excludedDomains instanceof Set ? excludedDomains : new Set(excludedDomains);
+  const exPatterns = excludedPatterns instanceof Set ? excludedPatterns : new Set(excludedPatterns);
+  const inPatterns = includedPatterns instanceof Set ? includedPatterns : new Set(includedPatterns);
+
+  // 1. Filter by Domain
+  let filtered = rawLinks.filter(l => {
+    try {
+      const domain = new URL(l.url).hostname.replace(/^www\./, '');
+      if (exDomains.size > 0 && exDomains.has(domain)) return false;
+      return true;
+    } catch { return false; }
+  });
+
+  // 2. Filter by Pattern
+
+  // A. Whitelist (Included Patterns) - Strict Include
+  if (inPatterns.size > 0) {
+    filtered = filtered.filter(l => {
+      // Must match at least one included pattern
+      for (const pattern of inPatterns) {
+        if (urlMatchesPattern(l.url, pattern)) return true;
+      }
+      return false;
+    });
+  }
+
+  // B. Blacklist (Excluded Patterns)
+  if (exPatterns.size > 0) {
+    filtered = filtered.filter(l => {
+      for (const pattern of exPatterns) {
+        if (urlMatchesPattern(l.url, pattern)) return false;
+      }
+      return true;
+    });
+  }
+
+  // 3. Apply Limit (slice from end for newest/most relevant usually)
+  const total = filtered.length;
+  if (scrapeLimit > 0 && total > scrapeLimit) {
+    filtered = filtered.slice(-scrapeLimit);
+  }
+
+  return {
+    links: filtered,
+    totalAvailable: total,
+    finalCount: filtered.length
+  };
 }
 
 /**
@@ -2247,6 +2386,7 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
     // Ensure state sets exist
     if (!excludedDomains) excludedDomains = new Set();
     if (!excludedPatterns) excludedPatterns = new Set();
+    if (!includedPatterns) includedPatterns = new Set();
 
     if (selectorInfo && selectorInfo.full) {
       // 1. Filter by Domain first
@@ -2256,24 +2396,17 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
       const patterns = analyzePathPatterns(domainFilteredLinks);
       showPatterns = patterns.length > 1;
 
-      // 3. Calculate final count (filtering by patterns)
-      finalLinks = domainFilteredLinks.filter(l => {
-        if (excludedPatterns.size > 0) {
-          for (const pattern of excludedPatterns) {
-            if (urlMatchesPattern(l.url, pattern)) return false;
-          }
-        }
-        return true;
+      // Use centralized processing
+      const processed = processScrapedLinks(domainFilteredLinks, {
+        excludedDomains: excludedDomains,
+        excludedPatterns: excludedPatterns,
+        includedPatterns: includedPatterns,
+        scrapeLimit: scrapeLimit
       });
 
-      totalAvailable = finalLinks.length;
-
-      // 4. Apply Limit (slice from end for newest)
-      if (scrapeLimit > 0 && finalLinks.length > scrapeLimit) {
-        finalLinks = finalLinks.slice(-scrapeLimit);
-      }
-
-      finalCount = finalLinks.length;
+      finalLinks = processed.links;
+      totalAvailable = processed.totalAvailable;
+      finalCount = processed.finalCount;
 
       // --- Generate Filter HTML ---
 
@@ -2589,6 +2722,7 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
       e.preventDefault();
       e.stopPropagation();
       excludedPatterns.clear();
+      includedPatterns.clear();
       renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
     };
   }
@@ -2672,11 +2806,17 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
     confirmBtn.onclick = (e) => {
       e.stopPropagation();
 
-      const outputSelector = selectorInfo; // captured from closure
+      // Add filters to selector info for saving (Convert Sets to Arrays for JSON/Messaging)
+      const saveInfo = {
+        ...selectorInfo,
+        excludedDomains: Array.from(excludedDomains),
+        excludedPatterns: Array.from(excludedPatterns),
+        includedPatterns: Array.from(includedPatterns),
+        scrapeLimit: scrapeLimit
+      };
 
-      // UI Feedback
-      confirmBtn.textContent = 'Sending...';
-      confirmBtn.style.opacity = '0.7';
+      // Auto-save the config with filters!
+      saveSelectorForDomain(saveInfo);
 
       // Use filtered links (finalLinks) instead of re-scraping
       const results = finalLinks;
@@ -2685,8 +2825,8 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
         currentShowNotification(`✓ Scraped ${results.length} links!`, '#10b981');
       }
 
-      // Send
-      sendScrapedLinks(results, outputSelector);
+      // Send updated config to background
+      sendScrapedLinks(results, saveInfo);
 
       // Exit
       setTimeout(() => exitLinkSelectMode(), 500);
@@ -2928,6 +3068,7 @@ function exitLinkSelectMode() {
   isSelectionLocked = false;
   isTableVisible = false;
   excludedPatterns.clear();
+  includedPatterns.clear();
   manuallyExcludedUrls.clear();
   unhighlightLink();
   removeSelectOverlay();
@@ -2947,27 +3088,62 @@ function exitLinkSelectMode() {
 }
 
 /**
- * Auto-scrape if saved selector exists for this domain
+ * Auto-scrape if saved selector exists or predefined config matches
  */
 async function autoScrapeIfConfigured() {
   try {
     const hostKey = getHostKey();
+
+    // 1. Check Saved Configs (Higher priority)
     const result = await chrome.storage.local.get('domainSelectors');
     const selectors = result.domainSelectors || {};
-    const saved = selectors[hostKey];
+    let config = selectors[hostKey];
+    let source = 'saved';
 
-    if (!saved) return null;
+    // 2. Check Predefined Configs (Fallback)
+    if (!config) {
+      // Check exact match or loop for partial match logic if needed
+      // For now, strict domain matching
+      const predefinedEntry = Object.entries(PREDEFINED_SELECTORS).find(([domain]) => hostKey.endsWith(domain));
+      if (predefinedEntry) {
+        // Use the first predefined selector for this domain
+        config = predefinedEntry[1][0];
+        source = 'predefined';
+      }
+    }
 
-    console.log(`[CoolDesk Scraper] Auto-scraping ${hostKey} with saved selector`);
+    if (!config) return null;
 
-    // Wait for page to load
+    console.log(`[CoolDesk Scraper] Auto-scraping ${hostKey} using ${source} config`, config);
+
+    // Wait for page to load dynamic content
     await new Promise(resolve => setTimeout(resolve, 2500));
 
-    const links = scrapeWithSelector(saved.selector);
+    // Scrape raw
+    const rawLinks = scrapeWithSelector(config.selector);
+
+    if (rawLinks.length === 0) {
+      console.log('[CoolDesk Scraper] No links found with auto-config');
+      return null;
+    }
+
+    // Apply Filters (Saved or Default)
+    const processed = processScrapedLinks(rawLinks, {
+      excludedDomains: config.excludedDomains || [],
+      excludedPatterns: config.excludedPatterns || [],
+      includedPatterns: config.includedPatterns || [],
+      scrapeLimit: config.scrapeLimit || 0
+    });
+
+    const links = processed.links;
 
     if (links.length > 0) {
-      console.log(`[CoolDesk Scraper] Auto-scraped ${links.length} links`);
-      sendScrapedLinks(links, saved);
+      console.log(`[CoolDesk Scraper] Auto-scraped ${links.length} links (${processed.totalAvailable} raw)`);
+
+      // If using predefined, we might want to save it? 
+      // Maybe not, let user decide to customize.
+
+      sendScrapedLinks(links, config);
     }
 
     return links;
@@ -2979,12 +3155,23 @@ async function autoScrapeIfConfigured() {
 
 // Auto-scrape on page load (after a delay)
 if (typeof window !== 'undefined') {
+  const initAutoScrape = () => {
+    if ('requestIdleCallback' in window) {
+      // Wait for idle time, with a max timeout
+      requestIdleCallback(() => {
+        // Still keep a small delay to ensure rendering is settled
+        setTimeout(autoScrapeIfConfigured, 3000);
+      }, { timeout: 10000 });
+    } else {
+      // Fallback
+      setTimeout(autoScrapeIfConfigured, 4000);
+    }
+  };
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      setTimeout(autoScrapeIfConfigured, 3000);
-    });
+    document.addEventListener('DOMContentLoaded', initAutoScrape);
   } else {
-    setTimeout(autoScrapeIfConfigured, 3000);
+    initAutoScrape();
   }
 }
 

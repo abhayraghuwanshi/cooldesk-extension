@@ -79,7 +79,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     esbuild: {
-      drop: ['console', 'debugger'],
+      // drop: ['console', 'debugger'],
       legalComments: 'none'
     },
     define: {
