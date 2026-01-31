@@ -138,6 +138,49 @@ const PLATFORM_CONFIGS = {
       return match ? match[1] : null;
     },
   },
+  'figma.com': {
+    name: 'Figma',
+    urlPrefix: '/design/',
+    selectors: {
+      // Figma Dashboard: role="listitem" or cards with specific classes
+      chatItems: '[role="listitem"], .card-primitive__root__h5a39, [class*="card-primitive__root"]',
+      titleElement: 'h2, [aria-label], .xxrns5j, .card-primitive__interactive__9-8aA',
+      titleAttribute: 'aria-label',
+      waitFor: '[role="listitem"], .card-primitive__root__h5a39',
+    },
+    extractChatId: (element) => {
+      // If it's just a string (href), extract the ID from it
+      if (typeof element === 'string') {
+        const match = element.match(/\/(?:file|design)\/([a-zA-Z0-9-]+)/);
+        return match ? match[1] : null;
+      }
+
+      // If it's an element (card)
+      // 1. Try to find a link inside
+      const link = element.querySelector('a[href*="/file/"], a[href*="/design/"]');
+      if (link) {
+        const href = link.getAttribute('href');
+        const match = href.match(/\/(?:file|design)\/([a-zA-Z0-9-]+)/);
+        if (match) return match[1];
+      }
+
+      // 2. Try thumbnail ID (very reliable in Figma)
+      const img = element.querySelector('img[src*="/thumbnails/"]');
+      if (img) {
+        const src = img.getAttribute('src');
+        const match = src.match(/\/thumbnails\/([a-f0-9-]+)/);
+        if (match) return match[1];
+      }
+
+      // 3. Try to find it in data-testid or aria-labelledby context
+      const titleSpan = element.querySelector('[data-testid="thumbnail-container"]');
+      if (titleSpan && titleSpan.nextElementSibling) {
+        // IDs are sometimes hidden in siblings
+      }
+
+      return null;
+    },
+  },
 };
 
 /**
@@ -271,16 +314,26 @@ async function scrapeChats() {
             return;
           }
 
-          // For Grok, find the link inside the container
-          const link = element.querySelector('a[href*="/c/"]');
-          if (link) {
-            const linkHref = link.getAttribute('href');
-            url = linkHref.startsWith('http') ? linkHref : `${window.location.origin}${linkHref}`;
-            console.log(`[ChatScraper] Chat ${index}: Found link in container, url="${url}"`);
-          } else {
-            // For Gemini or if no link found, construct URL from chat ID
-            url = `${window.location.origin}/app/${chatId}`;
-            console.log(`[ChatScraper] Chat ${index}: No link found, constructed url="${url}"`);
+          // Dynamic Discovery: Search the document for ANY link containing this ID
+          // This avoids hardcoding platform-specific URL structures
+          const id = extractIdFromElement(element);
+          if (id) {
+            const foundLink = document.querySelector(`a[href*="${id}"]`);
+            if (foundLink) {
+              url = foundLink.href;
+            } else if (window.location.hostname.includes('figma.com')) {
+              // Minimal fallback for Figma cards where links are only active on click
+              url = `${window.location.origin}/design/${id}`;
+            } else if (window.location.hostname.includes('gemini.google.com')) {
+              url = `${window.location.origin}/app/${id}`;
+            }
+          }
+
+          if (!url) {
+            // Fallback to constructing URL if not found dynamically
+            const prefix = config.urlPrefix || '/app/';
+            url = `${window.location.origin}${prefix}${chatId}`;
+            console.log(`[ChatScraper] Chat ${index}: Constructed url="${url}"`);
           }
         }
 
@@ -494,14 +547,26 @@ async function scrapeNewChats() {
             return;
           }
 
-          // For Grok, find the link inside the container
-          const link = element.querySelector('a[href*="/c/"]');
-          if (link) {
-            const linkHref = link.getAttribute('href');
-            url = linkHref.startsWith('http') ? linkHref : `${window.location.origin}${linkHref}`;
-          } else {
-            // For Gemini or if no link found, construct URL from chat ID
-            url = `${window.location.origin}/app/${chatId}`;
+          // Dynamic Discovery: Search the document for ANY link containing this ID
+          // This avoids hardcoding platform-specific URL structures
+          const id = extractIdFromElement(element);
+          if (id) {
+            const foundLink = document.querySelector(`a[href*="${id}"]`);
+            if (foundLink) {
+              url = foundLink.href;
+            } else if (window.location.hostname.includes('figma.com')) {
+              // Minimal fallback for Figma cards where links are only active on click
+              url = `${window.location.origin}/design/${id}`;
+            } else if (window.location.hostname.includes('gemini.google.com')) {
+              url = `${window.location.origin}/app/${id}`;
+            }
+          }
+
+          if (!url) {
+            // Fallback to constructing URL if not found dynamically
+            const prefix = config.urlPrefix || '/app/';
+            url = `${window.location.origin}${prefix}${chatId}`;
+            console.log(`[ChatScraper] Chat ${index}: Constructed url="${url}"`);
           }
         }
 
@@ -580,6 +645,17 @@ async function scrapeNewChats() {
  */
 let autoScrapeTimeout = null;
 async function autoScrape() {
+  // Check if auto-scraping is enabled in settings
+  try {
+    const settings = await chrome.storage.local.get(['autoScrapeEnabled']);
+    if (settings.autoScrapeEnabled === false) {
+      console.log('[ChatScraper] Auto-scraping is disabled in settings');
+      return;
+    }
+  } catch (e) {
+    console.debug('[ChatScraper] Could not check autoScrapeEnabled setting, defaulting to enabled');
+  }
+
   // Clear any pending auto-scrape
   if (autoScrapeTimeout) {
     clearTimeout(autoScrapeTimeout);
@@ -707,6 +783,26 @@ new MutationObserver(() => {
  */
 
 /**
+ * Helper to extract an ID from an element (for dynamic URL discovery)
+ */
+function extractIdFromElement(el) {
+  // Try platform specific ID targets
+  if (window.location.hostname.includes('figma.com')) {
+    const img = el.querySelector('img[src*="/thumbnails/"]');
+    if (img) {
+      const match = img.src.match(/\/thumbnails\/([a-f0-9-]+)/);
+      if (match) return match[1];
+    }
+  }
+
+  // Try common ID attributes
+  const idAttr = el.id || el.getAttribute('data-id') || el.getAttribute('data-chat-id');
+  if (idAttr) return idAttr;
+
+  return null;
+}
+
+/**
  * Check if current site has a specific config or needs generic scraping
  */
 function hasSpecificConfig() {
@@ -801,7 +897,7 @@ async function scrapeLinksGeneric(options = {}) {
 }
 
 /**
- * Extract an ID from any URL
+ * Extract an ID from URL
  */
 function extractGenericId(url) {
   try {

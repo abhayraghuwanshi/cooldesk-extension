@@ -1,4 +1,4 @@
-import { faArrowRight, faPlus, faSync, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faAngleRight, faArrowRight, faGear, faPlus, faSync, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
@@ -23,6 +23,7 @@ const PLATFORM_STYLES = {
   'Perplexity': { color: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#A7F3D0', hoverBg: 'rgba(16, 185, 129, 0.25)', hoverBorder: 'rgba(16, 185, 129, 0.5)' },
   'AI Studio': { color: 'rgba(66, 133, 244, 0.15)', borderColor: 'rgba(66, 133, 244, 0.3)', textColor: '#93C5FD', hoverBg: 'rgba(66, 133, 244, 0.25)', hoverBorder: 'rgba(66, 133, 244, 0.5)' },
   'Lovable': { color: 'rgba(167, 139, 250, 0.15)', borderColor: 'rgba(167, 139, 250, 0.3)', textColor: '#C4B5FD', hoverBg: 'rgba(167, 139, 250, 0.25)', hoverBorder: 'rgba(167, 139, 250, 0.5)' },
+  'Figma': { color: 'rgba(242, 78, 30, 0.15)', borderColor: 'rgba(242, 78, 30, 0.3)', textColor: '#FF8A65', hoverBg: 'rgba(242, 78, 30, 0.25)', hoverBorder: 'rgba(242, 78, 30, 0.5)' },
 };
 
 // Default style for unknown platforms
@@ -47,6 +48,30 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [scrapedPlatforms, setScrapedPlatforms] = useState([]);
   const [activePlatformFilter, setActivePlatformFilter] = useState(null); // Filter by platform
+  const [autoScrapeEnabled, setAutoScrapeEnabled] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showPlatformConfig, setShowPlatformConfig] = useState(false);
+  const [importConfig, setImportConfig] = useState('');
+  const [importStatus, setImportStatus] = useState({ type: '', message: '' });
+  const [customSelectors, setCustomSelectors] = useState({});
+  const [allowedDomains, setAllowedDomains] = useState([]);
+  const [newDomain, setNewDomain] = useState('');
+  const [scrapingStats, setScrapingStats] = useState({});
+
+  const BUILT_IN_PLATFORMS = [
+    { name: 'ChatGPT', domains: ['chatgpt.com', 'chat.openai.com'], type: 'AI Chat' },
+    { name: 'Claude', domains: ['claude.ai'], type: 'AI Chat' },
+    { name: 'Gemini', domains: ['gemini.google.com'], type: 'AI Chat' },
+    { name: 'Grok', domains: ['grok.com'], type: 'AI Chat' },
+    { name: 'Perplexity', domains: ['perplexity.ai'], type: 'AI Search' },
+    { name: 'AI Studio', domains: ['aistudio.google.com'], type: 'AI Dev' },
+    { name: 'Lovable', domains: ['lovable.dev'], type: 'AI Dev' },
+    { name: 'GitHub', domains: ['github.com'], type: 'Development' },
+    { name: 'Vercel', domains: ['vercel.com'], type: 'Development' },
+    { name: 'Figma', domains: ['figma.com'], type: 'Design' },
+    { name: 'Hacker News', domains: ['news.ycombinator.com'], type: 'Social' },
+    { name: 'Stack Overflow', domains: ['stackoverflow.com'], type: 'Development' },
+  ];
 
   // Load saved links from storage
   const loadSavedLinks = useCallback(() => {
@@ -147,10 +172,138 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
     }
   }, [maxItems]);
 
+  // Load settings from storage
+  const loadSettings = useCallback(async () => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        const result = await chrome.storage.local.get(['autoScrapeEnabled', 'domainSelectors', 'genericScraperAllowlist']);
+        if (result.autoScrapeEnabled !== undefined) {
+          setAutoScrapeEnabled(result.autoScrapeEnabled);
+        }
+        if (result.domainSelectors) {
+          setCustomSelectors(result.domainSelectors);
+        }
+        if (result.genericScraperAllowlist) {
+          setAllowedDomains(result.genericScraperAllowlist);
+        }
+      } else {
+        const stored = localStorage.getItem('autoScrapeEnabled');
+        if (stored !== null) {
+          setAutoScrapeEnabled(stored === 'true');
+        }
+      }
+    } catch (error) {
+      console.error('[ChatContext] Error loading settings:', error);
+    }
+  }, []);
+
+  // Load platform stats from DB
+  const loadPlatformStats = useCallback(async () => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        const response = await new Promise(resolve => {
+          chrome.runtime.sendMessage({ type: 'GET_SCRAPED_CHATS' }, resolve);
+        });
+        if (response && response.success && response.byPlatform) {
+          setScrapingStats(response.byPlatform);
+        }
+      }
+    } catch (error) {
+      console.error('[ChatContext] Error loading platform stats:', error);
+    }
+  }, []);
+
+  // Toggle auto-scraping setting
+  const toggleAutoScrape = async () => {
+    const newValue = !autoScrapeEnabled;
+    setAutoScrapeEnabled(newValue);
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({ autoScrapeEnabled: newValue });
+      } else {
+        localStorage.setItem('autoScrapeEnabled', newValue.toString());
+      }
+    } catch (error) {
+      console.error('[ChatContext] Error saving setting:', error);
+    }
+  };
+
+  // Import scraping configurations
+  const handleImportConfig = async () => {
+    try {
+      if (!importConfig.trim()) return;
+      const config = JSON.parse(importConfig);
+
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        const result = await chrome.storage.local.get('domainSelectors');
+        const existing = result.domainSelectors || {};
+        const updated = { ...existing, ...config };
+        await chrome.storage.local.set({ domainSelectors: updated });
+        setImportStatus({ type: 'success', message: `Imported ${Object.keys(config).length} platform configs!` });
+        setImportConfig('');
+        setTimeout(() => setImportStatus({ type: '', message: '' }), 3000);
+      }
+    } catch (error) {
+      setImportStatus({ type: 'error', message: 'Invalid JSON configuration' });
+    }
+  };
+
   useEffect(() => {
     loadChats();
     loadSavedLinks();
-  }, [loadChats, loadSavedLinks]);
+    loadSettings();
+    loadPlatformStats();
+  }, [loadChats, loadSavedLinks, loadSettings, loadPlatformStats]);
+
+  // Add a new domain to allowlist
+  const handleAddDomain = async () => {
+    if (!newDomain.trim()) return;
+    const cleanDomain = newDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, '');
+    if (allowedDomains.includes(cleanDomain)) return;
+
+    const newList = [...allowedDomains, cleanDomain];
+    setAllowedDomains(newList);
+    setNewDomain('');
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({ genericScraperAllowlist: newList });
+      }
+    } catch (error) {
+      console.error('[ChatContext] Error adding domain:', error);
+    }
+  };
+
+  // Remove domain from allowlist
+  const handleRemoveDomain = async (domain) => {
+    const newList = allowedDomains.filter(d => d !== domain);
+    setAllowedDomains(newList);
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({ genericScraperAllowlist: newList });
+      }
+    } catch (error) {
+      console.error('[ChatContext] Error removing domain:', error);
+    }
+  };
+
+  // Export scraping configurations
+  const handleExportConfig = async () => {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        const result = await chrome.storage.local.get('domainSelectors');
+        const config = result.domainSelectors || {};
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'cooldesk-scraping-config.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('[ChatContext] Export failed:', error);
+    }
+  };
 
   const handleLinkClick = (url) => {
     if (url) {
@@ -276,11 +429,370 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
                 <FontAwesomeIcon icon={showAddLink ? faTimes : faPlus} />
               </div>
             )}
+            <div
+              className="panel-action"
+              onClick={() => {
+                setShowSettings(!showSettings);
+                if (!showSettings) loadPlatformStats();
+              }}
+              title="Scraping Settings"
+              style={{ color: showSettings ? '#3B82F6' : undefined }}
+            >
+              <FontAwesomeIcon icon={faGear} style={{ transform: showSettings ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }} />
+            </div>
             <div className="panel-action" onClick={loadChats} title="Refresh">
               <FontAwesomeIcon icon={faSync} />
             </div>
           </div>
         </div>
+
+        {/* Scraping Settings & Import */}
+        {showSettings && (
+          <div className="ai-card" style={{
+            padding: '20px',
+            margin: '0 16px 20px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            animation: 'slideInDown 0.3s ease-out',
+            background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%)',
+            backdropFilter: 'blur(24px)',
+            border: '1px solid rgba(148, 163, 184, 0.1)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)'
+          }}>
+            <style>{`
+              @keyframes slideInDown {
+                from { transform: translateY(-10px); opacity: 0; }
+                to { transform: translateY(0); opacity: 1; }
+              }
+              .settings-label {
+                font-size: 11px;
+                font-weight: 700;
+                color: #64748B;
+                text-transform: uppercase;
+                letter-spacing: 0.1em;
+              }
+              .platform-item {
+                transition: all 0.2s ease;
+                border: 1px solid transparent;
+              }
+              .platform-item:hover {
+                background: rgba(255, 255, 255, 0.05) !important;
+                border-color: rgba(255, 255, 255, 0.1);
+                transform: translateX(4px);
+              }
+              .premium-toggle {
+                cursor: pointer;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+              }
+              .premium-toggle:active {
+                transform: scale(0.95);
+              }
+            `}</style>
+
+            {/* Header: Toggle */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div className="settings-label" style={{ color: '#94A3B8' }}>Auto-Scraping Engine</div>
+                <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>Automatically sync links while you browse</div>
+              </div>
+              <div
+                className="premium-toggle"
+                onClick={toggleAutoScrape}
+                style={{
+                  width: '44px',
+                  height: '24px',
+                  borderRadius: '12px',
+                  background: autoScrapeEnabled ? 'linear-gradient(90deg, #3B82F6, #8B5CF6)' : 'rgba(148, 163, 184, 0.2)',
+                  padding: '3px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  boxShadow: autoScrapeEnabled ? '0 0 15px rgba(59, 130, 246, 0.4)' : 'none'
+                }}
+              >
+                <div style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  background: 'white',
+                  transform: autoScrapeEnabled ? 'translateX(20px)' : 'translateX(0)',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }} />
+              </div>
+            </div>
+
+            <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+
+            {/* Platform Explorer Section */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div
+                className="premium-toggle"
+                onClick={() => setShowPlatformConfig(!showPlatformConfig)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  width: '100%',
+                  padding: '12px 14px',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '10px',
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <FontAwesomeIcon icon={faSync} style={{ color: '#60A5FA', fontSize: '12px' }} />
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#E2E8F0' }}>Platform Explorer</span>
+                </div>
+                <FontAwesomeIcon
+                  icon={faAngleRight}
+                  style={{
+                    color: '#64748B',
+                    transform: showPlatformConfig ? 'rotate(90deg)' : 'none',
+                    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                  }}
+                />
+              </div>
+
+              {showPlatformConfig && (
+                <div style={{
+                  maxHeight: '220px',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  padding: '4px',
+                  background: 'rgba(0, 0, 0, 0.15)',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255, 255, 255, 0.03)'
+                }} className="scrollbar-hidden">
+                  <style>{`.scrollbar-hidden::-webkit-scrollbar { width: 0px; background: transparent; }`}</style>
+
+                  {/* Built-in Platforms */}
+                  {BUILT_IN_PLATFORMS.map(platform => (
+                    <div key={platform.name} className="platform-item" style={{
+                      padding: '10px 12px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#F1F5F9' }}>{platform.name}</span>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          {scrapingStats[platform.name] > 0 && (
+                            <span className="ai-chip" style={{ fontSize: '9px', padding: '2px 6px', borderColor: 'rgba(59, 130, 246, 0.3)', color: '#60A5FA', background: 'rgba(59, 130, 246, 0.1)' }}>
+                              {scrapingStats[platform.name]} links
+                            </span>
+                          )}
+                          <span style={{ fontSize: '9px', opacity: 0.5, fontWeight: 700, textTransform: 'uppercase', color: '#94A3B8' }}>SYSTEM</span>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '10px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: '8px', opacity: 0.5 }} />
+                        {platform.domains[0]} {platform.domains.length > 1 && `+${platform.domains.length - 1} more`}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Custom Platforms */}
+                  {Object.entries(customSelectors).map(([domain, config]) => (
+                    <div key={domain} className="platform-item" style={{
+                      padding: '10px 12px',
+                      background: 'rgba(16, 185, 129, 0.03)',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#F1F5F9' }}>{domain}</span>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          {scrapingStats[domain] > 0 && (
+                            <span className="ai-chip" style={{ fontSize: '9px', padding: '2px 6px', borderColor: 'rgba(16, 185, 129, 0.3)', color: '#34D399', background: 'rgba(16, 185, 129, 0.1)' }}>
+                              {scrapingStats[domain]} links
+                            </span>
+                          )}
+                          <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: '#10B981' }}>CUSTOM</span>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '9px', color: '#64748B', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: '4px' }}>
+                        {config.selector || (typeof config === 'string' ? config : 'Unknown Selector')}
+                      </span>
+                    </div>
+                  ))}
+
+                  {/* Monitored Discovery Domains */}
+                  {allowedDomains.map(domain => {
+                    const isBuiltIn = BUILT_IN_PLATFORMS.some(p => p.domains.includes(domain));
+                    const isCustom = customSelectors[domain];
+                    if (isBuiltIn || isCustom) return null;
+
+                    return (
+                      <div key={domain} className="platform-item" style={{
+                        padding: '10px 12px',
+                        background: 'rgba(251, 191, 36, 0.03)',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#F1F5F9' }}>{domain}</span>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            {scrapingStats[domain] > 0 && (
+                              <span className="ai-chip" style={{ fontSize: '9px', padding: '2px 6px', borderColor: 'rgba(251, 191, 36, 0.3)', color: '#FBBF24', background: 'rgba(251, 191, 36, 0.1)' }}>
+                                {scrapingStats[domain]} links
+                              </span>
+                            )}
+                            <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: '#F59E0B' }}>MONITORED</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+
+            {/* Monitored Domains Section */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="settings-label">App Filters & Discovery</div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  placeholder="domain.com"
+                  className="ai-input"
+                  value={newDomain}
+                  onChange={(e) => setNewDomain(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddDomain()}
+                  style={{
+                    flex: 1,
+                    margin: 0,
+                    fontSize: '12px',
+                    height: '36px',
+                    background: 'rgba(0,0,0,0.2)'
+                  }}
+                />
+                <button
+                  className="ai-button"
+                  onClick={handleAddDomain}
+                  style={{
+                    margin: 0,
+                    padding: '0 16px',
+                    height: '36px',
+                    fontSize: '12px',
+                    fontWeight: 600
+                  }}
+                >
+                  Watch
+                </button>
+              </div>
+
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '8px',
+                padding: '2px'
+              }}>
+                {allowedDomains.map(domain => (
+                  <div key={domain} className="ai-chip" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '4px 10px',
+                    borderRadius: '20px',
+                    fontSize: '11px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <span style={{ color: '#CBD5E1' }}>{domain}</span>
+                    <FontAwesomeIcon
+                      icon={faTimes}
+                      onClick={() => handleRemoveDomain(domain)}
+                      style={{ cursor: 'pointer', fontSize: '10px', color: '#64748B' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
+
+            {/* Config Portability Section */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="settings-label">Engine Configuration</div>
+              <textarea
+                placeholder='Paste platform profile (JSON)...'
+                className="ai-input"
+                value={importConfig}
+                onChange={(e) => setImportConfig(e.target.value)}
+                style={{
+                  width: '100%',
+                  height: '60px',
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  margin: 0,
+                  resize: 'none',
+                  background: 'rgba(0,0,0,0.2)',
+                  padding: '10px'
+                }}
+              />
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  className="ai-button"
+                  onClick={handleImportConfig}
+                  disabled={!importConfig.trim()}
+                  style={{
+                    flex: 1,
+                    margin: 0,
+                    fontSize: '12px',
+                    opacity: importConfig.trim() ? 1 : 0.5,
+                    filter: importConfig.trim() ? 'none' : 'grayscale(1)'
+                  }}
+                >
+                  Sync Profile
+                </button>
+                <button
+                  onClick={handleExportConfig}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '10px',
+                    color: '#94A3B8',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  Export Current
+                </button>
+              </div>
+            </div>
+
+            {importStatus.message && (
+              <div style={{
+                fontSize: '11px',
+                padding: '10px',
+                borderRadius: '8px',
+                textAlign: 'center',
+                background: importStatus.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                color: importStatus.type === 'success' ? '#34D399' : '#F87171',
+                border: `1px solid ${importStatus.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`
+              }}>
+                {importStatus.message}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Add Link Form */}
         {showAddLink && (

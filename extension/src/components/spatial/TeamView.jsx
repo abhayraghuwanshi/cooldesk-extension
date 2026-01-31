@@ -917,7 +917,8 @@ export default function TeamView({ team: propTeam }) {
                                                         border: '1px solid rgba(244, 114, 182, 0.2)',
                                                         position: 'relative', overflow: 'hidden',
                                                         transition: 'all 0.2s',
-                                                        display: 'flex', flexDirection: 'column', gap: 12
+                                                        display: 'flex', flexDirection: 'column', gap: 12,
+                                                        cursor: 'pointer'
                                                     }}
                                                 >
                                                     <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 8 }}>

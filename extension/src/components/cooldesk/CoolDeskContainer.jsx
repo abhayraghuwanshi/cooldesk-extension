@@ -389,6 +389,7 @@ export function CoolDeskContainer({
               width="48"
               height="48"
               decoding="async"
+              fetchPriority="high"
               style={{
                 objectFit: 'contain'
               }}

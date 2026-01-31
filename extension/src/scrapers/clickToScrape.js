@@ -31,7 +31,13 @@ function generateSelector(element) {
 
   // If clicked element is a link, use it directly
   // If not, find the closest link
-  const link = element.tagName === 'A' ? element : element.closest('a');
+  let link = element.tagName === 'A' ? element : element.closest('a');
+
+  // Platform specific fallback: Figma uses buttons/divs for file cards
+  if (!link && window.location.hostname.includes('figma.com')) {
+    link = element.closest('[role="listitem"], [class*="card-primitive__root"]');
+  }
+
   if (!link) {
     return null;
   }
@@ -587,11 +593,30 @@ function scrapeWithSelector(selector, limit = 0) {
     } // turbo
 
     for (const el of elementList) {
-      // Get the link element
-      const link = el.tagName === 'A' ? el : el.querySelector('a[href]');
-      if (!link) continue;
+      // Get the link element or platform-specific equivalent
+      let link = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      let url = null;
+      let title = null;
 
-      const url = link.href;
+      if (link) {
+        url = link.href;
+      } else {
+        // Dynamic Discovery: Search the document for ANY link containing this ID
+        // This avoids hardcoding platform-specific URL structures
+        const id = extractIdFromElement(el);
+        if (id) {
+          const foundLink = document.querySelector(`a[href*="${id}"]`);
+          if (foundLink) {
+            url = foundLink.href;
+          } else if (window.location.hostname.includes('figma.com')) {
+            // Minimal fallback for Figma cards where links are only active on click
+            url = `${window.location.origin}/design/${id}`;
+          } else if (window.location.hostname.includes('gemini.google.com')) {
+            url = `${window.location.origin}/app/${id}`;
+          }
+        }
+      }
+
       if (!url || seenUrls.has(url)) continue;
 
       // Skip non-http links
@@ -599,7 +624,7 @@ function scrapeWithSelector(selector, limit = 0) {
 
       seenUrls.add(url);
 
-      const title = extractTitle(link);
+      title = extractTitle(link || el);
       if (!title) continue;
 
       links.push({
@@ -615,6 +640,26 @@ function scrapeWithSelector(selector, limit = 0) {
   }
 
   return links;
+}
+
+/**
+ * Helper to extract an ID from an element (for dynamic URL discovery)
+ */
+function extractIdFromElement(el) {
+  // Try platform specific ID targets
+  if (window.location.hostname.includes('figma.com')) {
+    const img = el.querySelector('img[src*="/thumbnails/"]');
+    if (img) {
+      const match = img.src.match(/\/thumbnails\/([a-f0-9-]+)/);
+      if (match) return match[1];
+    }
+  }
+
+  // Try common ID attributes
+  const idAttr = el.id || el.getAttribute('data-id') || el.getAttribute('data-chat-id');
+  if (idAttr) return idAttr;
+
+  return null;
 }
 
 /**
@@ -737,6 +782,17 @@ async function notifyBackground(links, selectorInfo) {
  * Auto-scrape if we have a saved selector for this domain
  */
 async function autoScrape() {
+  // Check if auto-scraping is enabled in settings
+  try {
+    const settings = await chrome.storage.local.get(['autoScrapeEnabled']);
+    if (settings.autoScrapeEnabled === false) {
+      console.log('[ClickToScrape] Auto-scraping is disabled in settings');
+      return null;
+    }
+  } catch (e) {
+    console.debug('[ClickToScrape] Could not check autoScrapeEnabled setting, defaulting to enabled');
+  }
+
   const saved = await getSelectorForDomain();
   if (!saved) {
     console.log('[ClickToScrape] No saved selector for this domain');

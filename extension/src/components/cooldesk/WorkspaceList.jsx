@@ -94,7 +94,16 @@ export function WorkspaceList({
     const unpinned = useMemo(() => savedWorkspaces.filter(ws => !pinnedWorkspaces.includes(ws.name)), [savedWorkspaces, pinnedWorkspaces]);
 
     // State for workspace activity scores
-    const [workspaceScores, setWorkspaceScores] = useState(new Map());
+    // Load cached scores synchronously to prevent layout shift on refresh
+    const [workspaceScores, setWorkspaceScores] = useState(() => {
+        try {
+            const cachedScores = localStorage.getItem('cooldesk_workspace_scores');
+            if (cachedScores) {
+                return new Map(JSON.parse(cachedScores));
+            }
+        } catch { /* ignore */ }
+        return new Map();
+    });
     const [isSortingByActivity, setIsSortingByActivity] = useState(() => {
         try {
             // Default to true (sort by activity) if not set
@@ -218,6 +227,7 @@ export function WorkspaceList({
 
 
     // Sort unpinned workspaces by activity score (memoized)
+    // Scores are loaded from cache on mount, so sorting happens immediately without layout shift
     const sortedUnpinned = useMemo(() => {
         if (!isSortingByActivity) return unpinned;
 
@@ -467,9 +477,24 @@ export function WorkspaceList({
                                         fontFamily: defaultFontFamily,
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.05em',
-                                        margin: 0
+                                        margin: 0,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
                                     }}>
-                                        {activeMode === 'all' ? 'All Workspaces' : modeConfigs[activeMode].label} ({filteredUnpinned.length})
+                                        {activeMode === 'all' ? 'All Urls' : modeConfigs[activeMode].label} ({filteredUnpinned.length})
+                                        {isSortingByActivity && isCalculatingScores && (
+                                            <span style={{
+                                                fontSize: '11px',
+                                                color: '#60a5fa',
+                                                fontWeight: 400,
+                                                textTransform: 'none',
+                                                letterSpacing: 'normal',
+                                                opacity: 0.8
+                                            }}>
+                                                sorting...
+                                            </span>
+                                        )}
                                     </h3>
                                 </div>
 
@@ -556,7 +581,7 @@ export function WorkspaceList({
                                         gap: '4px'
                                     }}
                                 >
-                                    {filteredUnpinned.slice(0, workspaceLimit).map((workspace) => (
+                                    {filteredUnpinned.slice(0, workspaceLimit).map((workspace, index) => (
                                         <WorkspaceCard
                                             key={workspace.id}
                                             workspace={workspace}
@@ -568,6 +593,7 @@ export function WorkspaceList({
                                             onPin={() => onTogglePin && onTogglePin(workspace.name)}
                                             onDelete={handleDeleteWorkspace}
                                             onAddUrl={onAddUrl}
+                                            deferAnalytics={index > 3}
                                         />
                                     ))}
                                 </div>

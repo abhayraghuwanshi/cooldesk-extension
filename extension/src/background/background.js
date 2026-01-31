@@ -35,6 +35,40 @@ if (chrome.windows && chrome.windows.onFocusChanged) {
   });
 }
 
+// Global Command Handlers (Keyboard Shortcuts)
+chrome.commands.onCommand.addListener(async (command) => {
+  console.log('[Background] Command received:', command);
+
+  if (command === 'open_spotlight') {
+    // Send message to active tab to trigger Spotlight UI
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab) {
+        console.log('[Background] Toggling Spotlight on tab:', tab.id);
+        chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SPOTLIGHT' }).catch(err => {
+          console.warn('[Background] Message failed (likely content script not loaded):', err);
+        });
+      }
+    } catch (e) {
+      console.warn('[Background] Failed to send Spotlight message:', e);
+    }
+  }
+
+  if (command === 'toggle_sidebar') {
+    try {
+      const win = await chrome.windows.getLastFocused();
+      if (win && chrome.sidePanel && chrome.sidePanel.open) {
+        console.log('[Background] Toggling sidebar for window:', win.id);
+        await chrome.sidePanel.open({ windowId: win.id });
+      } else {
+        console.warn('[Background] Side panel API or window not available');
+      }
+    } catch (e) {
+      console.warn('[Background] Error toggling side panel:', e);
+    }
+  }
+});
+
 // MV3 background service worker (type: module)
 
 // Polyfill for libraries that check for document (but don't actually use it)
@@ -153,10 +187,22 @@ import {
 } from './activity.js';
 import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
+import { CommandExecutor } from '../services/commandExecutor.js';
+import { CommandParser } from '../services/commandParser.js';
 import '../utils/realTimeCategorizor.js'; // Auto-starts real-time categorization
+import { fuzzySearch } from '../utils/searchUtils.js';
 import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
+
+// Initialize CommandExecutor for shared use
+const commandExecutor = new CommandExecutor((feedback) => {
+  console.log('[Background:Command] Feedback:', feedback);
+  // Optionally broadcast feedback to active tab
+  chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+    if (tab) chrome.tabs.sendMessage(tab.id, { type: 'SHOW_NOTIFICATION', message: feedback.message, color: feedback.type === 'success' ? '#10b981' : '#3B82F6' });
+  });
+});
 
 
 
@@ -1948,6 +1994,97 @@ async function main() {
       })();
       return true;
     }
+
+    // --- Spotlight/Raycast Handlers ---
+    if (msg?.type === 'GET_SPOTLIGHT_SUGGESTIONS') {
+      (async () => {
+        try {
+          const query = msg.query.toLowerCase();
+          let results = [];
+
+          // 1. Check for Commands (if starts with ! or /)
+          if (query.startsWith('!') || query.startsWith('/')) {
+            const allCmds = CommandParser.getAllCommands();
+            const q = query.slice(1);
+            const matches = fuzzySearch(allCmds, q, ['command', 'title', 'description'], { threshold: 0.4 });
+            results.push(...matches.map(c => ({
+              title: c.command.startsWith('!') ? c.command : `/${c.command}`,
+              description: c.description,
+              icon: c.category === 'AI' ? '🤖' : '⚙️',
+              command: c.command,
+              category: 'Command'
+            })));
+          }
+
+          // 2. Search Open Tabs
+          const tabs = await chrome.tabs.query({});
+          const tabMatches = fuzzySearch(tabs, query, ['title', 'url'], { threshold: 0.3 });
+          results.push(...tabMatches.slice(0, 5).map(t => ({
+            title: t.title,
+            description: t.url,
+            icon: '🌍', // Favor favicons if possible, but emojis are safer for now
+            tabId: t.id,
+            category: 'Open Tab'
+          })));
+
+          // 3. Search History (limit to top 5)
+          const history = await chrome.history.search({ text: query, maxResults: 10 });
+          results.push(...history.slice(0, 5).map(h => ({
+            title: h.title || h.url,
+            description: h.url,
+            icon: '📜',
+            url: h.url,
+            category: 'History'
+          })));
+
+          // 4. Search Workspaces
+          const wsResult = await listWorkspaces();
+          if (wsResult?.success) {
+            const wsMatches = fuzzySearch(wsResult.data, query, ['name'], { threshold: 0.3 });
+            results.push(...wsMatches.map(w => ({
+              title: `Switch to ${w.name}`,
+              description: 'Workspace',
+              icon: '📁',
+              command: `!ws switch ${w.name}`,
+              category: 'Workspace'
+            })));
+          }
+
+          sendResponse({ results: results.slice(0, 15) });
+        } catch (e) {
+          console.error('[Background] Spotlight error:', e);
+          sendResponse({ results: [] });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'EXECUTE_COMMAND') {
+      (async () => {
+        try {
+          const parsed = CommandParser.parse(msg.commandValue);
+          if (parsed) {
+            const result = await commandExecutor.execute(parsed);
+            sendResponse({ success: true, result });
+          } else {
+            sendResponse({ success: false, error: 'Invalid command' });
+          }
+        } catch (e) {
+          console.error('[Background] Command execution failed:', e);
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'JUMP_TO_TAB') {
+      chrome.tabs.update(msg.tabId, { active: true });
+      chrome.tabs.get(msg.tabId, (tab) => {
+        if (tab?.windowId) chrome.windows.update(tab.windowId, { focused: true });
+      });
+      sendResponse({ success: true });
+      return true;
+    }
   });
 
   // Handle connections from content scripts to keep service worker alive
@@ -2020,63 +2157,8 @@ async function main() {
     });
   }
 
-  // Keyboard shortcut command to open side panel and focus search
-  try {
-    if (chrome?.commands?.onCommand?.addListener) {
-      chrome.commands.onCommand.addListener(async (command, tab) => {
-        if (command !== 'open_search') return;
-        try {
-          console.log('[Background] Keyboard command triggered, opening side panel...');
-          // Use the windowId from the active tab when available
-          const windowId = tab?.windowId;
+  // Consolidated keyboard shortcut handler is at the top of the file.
 
-          if (chrome?.sidePanel?.setOptions) {
-            await chrome.sidePanel.setOptions({ path: 'sidebar.html', enabled: true });
-          }
-
-          if (chrome?.sidePanel?.open && windowId) {
-            console.log('[Background] Opening side panel for window via command:', windowId);
-            await chrome.sidePanel.open({ windowId: windowId });
-            console.log('[Background] Side panel opened via keyboard shortcut!');
-          } else {
-            console.log('[Background] No windowId available, trying getCurrent()...');
-            const win = await chrome.windows.getCurrent();
-            if (win?.id) {
-              await chrome.sidePanel.open({ windowId: win.id });
-              console.log('[Background] Side panel opened via getCurrent()');
-            } else {
-              throw new Error('No valid window ID available');
-            }
-          }
-        } catch (e) {
-          console.warn('[Background] Failed to open side panel via command:', e);
-          // Fallback: reuse existing extension tab if available; else create once
-          try {
-            const url = chrome.runtime.getURL('index.html');
-            // Try to find an existing tab with our UI
-            const existing = await chrome.tabs.query({ url });
-            if (existing && existing.length > 0) {
-              const tab = existing[0];
-              try { await chrome.tabs.update(tab.id, { active: true }); } catch { }
-              try {
-                if (tab.windowId != null) await chrome.windows.update(tab.windowId, { focused: true });
-              } catch { }
-            } else {
-              if (chrome?.tabs?.create) {
-                await chrome.tabs.create({ url });
-              }
-            }
-          } catch (e2) {
-            console.warn('[Background] Fallback to tab failed:', e2);
-          }
-        }
-        // Notify any open UI to focus the search input
-        try { chrome.runtime.sendMessage({ action: 'focusSearch' }); } catch { }
-      });
-    }
-  } catch (e) {
-    console.warn('[Background] Could not register commands listener:', e);
-  }
 
   // Use chrome.alarms for periodic tasks instead of setInterval
   // Daily cleanup alarm
@@ -2097,23 +2179,7 @@ async function main() {
     }
   });
 
-  // Listen for global commands (shortcuts)
-  if (chrome?.commands?.onCommand?.addListener) {
-    chrome.commands.onCommand.addListener(async (command) => {
-      console.log('[Background] Command received:', command);
-      if (command === 'open-spotlight') {
-        try {
-          const window = await chrome.windows.getLastFocused();
-          if (chrome.sidePanel && chrome.sidePanel.open) {
-            await chrome.sidePanel.open({ windowId: window.id });
-            console.log('[Background] Opened side panel via shortcut');
-          }
-        } catch (error) {
-          console.error('[Background] Failed to open side panel via command:', error);
-        }
-      }
-    });
-  }
+
 
 }
 
@@ -2412,19 +2478,6 @@ async function triggerCalendarScrape() {
     });
 
     console.log('[Background:Calendar] ✅ Created hidden calendar tab:', tab.id);
-
-    // Set a timeout to close it if it hangs (45 seconds)
-    setTimeout(async () => {
-      try {
-        const t = await chrome.tabs.get(tab.id);
-        if (t) {
-          console.warn('[Background:Calendar] ⚠️ Safety timeout: closing calendar tab (scraper might be stuck):', tab.id);
-          chrome.tabs.remove(tab.id);
-        }
-      } catch (e) {
-        // Tab probably already closed
-      }
-    }, 45000);
 
   } catch (error) {
     console.error('[Background:Calendar] ❌ Failed to trigger calendar scrape:', error);

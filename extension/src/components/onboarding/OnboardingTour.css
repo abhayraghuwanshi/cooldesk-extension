@@ -3,13 +3,11 @@
 .onboarding-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  /* Reduced opacity */
-  /* backdrop-filter: blur(4px); Removed blur for clarity */
+  background: transparent;
+  /* No overlay - let wallpaper show through */
   z-index: 9998;
   animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  background: radial-gradient(circle at center, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.6) 100%);
-  /* Vignette effect */
+  pointer-events: none;
 }
 
 /* ... existing tooltip styles ... */
@@ -47,6 +45,100 @@
   transition: top 0.4s cubic-bezier(0.16, 1, 0.3, 1), left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Subtitle-style tooltip - compact centered bottom */
+.onboarding-tooltip.subtitle-style {
+  width: auto;
+  min-width: 280px;
+  max-width: 520px;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 10px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-content {
+  margin-bottom: 0;
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-close {
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+/* Compact header: emoji + title + step count inline */
+.onboarding-tooltip.subtitle-style .onboarding-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-emoji {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  background: none;
+  -webkit-text-fill-color: #fff;
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-step-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-description {
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 10px;
+}
+
+/* Compact footer row */
+.onboarding-tooltip.subtitle-style .onboarding-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-progress-bar {
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-btn.secondary {
+  padding: 6px 8px;
+}
+
+.onboarding-tooltip.subtitle-style .onboarding-btn.primary {
+  min-width: 36px;
+}
+
 /* Gradient Border Effect */
 .onboarding-tooltip::before {
   content: '';
@@ -56,6 +148,7 @@
   padding: 1px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
@@ -117,6 +210,7 @@
   padding-right: 32px;
   background: linear-gradient(to right, #fff, #cbd5e1);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   line-height: 1.3;
 }
@@ -260,6 +354,34 @@
   }
 }
 
+/* Shimmer effect on highlighted elements */
+.onboarding-highlight::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
 /* Chat Log Animations */
 @keyframes fadeInUp {
   from {
@@ -270,6 +392,36 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Cinematic Scene Transition */
+@keyframes sceneTransition {
+  0% {
+    opacity: 0;
+    transform: scale(1.05);
+    filter: blur(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+/* Smooth step change animation */
+.onboarding-message.latest {
+  animation: messageReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes messageReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -375,30 +527,27 @@ body.onboarding-active.step-workspaces .cooldesk-workspace-card:nth-child(8) {
 
 /* --- CINEMATIC GLOW (Professional Trailer Effect) --- */
 
-/* 1. Dramatic Vignette Overlay */
-body.onboarding-active::before {
-  content: '';
+/* Vignette overlay uses a separate element to not conflict with wallpaper ::before */
+.onboarding-vignette {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
   pointer-events: none;
-  z-index: 9998;
-  /* Below tooltip/cursor but above app */
-  /* Dramatic dark edges with subtle blue tint */
-  box-shadow: inset 0 0 150px rgba(0, 0, 0, 0.9), inset 0 0 50px rgba(59, 130, 246, 0.1);
-  background: radial-gradient(circle at center, transparent 40%, rgba(0, 0, 0, 0.4) 100%);
+  z-index: 9997;
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.3);
+  background: radial-gradient(circle at center, transparent 60%, rgba(0, 0, 0, 0.15) 100%);
   animation: vignetteBreath 4s ease-in-out infinite alternate;
 }
 
 @keyframes vignetteBreath {
   0% {
-    box-shadow: inset 0 0 150px rgba(0, 0, 0, 0.9);
+    box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.3);
   }
 
   100% {
-    box-shadow: inset 0 0 200px rgba(0, 0, 0, 0.95);
+    box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -456,6 +605,676 @@ body.onboarding-active.step-magic [data-onboarding="global-add-btn"] {
   }
 }
 
+/* Cinematic Flash Transition */
+.onboarding-transition-flash {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(99, 102, 241, 0.3) 0%, rgba(0, 0, 0, 0.8) 100%);
+  z-index: 10005;
+  pointer-events: none;
+  animation: flashTransition 0.6s ease-out forwards;
+}
+
+@keyframes flashTransition {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Smooth content area transition */
+body.onboarding-active .cooldesk-content-area {
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Step-specific scene animations */
+body.onboarding-active.step-welcome .cooldesk-content-area {
+  animation: sceneTransition 0.8s ease-out;
+}
+
+body.onboarding-active.step-workspaces .cooldesk-content-area {
+  animation: sceneTransition 0.8s ease-out;
+}
+
+body.onboarding-active.step-tabs .cooldesk-content-area {
+  animation: sceneTransition 0.8s ease-out;
+}
+
+body.onboarding-active.step-overview .cooldesk-content-area {
+  animation: sceneTransition 0.8s ease-out;
+}
+
+/* Progress bar glow effect */
+.onboarding-progress-fill {
+  position: relative;
+}
+
+.onboarding-progress-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.8) 0%, transparent 70%);
+  filter: blur(4px);
+  animation: progressGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes progressGlow {
+  0%, 100% {
+    opacity: 0.5;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1.5);
+  }
+}
+
+/* Typing cursor blink */
+.cursor-animate {
+  animation: cursorBlink 0.8s infinite;
+  color: #60a5fa;
+  font-weight: bold;
+}
+
+@keyframes cursorBlink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+/* Emoji pop animation */
+@keyframes emojiPop {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(-15deg);
+  }
+  50% {
+    transform: scale(1.3) rotate(10deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.onboarding-emoji {
+  text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+/* ============================================
+   CINEMATIC ENTRY ANIMATIONS FOR ONBOARDING
+   Only on welcome step - other steps use smooth transitions
+   ============================================ */
+
+/* Base transition for all elements during onboarding */
+body.onboarding-active .cooldesk-header,
+body.onboarding-active .cooldesk-logo,
+body.onboarding-active .cooldesk-search-container,
+body.onboarding-active .cooldesk-settings-btn,
+body.onboarding-active .spatial-workspace-shell,
+body.onboarding-active [data-onboarding="global-add-btn"],
+body.onboarding-active .workspace-shell-nav {
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* WELCOME STEP - Initial cinematic entrance */
+body.onboarding-active.step-welcome .cooldesk-header {
+  animation: dropFromTop 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+body.onboarding-active.step-welcome .cooldesk-logo {
+  animation: bounceIn 1s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
+}
+
+body.onboarding-active.step-welcome .cooldesk-search-container {
+  animation: slideInRight 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+}
+
+body.onboarding-active.step-welcome .cooldesk-settings-btn {
+  animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s both;
+}
+
+body.onboarding-active.step-welcome .spatial-workspace-shell {
+  animation: riseFromBottom 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both;
+}
+
+body.onboarding-active.step-welcome [data-onboarding="global-add-btn"] {
+  animation: slideFromCorner 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.7s both;
+}
+
+body.onboarding-active.step-welcome .workspace-shell-nav {
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.6s both;
+}
+
+@keyframes dropFromTop {
+  0% {
+    opacity: 0;
+    transform: translateY(-50px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(50px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes riseFromBottom {
+  0% {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideFromCorner {
+  0% {
+    opacity: 0;
+    transform: translate(30px, 30px) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes slideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideFromLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideFromRight {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ============================================
+   SMOOTH FACE/VIEW TRANSITIONS
+   The spatial shell already handles slide transitions
+   We just need subtle content reveals
+   ============================================ */
+
+/* Smooth fade for all face content */
+body.onboarding-active .face-content {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+/* Gentle highlight pulse for the current view */
+body.onboarding-active.step-overview .overview-dashboard-grid,
+body.onboarding-active.step-workspaces .workspace-list-container,
+body.onboarding-active.step-tabs .tab-management-container,
+body.onboarding-active.step-team .team-view-container,
+body.onboarding-active.step-notes .notes-canvas {
+  animation: gentleReveal 0.6s ease-out;
+}
+
+@keyframes gentleReveal {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   WORKSPACE CARDS - Glowing border effect
+   ============================================ */
+body.onboarding-active.step-workspaces .cooldesk-workspace-card,
+body.onboarding-active.step-overview .cooldesk-workspace-card {
+  animation: cardGlow 2s ease-in-out infinite;
+  position: relative;
+}
+
+body.onboarding-active.step-workspaces .cooldesk-workspace-card::before,
+body.onboarding-active.step-overview .cooldesk-workspace-card::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.3), rgba(59, 130, 246, 0.5));
+  background-size: 200% 200%;
+  animation: gradientShift 3s ease infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+@keyframes cardGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(99, 102, 241, 0.4);
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* ============================================
+   ACTIVITY FEED - Staggered glow entries
+   ============================================ */
+body.onboarding-active.step-overview .cooldesk-panel {
+  animation: panelReveal 0.8s ease-out;
+}
+
+@keyframes panelReveal {
+  0% {
+    opacity: 0.5;
+    transform: translateX(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Activity feed items get a subtle left border glow */
+body.onboarding-active.step-overview .recent-chat-item,
+body.onboarding-active.step-overview [style*="borderBottom"] > div {
+  position: relative;
+}
+
+body.onboarding-active.step-overview .recent-chat-item::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.8), rgba(139, 92, 246, 0.4));
+  border-radius: 2px;
+  animation: feedItemGlow 1.5s ease-in-out infinite;
+  opacity: 0.7;
+}
+
+@keyframes feedItemGlow {
+  0%, 100% {
+    opacity: 0.5;
+    height: 50%;
+  }
+  50% {
+    opacity: 1;
+    height: 70%;
+  }
+}
+
+/* Favorites icons bounce slightly */
+body.onboarding-active.step-overview .favorites-scroll-container > div {
+  animation: favBounce 0.6s ease-out backwards;
+}
+
+body.onboarding-active.step-overview .favorites-scroll-container > div:nth-child(1) { animation-delay: 0.1s; }
+body.onboarding-active.step-overview .favorites-scroll-container > div:nth-child(2) { animation-delay: 0.15s; }
+body.onboarding-active.step-overview .favorites-scroll-container > div:nth-child(3) { animation-delay: 0.2s; }
+body.onboarding-active.step-overview .favorites-scroll-container > div:nth-child(4) { animation-delay: 0.25s; }
+body.onboarding-active.step-overview .favorites-scroll-container > div:nth-child(5) { animation-delay: 0.3s; }
+body.onboarding-active.step-overview .favorites-scroll-container > div:nth-child(6) { animation-delay: 0.35s; }
+
+@keyframes favBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(10px);
+  }
+  60% {
+    transform: scale(1.1) translateY(-5px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ============================================
+   NOTES VIEW - Floating cards effect
+   ============================================ */
+body.onboarding-active.step-notes .notes-canvas,
+body.onboarding-active.step-notes .notes-list {
+  animation: gentleReveal 0.6s ease-out;
+}
+
+body.onboarding-active.step-notes .note-item,
+body.onboarding-active.step-notes .notes-canvas-note,
+body.onboarding-active.step-notes .simple-note-item {
+  animation: noteFloat 3s ease-in-out infinite;
+  position: relative;
+}
+
+body.onboarding-active.step-notes .note-item:nth-child(odd),
+body.onboarding-active.step-notes .simple-note-item:nth-child(odd) {
+  animation-delay: 0.5s;
+}
+
+body.onboarding-active.step-notes .note-item:nth-child(even),
+body.onboarding-active.step-notes .simple-note-item:nth-child(even) {
+  animation-delay: 1s;
+}
+
+@keyframes noteFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Notes get a soft purple glow border */
+body.onboarding-active.step-notes .note-item::before,
+body.onboarding-active.step-notes .simple-note-item::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.4), rgba(167, 139, 250, 0.2));
+  z-index: -1;
+  animation: noteBorderPulse 2s ease-in-out infinite;
+}
+
+@keyframes noteBorderPulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   CHAT/PROJECT LINKS VIEW - Link items glow
+   ============================================ */
+body.onboarding-active.step-chat .cooldesk-panel,
+body.onboarding-active .chat-context-container {
+  animation: gentleReveal 0.6s ease-out;
+}
+
+body.onboarding-active.step-chat .recent-chat-item,
+body.onboarding-active.step-chat .recent-chats-list li {
+  animation: linkItemSlide 0.5s ease-out backwards;
+  position: relative;
+}
+
+body.onboarding-active.step-chat .recent-chat-item:nth-child(1) { animation-delay: 0.1s; }
+body.onboarding-active.step-chat .recent-chat-item:nth-child(2) { animation-delay: 0.2s; }
+body.onboarding-active.step-chat .recent-chat-item:nth-child(3) { animation-delay: 0.3s; }
+body.onboarding-active.step-chat .recent-chat-item:nth-child(4) { animation-delay: 0.4s; }
+body.onboarding-active.step-chat .recent-chat-item:nth-child(5) { animation-delay: 0.5s; }
+
+@keyframes linkItemSlide {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Platform quick access buttons get rainbow border */
+body.onboarding-active.step-chat button[style*="borderRadius: '6px'"] {
+  animation: platformButtonGlow 2s ease-in-out infinite;
+}
+
+@keyframes platformButtonGlow {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.2);
+  }
+}
+
+/* ============================================
+   TEAM VIEW - Members cards effect
+   ============================================ */
+body.onboarding-active.step-team .team-view,
+body.onboarding-active.step-team .team-container {
+  animation: gentleReveal 0.6s ease-out;
+}
+
+body.onboarding-active.step-team .team-card,
+body.onboarding-active.step-team .team-member-item {
+  animation: teamCardPop 0.6s ease-out backwards;
+  position: relative;
+}
+
+body.onboarding-active.step-team .team-card:nth-child(1) { animation-delay: 0.1s; }
+body.onboarding-active.step-team .team-card:nth-child(2) { animation-delay: 0.2s; }
+body.onboarding-active.step-team .team-card:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes teamCardPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Team cards get a cyan/teal glow */
+body.onboarding-active.step-team .team-card::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.5), rgba(59, 130, 246, 0.3));
+  z-index: -1;
+  animation: teamGlow 2s ease-in-out infinite;
+  opacity: 0.6;
+}
+
+@keyframes teamGlow {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* ============================================
+   TABS VIEW - Tab cards slide in
+   ============================================ */
+body.onboarding-active.step-tabs .tab-management-container,
+body.onboarding-active.step-tabs .tabs-container {
+  animation: gentleReveal 0.6s ease-out;
+}
+
+body.onboarding-active.step-tabs .tab-card,
+body.onboarding-active.step-tabs .tab-item,
+body.onboarding-active.step-tabs .domain-group {
+  animation: tabSlideIn 0.5s ease-out backwards;
+}
+
+body.onboarding-active.step-tabs .tab-card:nth-child(1),
+body.onboarding-active.step-tabs .domain-group:nth-child(1) { animation-delay: 0.1s; }
+body.onboarding-active.step-tabs .tab-card:nth-child(2),
+body.onboarding-active.step-tabs .domain-group:nth-child(2) { animation-delay: 0.15s; }
+body.onboarding-active.step-tabs .tab-card:nth-child(3),
+body.onboarding-active.step-tabs .domain-group:nth-child(3) { animation-delay: 0.2s; }
+body.onboarding-active.step-tabs .tab-card:nth-child(4),
+body.onboarding-active.step-tabs .domain-group:nth-child(4) { animation-delay: 0.25s; }
+body.onboarding-active.step-tabs .tab-card:nth-child(5),
+body.onboarding-active.step-tabs .domain-group:nth-child(5) { animation-delay: 0.3s; }
+
+@keyframes tabSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tab cards get a blue glow on hover during onboarding */
+body.onboarding-active.step-tabs .tab-card,
+body.onboarding-active.step-tabs .domain-group {
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.15);
+  transition: box-shadow 0.3s ease;
+}
+
+body.onboarding-active.step-tabs .tab-card:hover,
+body.onboarding-active.step-tabs .domain-group:hover {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+}
+
+/* Search step - soft glow without harsh transitions */
+body.onboarding-active.step-search .cooldesk-search-container {
+  animation: searchPulse 2s ease-in-out infinite;
+  box-shadow: 0 0 20px 5px rgba(99, 102, 241, 0.2);
+}
+
+@keyframes searchPulse {
+  0%, 100% {
+    box-shadow: 0 0 20px 5px rgba(99, 102, 241, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 35px 10px rgba(99, 102, 241, 0.35);
+  }
+}
+
+/* Ready step - subtle celebration with confetti-like sparkle */
+body.onboarding-active.step-ready .cooldesk-container {
+  animation: subtleCelebrate 2s ease-in-out;
+}
+
+@keyframes subtleCelebrate {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.05);
+  }
+}
+
+/* Final ready step - all cards get a brief sparkle */
+body.onboarding-active.step-ready .cooldesk-workspace-card,
+body.onboarding-active.step-ready .cooldesk-panel {
+  animation: celebrateSparkle 1s ease-out;
+}
+
+@keyframes celebrateSparkle {
+  0% {
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+
+/* After welcome step, all UI elements stay visible with no animation */
+body.onboarding-active:not(.step-welcome) .cooldesk-header,
+body.onboarding-active:not(.step-welcome) .cooldesk-logo,
+body.onboarding-active:not(.step-welcome) .cooldesk-search-container,
+body.onboarding-active:not(.step-welcome) .cooldesk-settings-btn,
+body.onboarding-active:not(.step-welcome) .spatial-workspace-shell,
+body.onboarding-active:not(.step-welcome) [data-onboarding="global-add-btn"],
+body.onboarding-active:not(.step-welcome) .workspace-shell-nav {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .onboarding-tooltip {
@@ -463,5 +1282,28 @@ body.onboarding-active.step-magic [data-onboarding="global-add-btn"] {
     left: 16px !important;
     right: 16px !important;
     bottom: 16px !important;
+  }
+
+  .onboarding-tooltip.subtitle-style {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%);
+    min-width: auto;
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    bottom: 16px !important;
+    padding: 10px 14px;
+  }
+
+  .onboarding-tooltip.subtitle-style .onboarding-emoji {
+    font-size: 18px;
+  }
+
+  .onboarding-tooltip.subtitle-style .onboarding-title {
+    font-size: 13px;
+  }
+
+  .onboarding-tooltip.subtitle-style .onboarding-description {
+    font-size: 12px;
   }
 }

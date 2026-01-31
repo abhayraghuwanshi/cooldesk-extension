@@ -1,7 +1,7 @@
-import { faArrowLeft, faArrowRight, faCheckCircle, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faArrowRight, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
-import './OnboardingTour.css';
+// CSS is imported in App.jsx to avoid lazy-load preload issues
 
 // Internal component for game-like typing effect
 const TypewriterText = ({ text, speed = 30, onComplete }) => {
@@ -42,109 +42,82 @@ const TypewriterText = ({ text, speed = 30, onComplete }) => {
 const ONBOARDING_STEPS = [
   {
     id: 'welcome',
-    title: 'System Online',
-    description: 'Welcome, Agent. Initiating automated system tour. Hands off—let me show you around the CoolDesk capabilities. Sequence starting...',
+    title: 'Welcome to CoolDesk',
+    description: 'Your browser\'s command center. Let me show you around...',
     target: null,
     position: 'center',
-    action: 'navigate:3' // Overview
+    action: 'navigate:3', // overview
+    duration: 3500,
+    emoji: '🚀'
   },
   {
     id: 'overview',
-    title: 'Sector 3: Mission Control',
-    description: 'The Overview Dashboard. Your central hub for recent activity, quick stats, and high-priority items. Accessible anytime via Ctrl+3.',
+    title: 'Your Dashboard',
+    description: 'This is home base. Quick access to workspaces, notes, focus timer, and your activity feed—all at a glance.',
     target: '.overview-dashboard-grid',
     position: 'center',
-    action: 'navigate:3'
+    action: 'navigate:3', // overview
+    duration: 4500,
+    emoji: '🏠'
+  },
+  {
+    id: 'workspaces',
+    title: 'Workspaces',
+    description: 'Save your browser sessions. One click restores all your tabs exactly where you left off. Never lose your flow again.',
+    target: null,
+    position: 'center',
+    action: 'navigate:2', // workspace
+    duration: 4500,
+    emoji: '📁'
+  },
+  {
+    id: 'tabs',
+    title: 'Tab Management',
+    description: 'All your open tabs, organized. Find duplicates, group by domain, search instantly. Tame the tab chaos.',
+    target: null,
+    position: 'center',
+    action: 'navigate:4', // tabs
+    duration: 4500,
+    emoji: '🗂️'
+  },
+  {
+    id: 'team',
+    title: 'Team Sharing',
+    description: 'Share resources with your team via encrypted P2P. No cloud servers—direct, secure collaboration.',
+    target: null,
+    position: 'center',
+    action: 'navigate:5', // team
+    duration: 4500,
+    emoji: '👥'
+  },
+  {
+    id: 'notes',
+    title: 'Quick Notes',
+    description: 'Capture thoughts instantly. Your notes sync across sessions and stay right where you need them.',
+    target: null,
+    position: 'center',
+    action: 'navigate:6', // notes
+    duration: 4500,
+    emoji: '📝'
   },
   {
     id: 'search',
     title: 'Command Center',
-    description: 'The Neural Interface. Press Ctrl+K to access global search. Type "/" to execute system commands or launch apps instantly.',
+    description: 'Press Ctrl+K anywhere to search everything. Type "/" for quick commands. This is your superpower.',
     target: '.cooldesk-search-container',
     position: 'bottom',
-    action: 'focus:.cooldesk-search-input'
-  },
-  {
-    id: 'notes_demo',
-    title: 'Simulating Navigation',
-    description: 'Watch closely. I am taking control of the interface to demonstrate command navigation. Typing "/notes"...',
-    target: '.cooldesk-search-input',
-    position: 'bottom',
-    action: 'type:.cooldesk-search-input:/notes'
-  },
-  {
-    id: 'notes',
-    title: 'Sector 6: Deep Focus',
-    description: 'We have arrived at the Notes Module. A distraction-free zone for tactical planning. Let\'s return to base.',
-    target: null,
-    position: 'center',
-    action: 'wait:1000' // Just wait a bit
-  },
-  {
-    id: 'return_search',
-    title: 'Re-engaging Search',
-    description: 'Bringing up the command line again (Ctrl+K). Now targeting the AI Chat module...',
-    target: '.cooldesk-search-container',
-    position: 'bottom',
-    // action: 'navigate:3', // Reset to overview first to ensure search is visible or just open search
-    // Actually search is available everywhere, let's just focus it again
-    action: 'focus:.cooldesk-search-input'
-  },
-  // Split search re-focus into small step to ensure it happens
-  {
-    id: 'chat_demo',
-    title: 'Executing Jump',
-    description: 'Typing "/chat" to initiate AI Companion uplinking...',
-    target: '.cooldesk-search-input',
-    position: 'bottom',
-    action: 'type:.cooldesk-search-input:/chat'
-  },
-  {
-    id: 'chat',
-    title: 'Sector 1: AI Companion',
-    description: 'Connection established. Your intelligent assistant is ready to analyze data and execute complex tasks on command.',
-    target: null,
-    position: 'center',
-    action: 'wait:1000'
-  },
-  {
-    id: 'workspaces',
-    title: 'Sector 2: Project Grid',
-    description: 'Transporting to Workspaces (Ctrl+2)... You can also type "/workspace" to get here. One click restores your entire environment.',
-    target: null, // Full view
-    position: 'center',
-    action: 'navigate:2'
-  },
-  {
-    id: 'tabs',
-    title: 'Sector 4: Tab Array',
-    description: 'Warping to Tab Management (Ctrl+4)... The system automatically groups your scattered browser tabs. Purge duplicates with one click.',
-    target: null,
-    position: 'center',
-    action: 'navigate:4'
-  },
-  {
-    id: 'team',
-    title: 'Sector 5: Team Ops',
-    description: 'Engaging Team Link (Ctrl+5)... Share resources securely via P2P. No cloud servers, just direct encrypted collaboration.',
-    target: null,
-    position: 'center',
-    action: 'navigate:5'
-  },
-  {
-    id: 'magic',
-    title: 'The Magic Button',
-    description: 'Returning to Base... The Global Add button is your universal collector. Grab tabs, history, and assets from anywhere in the system.',
-    target: '[data-onboarding="global-add-btn"]',
-    position: 'left',
-    action: 'navigate:3'
+    action: 'navigate:3', // back to overview
+    duration: 4500,
+    emoji: '⚡'
   },
   {
     id: 'ready',
-    title: 'Controls Transferred',
-    description: 'Tour complete. You have full manual control. Remember: "/" is your key to the entire system. Good luck, Agent.',
+    title: 'You\'re Ready!',
+    description: 'That\'s it! Ctrl+K is your gateway. Now go make something awesome.',
     target: null,
-    position: 'center'
+    position: 'center',
+    duration: 3500,
+    emoji: '✨'
   }
 ];
 
@@ -202,7 +175,6 @@ const FakeCursor = ({ target }) => {
 
 export function OnboardingTour({ onComplete, onSkip }) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [visitedSteps, setVisitedSteps] = useState([]); // Chat History
   const [isVisible, setIsVisible] = useState(true);
   const [showSpotlight, setShowSpotlight] = useState(false);
 
@@ -210,28 +182,12 @@ export function OnboardingTour({ onComplete, onSkip }) {
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [isTypingComplete, setIsTypingComplete] = useState(false);
   const [isActionRunning, setIsActionRunning] = useState(false);
+  const [showTransition, setShowTransition] = useState(false);
 
   const step = ONBOARDING_STEPS[currentStep];
   const isLastStep = currentStep === ONBOARDING_STEPS.length - 1;
   const isFirstStep = currentStep === 0;
 
-  // Add step to history
-  useEffect(() => {
-    if (step) {
-      setVisitedSteps(prev => {
-        // Avoid duplicates (if strict mode runs twice)
-        if (prev.length > 0 && prev[prev.length - 1].id === step.id) return prev;
-        return [...prev, step];
-      });
-      // Scroll to bottom
-      setTimeout(() => {
-        const container = document.getElementById('onboarding-chat-container');
-        if (container) {
-          container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-        }
-      }, 100);
-    }
-  }, [currentStep, step]);
 
   // Magical Body Class Control
   useEffect(() => {
@@ -355,13 +311,13 @@ export function OnboardingTour({ onComplete, onSkip }) {
     // Only advance if: AutoPlay is ON, Description Typing is DONE, Component VISIBLE, Action DONE
     if (!isAutoPlaying || !isTypingComplete || !isVisible || isActionRunning) return;
 
-    const readTime = isLastStep ? 5000 : 3500;
+    const readTime = step.duration || 4000;
     const timer = setTimeout(() => {
       if (isLastStep) handleComplete();
       else handleNext();
     }, readTime);
     return () => clearTimeout(timer);
-  }, [isAutoPlaying, isTypingComplete, currentStep, isLastStep, isVisible, isActionRunning]);
+  }, [isAutoPlaying, isTypingComplete, currentStep, isLastStep, isVisible, isActionRunning, step.duration]);
 
 
   // Trigger chat scrape when onboarding starts
@@ -409,8 +365,14 @@ export function OnboardingTour({ onComplete, onSkip }) {
   }, [currentStep, step]);
 
   const handleNext = () => {
-    if (isLastStep) handleComplete();
-    else setCurrentStep(prev => prev + 1);
+    if (isLastStep) {
+      handleComplete();
+    } else {
+      // Show cinematic transition flash
+      setShowTransition(true);
+      setTimeout(() => setShowTransition(false), 600);
+      setCurrentStep(prev => prev + 1);
+    }
   };
 
   const handlePrev = () => {
@@ -436,25 +398,29 @@ export function OnboardingTour({ onComplete, onSkip }) {
 
   return (
     <>
-      <div className="onboarding-backdrop" onClick={handleUserInteraction} />
+      {/* Vignette overlay - separate from backdrop to not conflict with wallpaper */}
+      <div className="onboarding-vignette" />
+
+      {showTransition && <div className="onboarding-transition-flash" />}
 
       {isAutoPlaying && <FakeCursor target={step.target} />}
 
       <div
-        className={`onboarding-tooltip ${step.id}`}
+        className={`onboarding-tooltip subtitle-style ${step.id}`}
         style={{
           position: 'fixed',
-          bottom: 32,
-          left: 32,
-          right: 'auto',
+          bottom: 48,
+          left: '50%',
+          transform: 'translateX(-50%)',
           top: 'auto',
-          transform: 'none',
+          right: 'auto',
           margin: 0,
           zIndex: 10003,
           display: 'flex',
           flexDirection: 'column',
-          maxHeight: '60vh',
-          transition: 'all 0.3s ease'
+          maxHeight: '40vh',
+          transition: 'all 0.3s ease',
+          textAlign: 'center'
         }}
       >
         <div className="onboarding-gradient-border" />
@@ -463,77 +429,36 @@ export function OnboardingTour({ onComplete, onSkip }) {
           <FontAwesomeIcon icon={faTimes} />
         </button>
 
-        <div
-          className="onboarding-content onboarding-chat-log"
-          id="onboarding-chat-container"
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            paddingRight: 8,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16
-          }}
-        >
-          {visitedSteps.map((s, index) => {
-            const isLatest = index === visitedSteps.length - 1;
-            return (
-              <div
-                key={`${s.id}-${index}`}
-                className={`onboarding-message ${isLatest ? 'latest' : 'history'}`}
-                style={{
-                  opacity: isLatest ? 1 : 0.6,
-                  filter: isLatest ? 'none' : 'grayscale(0.3)',
-                  transition: 'all 0.5s ease',
-                  transformOrigin: 'bottom left',
-                  animation: 'fadeInUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)'
-                }}
-              >
-                <div className="onboarding-step-indicator" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span>Step {index + 1}</span>
-                  {isLatest && isAutoPlaying && <span style={{ opacity: 0.7, color: '#4ade80' }}>▶ LIVE</span>}
-                </div>
-                <h3 className="onboarding-title" style={{ fontSize: isLatest ? 18 : 16, marginBottom: 8, opacity: isLatest ? 1 : 0.8 }}>{s.title}</h3>
-
-                {isLatest ? (
-                  <TypewriterText
-                    text={s.description}
-                    speed={20}
-                    onComplete={() => setIsTypingComplete(true)}
-                  />
-                ) : (
-                  <div className="onboarding-description" style={{ fontSize: 13 }}>{s.description}</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="onboarding-footer" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="onboarding-progress-bar">
-            <div
-              className="onboarding-progress-fill"
-              style={{ width: `${((currentStep + 1) / ONBOARDING_STEPS.length) * 100}%` }}
-            />
+        <div className="onboarding-content" id="onboarding-chat-container">
+          {/* Compact header with emoji + title inline */}
+          <div className="onboarding-header-row">
+            {step.emoji && <span className="onboarding-emoji">{step.emoji}</span>}
+            <h3 className="onboarding-title">{step.title}</h3>
+            <span className="onboarding-step-count">{currentStep + 1}/{ONBOARDING_STEPS.length}</span>
           </div>
 
-          <div className="onboarding-actions">
-            {!isFirstStep && (
-              <button className="onboarding-btn secondary" onClick={handlePrev}>
-                <FontAwesomeIcon icon={faArrowLeft} /> Back
-              </button>
-            )}
+          <TypewriterText
+            key={step.id}
+            text={step.description}
+            speed={18}
+            onComplete={() => setIsTypingComplete(true)}
+          />
 
-            <button
-              className="onboarding-btn primary"
-              onClick={() => { handleUserInteraction(); handleNext(); }}
-            >
-              {isLastStep ? (
-                <>Get Started <FontAwesomeIcon icon={faCheckCircle} /></>
-              ) : (
-                <>{isAutoPlaying ? 'Pause' : 'Next'} <FontAwesomeIcon icon={faArrowRight} /></>
+          {/* Compact footer */}
+          <div className="onboarding-footer-row">
+            <div className="onboarding-progress-bar">
+              <div className="onboarding-progress-fill" style={{ width: `${((currentStep + 1) / ONBOARDING_STEPS.length) * 100}%` }} />
+            </div>
+            <div className="onboarding-actions">
+              {!isFirstStep && (
+                <button className="onboarding-btn secondary" onClick={handlePrev}>
+                  <FontAwesomeIcon icon={faArrowLeft} />
+                </button>
               )}
-            </button>
+              <button className="onboarding-btn primary" onClick={() => { handleUserInteraction(); handleNext(); }}>
+                {isLastStep ? 'Start' : (isAutoPlaying ? '⏸' : <FontAwesomeIcon icon={faArrowRight} />)}
+              </button>
+            </div>
           </div>
         </div>
       </div>

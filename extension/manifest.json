@@ -65,5 +65,23 @@
       ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "commands": {
+    "open_spotlight": {
+      "suggested_key": {
+        "default": "Alt+S",
+        "mac": "Alt+S",
+        "windows": "Alt+S"
+      },
+      "description": "Open CoolDesk Spotlight Search"
+    },
+    "toggle_sidebar": {
+      "suggested_key": {
+        "default": "Alt+B",
+        "mac": "Command+Shift+S",
+        "windows": "Alt+B"
+      },
+      "description": "Toggle CoolDesk Sidebar"
+    }
+  }
 }

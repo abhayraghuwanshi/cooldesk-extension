@@ -246,8 +246,11 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                     borderRadius: 16,
                     padding: 20,
                     border: '1px solid rgba(255,255,255,0.05)',
-                    display: 'flex', flexDirection: 'column', gap: 12
-                }}>
+                    display: 'flex', flexDirection: 'column', gap: 12,
+                    cursor: (!isEditing && canWrite) ? 'pointer' : 'default',
+                    transition: 'all 0.2s'
+                }}
+                    onClick={() => (!isEditing && canWrite) && setIsEditing(true)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{
                             width: 32, height: 32, borderRadius: 10,
@@ -292,8 +295,11 @@ export default function TeamContextPanel({ teamId, canWrite }) {
                     borderRadius: 16,
                     padding: 20,
                     border: '1px solid rgba(255,255,255,0.05)',
-                    display: 'flex', flexDirection: 'column', gap: 12
-                }}>
+                    display: 'flex', flexDirection: 'column', gap: 12,
+                    cursor: (!isEditing && canWrite) ? 'pointer' : 'default',
+                    transition: 'all 0.2s'
+                }}
+                    onClick={() => (!isEditing && canWrite) && setIsEditing(true)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{
                             width: 32, height: 32, borderRadius: 10,

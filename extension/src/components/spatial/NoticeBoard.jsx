@@ -320,7 +320,7 @@ export default function NoticeBoard({ teamId, canWrite }) {
                                     transition: 'transform 0.2s ease, box-shadow 0.2s',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    cursor: 'default',
+                                    cursor: 'pointer',
                                     // Subtle paper texture gradient
                                     backgroundImage: 'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%)'
                                 }}

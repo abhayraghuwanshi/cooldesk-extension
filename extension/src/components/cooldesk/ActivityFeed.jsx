@@ -1,11 +1,12 @@
 import {
     faBookmark,
     faCalendarAlt,
+    faChevronDown,
     faGlobe,
     faLink
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { listScrapedChats } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { getFaviconUrl } from '../../utils/helpers.js';
@@ -41,6 +42,8 @@ export function ActivityFeed() {
     const [visibleFavCount, setVisibleFavCount] = useState(8);
     const [currentTime, setCurrentTime] = useState(new Date());
     const [region, setRegion] = useState('');
+    const [expandedDomains, setExpandedDomains] = useState(new Set());
+    const [isPending, startTransition] = useTransition();
     const favContainerRef = useRef(null);
 
     // Clock and region detection
@@ -137,7 +140,7 @@ export function ActivityFeed() {
         // 1. Fetch Chats
         try {
             const chatRes = await listScrapedChats({ sortBy: 'scrapedAt', sortOrder: 'desc' });
-            const chats = (chatRes.data || chatRes || []).slice(0, 10).map(chat => ({
+            const chats = (chatRes.data || chatRes || []).slice(0, 30).map(chat => ({
                 id: chat.id,
                 title: chat.title || 'Untitled Chat',
                 url: chat.url,
@@ -335,6 +338,118 @@ export function ActivityFeed() {
         if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
         return `${Math.floor(diff / 86400)}d ago`;
     };
+
+    // Group tabs by domain and chats by platform for cleaner view
+    const groupedFeedItems = useMemo(() => {
+        const filtered = feedItems.filter(item =>
+            activeTab === 'all' || item.type === (activeTab === 'chats' ? 'chat' : 'tab')
+        );
+
+        // Separate chats and tabs
+        const chats = filtered.filter(item => item.type === 'chat');
+        const tabs = filtered.filter(item => item.type === 'tab');
+
+        // Group chats by platform
+        const chatsByPlatform = {};
+        chats.forEach(chat => {
+            const platform = chat.platform || 'Other';
+            if (!chatsByPlatform[platform]) {
+                chatsByPlatform[platform] = [];
+            }
+            chatsByPlatform[platform].push(chat);
+        });
+
+        // Sort each platform's chats by timestamp (newest first)
+        Object.values(chatsByPlatform).forEach(platformChats => {
+            platformChats.sort((a, b) => b.timestamp - a.timestamp);
+        });
+
+        // Convert to array of chat groups
+        const groupedChats = Object.entries(chatsByPlatform)
+            .map(([platform, platformChats]) => ({
+                type: 'chat-group',
+                platform,
+                chats: platformChats,
+                latestTimestamp: platformChats[0].timestamp,
+                count: platformChats.length,
+                config: PLATFORM_CONFIG[platform] || { emoji: '💬', color: '#64748B' }
+            }))
+            .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+
+        // Group tabs by domain
+        const tabsByDomain = {};
+        tabs.forEach(tab => {
+            let domain = 'other';
+            try {
+                domain = new URL(tab.url).hostname.replace('www.', '');
+            } catch (e) { /* ignore */ }
+
+            if (!tabsByDomain[domain]) {
+                tabsByDomain[domain] = [];
+            }
+            tabsByDomain[domain].push(tab);
+        });
+
+        // Sort each domain's tabs by timestamp (newest first)
+        Object.values(tabsByDomain).forEach(domainTabs => {
+            domainTabs.sort((a, b) => b.timestamp - a.timestamp);
+        });
+
+        // Convert to array and sort by most recent tab in each group
+        const groupedTabs = Object.entries(tabsByDomain)
+            .map(([domain, domainTabs]) => ({
+                type: 'tab-group',
+                domain,
+                tabs: domainTabs,
+                latestTimestamp: domainTabs[0].timestamp,
+                count: domainTabs.length
+            }))
+            .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+
+        // Merge chat groups and tab groups
+        const result = [];
+
+        // Add chat groups (single chats stay as singles, multiple become groups)
+        groupedChats.forEach(group => {
+            if (group.count === 1) {
+                result.push({ ...group.chats[0], isGrouped: false });
+            } else {
+                result.push(group);
+            }
+        });
+
+        // Add tab groups (single tabs stay as singles, multiple become groups)
+        groupedTabs.forEach(group => {
+            if (group.count === 1) {
+                result.push({ ...group.tabs[0], isGrouped: false });
+            } else {
+                result.push(group);
+            }
+        });
+
+        // Sort final result by timestamp
+        return result.sort((a, b) => {
+            const tsA = a.type === 'tab-group' ? a.latestTimestamp :
+                       a.type === 'chat-group' ? a.latestTimestamp : a.timestamp;
+            const tsB = b.type === 'tab-group' ? b.latestTimestamp :
+                       b.type === 'chat-group' ? b.latestTimestamp : b.timestamp;
+            return tsB - tsA;
+        });
+    }, [feedItems, activeTab]);
+
+    const toggleDomainExpand = useCallback((domain) => {
+        startTransition(() => {
+            setExpandedDomains(prev => {
+                const next = new Set(prev);
+                if (next.has(domain)) {
+                    next.delete(domain);
+                } else {
+                    next.add(domain);
+                }
+                return next;
+            });
+        });
+    }, []);
 
     return (
         <div className="cooldesk-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -683,136 +798,440 @@ export function ActivityFeed() {
                         </div>
                     ) : isLoading && feedItems.length === 0 ? (
                         <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>Loading feed...</div>
-                    ) : feedItems.filter(item => activeTab === 'all' || item.type === (activeTab === 'chats' ? 'chat' : 'tab')).length > 0 ? (
+                    ) : groupedFeedItems.length > 0 ? (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            {feedItems
-                                .filter(item => activeTab === 'all' || item.type === (activeTab === 'chats' ? 'chat' : 'tab'))
-                                .map(item => {
-                                    const isChat = item.type === 'chat';
-                                    const isCalendar = item.type === 'calendar';
-                                    const icon = isChat
-                                        ? PLATFORM_CONFIG[item.platform]?.emoji || '💬'
-                                        : isCalendar ? '📅' : null;
+                            {groupedFeedItems.map((item, idx) => {
+                                // Handle chat groups (multiple chats from same platform)
+                                if (item.type === 'chat-group') {
+                                    const isExpanded = expandedDomains.has(`chat-${item.platform}`);
+                                    const topChat = item.chats[0];
+                                    const { emoji, color } = item.config;
 
                                     return (
-                                        <div key={item.id}
-                                            onClick={() => handleItemClick(item.url)}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '12px',
-                                                padding: '12px 16px',
-                                                cursor: 'pointer',
-                                                borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
-                                                transition: 'background 0.2s',
-                                                position: 'relative'
-                                            }}
-                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
-                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                        >
-                                            {/* Icon */}
-                                            <div style={{
-                                                // width: '36px', height: '36px',
-                                                borderRadius: isChat ? '12px' : '8px',
-                                                // background: isChat ? 'var(--accent-purple-soft, rgba(139, 92, 246, 0.15))' : isCalendar ? 'rgba(16, 185, 129, 0.15)' : 'var(--accent-blue-soft, rgba(96, 165, 250, 0.15))',
-                                                // border: isChat ? '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))' : isCalendar ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid var(--accent-blue-border, rgba(96, 165, 250, 0.2))',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                fontSize: '18px',
-                                                flexShrink: 0,
-                                                color: isChat ? 'var(--accent-purple, #8b5cf6)' : isCalendar ? '#10B981' : 'var(--accent-blue, #60a5fa)',
-                                                overflow: 'hidden'
-                                            }}>
-                                                <img
-                                                    src={item.favIconUrl || getFaviconUrl(item.url, 32)}
-                                                    alt=""
-                                                    style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
-                                                    onError={e => {
-                                                        e.target.style.display = 'none';
-                                                        // Show fallback icon if image fails
-                                                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
-                                                    }}
-                                                />
-                                                <div style={{ display: 'none' }}>
-                                                    {icon ? icon : <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />}
-                                                </div>
-                                            </div>
-
-                                            {/* Info */}
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{
-                                                    fontSize: 'var(--font-base)',
-                                                    color: 'var(--text-primary, #F1F5F9)',
-                                                    fontWeight: 500,
-                                                    whiteSpace: 'nowrap',
-                                                    overflow: 'hidden',
-                                                    textOverflow: 'ellipsis',
-                                                    marginBottom: '2px'
-                                                }}>
-                                                    {item.title}
-                                                </div>
-                                                <div style={{
-                                                    fontSize: 'var(--font-xs)',
-                                                    color: 'var(--text-secondary, #64748B)',
+                                        <div key={`chat-group-${item.platform}`} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.05)' }}>
+                                            {/* Group Header */}
+                                            <div
+                                                style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
-                                                    gap: '6px'
-                                                }}>
-                                                    <span>{item.subtitle}</span>
-                                                    <span style={{ width: '2px', height: '2px', background: 'currentColor', borderRadius: '50%', opacity: 0.5 }}></span>
-                                                    <span>{formatTime(item.timestamp)}</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Badge */}
-                                            <div style={{ flexShrink: 0, marginLeft: '8px' }}>
-                                                {isChat ? (
-                                                    <div style={{
-                                                        fontSize: 'var(--font-xs)',
-                                                        fontWeight: 600,
-                                                        color: 'var(--accent-purple, #8B5CF6)',
-                                                        background: 'var(--accent-purple-soft, rgba(139, 92, 246, 0.1))',
-                                                        border: '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))',
-                                                        padding: '2px 6px',
-                                                        borderRadius: '4px',
-                                                        textTransform: 'uppercase'
-                                                    }}>
-                                                        Chat
-                                                    </div>
-                                                ) : isCalendar ? (
-                                                    <div style={{
-                                                        fontSize: 'var(--font-xs)',
-                                                        fontWeight: 600,
-                                                        color: '#10B981',
-                                                        background: 'rgba(16, 185, 129, 0.1)',
-                                                        border: '1px solid rgba(16, 185, 129, 0.2)',
-                                                        padding: '2px 6px',
-                                                        borderRadius: '4px',
-                                                        textTransform: 'uppercase'
-                                                    }}>
-                                                        Event
-                                                    </div>
-                                                ) : (
-                                                    <div style={{
-                                                        fontSize: 'var(--font-xs)',
-                                                        fontWeight: 600,
-                                                        color: 'var(--accent-blue, #3B82F6)',
-                                                        background: 'var(--accent-blue-soft, rgba(59, 130, 246, 0.1))',
-                                                        border: '1px solid var(--accent-blue-border, rgba(59, 130, 246, 0.2))',
-                                                        padding: '2px 6px',
-                                                        borderRadius: '4px',
-                                                        textTransform: 'uppercase',
+                                                    gap: '12px',
+                                                    padding: '12px 16px',
+                                                    cursor: 'pointer',
+                                                    transition: 'background 0.2s',
+                                                    position: 'relative'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >
+                                                {/* Platform Icon */}
+                                                <div
+                                                    onClick={() => handleItemClick(topChat.url)}
+                                                    style={{
+                                                        width: '36px',
+                                                        height: '36px',
+                                                        borderRadius: '12px',
+                                                        background: `${color}20`,
+                                                        border: `1px solid ${color}40`,
                                                         display: 'flex',
                                                         alignItems: 'center',
-                                                        gap: '4px'
+                                                        justifyContent: 'center',
+                                                        fontSize: '18px',
+                                                        flexShrink: 0
+                                                    }}
+                                                >
+                                                    {emoji}
+                                                </div>
+
+                                                {/* Info */}
+                                                <div
+                                                    onClick={() => handleItemClick(topChat.url)}
+                                                    style={{ flex: 1, minWidth: 0 }}
+                                                >
+                                                    <div style={{
+                                                        fontSize: 'var(--font-base)',
+                                                        color: 'var(--text-primary, #F1F5F9)',
+                                                        fontWeight: 500,
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        marginBottom: '2px'
                                                     }}>
-                                                        <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'currentColor' }}></div>
-                                                        Tab
+                                                        {topChat.title}
                                                     </div>
-                                                )}
+                                                    <div style={{
+                                                        fontSize: 'var(--font-xs)',
+                                                        color: 'var(--text-secondary, #64748B)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px'
+                                                    }}>
+                                                        <span style={{ color }}>{item.platform}</span>
+                                                        <span style={{ width: '2px', height: '2px', background: 'currentColor', borderRadius: '50%', opacity: 0.5 }}></span>
+                                                        <span>{formatTime(topChat.timestamp)}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Count Badge + Expand Button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleDomainExpand(`chat-${item.platform}`);
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        padding: '4px 10px',
+                                                        borderRadius: '8px',
+                                                        border: `1px solid ${color}50`,
+                                                        background: isExpanded ? `${color}25` : `${color}15`,
+                                                        color: color,
+                                                        fontSize: 'var(--font-xs)',
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                >
+                                                    <span>{item.count} chats</span>
+                                                    <FontAwesomeIcon
+                                                        icon={faChevronDown}
+                                                        style={{
+                                                            fontSize: '10px',
+                                                            transition: 'transform 0.2s',
+                                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                                                        }}
+                                                    />
+                                                </button>
                                             </div>
+
+                                            {/* Expanded Chats */}
+                                            {isExpanded && (
+                                                <div style={{
+                                                    background: 'rgba(0, 0, 0, 0.15)',
+                                                    borderTop: '1px solid rgba(148, 163, 184, 0.05)'
+                                                }}>
+                                                    {item.chats.slice(1).map((chat, chatIdx) => (
+                                                        <div
+                                                            key={chat.id}
+                                                            onClick={() => handleItemClick(chat.url)}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '12px',
+                                                                padding: '10px 16px 10px 48px',
+                                                                cursor: 'pointer',
+                                                                transition: 'background 0.2s',
+                                                                borderBottom: chatIdx < item.chats.length - 2 ? '1px solid rgba(148, 163, 184, 0.03)' : 'none'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                        >
+                                                            <span style={{ fontSize: '14px' }}>{emoji}</span>
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{
+                                                                    fontSize: 'var(--font-sm)',
+                                                                    color: 'var(--text-primary, #E2E8F0)',
+                                                                    whiteSpace: 'nowrap',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis'
+                                                                }}>
+                                                                    {chat.title}
+                                                                </div>
+                                                            </div>
+                                                            <span style={{ fontSize: 'var(--font-xs)', color: '#64748B' }}>
+                                                                {formatTime(chat.timestamp)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     );
-                                })}
+                                }
+
+                                // Handle tab groups (multiple tabs from same domain)
+                                if (item.type === 'tab-group') {
+                                    const isExpanded = expandedDomains.has(item.domain);
+                                    const topTab = item.tabs[0];
+
+                                    return (
+                                        <div key={`group-${item.domain}`} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.05)' }}>
+                                            {/* Group Header - Shows top tab with expand button */}
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    padding: '12px 16px',
+                                                    cursor: 'pointer',
+                                                    transition: 'background 0.2s',
+                                                    position: 'relative'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >
+                                                {/* Icon */}
+                                                <div
+                                                    onClick={() => handleItemClick(topTab.url)}
+                                                    style={{
+                                                        borderRadius: '8px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        fontSize: '18px',
+                                                        flexShrink: 0,
+                                                        color: 'var(--accent-blue, #60a5fa)',
+                                                        overflow: 'hidden'
+                                                    }}
+                                                >
+                                                    <img
+                                                        src={topTab.favIconUrl || getFaviconUrl(topTab.url, 32)}
+                                                        alt=""
+                                                        style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
+                                                        onError={e => {
+                                                            e.target.style.display = 'none';
+                                                            if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                                        }}
+                                                    />
+                                                    <div style={{ display: 'none' }}>
+                                                        <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Info */}
+                                                <div
+                                                    onClick={() => handleItemClick(topTab.url)}
+                                                    style={{ flex: 1, minWidth: 0 }}
+                                                >
+                                                    <div style={{
+                                                        fontSize: 'var(--font-base)',
+                                                        color: 'var(--text-primary, #F1F5F9)',
+                                                        fontWeight: 500,
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        marginBottom: '2px'
+                                                    }}>
+                                                        {topTab.title}
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: 'var(--font-xs)',
+                                                        color: 'var(--text-secondary, #64748B)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px'
+                                                    }}>
+                                                        <span>{item.domain}</span>
+                                                        <span style={{ width: '2px', height: '2px', background: 'currentColor', borderRadius: '50%', opacity: 0.5 }}></span>
+                                                        <span>{formatTime(topTab.timestamp)}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Count Badge + Expand Button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleDomainExpand(item.domain);
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        padding: '4px 10px',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid rgba(59, 130, 246, 0.3)',
+                                                        background: isExpanded ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.08)',
+                                                        color: '#60A5FA',
+                                                        fontSize: 'var(--font-xs)',
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                >
+                                                    <span>{item.count} tabs</span>
+                                                    <FontAwesomeIcon
+                                                        icon={faChevronDown}
+                                                        style={{
+                                                            fontSize: '10px',
+                                                            transition: 'transform 0.2s',
+                                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                                                        }}
+                                                    />
+                                                </button>
+                                            </div>
+
+                                            {/* Expanded Tabs */}
+                                            {isExpanded && (
+                                                <div style={{
+                                                    background: 'rgba(0, 0, 0, 0.15)',
+                                                    borderTop: '1px solid rgba(148, 163, 184, 0.05)'
+                                                }}>
+                                                    {item.tabs.slice(1).map((tab, tabIdx) => (
+                                                        <div
+                                                            key={tab.id}
+                                                            onClick={() => handleItemClick(tab.url)}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '12px',
+                                                                padding: '10px 16px 10px 48px',
+                                                                cursor: 'pointer',
+                                                                transition: 'background 0.2s',
+                                                                borderBottom: tabIdx < item.tabs.length - 2 ? '1px solid rgba(148, 163, 184, 0.03)' : 'none'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                        >
+                                                            <img
+                                                                src={tab.favIconUrl || getFaviconUrl(tab.url, 20)}
+                                                                alt=""
+                                                                style={{ width: '20px', height: '20px', objectFit: 'contain', borderRadius: '4px' }}
+                                                                onError={e => { e.target.style.display = 'none'; }}
+                                                            />
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{
+                                                                    fontSize: 'var(--font-sm)',
+                                                                    color: 'var(--text-primary, #E2E8F0)',
+                                                                    whiteSpace: 'nowrap',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis'
+                                                                }}>
+                                                                    {tab.title}
+                                                                </div>
+                                                            </div>
+                                                            <span style={{ fontSize: 'var(--font-xs)', color: '#64748B' }}>
+                                                                {formatTime(tab.timestamp)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                }
+
+                                // Handle single items (chats, single tabs, calendar)
+                                const isChat = item.type === 'chat';
+                                const isCalendar = item.type === 'calendar';
+                                const icon = isChat
+                                    ? PLATFORM_CONFIG[item.platform]?.emoji || '💬'
+                                    : isCalendar ? '📅' : null;
+
+                                return (
+                                    <div key={item.id}
+                                        onClick={() => handleItemClick(item.url)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            padding: '12px 16px',
+                                            cursor: 'pointer',
+                                            borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
+                                            transition: 'background 0.2s',
+                                            position: 'relative'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                        {/* Icon */}
+                                        <div style={{
+                                            borderRadius: isChat ? '12px' : '8px',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: '18px',
+                                            flexShrink: 0,
+                                            color: isChat ? 'var(--accent-purple, #8b5cf6)' : isCalendar ? '#10B981' : 'var(--accent-blue, #60a5fa)',
+                                            overflow: 'hidden'
+                                        }}>
+                                            <img
+                                                src={item.favIconUrl || getFaviconUrl(item.url, 32)}
+                                                alt=""
+                                                style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
+                                                onError={e => {
+                                                    e.target.style.display = 'none';
+                                                    if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                                }}
+                                            />
+                                            <div style={{ display: 'none' }}>
+                                                {icon ? icon : <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />}
+                                            </div>
+                                        </div>
+
+                                        {/* Info */}
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{
+                                                fontSize: 'var(--font-base)',
+                                                color: 'var(--text-primary, #F1F5F9)',
+                                                fontWeight: 500,
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                marginBottom: '2px'
+                                            }}>
+                                                {item.title}
+                                            </div>
+                                            <div style={{
+                                                fontSize: 'var(--font-xs)',
+                                                color: 'var(--text-secondary, #64748B)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '6px'
+                                            }}>
+                                                <span>{item.subtitle}</span>
+                                                <span style={{ width: '2px', height: '2px', background: 'currentColor', borderRadius: '50%', opacity: 0.5 }}></span>
+                                                <span>{formatTime(item.timestamp)}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Badge */}
+                                        <div style={{ flexShrink: 0, marginLeft: '8px' }}>
+                                            {isChat ? (
+                                                <div style={{
+                                                    fontSize: 'var(--font-xs)',
+                                                    fontWeight: 600,
+                                                    color: 'var(--accent-purple, #8B5CF6)',
+                                                    background: 'var(--accent-purple-soft, rgba(139, 92, 246, 0.1))',
+                                                    border: '1px solid var(--accent-purple-border, rgba(139, 92, 246, 0.2))',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    textTransform: 'uppercase'
+                                                }}>
+                                                    Chat
+                                                </div>
+                                            ) : isCalendar ? (
+                                                <div style={{
+                                                    fontSize: 'var(--font-xs)',
+                                                    fontWeight: 600,
+                                                    color: '#10B981',
+                                                    background: 'rgba(16, 185, 129, 0.1)',
+                                                    border: '1px solid rgba(16, 185, 129, 0.2)',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    textTransform: 'uppercase'
+                                                }}>
+                                                    Event
+                                                </div>
+                                            ) : (
+                                                <div style={{
+                                                    fontSize: 'var(--font-xs)',
+                                                    fontWeight: 600,
+                                                    color: 'var(--accent-blue, #3B82F6)',
+                                                    background: 'var(--accent-blue-soft, rgba(59, 130, 246, 0.1))',
+                                                    border: '1px solid var(--accent-blue-border, rgba(59, 130, 246, 0.2))',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    textTransform: 'uppercase',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px'
+                                                }}>
+                                                    <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'currentColor' }}></div>
+                                                    Tab
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     ) : (
                         <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B' }}>

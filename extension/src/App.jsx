@@ -6,6 +6,7 @@ import './styles/components.css';
 import './styles/theme.css';
 import './styles/themes/components-vars.css';
 import './styles/wallpaper-enhancements.css';
+import './components/onboarding/OnboardingTour.css'; // Preload onboarding styles
 
 // Add icons to the library
 import { library } from '@fortawesome/fontawesome-svg-core';

@@ -366,48 +366,63 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       return;
     }
 
-    // 2. Handle Slash Commands
-    if (searchValue.startsWith('/')) {
+    // 2. Handle Slash Commands & ! Commands
+    if (searchValue.startsWith('/') || searchValue.startsWith('!')) {
+      const isBang = searchValue.startsWith('!');
       const query = searchValue.slice(1).toLowerCase();
 
       const fetchFlattenedSuggestions = async () => {
-        const navigationCommands = [
-          { command: '/notes', title: 'Notes Manager', description: 'Navigate to Notes view', icon: '📝', category: 'Nav' },
-          { command: '/workspace', title: 'Workspaces', description: 'Navigate to Workspace view', icon: '💼', category: 'Nav' },
-          { command: '/chat', title: 'AI Chat', description: 'Navigate to Chat view', icon: '💬', category: 'Nav' },
-          { command: '/tabs', title: 'Tab Manager', description: 'Navigate to Tabs view', icon: '📑', category: 'Nav' },
-          { command: '/overview', title: 'Dashboard', description: 'Navigate to Overview', icon: '🏠', category: 'Nav' }
-        ];
+        let allOptions = [];
 
-        // Predictive additions using cache
-        const quickSaves = [];
-        if (currentTab && workspacesCache.current) {
-          workspacesCache.current.forEach(ws => {
-            quickSaves.push({
-              command: `/add tab ${currentTab.url} ${ws.name}`,
-              title: `Save to "${ws.name}"`,
-              description: `Add this tab to your "${ws.name}" workspace`,
-              icon: '📁',
-              category: 'Quick Save',
-              metadata: { url: currentTab.url, workspaceName: ws.name }
+        if (isBang) {
+          // ! Commands from CommandParser
+          allOptions = CommandParser.getAllCommands().map(cmd => ({
+            command: cmd.command.split(' ')[0], // Clean command for input e.g. !go
+            title: cmd.command,
+            description: cmd.description,
+            icon: cmd.category === 'AI' ? '🤖' : cmd.category === 'Navigation' ? '🧭' : '⚙️',
+            category: cmd.category
+          }));
+        } else {
+          // / Commands
+          const navigationCommands = [
+            { command: '/notes', title: 'Notes Manager', description: 'Navigate to Notes view', icon: '📝', category: 'Nav' },
+            { command: '/workspace', title: 'Workspaces', description: 'Navigate to Workspace view', icon: '💼', category: 'Nav' },
+            { command: '/chat', title: 'AI Chat', description: 'Navigate to Chat view', icon: '💬', category: 'Nav' },
+            { command: '/tabs', title: 'Tab Manager', description: 'Navigate to Tabs view', icon: '📑', category: 'Nav' },
+            { command: '/overview', title: 'Dashboard', description: 'Navigate to Overview', icon: '🏠', category: 'Nav' }
+          ];
+
+          // Predictive additions using cache
+          const quickSaves = [];
+          if (currentTab && workspacesCache.current) {
+            workspacesCache.current.forEach(ws => {
+              quickSaves.push({
+                command: `/add tab ${currentTab.url} ${ws.name}`,
+                title: `Save to "${ws.name}"`,
+                description: `Add this tab to your "${ws.name}" workspace`,
+                icon: '📁',
+                category: 'Quick Save',
+                metadata: { url: currentTab.url, workspaceName: ws.name }
+              });
             });
-          });
+          }
+
+          const predictiveActions = [
+            { command: '/save', title: 'Save All Tabs', description: 'Snapshot all tabs to workspace', icon: '💾', category: 'Action' },
+            { command: '/share community', title: 'Share Work', description: 'Post to community hub', icon: '🌍', category: 'Action' },
+            { command: '/add note', title: 'New Note', description: 'Create a quick thought', icon: '📝', category: 'Action' },
+            { command: '/add workspace', title: 'New Workspace', description: 'Create project space', icon: '📁', category: 'Action' }
+          ];
+
+          allOptions = [...quickSaves, ...predictiveActions, ...navigationCommands];
         }
-
-        const predictiveActions = [
-          { command: '/save', title: 'Save All Tabs', description: 'Snapshot all tabs to workspace', icon: '💾', category: 'Action' },
-          { command: '/share community', title: 'Share Work', description: 'Post to community hub', icon: '🌍', category: 'Action' },
-          { command: '/add note', title: 'New Note', description: 'Create a quick thought', icon: '📝', category: 'Action' },
-          { command: '/add workspace', title: 'New Workspace', description: 'Create project space', icon: '📁', category: 'Action' }
-        ];
-
-        let allOptions = [...quickSaves, ...predictiveActions, ...navigationCommands];
 
         if (query === '') {
           updateCommandSuggestions(allOptions.slice(0, 10));
         } else {
           const matches = allOptions.filter(opt => {
-            const searchStr = `${opt.title} ${opt.command} ${opt.category}`.toLowerCase();
+            const searchStr = `${opt.title} ${opt.command} ${opt.category} ${opt.description}`.toLowerCase();
             return searchStr.includes(query) ||
               query.split('').every((char, i) => searchStr.indexOf(char, i) !== -1);
           });
@@ -417,13 +432,14 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             const bTitle = (b.title || '').toLowerCase();
             const aCmd = a.command.toLowerCase();
             const bCmd = b.command.toLowerCase();
-            if (aCmd === '/' + query) return -1;
-            if (bCmd === '/' + query) return 1;
-            const aStarts = aTitle.startsWith(query) || aCmd.startsWith('/' + query);
-            const bStarts = bTitle.startsWith(query) || bCmd.startsWith('/' + query);
+            const prefix = isBang ? '!' : '/';
+            if (aCmd === prefix + query) return -1;
+            if (bCmd === prefix + query) return 1;
+            const aStarts = aTitle.startsWith(query) || aCmd.startsWith(prefix + query);
+            const bStarts = bTitle.startsWith(query) || bCmd.startsWith(prefix + query);
             if (aStarts && !bStarts) return -1;
             if (!aStarts && bStarts) return 1;
-            const prio = { 'Quick Save': 1, 'Action': 2, 'Nav': 3 };
+            const prio = { 'Quick Save': 1, 'Action': 2, 'Nav': 3, 'AI': 1, 'Navigation': 2 };
             const aPrio = prio[a.category] || 4;
             const bPrio = prio[b.category] || 4;
             if (aPrio !== bPrio) return aPrio - bPrio;
@@ -455,7 +471,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     setAutocompleteHint('');
 
     // If input is effectively empty or just command triggers, clear everything
-    if (!searchValue || searchValue.trim() === '' || searchValue.startsWith('!') || searchValue.length < 2 || /^https?:\/\//i.test(searchValue)) {
+    if (!searchValue || searchValue.trim() === '' || (searchValue.startsWith('!') && searchValue.length < 2) || (searchValue.startsWith('/') && searchValue.length < 2) || /^https?:\/\//i.test(searchValue)) {
       updateSearchSuggestions([]);
       updateCommandSuggestions([]);
       return;
@@ -594,7 +610,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   // Sync commandMode with input
   useEffect(() => {
     if (activePill) {
-      if (['/add', '/share'].includes(activePill.prefix)) {
+      if (['/add', '/share', 'ADD', 'SHARE'].includes(activePill.prefix || activePill.label)) {
         setCommandMode('action');
       } else {
         setCommandMode('nav');
@@ -602,7 +618,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       return;
     }
 
-    const val = searchValue.toLowerCase();
+    const val = searchValue.trim().toLowerCase();
     if (val.startsWith('!')) {
       setCommandMode('ai');
     } else if (val.startsWith('/')) {
@@ -1032,12 +1048,13 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     }
   };
 
-  const handleSubmit = React.useCallback(async (e) => {
+  const handleSubmit = React.useCallback(async (e, overrideQuery = null) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (!searchValue.trim() && !activePill) return;
 
-    let query = searchValue.trim();
-    if (activePill) {
+    let query = overrideQuery || searchValue.trim();
+    if (!query && !activePill) return;
+
+    if (activePill && !overrideQuery) {
       query = `${activePill.prefix} ${query}`.trim();
     }
 
@@ -1067,11 +1084,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
         if (target && onNavigate) {
           onNavigate(target);
+          handleClose();
           setSearchValue('');
           setActivePill(null);
-          setCommandSuggestions([]);
-          setSearchSuggestions([]);
-          setSelectedSuggestionIndex(-1);
           return;
         }
 
@@ -1085,11 +1100,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
                 detail: { workspace: result.workspace }
               }));
             }
+            handleClose();
             setSearchValue('');
             setActivePill(null);
-            setCommandSuggestions([]);
-            setSearchSuggestions([]);
-            setSelectedSuggestionIndex(-1);
           }
           return;
         }
@@ -1107,11 +1120,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           }));
         }
 
+        handleClose();
         setSearchValue('');
         setActivePill(null);
-        setCommandSuggestions([]);
-        setSearchSuggestions([]);
-        setSelectedSuggestionIndex(-1);
       } catch (error) {
         console.error('[CoolSearch] Command execution error:', error);
         setCommandFeedback({
@@ -1136,10 +1147,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           text: query,
           disposition: 'NEW_TAB'
         });
+        handleClose();
         setSearchValue('');
-        setCommandSuggestions([]);
-        setSearchSuggestions([]);
-        setSelectedSuggestionIndex(-1);
         return;
       } else {
         url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
@@ -1153,73 +1162,69 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       window.open(url, '_blank');
     }
 
+    handleClose();
     setSearchValue('');
-    setCommandSuggestions([]);
-    setSearchSuggestions([]);
-    setSelectedSuggestionIndex(-1);
-  }, [searchValue, activePill, onNavigate, commandExecutor]);
+  }, [searchValue, activePill, onNavigate, commandExecutor, handleClose]);
 
   const onSelectSuggestion = React.useCallback(async (item) => {
-    const isCommandMode = commandSuggestions.length > 0;
+    if (!item) return;
 
-    if (isCommandMode) {
-      // Check if it's a slash command (navigation or action)
-      if (item.command.startsWith('/')) {
-        const navigationMap = {
-          '/notes': 'notes',
-          '/workspace': 'workspace',
-          '/chat': 'chat',
-          '/tabs': 'tabs',
-          '/team': 'team',
-          '/overview': 'overview'
-        };
+    // 1. Handle Command Mode (Slash or Bang)
+    if (item.command || item.category === 'Command' || (item.command && (item.command.startsWith('/') || item.command.startsWith('!')))) {
+      const cmd = item.command;
 
-        // Handle specific actions for Pills
-        const supportedPrefixes = {
-          '/add': 'ADD',
-          '/share': 'SHARE',
-          '/notes': 'NOTES'
-        };
+      const navigationMap = {
+        '/notes': 'notes',
+        '/workspace': 'workspace',
+        '/chat': 'chat',
+        '/tabs': 'tabs',
+        '/team': 'team',
+        '/overview': 'overview'
+      };
 
-        // Flattened Execution: If it's a fully composed Quick Save or Note, execute immediately
-        if (item.category === 'Quick Save' || item.category === 'Select Destination' || item.command.split(' ').length > 2) {
-          setSearchValue(item.command);
-          setCommandSuggestions([]);
-          setSelectedSuggestionIndex(-1);
-          // Trigger immediate submit
-          setTimeout(() => handleSubmit({ preventDefault: () => { } }), 10);
-          return;
-        }
+      const supportedPrefixes = {
+        '/add': 'ADD',
+        '/share': 'SHARE',
+        '/notes': 'NOTES'
+      };
 
-        // Navigation Priority: Check for core navigation matches first
-        if (navigationMap[item.command] && onNavigate) {
-          onNavigate(navigationMap[item.command]);
-          setSearchValue('');
-          setActivePill(null);
-          setCommandSuggestions([]);
-          setSelectedSuggestionIndex(-1);
-          return;
-        }
+      // Check if command requires arguments
+      const requiresArgs = ['!jump', '!go', '!spot', '!history', '!answer', '!write', '!ws', '/add', '/share'];
+      const baseCmd = cmd.split(' ')[0];
+      const needsMore = requiresArgs.includes(baseCmd) && cmd.split(' ').length === 1;
 
-        // Navigation Pivot: If it's a prefix command, just fill and wait for parameters
-        if (supportedPrefixes[item.command]) {
-          setSearchValue(item.command + ' ');
-          setCommandSuggestions([]);
-          setSelectedSuggestionIndex(-1);
-          return;
-        }
-
-        // Fallback for sub-commands or direct command entry
-        setSearchValue(item.command);
-        setCommandSuggestions([]);
-        setSelectedSuggestionIndex(-1);
-      } else {
-        setSearchValue(item.command);
-        setCommandSuggestions([]);
-        setSelectedSuggestionIndex(-1);
+      // Flattened Execution: If it's a fully composed command, execute immediately
+      if (item.category === 'Quick Save' || item.category === 'Select Destination' || (cmd.split(' ').length > 1 && !needsMore)) {
+        handleSubmit({ preventDefault: () => { } }, cmd);
+        return;
       }
-    } else {
-      // Handle workspace/URL selection (same logic as before)
+
+      // Navigation Priority: Check for core navigation matches first
+      if (navigationMap[cmd] && onNavigate) {
+        onNavigate(navigationMap[cmd]);
+        handleClose();
+        setSearchValue('');
+        setActivePill(null);
+        return;
+      }
+
+      // Command Pivot: If it needs args, just fill and wait
+      if (needsMore || supportedPrefixes[cmd]) {
+        setSearchValue(cmd + ' ');
+        setCommandSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+        if (supportedPrefixes[cmd]) {
+          setActivePill({ label: supportedPrefixes[cmd], prefix: cmd });
+          setSearchValue('');
+        }
+        return;
+      }
+
+      // Final fallback: Execute
+      handleSubmit({ preventDefault: () => { } }, cmd);
+    }
+    // 2. Handle Search/URL Mode
+    else {
       if (item.type === 'workspace') {
         if (onWorkspaceNavigate) onWorkspaceNavigate(item.workspace);
         else handleWorkspaceOpen(item.workspace);
@@ -1227,11 +1232,10 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
         else window.open(item.url, '_blank');
       }
+      handleClose();
       setSearchValue('');
-      setSearchSuggestions([]);
-      setSelectedSuggestionIndex(-1);
     }
-  }, [commandSuggestions, onNavigate, onWorkspaceNavigate, handleSubmit]); // handleSubmit also needs to be stable or dependent.
+  }, [onNavigate, onWorkspaceNavigate, handleSubmit, handleClose]); // handleSubmit also needs to be stable or dependent.
   // This is getting deep. handleSubmit relies on state too.
 
 
@@ -1263,24 +1267,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
 
   const handleSelect = React.useCallback(async (item, idx) => {
-    const isCommandMode = commandSuggestions.length > 0;
-
-    if (isCommandMode) {
-      onSelectSuggestion(item);
-    } else {
-      // Handle workspace or URL selection
-      if (item.type === 'workspace') {
-        if (onWorkspaceNavigate) onWorkspaceNavigate(item.workspace);
-        else handleWorkspaceOpen(item.workspace);
-      } else if (item.type === 'workspace-url' || item.url) {
-        if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
-        else window.open(item.url, '_blank');
-      }
-      setSearchValue('');
-      setSearchSuggestions([]);
-      setSelectedSuggestionIndex(-1);
-    }
-  }, [commandSuggestions, onWorkspaceNavigate, onSelectSuggestion]);
+    onSelectSuggestion(item);
+  }, [onSelectSuggestion]);
 
   const toggleVoice = async (forceStart = false) => {
     if (!annyang) {
@@ -1473,13 +1461,50 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   };
 
   return (
-    <div className="cooldesk-search-container">
+    <div className={`cooldesk-search-container mode-${commandMode}`}>
       <form
         onSubmit={handleSubmit}
-        className="cooldesk-search-box"
+        className={`cooldesk-search-box command-${commandMode} ${isListening ? 'listening' : ''}`}
         onClick={() => inputRef.current?.focus()}
-        style={{ cursor: 'text' }}
+        style={{
+          cursor: 'text',
+          position: 'relative'
+        }}
       >
+        {/* Modern Accent Glow */}
+        <div className="search-glow-effect" style={{
+          position: 'absolute',
+          inset: '-2px',
+          borderRadius: '14px',
+          background: commandMode === 'ai' ? 'linear-gradient(135deg, #F59E0B, #EF4444)' :
+            commandMode === 'action' ? 'linear-gradient(135deg, #8B5CF6, #3B82F6)' :
+              commandMode === 'nav' ? 'linear-gradient(135deg, #10B981, #3B82F6)' :
+                'transparent',
+          opacity: commandMode !== 'default' ? 0.2 : 0,
+          filter: 'blur(10px)',
+          zIndex: -1,
+          transition: 'all 0.4s ease'
+        }}></div>
+
+        {activePill && (
+          <div className="command-pill" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 10px',
+            marginRight: '8px',
+            background: 'rgba(139, 92, 246, 0.2)',
+            border: '1px solid rgba(139, 92, 246, 0.4)',
+            borderRadius: '6px',
+            color: '#A78BFA',
+            fontSize: '11px',
+            fontWeight: 800,
+            letterSpacing: '0.05em'
+          }}>
+            {activePill.label}
+          </div>
+        )}
+
         <span className="terminal-prompt" style={{
           fontFamily: "'Fira Code', monospace",
           fontWeight: '700',

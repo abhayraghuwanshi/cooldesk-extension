@@ -1,6 +1,5 @@
-
+import { useState } from 'react';
 import { fontFamilies } from '../../utils/fontUtils';
-
 const ThemesTab = ({
   selectedTheme,
   fontSize,
@@ -15,6 +14,7 @@ const ThemesTab = ({
   onWallpaperUrlChange = () => { },
   onWallpaperOpacityChange = () => { }
 }) => {
+  const [showAllThemes, setShowAllThemes] = useState(false);
 
 
 
@@ -268,7 +268,7 @@ const ThemesTab = ({
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '8px'
       }}>
-        {themes.map((theme) => {
+        {themes.slice(0, showAllThemes ? themes.length : 3).map((theme) => {
           const themeFontFamily = fontFamilies.find(f => f.id === theme.fontFamily);
           const isWallpaperTheme = theme.type === 'wallpaper';
           const isSelected = selectedTheme === theme.id;
@@ -408,6 +408,33 @@ const ThemesTab = ({
             </div>
           );
         })}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+        <button
+          onClick={() => setShowAllThemes(!showAllThemes)}
+          style={{
+            background: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '20px',
+            padding: '8px 24px',
+            color: '#e5e7eb',
+            fontSize: 'var(--font-sm)',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+          }}
+        >
+          {showAllThemes ? 'Show Less Themes' : `Show All Themes (${themes.length})`}
+        </button>
       </div>
 
       <div style={{ marginTop: '32px' }}>

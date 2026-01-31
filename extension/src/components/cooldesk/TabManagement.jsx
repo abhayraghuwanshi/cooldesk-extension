@@ -1,6 +1,7 @@
 import { faBrain, faClock, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { TabCard, TabGroupCard } from './TabCard';
 
@@ -26,6 +27,7 @@ export function TabManagement() {
   const [visibleTabsCount, setVisibleTabsCount] = useState(12);
   const [tabActivity, setTabActivity] = useState({});
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   // Load auto-group and smart sort state on mount
   useEffect(() => {
@@ -113,23 +115,6 @@ export function TabManagement() {
     };
   }, [refreshTabs, debouncedRefresh]);
 
-  // Group tabs by domain
-  const tabsByDomain = useCallback(() => {
-    const grouped = {};
-    tabs.forEach(tab => {
-      try {
-        const url = new URL(tab.url);
-        const domain = url.hostname;
-        if (!grouped[domain]) {
-          grouped[domain] = [];
-        }
-        grouped[domain].push(tab);
-      } catch (e) {
-        // Invalid URL, skip
-      }
-    });
-    return grouped;
-  }, [tabs]);
 
   // Handle tab actions
   const handleTabClick = useCallback(async (tab) => {
@@ -214,25 +199,21 @@ export function TabManagement() {
     const groups = {};
     const singles = [];
 
-    // First pass: organize unpinned by domain
+    // First pass: organize unpinned by base domain
     const byDomain = {};
     unpinned.forEach(t => {
-      try {
-        const domain = new URL(t.url).hostname;
-        if (!byDomain[domain]) byDomain[domain] = [];
-        byDomain[domain].push(t);
-      } catch {
-        if (!byDomain['others']) byDomain['others'] = [];
-        byDomain['others'].push(t);
-      }
+      const domain = getBaseDomainFromUrl(t.url);
+      if (!byDomain[domain]) byDomain[domain] = [];
+      byDomain[domain].push(t);
     });
 
     // Identify valid groups vs singles
     Object.entries(byDomain).forEach(([domain, domainTabs]) => {
-      // Logic: Only group if > 1 tab AND Auto-Group enabled OR domain has > 1 tab (User said "group", imply auto-group behavior or general grouping)
-      // If Auto Group is purely a toggle for display, we check it. 
-      // User said "we have pinned, group", implying existing groups.
-      if (domainTabs.length > 1) {
+      // Group if either:
+      // 1. Auto-group is enabled and we have multiple tabs
+      // 2. We have a lot of tabs (force group > 3 even if auto-group is off, for sanity?)
+      // Actually, let's stick to autoGroupEnabled preference.
+      if (autoGroupEnabled && domainTabs.length > 1) {
         groups[domain] = domainTabs;
       } else {
         singles.push(...domainTabs);
@@ -498,7 +479,7 @@ export function TabManagement() {
                         key={domain}
                         domain={domain}
                         tabs={domainTabs}
-                        onToggleExpand={() => setExpandedDomain(expandedDomain === domain ? null : domain)}
+                        onToggleExpand={() => startTransition(() => setExpandedDomain(expandedDomain === domain ? null : domain))}
                         onTabClick={handleTabClick}
                         onTabClose={handleTabClose}
                         isExpanded={expandedDomain === domain}
@@ -577,7 +558,7 @@ export function TabManagement() {
                 {partitionedTabs.others.length > visibleTabsCount && (
                   <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
                     <button
-                      onClick={() => setVisibleTabsCount(prev => prev + 12)}
+                      onClick={() => startTransition(() => setVisibleTabsCount(prev => prev + 12))}
                       style={{
                         background: 'rgba(59, 130, 246, 0.1)',
                         color: '#60A5FA',

@@ -39,6 +39,20 @@ export const applyBaseFontSize = (fontSizeId) => {
   document.documentElement.style.setProperty('--font-4xl', `${Math.round(baseSize * 2.1)}px`);   // ~28-34px (Heading)
   document.documentElement.style.setProperty('--font-5xl', `${Math.round(baseSize * 2.8)}px`);   // ~38-45px (Hero)
 
+  // Icon size variables (scales with font size for consistency)
+  document.documentElement.style.setProperty('--icon-xs', `${Math.round(baseSize * 1.0)}px`);    // ~14-18px (Tiny icons)
+  document.documentElement.style.setProperty('--icon-sm', `${Math.round(baseSize * 1.3)}px`);    // ~17-23px (Small icons)
+  document.documentElement.style.setProperty('--icon-md', `${Math.round(baseSize * 1.6)}px`);    // ~21-29px (Medium icons)
+  document.documentElement.style.setProperty('--icon-lg', `${Math.round(baseSize * 2.0)}px`);    // ~26-36px (Large icons)
+  document.documentElement.style.setProperty('--icon-xl', `${Math.round(baseSize * 2.5)}px`);    // ~33-45px (Extra large icons)
+  document.documentElement.style.setProperty('--icon-2xl', `${Math.round(baseSize * 3.0)}px`);   // ~39-54px (Huge icons)
+
+  // Icon container sizes (for favicon containers with padding)
+  document.documentElement.style.setProperty('--icon-container-sm', `${Math.round(baseSize * 1.8)}px`);  // ~24-32px
+  document.documentElement.style.setProperty('--icon-container-md', `${Math.round(baseSize * 2.4)}px`);  // ~32-43px
+  document.documentElement.style.setProperty('--icon-container-lg', `${Math.round(baseSize * 3.0)}px`);  // ~39-54px
+  document.documentElement.style.setProperty('--icon-container-xl', `${Math.round(baseSize * 3.5)}px`);  // ~46-63px
+
   // Also set directly on body for immediate effect
   document.body.style.fontSize = fontSizeObj.size;
 

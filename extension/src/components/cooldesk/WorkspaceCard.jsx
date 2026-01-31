@@ -37,7 +37,7 @@ import {
   faVrCardboard
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
 import { getBaseDomainFromUrl, getFaviconUrl } from '../../utils/helpers.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
@@ -100,7 +100,7 @@ const CATEGORY_ICONS = {
 };
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
-export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, ...rest }) {
+export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, deferAnalytics = false, ...rest }) {
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
@@ -153,18 +153,122 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     }
   };
 
+  // Generate letter avatar with consistent color based on domain
+  const getLetterAvatar = (url) => {
+    try {
+      const hostname = new URL(url).hostname.replace(/^www\./, '');
+      const firstLetter = hostname.charAt(0).toUpperCase();
+
+      // Generate consistent color from hostname
+      let hash = 0;
+      for (let i = 0; i < hostname.length; i++) {
+        hash = hostname.charCodeAt(i) + ((hash << 5) - hash);
+      }
+
+      // Vibrant color palette for better visibility
+      const colors = [
+        '#3B82F6', // blue
+        '#8B5CF6', // purple
+        '#EC4899', // pink
+        '#EF4444', // red
+        '#F97316', // orange
+        '#EAB308', // yellow
+        '#22C55E', // green
+        '#14B8A6', // teal
+        '#06B6D4', // cyan
+        '#6366F1', // indigo
+      ];
+
+      const colorIndex = Math.abs(hash) % colors.length;
+      return { letter: firstLetter, color: colors[colorIndex] };
+    } catch {
+      return { letter: '?', color: '#64748B' };
+    }
+  };
+
+  // Generate a hash for the URLs to detect changes
+  const urlsHash = useMemo(() => {
+    return urls.map(u => u.url).join(',');
+  }, [urls]);
+
+  // Cache key for this workspace's sorted URLs with analytics
+  const cacheKey = `cooldesk_urls_analytics_${workspace.id}`;
+  const cacheHashKey = `cooldesk_urls_analytics_hash_${workspace.id}`;
+  const cacheTimeKey = `cooldesk_urls_analytics_time_${workspace.id}`;
+
+  // Score calculation helper (defined early so it can be used in useState initializer)
+  const calculateUrlScore = (stats) => {
+    const totalVisits = stats.totalVisits || 0;
+    const timeInHours = (stats.totalTime || 0) / (1000 * 60 * 60);
+    const mostRecentVisit = stats.lastVisit || 0;
+
+    const recencyBonus = mostRecentVisit > 0
+      ? Math.max(0, 100 - (Date.now() - mostRecentVisit) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    return (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
+  };
 
   // State for sorted URLs based on usage
-  const [sortedUrls, setSortedUrls] = useState(urls);
+  // Load from cache synchronously to prevent layout shift
+  const [sortedUrls, setSortedUrls] = useState(() => {
+    try {
+      const cachedHash = localStorage.getItem(cacheHashKey);
+      if (cachedHash === urlsHash) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const cachedData = JSON.parse(cached); // Array of {url, title, stats} objects
+          // Merge cached analytics with current URL data
+          const urlMap = new Map(urls.map(u => [u.url, u]));
+          const sorted = cachedData
+            .map(cached => {
+              const current = urlMap.get(cached.url);
+              return current ? { ...current, stats: cached.stats } : null;
+            })
+            .filter(Boolean);
+          // Add any new URLs not in cache at the end
+          const cachedSet = new Set(cachedData.map(c => c.url));
+          urls.forEach(u => {
+            if (!cachedSet.has(u.url)) {
+              sorted.push({ ...u, stats: { totalVisits: 0, totalTime: 0, lastVisit: 0 } });
+            }
+          });
+          return sorted;
+        }
+      }
+    } catch { /* ignore */ }
+    return urls;
+  });
   const [isSorting, setIsSorting] = useState(false);
 
-  // Effect to sort URLs by usage
+  // Effect to sort URLs by usage - refresh analytics periodically
+  // Uses requestIdleCallback to avoid blocking the main thread
   useEffect(() => {
     let isMounted = true;
+    let idleCallbackId = null;
 
     const sortUrlsByUsage = async () => {
       if (!urls || urls.length === 0) {
         if (isMounted) setSortedUrls([]);
+        return;
+      }
+
+      // Check if cache is still valid (same URLs and less than 5 minutes old)
+      try {
+        const cachedHash = localStorage.getItem(cacheHashKey);
+        const cachedTime = parseInt(localStorage.getItem(cacheTimeKey) || '0', 10);
+        const cacheAge = Date.now() - cachedTime;
+        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+        if (cachedHash === urlsHash && cacheAge < CACHE_TTL) {
+          // Cache is valid and fresh, no need to re-fetch
+          return;
+        }
+      } catch { /* ignore */ }
+
+      // If deferAnalytics is true, skip fetching entirely on initial render
+      // This prevents INP issues when many cards mount at once
+      if (deferAnalytics) {
         return;
       }
 
@@ -180,7 +284,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               stats: stats || { totalVisits: 0, totalTime: 0, lastVisit: 0 }
             };
           } catch (error) {
-            // console.error(`[WorkspaceCard] Error getting stats for "${urlObj.url}":`, error);
             return {
               ...urlObj,
               stats: { totalVisits: 0, totalTime: 0, lastVisit: 0 }
@@ -193,7 +296,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
         if (!isMounted) return;
 
         // Calculate scores and sort
-        const sorted = urlsWithStats.sort((a, b) => {
+        const sorted = [...urlsWithStats].sort((a, b) => {
           const scoreA = calculateUrlScore(a.stats);
           const scoreB = calculateUrlScore(b.stats);
           return scoreB - scoreA; // Descending order
@@ -201,37 +304,53 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
         if (isMounted) {
           setSortedUrls(sorted);
+          // Cache the sorted URLs with their full analytics data
+          try {
+            const cacheData = sorted.map(u => ({
+              url: u.url,
+              title: u.title,
+              stats: u.stats
+            }));
+            localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+            localStorage.setItem(cacheHashKey, urlsHash);
+            localStorage.setItem(cacheTimeKey, Date.now().toString());
+          } catch { /* ignore */ }
         }
       } catch (error) {
         console.error('[WorkspaceCard] Error sorting URLs:', error);
-        // Fallback to original order
         if (isMounted) setSortedUrls(urls);
       } finally {
         if (isMounted) setIsSorting(false);
       }
     };
 
-    // Score calculation helper
-    const calculateUrlScore = (stats) => {
-      const totalVisits = stats.totalVisits || 0;
-      const timeInHours = (stats.totalTime || 0) / (1000 * 60 * 60);
-      const mostRecentVisit = stats.lastVisit || 0;
-
-      const recencyBonus = mostRecentVisit > 0
-        ? Math.max(0, 100 - (Date.now() - mostRecentVisit) / (1000 * 60 * 60 * 24)) // Decay over days
-        : 0;
-
-      return (totalVisits * 10) + (timeInHours * 50) + recencyBonus;
+    // Use requestIdleCallback to defer analytics loading when browser is idle
+    // This prevents blocking the main thread during interactions
+    const scheduleSort = () => {
+      if (window.requestIdleCallback) {
+        idleCallbackId = window.requestIdleCallback(
+          () => sortUrlsByUsage(),
+          { timeout: 2000 } // Max wait 2 seconds
+        );
+      } else {
+        // Fallback: use setTimeout with longer delay
+        idleCallbackId = setTimeout(sortUrlsByUsage, 200);
+      }
     };
 
-    // Debounce/Delay slightly to avoid blocking UI on mount
-    const timeoutId = setTimeout(sortUrlsByUsage, 100);
+    scheduleSort();
 
     return () => {
       isMounted = false;
-      clearTimeout(timeoutId);
+      if (idleCallbackId) {
+        if (window.cancelIdleCallback) {
+          window.cancelIdleCallback(idleCallbackId);
+        } else {
+          clearTimeout(idleCallbackId);
+        }
+      }
     };
-  }, [urls]); // Re-run if URLs change
+  }, [urls, urlsHash, deferAnalytics]); // Re-run if URLs change
 
   const [groupPopoverState, setGroupPopoverState] = useState({ group: null, rect: null });
   const [visibleCount, setVisibleCount] = useState(8);
@@ -466,22 +585,33 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     }}
                     title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : (item.title || formatDomainName(item.url))}
                   >
-                    {faviconUrl ? (
-                      <img
-                        src={faviconUrl}
-                        alt=""
-                        className="compact-item-img"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'flex';
-                        }}
-                      />
-                    ) : null}
-                    <FontAwesomeIcon
-                      icon={faLink}
-                      className="fallback-icon"
-                      style={{ display: faviconUrl ? 'none' : 'flex' }}
-                    />
+                    {(() => {
+                      const avatar = getLetterAvatar(url);
+                      return (
+                        <>
+                          {faviconUrl ? (
+                            <img
+                              src={faviconUrl}
+                              alt=""
+                              className="compact-item-img"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <div
+                            className="letter-avatar"
+                            style={{
+                              display: faviconUrl ? 'none' : 'flex',
+                              background: avatar.color
+                            }}
+                          >
+                            {avatar.letter}
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     {/* Pill Text Content */}
                     {isGroup && (
@@ -711,22 +841,33 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     style={{ cursor: 'pointer', position: 'relative' }}
                   >
                     <span className="workspace-link-icon">
-                      {faviconUrl ? (
-                        <img
-                          src={faviconUrl}
-                          alt=""
-                          className="link-favicon"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.nextSibling.style.display = 'inline';
-                          }}
-                        />
-                      ) : null}
-                      <FontAwesomeIcon
-                        icon={faLink}
-                        className="link-fallback-icon"
-                        style={{ display: faviconUrl ? 'none' : 'inline' }}
-                      />
+                      {(() => {
+                        const avatar = getLetterAvatar(urlObj.url);
+                        return (
+                          <>
+                            {faviconUrl ? (
+                              <img
+                                src={faviconUrl}
+                                alt=""
+                                className="link-favicon"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className="letter-avatar"
+                              style={{
+                                display: faviconUrl ? 'none' : 'flex',
+                                background: avatar.color
+                              }}
+                            >
+                              {avatar.letter}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </span>
                     <span className="workspace-link-text" title={urlObj.url}>
                       {(() => {

@@ -26,17 +26,20 @@ const CONFIG = {
 };
 
 // Initialize tab cleanup module
-export function initializeTabCleanup() {
+export async function initializeTabCleanup() {
   console.log('[TabCleanup] Initializing tab cleanup module');
 
-  // Load settings from storage
-  loadSettings();
+  // Load settings from storage FIRST (await it!)
+  await loadSettings();
 
   // Set up event listeners
   setupEventListeners();
 
-  // Set up periodic cleanup alarm
-  setupCleanupAlarm();
+  // Set up periodic cleanup alarm (only if enabled)
+  // setupCleanupAlarm();
+
+  // Set up alarm listener (always, so it works when enabled later)
+  // setupAlarmListener();
 }
 
 // Load settings from chrome.storage
@@ -101,23 +104,37 @@ function setupCleanupAlarm() {
     console.warn('[TabCleanup] chrome.alarms.clear is not available');
   }
 
+  // Only create alarm if cleanup is enabled
+  if (!isCleanupEnabled) {
+    console.log('[TabCleanup] Cleanup disabled, not creating alarm');
+    return;
+  }
+
   // Create new alarm that triggers every minute
   if (chrome && chrome.alarms && typeof chrome.alarms.create === 'function') {
     chrome.alarms.create(cleanupAlarmName, {
       delayInMinutes: CONFIG.CHECK_INTERVAL_MINUTES,
       periodInMinutes: CONFIG.CHECK_INTERVAL_MINUTES
     });
+    console.log('[TabCleanup] Cleanup alarm created');
   } else {
     console.warn('[TabCleanup] chrome.alarms.create is not available');
   }
 
-  // Listen for alarm events
+}
+
+// Set up alarm listener (separate from alarm creation)
+let alarmListenerSetup = false;
+function setupAlarmListener() {
+  if (alarmListenerSetup) return; // Only set up once
+
   if (chrome && chrome.alarms && typeof chrome.alarms.onAlarm === 'object') {
     chrome.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name === cleanupAlarmName && isCleanupEnabled) {
         performCleanup();
       }
     });
+    alarmListenerSetup = true;
   } else {
     console.warn('[TabCleanup] chrome.alarms.onAlarm is not available');
   }

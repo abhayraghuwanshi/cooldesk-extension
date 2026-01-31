@@ -250,6 +250,183 @@ export function injectFooterBar() {
         from { transform: scale(0.8) rotate(-5deg); opacity: 0; }
         to { transform: scale(1) rotate(0deg); opacity: 1; }
       }
+
+      /* Spotlight Modal Styles */
+      .spotlight-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(8px);
+        display: none; /* Hidden by default */
+        z-index: 2147483647;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 15vh;
+        animation: fadeIn 0.2s ease;
+      }
+
+      .spotlight-overlay.visible {
+        display: flex;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      .spotlight-container {
+        width: 100%;
+        max-width: 680px;
+        background: rgba(23, 23, 23, 0.85);
+        backdrop-filter: blur(25px) saturate(150%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        box-shadow: 
+          0 25px 50px -12px rgba(0, 0, 0, 0.5),
+          0 0 0 1px rgba(255, 255, 255, 0.05);
+        overflow: hidden;
+        animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        display: flex;
+        flex-direction: column;
+      }
+
+      @keyframes slideDown {
+        from { transform: translateY(-20px) scale(0.95); opacity: 0; }
+        to { transform: translateY(0) scale(1); opacity: 1; }
+      }
+
+      .spotlight-search-box {
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .spotlight-prompt {
+        font-family: 'Fira Code', monospace;
+        font-weight: 700;
+        font-size: 20px;
+        color: #34C759;
+        user-select: none;
+      }
+
+      .spotlight-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: white;
+        font-size: 20px;
+        font-family: inherit;
+        padding: 0;
+      }
+
+      .spotlight-input::placeholder {
+        color: rgba(255, 255, 255, 0.2);
+      }
+
+      .spotlight-results {
+        max-height: 420px;
+        overflow-y: auto;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .result-item {
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.1s ease;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 14px;
+      }
+
+      .result-item.selected {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+      }
+
+      .result-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
+      }
+
+      .result-icon {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        font-size: 18px;
+        flex-shrink: 0;
+      }
+
+      .result-content {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .result-title {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+      }
+
+      .result-desc {
+        font-size: 12px;
+        opacity: 0.5;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+      }
+
+      .result-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.4);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .spotlight-footer {
+        padding: 12px 24px;
+        background: rgba(0, 0, 0, 0.2);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.3);
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .shortcut-hint {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .shortcut-key {
+        padding: 2px 6px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.6);
+        font-family: monospace;
+      }
     `;
 
     // Inject Global Styles for Highlights (Must be in Light DOM)
@@ -798,6 +975,146 @@ export function injectFooterBar() {
         }
       }
     };
+
+    // --- Spotlight Search Bar (Raycast Style) ---
+    const spotlightOverlay = document.createElement('div');
+    spotlightOverlay.className = 'spotlight-overlay';
+
+    const spotlightContainer = document.createElement('div');
+    spotlightContainer.className = 'spotlight-container';
+
+    spotlightContainer.innerHTML = `
+      <div class="spotlight-search-box">
+        <span class="spotlight-prompt">></span>
+        <input type="text" class="spotlight-input" placeholder="Search tabs, history, or type ! for commands..." spellcheck="false">
+      </div>
+      <div class="spotlight-results"></div>
+      <div class="spotlight-footer">
+        <div class="shortcut-hint"><span class="shortcut-key">↵</span> to Open</div>
+        <div class="shortcut-hint"><span class="shortcut-key">↑↓</span> to Navigate</div>
+        <div class="shortcut-hint"><span class="shortcut-key">ESC</span> to Close</div>
+      </div>
+    `;
+
+    spotlightOverlay.appendChild(spotlightContainer);
+    shadow.appendChild(spotlightOverlay);
+
+    const spotlightInput = spotlightContainer.querySelector('.spotlight-input');
+    const spotlightResults = spotlightContainer.querySelector('.spotlight-results');
+    let selectedIndex = -1;
+    let currentResults = [];
+
+    const toggleSpotlight = () => {
+      const isVisible = spotlightOverlay.classList.toggle('visible');
+      if (isVisible) {
+        spotlightInput.value = '';
+        renderResults([]);
+        setTimeout(() => spotlightInput.focus(), 50);
+      }
+    };
+
+    const renderResults = (results) => {
+      currentResults = results;
+      selectedIndex = results.length > 0 ? 0 : -1;
+
+      spotlightResults.innerHTML = results.map((res, i) => `
+        <div class="result-item ${i === 0 ? 'selected' : ''}" data-index="${i}">
+          <div class="result-icon">${res.icon || '🔍'}</div>
+          <div class="result-content">
+            <span class="result-title">${res.title}</span>
+            <span class="result-desc">${res.description || res.url || ''}</span>
+          </div>
+          ${res.category ? `<span class="result-badge">${res.category}</span>` : ''}
+        </div>
+      `).join('');
+
+      // Add click listeners
+      spotlightResults.querySelectorAll('.result-item').forEach(item => {
+        item.onclick = () => {
+          const idx = parseInt(item.dataset.index);
+          executeResult(currentResults[idx]);
+        };
+      });
+    };
+
+    const executeResult = async (item) => {
+      if (!item) return;
+
+      if (item.command) {
+        chrome.runtime.sendMessage({
+          type: 'EXECUTE_COMMAND',
+          commandValue: item.command
+        }, (response) => {
+          if (response?.success) toggleSpotlight();
+        });
+      } else if (item.tabId) {
+        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId });
+        toggleSpotlight();
+      } else if (item.url) {
+        window.open(item.url, '_blank');
+        toggleSpotlight();
+      }
+    };
+
+    spotlightInput.oninput = async () => {
+      const value = spotlightInput.value.trim();
+      if (!value) {
+        renderResults([]);
+        return;
+      }
+
+      // Request suggestions from background
+      chrome.runtime.sendMessage({
+        type: 'GET_SPOTLIGHT_SUGGESTIONS',
+        query: value
+      }, (response) => {
+        if (response?.results) {
+          renderResults(response.results);
+        }
+      });
+    };
+
+    spotlightInput.onkeydown = (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedIndex = (selectedIndex + 1) % currentResults.length;
+        updateSelection();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedIndex = (selectedIndex - 1 + currentResults.length) % currentResults.length;
+        updateSelection();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedIndex >= 0) {
+          executeResult(currentResults[selectedIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        toggleSpotlight();
+      }
+    };
+
+    const updateSelection = () => {
+      const items = spotlightResults.querySelectorAll('.result-item');
+      items.forEach((item, i) => {
+        item.classList.toggle('selected', i === selectedIndex);
+        if (i === selectedIndex) {
+          item.scrollIntoView({ block: 'nearest' });
+        }
+      });
+    };
+
+    spotlightOverlay.onclick = (e) => {
+      if (e.target === spotlightOverlay) toggleSpotlight();
+    };
+
+    // Listen for global command from background
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.type === 'TOGGLE_SPOTLIGHT') {
+        toggleSpotlight();
+      }
+    });
+
+    // --- End Spotlight ---
 
     // Click handler - toggle menu expansion
     toggleBtn.addEventListener('click', async (e) => {
