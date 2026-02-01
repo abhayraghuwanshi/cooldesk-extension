@@ -1114,6 +1114,21 @@ export function injectFooterBar() {
       }
     });
 
+    // Fallback keyboard shortcut for Alt+S
+    window.addEventListener('keydown', (e) => {
+      if (e.altKey && (e.key === 's' || e.key === 'S')) {
+        // Only trigger if not in an input/textarea (unless it's our own spotlight input)
+        const target = e.target;
+        const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+        
+        if (isInput && target !== spotlightInput) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        toggleSpotlight();
+      }
+    }, true);
+
     // --- End Spotlight ---
 
     // Click handler - toggle menu expansion

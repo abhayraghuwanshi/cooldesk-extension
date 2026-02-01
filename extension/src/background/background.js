@@ -45,8 +45,23 @@ chrome.commands.onCommand.addListener(async (command) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab) {
         console.log('[Background] Toggling Spotlight on tab:', tab.id);
-        chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SPOTLIGHT' }).catch(err => {
-          console.warn('[Background] Message failed (likely content script not loaded):', err);
+        chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SPOTLIGHT' }).catch(async (err) => {
+          console.warn('[Background] Message failed (likely content script not loaded), attempting to re-inject:', err);
+          try {
+            // Attempt to inject the content script manually if it's not present
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['src/content-scripts/interactionContent.js']
+            });
+            // Try sending the message again after a short delay
+            setTimeout(() => {
+              chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SPOTLIGHT' }).catch(e => {
+                console.error('[Background] Failed to toggle spotlight even after injection:', e);
+              });
+            }, 200);
+          } catch (injectErr) {
+            console.error('[Background] Failed to re-inject content script:', injectErr);
+          }
         });
       }
     } catch (e) {
