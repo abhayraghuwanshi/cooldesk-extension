@@ -243,7 +243,7 @@ export function TabManagement() {
       others,
       hasGroups: Object.keys(groups).length > 0
     };
-  }, [filteredTabs, tabActivity]);
+  }, [filteredTabs, tabActivity, autoGroupEnabled]);
 
   return (
     <div style={{
@@ -333,24 +333,18 @@ export function TabManagement() {
             <span style={{ pointerEvents: 'none' }}>Focus</span>
           </button>
           <button
-            onClick={async () => {
-              try {
-                const newState = !autoGroupEnabled;
-                const response = await chrome.runtime.sendMessage({
-                  type: 'TOGGLE_AUTO_GROUP',
-                  enabled: newState
-                });
-
-                if (response?.success) {
-                  setAutoGroupEnabled(newState);
-                  console.log('[TabManagement] Auto-group toggled:', newState);
-                  refreshTabs(); // Refresh to show updated groups
-                } else {
-                  console.error('[TabManagement] Toggle failed:', response?.error);
-                }
-              } catch (error) {
-                console.error('[TabManagement] Toggle error:', error);
-              }
+            onClick={() => {
+              const newState = !autoGroupEnabled;
+              // Update state immediately for responsive UI
+              setAutoGroupEnabled(newState);
+              // Save to storage
+              chrome.storage.local.set({ autoGroupEnabled: newState });
+              console.log('[TabManagement] Auto-group toggled:', newState);
+              // Notify background (fire and forget)
+              chrome.runtime.sendMessage({
+                type: 'TOGGLE_AUTO_GROUP',
+                enabled: newState
+              }).catch(() => {/* ignore errors */});
             }}
             style={{
               background: autoGroupEnabled

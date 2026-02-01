@@ -17,30 +17,7 @@
   /* Lock parent container */
   display: flex;
   flex-direction: column;
-  /* Custom scrollbar styling */
-  scrollbar-width: thin;
-  scrollbar-color: var(--primary-color, rgba(139, 92, 246, 0.4)) transparent;
-}
-
-.cooldesk-container::-webkit-scrollbar {
-  width: 8px;
-}
-
-.cooldesk-container::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.3);
-  border-radius: 4px;
-}
-
-.cooldesk-container::-webkit-scrollbar-thumb {
-  background: var(--primary-color, rgba(139, 92, 246, 0.4));
-  border-radius: 4px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-.cooldesk-container::-webkit-scrollbar-thumb:hover {
-  background: var(--secondary-color, rgba(139, 92, 246, 0.6));
-  background-clip: padding-box;
+  /* Scrollbar inherits from global theme.css */
 }
 
 /* Top Logo and Settings */

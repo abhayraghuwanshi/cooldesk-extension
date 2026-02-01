@@ -168,76 +168,76 @@ const ThemesTab = ({
 
 
 
-  // Curated high-quality wallpapers for the application
+  // Curated 4K high-quality wallpapers for the application
   const curatedWallpapers = [
     {
       id: 1,
       name: 'Mountain Sunset',
-      url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80',
       category: 'nature'
     },
     {
       id: 2,
       name: 'Ocean Waves',
-      url: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=400&q=80',
       category: 'nature'
     },
     {
       id: 3,
       name: 'Northern Lights',
-      url: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=400&q=80',
       category: 'nature'
     },
     {
       id: 4,
       name: 'Starry Night',
-      url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&q=80',
       category: 'space'
     },
     {
       id: 5,
       name: 'Abstract Gradient',
-      url: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=400&q=80',
       category: 'abstract'
     },
     {
       id: 6,
       name: 'Minimal Desk',
-      url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=400&q=80',
       category: 'minimal'
     },
     {
       id: 7,
       name: 'Forest Path',
-      url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&q=80',
       category: 'nature'
     },
     {
       id: 8,
       name: 'City Lights',
-      url: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=400&q=80',
       category: 'urban'
     },
     {
       id: 9,
       name: 'Desert Dunes',
-      url: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=400&q=80',
       category: 'nature'
     },
     {
       id: 10,
       name: 'Cosmic Nebula',
-      url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=300&q=80',
+      url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&q=90&fm=jpg',
+      thumbnail: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=400&q=80',
       category: 'space'
     }
   ];

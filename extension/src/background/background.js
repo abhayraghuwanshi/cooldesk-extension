@@ -1,3 +1,5 @@
+console.log('[Background] ====== SERVICE WORKER STARTING ======');
+
 // Initialize side panel options on install
 chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
@@ -204,11 +206,13 @@ import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
 import { CommandExecutor } from '../services/commandExecutor.js';
 import { CommandParser } from '../services/commandParser.js';
-import '../utils/realTimeCategorizor.js'; // Auto-starts real-time categorization
-import { fuzzySearch } from '../utils/searchUtils.js';
+// import '../utils/realTimeCategorizor.js'; // REMOVED
 import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
+
+// Initialize Search Indexer (Background Service)
+// initializeSearchIndexer(); // TEMPORARILY DISABLED FOR DEBUGGING
 
 // Initialize CommandExecutor for shared use
 const commandExecutor = new CommandExecutor((feedback) => {
@@ -497,8 +501,13 @@ async function main() {
   })
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    // console.log('[Background Debug] Received message:', msg);
-    // console.log('[Background Debug] Message sender:', sender);
+    console.log('[Background Debug] ON_MESSAGE_START:', msg?.type);
+    console.log('[Background Debug] Received message:', {
+      type: msg?.type,
+      action: msg?.action,
+      query: msg?.query,
+      sender: sender?.tab?.id
+    });
 
     // Temporarily disable keepalive connection mechanism to prevent connection errors
     // console.log('[Background Debug] Keepalive connection mechanism disabled to prevent connection errors');
@@ -2010,69 +2019,116 @@ async function main() {
       return true;
     }
 
-    // --- Spotlight/Raycast Handlers ---
-    if (msg?.type === 'GET_SPOTLIGHT_SUGGESTIONS') {
+    // --- Specific Search Handlers for footerBar.js ---
+    if (msg?.type === 'SEARCH_TABS') {
       (async () => {
         try {
-          const query = msg.query.toLowerCase();
+          console.log('[Background] SEARCH_TABS received:', msg.query);
+          const query = (msg.query || '').toLowerCase();
+          const tabs = await chrome.tabs.query({});
           let results = [];
 
-          // 1. Check for Commands (if starts with ! or /)
-          if (query.startsWith('!') || query.startsWith('/')) {
-            const allCmds = CommandParser.getAllCommands();
-            const q = query.slice(1);
-            const matches = fuzzySearch(allCmds, q, ['command', 'title', 'description'], { threshold: 0.4 });
-            results.push(...matches.map(c => ({
-              title: c.command.startsWith('!') ? c.command : `/${c.command}`,
-              description: c.description,
-              icon: c.category === 'AI' ? '🤖' : '⚙️',
-              command: c.command,
-              category: 'Command'
-            })));
+          if (query) {
+            // Simple robust filter to avoid library dependencies in Service Worker
+            results = tabs.filter(t =>
+              (t.title && t.title.toLowerCase().includes(query)) ||
+              (t.url && t.url.toLowerCase().includes(query))
+            );
+          } else {
+            results = tabs;
           }
 
-          // 2. Search Open Tabs
-          const tabs = await chrome.tabs.query({});
-          const tabMatches = fuzzySearch(tabs, query, ['title', 'url'], { threshold: 0.3 });
-          results.push(...tabMatches.slice(0, 5).map(t => ({
+          console.log(`[Background] Found ${results.length} tabs for query "${query}"`);
+
+          // Format as expected by searchService.js
+          const mapped = results.slice(0, 20).map(t => ({
+            id: t.id,
             title: t.title,
+            url: t.url,
             description: t.url,
-            icon: '🌍', // Favor favicons if possible, but emojis are safer for now
+            favIconUrl: t.favIconUrl,
+            type: 'tab',
             tabId: t.id,
+            icon: t.favIconUrl || '🔵',
             category: 'Open Tab'
-          })));
+          }));
 
-          // 3. Search History (limit to top 5)
-          const history = await chrome.history.search({ text: query, maxResults: 10 });
-          results.push(...history.slice(0, 5).map(h => ({
-            title: h.title || h.url,
-            description: h.url,
-            icon: '📜',
-            url: h.url,
-            category: 'History'
-          })));
-
-          // 4. Search Workspaces
-          const wsResult = await listWorkspaces();
-          if (wsResult?.success) {
-            const wsMatches = fuzzySearch(wsResult.data, query, ['name'], { threshold: 0.3 });
-            results.push(...wsMatches.map(w => ({
-              title: `Switch to ${w.name}`,
-              description: 'Workspace',
-              icon: '📁',
-              command: `!ws switch ${w.name}`,
-              category: 'Workspace'
-            })));
-          }
-
-          sendResponse({ results: results.slice(0, 15) });
+          sendResponse({ results: mapped });
         } catch (e) {
-          console.error('[Background] Spotlight error:', e);
+          console.error('[Background] SEARCH_TABS failed:', e);
           sendResponse({ results: [] });
         }
       })();
       return true;
     }
+
+    if (msg?.type === 'SEARCH_HISTORY') {
+      (async () => {
+        try {
+          const query = msg.query || '';
+          const maxResults = msg.maxResults || 20;
+          const historyItems = await chrome.history.search({ text: query, maxResults });
+
+          const results = historyItems.map(h => ({
+            id: `history_${h.id}`,
+            title: h.title || h.url,
+            url: h.url,
+            description: h.url,
+            type: 'history',
+            icon: '📜',
+            category: 'History',
+            visitCount: h.visitCount,
+            lastVisitTime: h.lastVisitTime
+          }));
+
+          sendResponse({ results });
+        } catch (e) {
+          console.error('[Background] SEARCH_HISTORY failed:', e);
+          sendResponse({ results: [] });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'SEARCH_BOOKMARKS') {
+      (async () => {
+        try {
+          const query = msg.query || '';
+          const maxResults = msg.maxResults || 20;
+          const bookmarks = await chrome.bookmarks.search(query);
+
+          const results = bookmarks.filter(b => b.url).slice(0, maxResults).map(b => ({
+            id: b.id,
+            title: b.title || b.url,
+            url: b.url,
+            description: b.url,
+            type: 'bookmark',
+            icon: '⭐',
+            category: 'Bookmark'
+          }));
+
+          sendResponse({ results });
+        } catch (e) {
+          console.error('[Background] SEARCH_BOOKMARKS failed:', e);
+          sendResponse({ results: [] });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'GET_SPOTLIGHT_SUGGESTIONS') {
+      console.log('[Background] GET_SPOTLIGHT_SUGGESTIONS received:', msg.query);
+
+      // TEMP: Send dummy response for testing
+      sendResponse({
+        results: [
+          { title: 'Test Result 1', description: 'Dummy result for: ' + msg.query, icon: '🔍', category: 'Test' },
+          { title: 'Test Result 2', description: 'Another test item', icon: '⭐', category: 'Test' },
+        ]
+      });
+      return true;
+    }
+
 
     if (msg?.type === 'EXECUTE_COMMAND') {
       (async () => {

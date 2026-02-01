@@ -1,4 +1,6 @@
 ﻿// Sider.ai-style Floating Button for Cool-Desk
+import { quickSearch } from '../services/searchService.js';
+
 export function injectFooterBar() {
   try {
     const FLAG_ID = 'cooldesk-floating-button';
@@ -256,12 +258,12 @@ export function injectFooterBar() {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.4);
-        backdrop-filter: blur(8px);
-        display: none; /* Hidden by default */
+        backdrop-filter: blur(12px);
+        display: none;
         z-index: 2147483647;
         align-items: flex-start;
         justify-content: center;
-        padding-top: 15vh;
+        padding-top: 12vh;
         animation: fadeIn 0.2s ease;
       }
 
@@ -277,37 +279,40 @@ export function injectFooterBar() {
       .spotlight-container {
         width: 100%;
         max-width: 680px;
-        background: rgba(23, 23, 23, 0.85);
-        backdrop-filter: blur(25px) saturate(150%);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 20px;
+        background: rgba(15, 15, 15, 0.85);
+        backdrop-filter: blur(40px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 24px;
         box-shadow: 
-          0 25px 50px -12px rgba(0, 0, 0, 0.5),
-          0 0 0 1px rgba(255, 255, 255, 0.05);
+          0 0 0 1px rgba(0, 0, 0, 0.5),
+          0 20px 70px -10px rgba(0, 0, 0, 0.7),
+          inset 0 1px 1px rgba(255, 255, 255, 0.1);
         overflow: hidden;
-        animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         display: flex;
         flex-direction: column;
+        color: white;
       }
 
       @keyframes slideDown {
-        from { transform: translateY(-20px) scale(0.95); opacity: 0; }
+        from { transform: translateY(-30px) scale(0.96); opacity: 0; }
         to { transform: translateY(0) scale(1); opacity: 1; }
       }
 
       .spotlight-search-box {
-        padding: 20px 24px;
+        padding: 24px 28px;
         display: flex;
         align-items: center;
-        gap: 16px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        gap: 18px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.02);
       }
 
       .spotlight-prompt {
-        font-family: 'Fira Code', monospace;
-        font-weight: 700;
-        font-size: 20px;
-        color: #34C759;
+        font-family: inherit;
+        font-weight: 800;
+        font-size: 24px;
+        color: #60a5fa;
         user-select: none;
       }
 
@@ -316,57 +321,78 @@ export function injectFooterBar() {
         background: transparent;
         border: none;
         outline: none;
-        color: white;
-        font-size: 20px;
+        color: #f8fafc;
+        font-size: 22px;
         font-family: inherit;
+        font-weight: 500;
         padding: 0;
       }
 
       .spotlight-input::placeholder {
-        color: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.25);
       }
 
       .spotlight-results {
-        max-height: 420px;
+        max-height: 480px;
         overflow-y: auto;
-        padding: 8px;
+        padding: 12px;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 2px;
+      }
+
+      /* Custom Scrollbar for results */
+      .spotlight-results::-webkit-scrollbar {
+        width: 6px;
+      }
+      .spotlight-results::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .spotlight-results::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
       }
 
       .result-item {
         padding: 12px 16px;
         display: flex;
         align-items: center;
-        gap: 12px;
-        border-radius: 12px;
+        gap: 16px;
+        border-radius: 14px;
         cursor: pointer;
-        transition: all 0.1s ease;
-        color: rgba(255, 255, 255, 0.7);
-        font-size: 14px;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid transparent;
+        position: relative;
       }
 
       .result-item.selected {
-        background: rgba(255, 255, 255, 0.1);
-        color: white;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.1);
+        transform: scale(1.01);
       }
 
-      .result-item:hover {
-        background: rgba(255, 255, 255, 0.05);
-        color: white;
+      .result-item.selected .result-hint {
+        opacity: 1;
+        transform: translateX(0);
       }
 
       .result-icon {
-        width: 32px;
-        height: 32px;
+        width: 40px;
+        height: 40px;
         display: flex;
         align-items: center;
         justify-content: center;
         background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        font-size: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        font-size: 20px;
         flex-shrink: 0;
+        transition: all 0.2s ease;
+      }
+
+      .result-item.selected .result-icon {
+        background: rgba(96, 165, 250, 0.2);
+        border-color: rgba(96, 165, 250, 0.3);
       }
 
       .result-content {
@@ -375,16 +401,19 @@ export function injectFooterBar() {
       }
 
       .result-title {
+        font-size: 15px;
         font-weight: 600;
+        color: #f1f5f9;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         display: block;
+        margin-bottom: 2px;
       }
 
       .result-desc {
-        font-size: 12px;
-        opacity: 0.5;
+        font-size: 13px;
+        color: #94a3b8;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -392,40 +421,60 @@ export function injectFooterBar() {
       }
 
       .result-badge {
-        font-size: 10px;
-        padding: 2px 6px;
-        border-radius: 4px;
-        background: rgba(255, 255, 255, 0.05);
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.06);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.4);
+        color: rgba(255, 255, 255, 0.6);
         font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
+        text-transform: capitalize;
+        letter-spacing: 0.02em;
+        flex-shrink: 0;
+      }
+
+      .result-hint {
+        font-size: 11px;
+        color: #60a5fa;
+        font-weight: 700;
+        opacity: 0;
+        transform: translateX(10px);
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(96, 165, 250, 0.15);
+        padding: 4px 8px;
+        border-radius: 6px;
       }
 
       .spotlight-footer {
-        padding: 12px 24px;
-        background: rgba(0, 0, 0, 0.2);
+        padding: 16px 28px;
+        background: rgba(0, 0, 0, 0.3);
         display: flex;
         align-items: center;
-        gap: 16px;
-        font-size: 11px;
-        color: rgba(255, 255, 255, 0.3);
-        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        gap: 24px;
+        font-size: 12px;
+        color: #64748b;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
       }
 
       .shortcut-hint {
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 6px;
       }
 
       .shortcut-key {
-        padding: 2px 6px;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 4px;
-        color: rgba(255, 255, 255, 0.6);
-        font-family: monospace;
+        padding: 3px 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        color: #cbd5e1;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-weight: 600;
+        font-size: 11px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
       }
     `;
 
@@ -659,42 +708,6 @@ export function injectFooterBar() {
     scrapeBtn.appendChild(scrapeTooltip);
 
     container.appendChild(scrapeBtn);
-
-
-    // 4. AI Voice Button
-    const voiceBtn = document.createElement('div');
-    voiceBtn.className = 'action-btn voice-btn';
-    voiceBtn.id = 'cooldesk-voice-btn'; // For easier selection
-
-    // Create Microphone Icon
-    const micIcon = document.createElement('div');
-    micIcon.textContent = '🎤';
-    micIcon.style.fontSize = '20px';
-    micIcon.style.lineHeight = '1';
-    voiceBtn.appendChild(micIcon);
-
-
-
-    voiceBtn.onclick = async (e) => {
-      e.stopPropagation();
-      // Visual feedback
-      voiceBtn.style.transform = 'scale(0.95)';
-      setTimeout(() => voiceBtn.style.transform = '', 150);
-
-      showNotification('Opening Voice Chat...', '#ec4899', 2000);
-
-      // Open side panel with voice mode enabled
-      await openSidePanel(true); // Pass true to start voice mode
-    };
-    voiceBtn.onmousedown = (e) => e.stopPropagation();
-
-    // Tooltip for Voice
-    const voiceTooltip = document.createElement('div');
-    voiceTooltip.className = 'action-tooltip';
-    voiceTooltip.textContent = 'Voice Command';
-    voiceBtn.appendChild(voiceTooltip);
-
-    container.appendChild(voiceBtn);
 
 
 
@@ -1013,18 +1026,27 @@ export function injectFooterBar() {
       }
     };
 
-    const renderResults = (results) => {
+    const renderResults = (results = []) => {
+      console.log('[Spotlight:Content] Rendering results:', results.length);
       currentResults = results;
       selectedIndex = results.length > 0 ? 0 : -1;
 
       spotlightResults.innerHTML = results.map((res, i) => `
-        <div class="result-item ${i === 0 ? 'selected' : ''}" data-index="${i}">
-          <div class="result-icon">${res.icon || '🔍'}</div>
+        <div class="result-item ${i === selectedIndex ? 'selected' : ''}" data-index="${i}">
+          <div class="result-icon">
+            ${(res.icon && (res.icon.startsWith('http') || res.icon.startsWith('chrome-extension')))
+          ? `<img src="${res.icon}" style="width:20px; height:20px; border-radius:4px; object-fit: contain;" />`
+          : (res.icon || '🔍')}
+          </div>
           <div class="result-content">
             <span class="result-title">${res.title}</span>
             <span class="result-desc">${res.description || res.url || ''}</span>
           </div>
           ${res.category ? `<span class="result-badge">${res.category}</span>` : ''}
+          <div class="result-hint">
+            <span>Open</span>
+            <span class="shortcut-key">↵</span>
+          </div>
         </div>
       `).join('');
 
@@ -1058,34 +1080,41 @@ export function injectFooterBar() {
 
     spotlightInput.oninput = async () => {
       const value = spotlightInput.value.trim();
+      console.log('[Spotlight:Content] Input changed:', value);
       if (!value) {
         renderResults([]);
         return;
       }
 
-      // Request suggestions from background
-      chrome.runtime.sendMessage({
-        type: 'GET_SPOTLIGHT_SUGGESTIONS',
-        query: value
-      }, (response) => {
-        if (response?.results) {
-          renderResults(response.results);
-        }
-      });
+      // Use direct search service (no message passing needed)
+      console.log('[Spotlight:Content] Searching directly for:', value);
+      try {
+        const results = await quickSearch(value, 15);
+        console.log('[Spotlight:Content] Found', results.length, 'results');
+        renderResults(results);
+      } catch (e) {
+        console.error('[Spotlight:Content] Search error:', e);
+        renderResults([]);
+      }
     };
 
     spotlightInput.onkeydown = (e) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        selectedIndex = (selectedIndex + 1) % currentResults.length;
-        updateSelection();
+        if (currentResults.length > 0) {
+          selectedIndex = (selectedIndex + 1) % currentResults.length;
+          updateSelection();
+        }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        selectedIndex = (selectedIndex - 1 + currentResults.length) % currentResults.length;
-        updateSelection();
+        if (currentResults.length > 0) {
+          selectedIndex = (selectedIndex - 1 + currentResults.length) % currentResults.length;
+          updateSelection();
+        }
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (selectedIndex >= 0) {
+        if (selectedIndex >= 0 && currentResults[selectedIndex]) {
+          console.log('[Spotlight:Content] Executing:', currentResults[selectedIndex].title);
           executeResult(currentResults[selectedIndex]);
         }
       } else if (e.key === 'Escape') {
@@ -1120,7 +1149,7 @@ export function injectFooterBar() {
         // Only trigger if not in an input/textarea (unless it's our own spotlight input)
         const target = e.target;
         const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-        
+
         if (isInput && target !== spotlightInput) return;
 
         e.preventDefault();

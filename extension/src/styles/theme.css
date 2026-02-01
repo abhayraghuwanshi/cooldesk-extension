@@ -308,24 +308,33 @@
   background-clip: text;
 }
 
-/* Scrollbar Styling */
+/* Scrollbar Styling - Minimal and clean */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--surface-2, rgba(15, 23, 42, 0.3));
-  border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--interactive-hover, var(--primary-color, rgba(139, 92, 246, 0.3)));
-  border-radius: 4px;
-  transition: background 0.2s ease;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--interactive-active, var(--secondary-color, rgba(139, 92, 246, 0.5)));
+  background: rgba(255, 255, 255, 0.2);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
 /* Modal Overlay */
