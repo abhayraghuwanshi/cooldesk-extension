@@ -114,18 +114,21 @@ async function buildIndex() {
         const activityMap = new Map();
         const activityRows = activityResult?.data || (Array.isArray(activityResult) ? activityResult : []);
 
-        activityRows.forEach(row => {
-            // row.url is usually the domain/key
-            if (!row || !row.url) return;
+        // Ensure activityRows is an array before calling forEach
+        if (Array.isArray(activityRows)) {
+            activityRows.forEach(row => {
+                // row.url is usually the domain/key
+                if (!row || !row.url) return;
 
-            // Calculate Boost Score
-            const timeScore = Math.min((Number(row.time) || 0) / 60000, 20); // up to 20 pts (1 pt per min)
-            const visitScore = Math.min((Number(row.visitCount) || 0) * 1, 15); // up to 15 pts
-            const clickScore = Math.min((Number(row.clicks) || 0) * 1, 10); // up to 10 pts
+                // Calculate Boost Score
+                const timeScore = Math.min((Number(row.time) || 0) / 60000, 20); // up to 20 pts (1 pt per min)
+                const visitScore = Math.min((Number(row.visitCount) || 0) * 1, 15); // up to 15 pts
+                const clickScore = Math.min((Number(row.clicks) || 0) * 1, 10); // up to 10 pts
 
-            const totalBoost = Math.floor(timeScore + visitScore + clickScore);
-            activityMap.set(row.url, totalBoost);
-        });
+                const totalBoost = Math.floor(timeScore + visitScore + clickScore);
+                activityMap.set(row.url, totalBoost);
+            });
+        }
 
         // 2. Normalize Data
         let index = [];
@@ -145,127 +148,144 @@ async function buildIndex() {
         };
 
         // --- TABS ---
-        tabs.forEach(tab => {
-            index.push({
-                i: `tab_${tab.id}`,
-                t: 'tab',
-                l: tab.title,
-                u: tab.url,
-                d: 'Open Tab',
-                f: tab.favIconUrl,
-                c: 'Open Tab',
-                scoreBase: 100 + (index.length < 5 ? 5 : 0) // Slight boost for first tabs
+        if (Array.isArray(tabs)) {
+            tabs.forEach(tab => {
+                index.push({
+                    i: `tab_${tab.id}`,
+                    t: 'tab',
+                    l: tab.title,
+                    u: tab.url,
+                    d: 'Open Tab',
+                    f: tab.favIconUrl,
+                    c: 'Open Tab',
+                    tabId: tab.id, // Add tabId for tab switching
+                    scoreBase: 100 + (index.length < 5 ? 5 : 0) // Slight boost for first tabs
+                });
             });
-        });
+        }
 
         // --- WORKSPACES ---
-        workspaces.forEach(ws => {
-            index.push({
-                i: `ws_${ws.id}`,
-                t: 'workspace',
-                l: ws.name,
-                d: `${(ws.urls || []).length} items`,
-                c: 'Workspace',
-                scoreBase: 90
-            });
+        if (Array.isArray(workspaces)) {
+            workspaces.forEach(ws => {
+                index.push({
+                    i: `ws_${ws.id}`,
+                    t: 'workspace',
+                    l: ws.name,
+                    d: `${(ws.urls || []).length} items`,
+                    c: 'Workspace',
+                    scoreBase: 90
+                });
 
-            (ws.urls || []).forEach(urlItem => {
-                const url = typeof urlItem === 'string' ? urlItem : urlItem.url;
-                const title = typeof urlItem === 'string' ? '' : urlItem.title;
-                if (url) {
-                    index.push({
-                        i: `ws_link_${ws.id}_${url}`,
-                        t: 'workspace-url',
-                        l: title || url,
-                        u: url,
-                        d: `in ${ws.name}`,
-                        f: typeof urlItem === 'object' ? urlItem.favicon : null,
-                        c: 'Saved Link',
-                        scoreBase: 85 + getBoost(url)
-                    });
-                }
+                (ws.urls || []).forEach(urlItem => {
+                    const url = typeof urlItem === 'string' ? urlItem : urlItem.url;
+                    const title = typeof urlItem === 'string' ? '' : urlItem.title;
+                    if (url) {
+                        index.push({
+                            i: `ws_link_${ws.id}_${url}`,
+                            t: 'workspace-url',
+                            l: title || url,
+                            u: url,
+                            d: `in ${ws.name}`,
+                            f: typeof urlItem === 'object' ? urlItem.favicon : null,
+                            c: 'Saved Link',
+                            scoreBase: 85 + getBoost(url)
+                        });
+                    }
+                });
             });
-        });
+        }
 
         // --- COMMANDS ---
         const commands = CommandParser.getAllCommands();
-        commands.forEach(cmd => {
-            index.push({
-                i: `cmd_${cmd.command}`,
-                t: 'command',
-                l: cmd.command,
-                d: cmd.description,
-                c: 'Command',
-                scoreBase: 95
+        if (Array.isArray(commands)) {
+            commands.forEach(cmd => {
+                index.push({
+                    i: `cmd_${cmd.command}`,
+                    t: 'command',
+                    l: cmd.command,
+                    d: cmd.description,
+                    c: 'Command',
+                    scoreBase: 95
+                });
             });
-        });
+        }
 
         // --- NOTES ---
-        notes.forEach(note => {
-            index.push({
-                i: `note_${note.id}`,
-                t: 'note',
-                l: note.title || 'Untitled Note',
-                d: (note.content || '').substring(0, 50),
-                c: 'Note',
-                scoreBase: 80
+        if (Array.isArray(notes)) {
+            notes.forEach(note => {
+                index.push({
+                    i: `note_${note.id}`,
+                    t: 'note',
+                    l: note.title || 'Untitled Note',
+                    d: (note.content || '').substring(0, 50),
+                    c: 'Note',
+                    scoreBase: 80
+                });
             });
-        });
+        }
 
         // --- URL NOTES ---
-        urlNotes.forEach(note => {
-            index.push({
-                i: `urlnote_${note.id}`,
-                t: note.type === 'highlight' ? 'highlight' : 'url-note',
-                l: note.text ? note.text.substring(0, 50) : 'URL Note',
-                u: note.url,
-                d: note.url,
-                c: note.type === 'highlight' ? 'Highlight' : 'URL Note',
-                scoreBase: 75 + getBoost(note.url)
+        if (Array.isArray(urlNotes)) {
+            urlNotes.forEach(note => {
+                index.push({
+                    i: `urlnote_${note.id}`,
+                    t: note.type === 'highlight' ? 'highlight' : 'url-note',
+                    l: note.text ? note.text.substring(0, 50) : 'URL Note',
+                    u: note.url,
+                    d: note.url,
+                    c: note.type === 'highlight' ? 'Highlight' : 'URL Note',
+                    scoreBase: 75 + getBoost(note.url)
+                });
             });
-        });
+        }
 
         // --- HISTORY ---
-        historyItems.forEach(h => {
-            const boost = getBoost(h.url);
-            index.push({
-                i: `hist_${h.id}`,
-                t: 'history',
-                l: h.title || h.url,
-                u: h.url,
-                d: h.url,
-                c: 'History',
-                v: h.visitCount,
-                scoreBase: 50 + Math.min(h.visitCount || 0, 10) + boost
+        if (Array.isArray(historyItems)) {
+            historyItems.forEach(h => {
+                const boost = getBoost(h.url);
+                index.push({
+                    i: `hist_${h.id}`,
+                    t: 'history',
+                    l: h.title || h.url,
+                    u: h.url,
+                    d: h.url,
+                    c: 'History',
+                    v: h.visitCount,
+                    scoreBase: 50 + Math.min(h.visitCount || 0, 10) + boost
+                });
             });
-        });
+        }
 
         // --- BOOKMARKS ---
         const flatBookmarks = flattenBookmarks(bookmarkTree);
-        flatBookmarks.forEach(b => {
-            index.push({
-                i: `bm_${b.id}`,
-                t: 'bookmark',
-                l: b.title,
-                u: b.url,
-                d: b.url,
-                c: 'Bookmark',
-                scoreBase: 70 + getBoost(b.url)
+        if (Array.isArray(flatBookmarks)) {
+            flatBookmarks.forEach(b => {
+                index.push({
+                    i: `bm_${b.id}`,
+                    t: 'bookmark',
+                    l: b.title,
+                    u: b.url,
+                    d: b.url,
+                    c: 'Bookmark',
+                    scoreBase: 70 + getBoost(b.url)
+                });
             });
-        });
+        }
 
         // --- SCRAPED CHATS ---
-        scrapedChats.forEach(chat => {
-            index.push({
-                i: `chat_${chat.chatId}`,
-                t: 'scraped-chat',
-                l: chat.title || 'AI Chat',
-                u: chat.url,
-                d: `from ${chat.platform}`,
-                c: 'AI Chat',
-                scoreBase: 60 + getBoost(chat.url)
+        if (Array.isArray(scrapedChats)) {
+            scrapedChats.forEach(chat => {
+                index.push({
+                    i: `chat_${chat.chatId}`,
+                    t: 'scraped-chat',
+                    l: chat.title || 'AI Chat',
+                    u: chat.url,
+                    d: `from ${chat.platform}`,
+                    c: 'AI Chat',
+                    scoreBase: 60 + getBoost(chat.url)
+                });
             });
-        });
+        }
 
         // 3. Save to Storage
         const payload = {

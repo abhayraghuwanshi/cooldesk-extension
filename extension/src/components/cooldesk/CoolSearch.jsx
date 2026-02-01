@@ -1228,6 +1228,14 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       if (item.type === 'workspace') {
         if (onWorkspaceNavigate) onWorkspaceNavigate(item.workspace);
         else handleWorkspaceOpen(item.workspace);
+      } else if (item.type === 'tab' && item.tabId) {
+        // Switch to existing tab instead of creating new one
+        if (chrome?.tabs?.update) {
+          chrome.tabs.update(item.tabId, { active: true });
+          chrome.tabs.get(item.tabId, (tab) => {
+            if (tab?.windowId) chrome.windows.update(tab.windowId, { focused: true });
+          });
+        }
       } else if (item.type === 'workspace-url' || item.url) {
         if (chrome?.tabs?.create) chrome.tabs.create({ url: item.url });
         else window.open(item.url, '_blank');

@@ -90,6 +90,7 @@ async function searchLocalIndex(query, typeFilter = null) {
           icon: getIconForType(item.t), // Use stored icon 'f' if available? Indexer stores 'f' as favicon
           favicon: item.f,
           category: item.c,
+          tabId: item.tabId, // Include tabId for tab switching
           score: baseScore + matchScore
         });
       }

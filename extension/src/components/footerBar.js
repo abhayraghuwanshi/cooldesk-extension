@@ -1062,6 +1062,8 @@ export function injectFooterBar() {
     const executeResult = async (item) => {
       if (!item) return;
 
+      console.log('[Spotlight:Content] Executing result:', item.title, 'type:', item.type, 'tabId:', item.tabId, 'url:', item.url);
+
       if (item.command) {
         chrome.runtime.sendMessage({
           type: 'EXECUTE_COMMAND',
@@ -1069,10 +1071,15 @@ export function injectFooterBar() {
         }, (response) => {
           if (response?.success) toggleSpotlight();
         });
-      } else if (item.tabId) {
-        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId });
+      } else if (item.tabId !== undefined && item.tabId !== null) {
+        // Use explicit check for tabId since tab ID 0 is falsy but valid
+        console.log('[Spotlight:Content] Jumping to tab:', item.tabId);
+        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId }, (response) => {
+          console.log('[Spotlight:Content] JUMP_TO_TAB response:', response);
+        });
         toggleSpotlight();
       } else if (item.url) {
+        console.log('[Spotlight:Content] Opening URL in new tab:', item.url);
         window.open(item.url, '_blank');
         toggleSpotlight();
       }

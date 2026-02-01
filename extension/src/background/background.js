@@ -204,24 +204,24 @@ import {
 } from './activity.js';
 import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
-import { CommandExecutor } from '../services/commandExecutor.js';
 import { CommandParser } from '../services/commandParser.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
+import { initializeSearchIndexer } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
 
 // Initialize Search Indexer (Background Service)
-// initializeSearchIndexer(); // TEMPORARILY DISABLED FOR DEBUGGING
+initializeSearchIndexer(); // Re-enabled for spotlight search
 
 // Initialize CommandExecutor for shared use
-const commandExecutor = new CommandExecutor((feedback) => {
-  console.log('[Background:Command] Feedback:', feedback);
-  // Optionally broadcast feedback to active tab
-  chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
-    if (tab) chrome.tabs.sendMessage(tab.id, { type: 'SHOW_NOTIFICATION', message: feedback.message, color: feedback.type === 'success' ? '#10b981' : '#3B82F6' });
-  });
-});
+// MOVED TO main() function to avoid top-level execution errors
+// const commandExecutor = new CommandExecutor((feedback) => {
+//   console.log('[Background:Command] Feedback:', feedback);
+//   chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+//     if (tab) chrome.tabs.sendMessage(tab.id, { type: 'SHOW_NOTIFICATION', message: feedback.message, color: feedback.type === 'success' ? '#10b981' : '#3B82F6' });
+//   });
+// });
 
 
 
@@ -779,8 +779,8 @@ async function main() {
     }
 
     // Handle activity tracking messages from content scripts
-    // Skip activity handling for chat scraping messages and calendar triggers
-    if (msg.type && sender.tab && msg.type !== 'AUTO_SCRAPED_CHATS' && msg.type !== 'SCRAPED_LINKS' && msg.type !== 'TRIGGER_CALENDAR_SCRAPE' && msg.type !== 'CALENDAR_EVENTS_SCRAPED' && msg.type !== 'TRIGGER_MANUAL_CHATS_SCRAPE' && msg.type !== 'TRIGGER_ALL_CHATS_SCRAPE') {
+    // Skip activity handling for chat scraping messages, calendar triggers, and tab navigation
+    if (msg.type && sender.tab && msg.type !== 'AUTO_SCRAPED_CHATS' && msg.type !== 'SCRAPED_LINKS' && msg.type !== 'TRIGGER_CALENDAR_SCRAPE' && msg.type !== 'CALENDAR_EVENTS_SCRAPED' && msg.type !== 'TRIGGER_MANUAL_CHATS_SCRAPE' && msg.type !== 'TRIGGER_ALL_CHATS_SCRAPE' && msg.type !== 'JUMP_TO_TAB') {
       console.log('[Background Debug] Potential activity message:', { type: msg.type, url: sender.tab?.url });
 
       const activityHandled = handleActivityContentScriptMessage(msg, sender);
@@ -2149,11 +2149,23 @@ async function main() {
     }
 
     if (msg?.type === 'JUMP_TO_TAB') {
-      chrome.tabs.update(msg.tabId, { active: true });
-      chrome.tabs.get(msg.tabId, (tab) => {
-        if (tab?.windowId) chrome.windows.update(tab.windowId, { focused: true });
-      });
-      sendResponse({ success: true });
+      (async () => {
+        try {
+          console.log('[Background] JUMP_TO_TAB:', msg.tabId);
+          // First activate the tab
+          await chrome.tabs.update(msg.tabId, { active: true });
+          // Then focus the window
+          const tab = await chrome.tabs.get(msg.tabId);
+          if (tab?.windowId) {
+            await chrome.windows.update(tab.windowId, { focused: true });
+          }
+          console.log('[Background] JUMP_TO_TAB success');
+          sendResponse({ success: true });
+        } catch (e) {
+          console.error('[Background] JUMP_TO_TAB failed:', e);
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
       return true;
     }
   });
