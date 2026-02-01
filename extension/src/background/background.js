@@ -206,7 +206,7 @@ import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
 import { CommandParser } from '../services/commandParser.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
-import { initializeSearchIndexer } from './searchIndexer.js';
+import { initializeSearchIndexer, forceIndexRebuild } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
@@ -2166,6 +2166,18 @@ async function main() {
           sendResponse({ success: false, error: e.message });
         }
       })();
+      return true;
+    }
+
+    if (msg?.type === 'REBUILD_INDEX') {
+      console.log('[Background] REBUILD_INDEX requested');
+      forceIndexRebuild().then(() => {
+        console.log('[Background] Index rebuild complete');
+        sendResponse({ success: true });
+      }).catch(e => {
+        console.error('[Background] Index rebuild failed:', e);
+        sendResponse({ success: false, error: e.message });
+      });
       return true;
     }
   });

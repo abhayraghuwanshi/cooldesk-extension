@@ -25,8 +25,17 @@ export function fuzzyScore(text, query) {
   if (textLower.startsWith(queryLower)) return 90;
   if (textLower.includes(queryLower)) return 70;
 
-  const words = textLower.split(/\s+/);
-  if (words.some(w => w.startsWith(queryLower))) return 60;
+  const textWords = textLower.split(/\s+/);
+  if (textWords.some(w => w.startsWith(queryLower))) return 60;
+
+  // Multi-word query matching: check if all query words appear in text
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 0);
+  if (queryWords.length > 1) {
+    const allWordsMatch = queryWords.every(qw =>
+      textLower.includes(qw) || textWords.some(tw => tw.startsWith(qw))
+    );
+    if (allWordsMatch) return 65; // Good match for multi-word queries
+  }
 
   // Simple character match walk
   let queryIdx = 0;
@@ -73,10 +82,12 @@ async function searchLocalIndex(query, typeFilter = null) {
       let baseScore = item.scoreBase || 0;
 
       // Compute fuzzy score based on query
+      // Search across all relevant fields including category
       const matchScore = Math.max(
         fuzzyScore(item.l, query), // l = label/title
         fuzzyScore(item.d, query), // d = description
-        fuzzyScore(item.u, query)  // u = url
+        fuzzyScore(item.u, query), // u = url
+        fuzzyScore(item.c, query)  // c = category (e.g., workspace name)
       );
 
       if (matchScore > 0) {
@@ -117,7 +128,7 @@ async function searchDesktop(query) {
 export async function quickSearch(query, maxResults = 15) {
   if (!query || !query.trim()) return [];
 
-  // console.log('[SearchService] quickSearch: ' + query);
+  console.log('[SearchService] quickSearch: ' + query);
 
   // 1. Try Local Index FIRST
   // This is the "High Speed Center" strategy
@@ -125,7 +136,12 @@ export async function quickSearch(query, maxResults = 15) {
 
   if (localResults !== null) {
     // Index Exists. Even if 0 results, we trust it.
-    // console.log(`[SearchService] Fast local hit: ${localResults.length} results`);
+    console.log(`[SearchService] Fast local hit: ${localResults.length} results`);
+    // Log workspace results for debugging
+    const wsResults = localResults.filter(r => r.type === 'workspace' || r.type === 'workspace-url');
+    if (wsResults.length > 0) {
+      console.log('[SearchService] Workspace results:', wsResults.map(r => ({ title: r.title, type: r.type })));
+    }
     return localResults.slice(0, maxResults);
   }
 

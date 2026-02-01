@@ -165,8 +165,13 @@ async function buildIndex() {
         }
 
         // --- WORKSPACES ---
-        if (Array.isArray(workspaces)) {
-            workspaces.forEach(ws => {
+        // Handle both array format and { success, data } format from listWorkspaces
+        const workspaceList = Array.isArray(workspaces) ? workspaces : (workspaces?.data || []);
+        console.log('[SearchIndexer] Workspaces fetched:', workspaceList.length);
+        if (workspaceList.length > 0) {
+            let totalUrls = 0;
+            workspaceList.forEach(ws => {
+                console.log('[SearchIndexer] Processing workspace:', ws.name, 'with', (ws.urls || []).length, 'URLs');
                 index.push({
                     i: `ws_${ws.id}`,
                     t: 'workspace',
@@ -180,6 +185,7 @@ async function buildIndex() {
                     const url = typeof urlItem === 'string' ? urlItem : urlItem.url;
                     const title = typeof urlItem === 'string' ? '' : urlItem.title;
                     if (url) {
+                        totalUrls++;
                         index.push({
                             i: `ws_link_${ws.id}_${url}`,
                             t: 'workspace-url',
@@ -193,6 +199,9 @@ async function buildIndex() {
                     }
                 });
             });
+            console.log('[SearchIndexer] Total workspace URLs indexed:', totalUrls);
+        } else {
+            console.warn('[SearchIndexer] No workspaces found to index!');
         }
 
         // --- COMMANDS ---
