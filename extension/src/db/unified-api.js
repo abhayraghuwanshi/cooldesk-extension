@@ -1635,3 +1635,147 @@ export const getUrlAnalytics = withErrorHandling(async (url) => {
     severity: ErrorSeverity.LOW,
     fallbackFunction: () => ({ totalVisits: 0, totalTime: 0 })
 });
+
+// ===== SCRAPED CONFIG OPERATIONS =====
+
+/**
+ * List all scraping configs
+ */
+export const listScrapingConfigs = withErrorHandling(async (options = {}) => {
+    const { limit, offset, sortBy = 'updatedAt', sortOrder = 'desc' } = options
+
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CONFIGS, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CONFIGS)
+
+    let results = await new Promise((resolve, reject) => {
+        const request = store.getAll()
+        request.onsuccess = () => resolve(request.result || [])
+        request.onerror = () => reject(request.error)
+    })
+
+    // Sort
+    if (sortBy) {
+        results.sort((a, b) => {
+            const aVal = a[sortBy] || 0
+            const bVal = b[sortBy] || 0
+            return sortOrder === 'desc' ? (bVal > aVal ? 1 : -1) : (aVal > bVal ? 1 : -1)
+        })
+    }
+
+    // Paginate
+    if (offset) results = results.slice(offset)
+    if (limit) results = results.slice(0, limit)
+
+    return results
+}, {
+    operation: 'listScrapingConfigs',
+    severity: ErrorSeverity.LOW,
+    strategy: ErrorStrategy.FALLBACK,
+    fallbackFunction: () => []
+})
+
+/**
+ * Get scraping config for a domain
+ */
+export const getScrapingConfig = withErrorHandling(async (domain) => {
+    if (!domain) throw new Error('Domain is required')
+
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CONFIGS, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CONFIGS)
+
+    const request = store.get(domain)
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result || null)
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'getScrapingConfig',
+    severity: ErrorSeverity.LOW
+})
+
+/**
+ * Save scraping config
+ * Also syncs to chrome.storage.local for content scripts
+ */
+export const saveScrapingConfig = withErrorHandling(async (configData) => {
+    // Validate
+    const config = validateAndSanitize(configData, 'scrapedConfig')
+
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CONFIGS, 'readwrite')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CONFIGS)
+
+    const request = store.put(config)
+
+    return new Promise((resolve, reject) => {
+        request.onsuccess = async () => {
+            console.log(`[Unified API] Saved scraping config for: ${config.domain}`)
+
+            // SYNC TO chrome.storage.local
+            try {
+                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                    const storage = await chrome.storage.local.get('domainSelectors')
+                    const selectors = storage.domainSelectors || {}
+                    selectors[config.domain] = {
+                        ...config, // Persist all validated fields
+                        enabled: config.enabled !== false, // Default to true if undefined
+                        savedAt: config.updatedAt // Use updatedAt as savedAt
+                    }
+                    await chrome.storage.local.set({ domainSelectors: selectors })
+                    console.log(`[Unified API] Synced config to chrome.storage.local for ${config.domain}`)
+                }
+            } catch (e) {
+                console.warn('[Unified API] Failed to sync to chrome.storage.local:', e)
+            }
+
+            resolve(config)
+        }
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'saveScrapingConfig',
+    severity: ErrorSeverity.MEDIUM,
+    strategy: ErrorStrategy.RETRY
+})
+
+/**
+ * Delete scraping config
+ */
+export const deleteScrapingConfig = withErrorHandling(async (domain) => {
+    if (!domain) throw new Error('Domain is required')
+
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CONFIGS, 'readwrite')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CONFIGS)
+
+    const request = store.delete(domain)
+
+    return new Promise((resolve, reject) => {
+        request.onsuccess = async () => {
+            console.log(`[Unified API] Deleted scraping config for: ${domain}`)
+
+            // SYNC TO chrome.storage.local
+            try {
+                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                    const storage = await chrome.storage.local.get('domainSelectors')
+                    const selectors = storage.domainSelectors || {}
+                    if (selectors[domain]) {
+                        delete selectors[domain]
+                        await chrome.storage.local.set({ domainSelectors: selectors })
+                        console.log(`[Unified API] Removed config from chrome.storage.local for ${domain}`)
+                    }
+                }
+            } catch (e) {
+                console.warn('[Unified API] Failed to sync delete to chrome.storage.local:', e)
+            }
+
+            resolve(true)
+        }
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'deleteScrapingConfig',
+    severity: ErrorSeverity.MEDIUM
+})

@@ -206,7 +206,7 @@ import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
 import { CommandParser } from '../services/commandParser.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
-import { initializeSearchIndexer, forceIndexRebuild } from './searchIndexer.js';
+import { forceIndexRebuild, initializeSearchIndexer } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
@@ -1176,7 +1176,7 @@ async function main() {
 
             if (linksToSave.length > 0) {
               // Store new/updated links in IndexedDB
-              const writeTx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS, DB_CONFIG.STORES.UI_STATE], 'readwrite');
+              const writeTx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS, DB_CONFIG.STORES.UI_STATE, DB_CONFIG.STORES.SCRAPED_CONFIGS], 'readwrite');
               const writeStore = writeTx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
 
               for (const link of linksToSave) {
@@ -1209,15 +1209,38 @@ async function main() {
                 updatedAt: Date.now()
               });
 
-              // Save the selector for this domain
+              // Save the selector for this domain to SCRAPED_CONFIGS
               if (result.selector) {
-                uiStateStore.put({
-                  id: `selector_${result.hostname}`,
-                  selector: result.selector,
-                  platform: result.platform,
-                  hostname: result.hostname,
-                  savedAt: Date.now()
-                });
+                // Also write to SCRAPED_CONFIGS
+                const configStore = writeTx.objectStore(DB_CONFIG.STORES.SCRAPED_CONFIGS);
+
+                // Handle selector being either a string or an object
+                const selectorData = typeof result.selector === 'object' ? result.selector : { selector: result.selector };
+
+                const configEntry = {
+                  ...selectorData, // Spread all fields (excludedPatterns, scrapeLimit, etc.)
+                  domain: result.hostname,
+                  selector: selectorData.selector, // Ensure selector field is set
+                  container: selectorData.container,
+                  links: selectorData.links,
+                  sample: selectorData.sample,
+                  source: 'auto', // It came from click-to-scrape
+                  enabled: true,
+                  updatedAt: Date.now()
+                };
+                configStore.put(configEntry);
+
+                // Sync to chrome.storage.local for immediate availability
+                try {
+                  chrome.storage.local.get('domainSelectors').then(data => {
+                    const selectors = data.domainSelectors || {};
+                    selectors[result.hostname] = {
+                      ...configEntry,
+                      savedAt: Date.now()
+                    };
+                    chrome.storage.local.set({ domainSelectors: selectors });
+                  });
+                } catch (e) { console.warn('Failed to sync selector to local storage', e); }
               }
 
               await new Promise((resolve, reject) => {
@@ -1225,10 +1248,10 @@ async function main() {
                 writeTx.onerror = () => reject(writeTx.error);
               });
 
-              console.log(`[Background] ✅ Stored ${newLinks.length} new links from ${result.platform}`);
+              console.log(`[Background] ✅ Stored ${linksToSave.length} new links from ${result.platform}`);
             }
 
-            sendResponse({ success: true, newCount: newLinks.length, totalCount: result.links.length });
+            sendResponse({ success: true, newCount: linksToSave.length, totalCount: result.links.length });
           } else {
             sendResponse({ success: true, newCount: 0, totalCount: 0 });
           }
@@ -1323,64 +1346,98 @@ async function main() {
 
     // Handle get scraped chats requests
     if (msg?.type === 'GET_SCRAPED_CHATS') {
-      console.log('[Background] Getting scraped chats:', msg.data);
+      console.log('[Background] Getting scraped chats (optimized):', msg.data);
       (async () => {
         try {
-          const { platform, limit, sortBy = 'scrapedAt' } = msg.data || {};
+          const { platform, limit = 50, sortBy = 'scrapedAt' } = msg.data || {};
 
           // Import DB dynamically
-          // Use statically imported functions (imported at top of file)
           const db = await getUnifiedDB();
-
           const tx = db.transaction([DB_CONFIG.STORES.SCRAPED_CHATS], 'readonly');
           const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS);
 
-          let chats = [];
+          const chats = [];
 
-          if (platform) {
-            // Get chats for specific platform
-            const index = store.index('by_platform');
-            chats = await new Promise((resolve, reject) => {
-              const request = index.getAll(platform);
-              request.onsuccess = () => resolve(request.result || []);
-              request.onerror = () => reject(request.error);
-            });
-          } else {
-            // Get all chats
-            chats = await new Promise((resolve, reject) => {
-              const request = store.getAll();
-              request.onsuccess = () => resolve(request.result || []);
-              request.onerror = () => reject(request.error);
-            });
-          }
+          // 1. Fetch Chats (Cursor Optimization)
+          await new Promise((resolve, reject) => {
+            let request;
+            let count = 0;
 
-          // Sort chats
-          if (sortBy === 'scrapedAt') {
-            chats.sort((a, b) => b.scrapedAt - a.scrapedAt); // Newest first
-          } else if (sortBy === 'title') {
-            chats.sort((a, b) => a.title.localeCompare(b.title));
-          }
-
-          // Apply limit if specified
-          if (limit && limit > 0) {
-            chats = chats.slice(0, limit);
-          }
-
-          // Group by platform for stats
-          const byPlatform = {};
-          chats.forEach(chat => {
-            if (!byPlatform[chat.platform]) {
-              byPlatform[chat.platform] = 0;
+            if (platform) {
+              const index = store.index('by_platform_scrapedAt');
+              // Range for specific platform, from -Inifinity to Infinity time
+              // We use cursors, so 'prev' gives us newest first
+              const range = IDBKeyRange.bound([platform, 0], [platform, Infinity]);
+              request = index.openCursor(range, 'prev');
+            } else {
+              // Global list, sorted by scrapedAt
+              if (sortBy === 'scrapedAt') {
+                const index = store.index('by_scrapedAt');
+                request = index.openCursor(null, 'prev'); // Newest first
+              } else {
+                // Default fallback (title sort not optimized with cursors yet, use simple limit?)
+                // If sorting by title, we can't easily limit without fetching all first 
+                // unless we have an index on title. We do have 'by_title'.
+                // But usually users want 'scrapedAt'. 
+                // For now, if sortBy is not scrapedAt, we might fall back to older method or just use scrapedAt index if title is rare
+                const index = store.index('by_scrapedAt'); // Fallback to time sort for performance
+                request = index.openCursor(null, 'prev');
+              }
             }
-            byPlatform[chat.platform]++;
+
+            request.onsuccess = (event) => {
+              const cursor = event.target.result;
+              if (cursor && count < limit) {
+                chats.push(cursor.value);
+                count++;
+                cursor.continue();
+              } else {
+                resolve();
+              }
+            };
+            request.onerror = () => reject(request.error);
           });
 
-          console.log(`[Background] Retrieved ${chats.length} scraped chats`);
+          // 2. Fetch Stats (Efficient Counting)
+          const byPlatform = {};
+
+          await new Promise((resolve, reject) => {
+            const platformIndex = store.index('by_platform');
+            const keyRequest = platformIndex.openKeyCursor(null, 'nextunique');
+
+            // Collect all unique platforms first
+            const platforms = [];
+            keyRequest.onsuccess = (event) => {
+              const cursor = event.target.result;
+              if (cursor) {
+                platforms.push(cursor.key);
+                cursor.continue();
+              } else {
+                // Now count each
+                Promise.all(platforms.map(p =>
+                  new Promise((res) => {
+                    const countReq = platformIndex.count(p);
+                    countReq.onsuccess = () => res({ platform: p, count: countReq.result });
+                    countReq.onerror = () => res({ platform: p, count: 0 });
+                  })
+                )).then(counts => {
+                  counts.forEach(c => byPlatform[c.platform] = c.count);
+                  resolve();
+                }).catch(reject);
+              }
+            };
+            keyRequest.onerror = () => reject(keyRequest.error);
+          });
+
+          // Get total count
+          const total = Object.values(byPlatform).reduce((a, b) => a + b, 0);
+
+          console.log(`[Background] Retrieved ${chats.length} chats (limit: ${limit})`);
 
           sendResponse({
             success: true,
             chats,
-            total: chats.length,
+            total,
             byPlatform,
           });
         } catch (error) {

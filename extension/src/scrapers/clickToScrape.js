@@ -763,7 +763,7 @@ function showToast(message, type = 'info') {
 async function notifyBackground(links, selectorInfo) {
   try {
     await chrome.runtime.sendMessage({
-      type: 'CLICK_SCRAPED_LINKS',
+      type: 'SCRAPED_LINKS',
       data: {
         success: true,
         platform: detectPlatform(),

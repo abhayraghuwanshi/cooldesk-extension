@@ -1,8 +1,10 @@
-// create export data component here and export it
-import React, { useRef, useState } from 'react'
+import { faCheckCircle, faFileExport, faFileImport, faTimesCircle } from '@fortawesome/free-solid-svg-icons'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { useRef, useState } from 'react'
 import { DB_CONFIG, getUnifiedDB } from '../../db/index.js'
-import { storageGet, storageSet, storageRemove } from '../../services/extensionApi'
+import { storageGet, storageRemove, storageSet } from '../../services/extensionApi'
 import './ExportData.css'
+
 
 export default function ExportData() {
     const fileInputRef = useRef(null)
@@ -37,7 +39,7 @@ export default function ExportData() {
             try {
                 const { pinnedWorkspaces } = await storageGet(['pinnedWorkspaces'])
                 data.storageLocal.pinnedWorkspaces = Array.isArray(pinnedWorkspaces) ? pinnedWorkspaces : []
-                
+
                 // Export view mode and display settings
                 try {
                     const viewMode = localStorage.getItem('cooldesk_view_mode') || 'default'
@@ -45,7 +47,7 @@ export default function ExportData() {
                     data.storageLocal.viewMode = viewMode
                     data.storageLocal.displaySettings = displaySettings ? JSON.parse(displaySettings) : null
                 } catch { /* ignore */ }
-                // Collect daily notes keys
+                // Collect daily notes keys and scraping settings
                 let notesByDate = {}
                 let dailyNotesSummary = {}
                 let dailyNotesLastUpdate = 0
@@ -59,6 +61,11 @@ export default function ExportData() {
                     }
                     dailyNotesSummary = all.dailyNotesSummary || {}
                     dailyNotesLastUpdate = all.dailyNotesLastUpdate || 0
+
+                    // Export scraping configurations
+                    if (all.domainSelectors) data.storageLocal.domainSelectors = all.domainSelectors
+                    if (all.platformSettings) data.storageLocal.platformSettings = all.platformSettings
+                    if (all.genericScraperAllowlist) data.storageLocal.genericScraperAllowlist = all.genericScraperAllowlist
                 } catch { /* ignore storage errors */ }
                 data.storageLocal.dailyNotes = {
                     notesByDate,
@@ -87,6 +94,7 @@ export default function ExportData() {
                     dailyNotesDays: Object.keys(data.storageLocal?.dailyNotes?.notesByDate || {}).length,
                     viewMode: data.storageLocal?.viewMode || 'default',
                     displaySettingsCount: data.storageLocal?.displaySettings ? Object.keys(data.storageLocal.displaySettings).length : 0,
+                    scrapingRules: Object.keys(data.storageLocal?.domainSelectors || {}).length
                 },
                 scrapedChats: storeCounts[DB_CONFIG.STORES.SCRAPED_CHATS] || 0
             })
@@ -168,12 +176,29 @@ export default function ExportData() {
                 }
             }
 
-            // Restore chrome.storage.local pins, daily notes, and view settings
+            // Restore chrome.storage.local pins, daily notes, view settings, and scraping configs
             try {
+                const updates = {}
+
                 if (parsed.storageLocal && Array.isArray(parsed.storageLocal.pinnedWorkspaces)) {
-                    await storageSet({ pinnedWorkspaces: parsed.storageLocal.pinnedWorkspaces })
+                    updates.pinnedWorkspaces = parsed.storageLocal.pinnedWorkspaces
                 }
-                
+
+                // Restore scraping configurations
+                if (parsed.storageLocal?.domainSelectors) {
+                    updates.domainSelectors = parsed.storageLocal.domainSelectors
+                }
+                if (parsed.storageLocal?.platformSettings) {
+                    updates.platformSettings = parsed.storageLocal.platformSettings
+                }
+                if (parsed.storageLocal?.genericScraperAllowlist) {
+                    updates.genericScraperAllowlist = parsed.storageLocal.genericScraperAllowlist
+                }
+
+                if (Object.keys(updates).length > 0) {
+                    await storageSet(updates)
+                }
+
                 // Restore view mode and display settings
                 if (parsed.storageLocal) {
                     if (parsed.storageLocal.viewMode) {
@@ -182,10 +207,10 @@ export default function ExportData() {
                     if (parsed.storageLocal.displaySettings) {
                         localStorage.setItem('cooldesk_display_settings', JSON.stringify(parsed.storageLocal.displaySettings))
                         // Dispatch event to update UI
-                        window.dispatchEvent(new CustomEvent('displaySettingsChanged', { 
-                            detail: parsed.storageLocal.displaySettings 
+                        window.dispatchEvent(new CustomEvent('displaySettingsChanged', {
+                            detail: parsed.storageLocal.displaySettings
                         }))
-                        window.dispatchEvent(new CustomEvent('viewModeChanged', { 
+                        window.dispatchEvent(new CustomEvent('viewModeChanged', {
                             detail: { modeId: parsed.storageLocal.viewMode || 'default' }
                         }))
                     }
@@ -205,10 +230,11 @@ export default function ExportData() {
             } catch { /* ignore storage errors */ }
 
             setMessage('Import complete')
-            setDetails({ 
+            setDetails({
                 counts: importCounts,
                 viewMode: parsed.storageLocal?.viewMode || 'not included',
-                displaySettings: parsed.storageLocal?.displaySettings ? 'restored' : 'not included'
+                displaySettings: parsed.storageLocal?.displaySettings ? 'restored' : 'not included',
+                scrapingRules: parsed.storageLocal?.domainSelectors ? Object.keys(parsed.storageLocal.domainSelectors).length : 0
             })
         } catch (err) {
             console.error('[ExportData] Import failed', err)
@@ -229,11 +255,11 @@ export default function ExportData() {
 
             <div className="export-actions">
                 <button className="export-btn primary" onClick={exportAll} disabled={busy}>
-                    <span className="btn-icon">📦</span>
+                    <span className="btn-icon"><FontAwesomeIcon icon={faFileExport} /></span>
                     {busy ? 'Working...' : 'Export JSON'}
                 </button>
                 <button className="export-btn secondary" onClick={onChooseFile} disabled={busy}>
-                    <span className="btn-icon">📥</span>
+                    <span className="btn-icon"><FontAwesomeIcon icon={faFileImport} /></span>
                     Import JSON
                 </button>
                 <label className="replace-mode-toggle">
@@ -255,80 +281,77 @@ export default function ExportData() {
 
             {message && (
                 <div className={`export-status ${message.includes('failed') ? 'error' : 'success'}`}>
-                    <span className="status-icon">{message.includes('failed') ? '❌' : '✅'}</span>
+                    <span className="status-icon">
+                        <FontAwesomeIcon icon={message.includes('failed') ? faTimesCircle : faCheckCircle} />
+                    </span>
                     <span>{message}</span>
                 </div>
             )}
 
             {details && (
-                <div className="export-details">
-                    <div className="details-header">
+                <div className="export-summary-container">
+                    <div className="summary-section-title">
                         <h3>Export Summary</h3>
                     </div>
-                    
-                    <div className="details-grid">
-                        <div className="detail-card highlight">
-                            <div className="detail-icon">💬</div>
-                            <div className="detail-content">
-                                <div className="detail-label">AI Chats</div>
-                                <div className="detail-value">{details.scrapedChats || 0}</div>
+
+                    <div className="stats-hero-grid">
+                        <div className="stat-card primary">
+                            <div className="stat-icon"><FontAwesomeIcon icon={faComments} /></div>
+                            <div className="stat-info">
+                                <div className="stat-value">{details.scrapedChats || 0}</div>
+                                <div className="stat-label">AI Chats</div>
                             </div>
                         </div>
-                        
-                        <div className="detail-card">
-                            <div className="detail-icon">📌</div>
-                            <div className="detail-content">
-                                <div className="detail-label">Pinned Workspaces</div>
-                                <div className="detail-value">{details.storageLocal?.pinnedWorkspaces || 0}</div>
+
+                        <div className="stat-card accent">
+                            <div className="stat-icon"><FontAwesomeIcon icon={faThumbtack} /></div>
+                            <div className="stat-info">
+                                <div className="stat-value">{details.storageLocal?.pinnedWorkspaces || 0}</div>
+                                <div className="stat-label">Pinned</div>
                             </div>
                         </div>
-                        
-                        <div className="detail-card">
-                            <div className="detail-icon">📝</div>
-                            <div className="detail-content">
-                                <div className="detail-label">Daily Notes</div>
-                                <div className="detail-value">{details.storageLocal?.dailyNotesDays || 0} days</div>
+
+                        <div className="stat-card success">
+                            <div className="stat-icon"><FontAwesomeIcon icon={faRobot} /></div>
+                            <div className="stat-info">
+                                <div className="stat-value">{details.storageLocal?.scrapingRules || details.scrapingRules || 0}</div>
+                                <div className="stat-label">Rules</div>
                             </div>
                         </div>
-                        
-                        {details.storageLocal?.viewMode && (
-                            <div className="detail-card">
-                                <div className="detail-icon">👁️</div>
-                                <div className="detail-content">
-                                    <div className="detail-label">View Mode</div>
-                                    <div className="detail-value">{details.storageLocal.viewMode}</div>
-                                </div>
+
+                        <div className="stat-card warning">
+                            <div className="stat-icon"><FontAwesomeIcon icon={faNoteSticky} /></div>
+                            <div className="stat-info">
+                                <div className="stat-value">{details.storageLocal?.dailyNotesDays || 0}</div>
+                                <div className="stat-label">Daily Notes</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="meta-stats-row">
+                        {(details.storageLocal?.viewMode || details.viewMode) && (
+                            <div className="meta-stat">
+                                <span className="meta-icon"><FontAwesomeIcon icon={faEye} /></span>
+                                <span className="meta-label">View Mode:</span>
+                                <span className="meta-value">{details.storageLocal?.viewMode || details.viewMode}</span>
                             </div>
                         )}
-                        
-                        {details.viewMode && (
-                            <div className="detail-card">
-                                <div className="detail-icon">👁️</div>
-                                <div className="detail-content">
-                                    <div className="detail-label">View Mode</div>
-                                    <div className="detail-value">{details.viewMode}</div>
-                                </div>
-                            </div>
-                        )}
-                        
                         {details.displaySettings && (
-                            <div className="detail-card">
-                                <div className="detail-icon">⚙️</div>
-                                <div className="detail-content">
-                                    <div className="detail-label">Display Settings</div>
-                                    <div className="detail-value">{details.displaySettings}</div>
-                                </div>
+                            <div className="meta-stat">
+                                <span className="meta-icon"><FontAwesomeIcon icon={faCog} /></span>
+                                <span className="meta-label">Display Settings:</span>
+                                <span className="meta-value">{details.displaySettings}</span>
                             </div>
                         )}
                     </div>
 
                     {details.counts && (
-                        <div className="store-counts">
-                            <h4>Database Stores</h4>
-                            <div className="store-list">
+                        <div className="stores-section">
+                            <h4>Database Content</h4>
+                            <div className="stores-grid">
                                 {Object.entries(details.counts).map(([store, count]) => (
-                                    <div key={store} className="store-item">
-                                        <code className="store-name">{store}</code>
+                                    <div key={store} className="store-pill">
+                                        <span className="store-name">{store}</span>
                                         <span className="store-count">{count}</span>
                                     </div>
                                 ))}
@@ -338,9 +361,13 @@ export default function ExportData() {
                 </div>
             )}
 
-            <div className="export-info">
-                <div className="info-title">📊 Included in Export:</div>
-                <div className="info-stores">{storeNames.join(', ')}</div>
+            <div className="export-includes">
+                <div className="includes-label">Included Data:</div>
+                <div className="includes-tags">
+                    {storeNames.map(name => (
+                        <span key={name} className="data-tag">{name}</span>
+                    ))}
+                </div>
             </div>
         </div>
     )

@@ -34,27 +34,29 @@ export {
 
     // Workspace URL operations
     addUrlToWorkspace, cleanupOldTimeSeriesData, closeDatabaseConnection, deleteNote, deletePing, deleteScrapedChat,
-    deleteScrapedChatsByPlatform, deleteUrlNote, deleteWorkspace, deleteWorkspaceById, getAllActivity,
+    deleteScrapedChatsByPlatform,
+    // Scraped Config operations
+    deleteScrapingConfig, deleteUrlNote, deleteWorkspace, deleteWorkspaceById, getAllActivity,
     // Utility functions
-    getDatabaseHealth, getScrapedChat,
+    getDatabaseHealth, getScrapedChat, getScrapingConfig,
     // Settings operations
     getSettings, getTimeSeriesDataRange, getTimeSeriesStorageStats,
     // UI State operations
     getUIState,
     // URL Notes operations
-    getUrlAnalytics, getUrlNotes, getUrlRecord, getWorkspace, listAllUrlNotes,
+    getUrlAnalytics, getUrlNotes, getUrlRecord, getWorkspace,
     // Initialization
-    initializeDatabase,
+    initializeDatabase, listAllUrlNotes,
     // Legacy compatibility functions
     listAllUrls,
     // Notes operations
     listNotes, listPings,
     // Scraped Chats operations
-    listScrapedChats,
+    listScrapedChats, listScrapingConfigs,
     // Workspace operations
     listWorkspaces, listWorkspaceUrls, putActivityRow,
     // Activity & Time Tracking operations
-    putActivityTimeSeriesEvent, saveNote, saveScrapedChat, saveSettings, saveUIState, saveUrlNote, saveWorkspace, subscribeDailyNotesChanges, subscribePinsChanges, subscribeSettingsChanges, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType, upsertNote, upsertPing, upsertUrl
+    putActivityTimeSeriesEvent, saveNote, saveScrapedChat, saveScrapingConfig, saveSettings, saveUIState, saveUrlNote, saveWorkspace, subscribeDailyNotesChanges, subscribePinsChanges, subscribeSettingsChanges, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType, upsertNote, upsertPing, upsertUrl
 } from './unified-api.js'
 
 // Export error handling utilities

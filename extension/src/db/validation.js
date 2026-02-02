@@ -416,6 +416,64 @@ export const VALIDATION_SCHEMAS = {
         }
     },
 
+    // Scraped config validation schema
+    scrapedConfig: {
+        domain: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MIN_LENGTH]: 1,
+            [ValidationRules.MAX_LENGTH]: 200
+        },
+        selector: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MIN_LENGTH]: 1,
+            [ValidationRules.MAX_LENGTH]: 2000
+        },
+        container: {
+            [ValidationRules.TYPE]: 'string'
+        },
+        links: {
+            [ValidationRules.TYPE]: 'string'
+        },
+        sample: {
+            [ValidationRules.TYPE]: 'object'
+        },
+        enabled: {
+            [ValidationRules.TYPE]: 'boolean'
+        },
+        source: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.ENUM]: ['manual', 'imported', 'auto', 'native']
+        },
+        excludedDomains: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'string'
+            }
+        },
+        excludedPatterns: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'string'
+            }
+        },
+        includedPatterns: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'string'
+            }
+        },
+        scrapeLimit: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        updatedAt: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        }
+    },
+
     // UI state validation schema
     uiState: {
         id: {
@@ -701,7 +759,7 @@ export function validateAndSanitize(data, schemaName, options = {}) {
 
     // Add timestamps if missing
     const now = Date.now()
-    if (schemaName === 'workspace' || schemaName === 'note' || schemaName === 'urlNote' || schemaName === 'pin') {
+    if (schemaName === 'workspace' || schemaName === 'note' || schemaName === 'urlNote' || schemaName === 'pin' || schemaName === 'scrapedConfig') {
         if (!sanitized.createdAt) sanitized.createdAt = now
         if (!sanitized.updatedAt) sanitized.updatedAt = now
     }

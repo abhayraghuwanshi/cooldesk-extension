@@ -1,7 +1,8 @@
-import { faAngleRight, faArrowRight, faGear, faPlus, faSync, faTimes, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faAngleRight, faArrowRight, faGear, faPlus, faSync, faTimes, faToggleOn, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
+import { saveScrapingConfig } from '../../db/unified-api.js';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { getFaviconUrl } from '../../utils/helpers.js';
 
@@ -48,14 +49,13 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [scrapedPlatforms, setScrapedPlatforms] = useState([]);
   const [activePlatformFilter, setActivePlatformFilter] = useState(null); // Filter by platform
-  const [autoScrapeEnabled, setAutoScrapeEnabled] = useState(true);
+  // const [autoScrapeEnabled, setAutoScrapeEnabled] = useState(true); // Removed as requested
   const [showSettings, setShowSettings] = useState(false);
   const [showPlatformConfig, setShowPlatformConfig] = useState(false);
-  const [importConfig, setImportConfig] = useState('');
-  const [importStatus, setImportStatus] = useState({ type: '', message: '' });
+
   const [customSelectors, setCustomSelectors] = useState({});
   const [allowedDomains, setAllowedDomains] = useState([]);
-  const [newDomain, setNewDomain] = useState('');
+
   const [scrapingStats, setScrapingStats] = useState({});
 
   const BUILT_IN_PLATFORMS = [
@@ -172,25 +172,23 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
     }
   }, [maxItems]);
 
+  const [platformSettings, setPlatformSettings] = useState({});
+
   // Load settings from storage
   const loadSettings = useCallback(async () => {
     try {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const result = await chrome.storage.local.get(['autoScrapeEnabled', 'domainSelectors', 'genericScraperAllowlist']);
-        if (result.autoScrapeEnabled !== undefined) {
-          setAutoScrapeEnabled(result.autoScrapeEnabled);
-        }
+        const result = await chrome.storage.local.get(['domainSelectors', 'genericScraperAllowlist', 'platformSettings']);
         if (result.domainSelectors) {
           setCustomSelectors(result.domainSelectors);
         }
         if (result.genericScraperAllowlist) {
           setAllowedDomains(result.genericScraperAllowlist);
         }
-      } else {
-        const stored = localStorage.getItem('autoScrapeEnabled');
-        if (stored !== null) {
-          setAutoScrapeEnabled(stored === 'true');
+        if (result.platformSettings) {
+          setPlatformSettings(result.platformSettings);
         }
+      } else {
       }
     } catch (error) {
       console.error('[ChatContext] Error loading settings:', error);
@@ -213,40 +211,73 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
     }
   }, []);
 
-  // Toggle auto-scraping setting
-  const toggleAutoScrape = async () => {
-    const newValue = !autoScrapeEnabled;
-    setAutoScrapeEnabled(newValue);
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        await chrome.storage.local.set({ autoScrapeEnabled: newValue });
-      } else {
-        localStorage.setItem('autoScrapeEnabled', newValue.toString());
+
+
+  // Toggle individual platform scraping
+  const togglePlatform = async (platformName) => {
+    // Default to true if undefined
+    const currentStatus = platformSettings[platformName] !== false;
+    const newStatus = !currentStatus;
+
+    // Update local state immediately for UI responsiveness
+    const newSettings = {
+      ...platformSettings,
+      [platformName]: newStatus
+    };
+    setPlatformSettings(newSettings);
+
+    // Check if it's a built-in platform
+    const platform = BUILT_IN_PLATFORMS.find(p => p.name === platformName);
+
+    if (platform) {
+      try {
+        // Update each domain associated with this platform in the DB
+        for (const domain of platform.domains) {
+          await saveScrapingConfig({
+            domain,
+            source: 'native', // specific type for built-ins
+            enabled: newStatus,
+            updatedAt: Date.now()
+          });
+        }
+
+        // Also update the legacy platformSettings in chrome.storage.local for backward compatibility
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          await chrome.storage.local.set({ platformSettings: newSettings });
+        }
+      } catch (error) {
+        console.error('[ChatContext] Error saving platform setting:', error);
       }
-    } catch (error) {
-      console.error('[ChatContext] Error saving setting:', error);
+    } else {
+      // Handle custom/generic domains
+      try {
+        // Check if we have existing config for this domain
+        const existingConfig = customSelectors[platformName];
+        if (existingConfig) {
+          // Update existing custom config
+          await saveScrapingConfig({
+            ...existingConfig, // Preserve existing selector and other fields
+            domain: platformName,
+            enabled: newStatus,
+            updatedAt: Date.now()
+          });
+
+          // Update customSelectors state to reflect change immediately
+          setCustomSelectors({
+            ...customSelectors,
+            [platformName]: {
+              ...existingConfig,
+              enabled: newStatus
+            }
+          });
+        }
+      } catch (error) {
+        console.error('[ChatContext] Error saving custom platform setting:', error);
+      }
     }
   };
 
-  // Import scraping configurations
-  const handleImportConfig = async () => {
-    try {
-      if (!importConfig.trim()) return;
-      const config = JSON.parse(importConfig);
 
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const result = await chrome.storage.local.get('domainSelectors');
-        const existing = result.domainSelectors || {};
-        const updated = { ...existing, ...config };
-        await chrome.storage.local.set({ domainSelectors: updated });
-        setImportStatus({ type: 'success', message: `Imported ${Object.keys(config).length} platform configs!` });
-        setImportConfig('');
-        setTimeout(() => setImportStatus({ type: '', message: '' }), 3000);
-      }
-    } catch (error) {
-      setImportStatus({ type: 'error', message: 'Invalid JSON configuration' });
-    }
-  };
 
   useEffect(() => {
     loadChats();
@@ -255,55 +286,7 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
     loadPlatformStats();
   }, [loadChats, loadSavedLinks, loadSettings, loadPlatformStats]);
 
-  // Add a new domain to allowlist
-  const handleAddDomain = async () => {
-    if (!newDomain.trim()) return;
-    const cleanDomain = newDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^www\./, '');
-    if (allowedDomains.includes(cleanDomain)) return;
 
-    const newList = [...allowedDomains, cleanDomain];
-    setAllowedDomains(newList);
-    setNewDomain('');
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        await chrome.storage.local.set({ genericScraperAllowlist: newList });
-      }
-    } catch (error) {
-      console.error('[ChatContext] Error adding domain:', error);
-    }
-  };
-
-  // Remove domain from allowlist
-  const handleRemoveDomain = async (domain) => {
-    const newList = allowedDomains.filter(d => d !== domain);
-    setAllowedDomains(newList);
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        await chrome.storage.local.set({ genericScraperAllowlist: newList });
-      }
-    } catch (error) {
-      console.error('[ChatContext] Error removing domain:', error);
-    }
-  };
-
-  // Export scraping configurations
-  const handleExportConfig = async () => {
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const result = await chrome.storage.local.get('domainSelectors');
-        const config = result.domainSelectors || {};
-        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'cooldesk-scraping-config.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch (error) {
-      console.error('[ChatContext] Export failed:', error);
-    }
-  };
 
   const handleLinkClick = (url) => {
     if (url) {
@@ -490,35 +473,19 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
               }
             `}</style>
 
-            {/* Header: Toggle */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Auto-Scraping Engine Header */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(0, 0, 0, 0.25)',
+              padding: '16px 20px',
+              borderRadius: '16px',
+              border: '1px solid rgba(255, 255, 255, 0.03)'
+            }}>
               <div>
-                <div className="settings-label" style={{ color: '#94A3B8' }}>Auto-Scraping Engine</div>
-                <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>Automatically sync links while you browse</div>
-              </div>
-              <div
-                className="premium-toggle"
-                onClick={toggleAutoScrape}
-                style={{
-                  width: '44px',
-                  height: '24px',
-                  borderRadius: '12px',
-                  background: autoScrapeEnabled ? 'linear-gradient(90deg, #3B82F6, #8B5CF6)' : 'rgba(148, 163, 184, 0.2)',
-                  padding: '3px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  boxShadow: autoScrapeEnabled ? '0 0 15px rgba(59, 130, 246, 0.4)' : 'none'
-                }}
-              >
-                <div style={{
-                  width: '18px',
-                  height: '18px',
-                  borderRadius: '50%',
-                  background: 'white',
-                  transform: autoScrapeEnabled ? 'translateX(20px)' : 'translateX(0)',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                }} />
+                <div className="settings-label" style={{ color: '#F8FAFC', fontSize: '14px', fontWeight: 600 }}>Auto-Scraping Engine</div>
+                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>Automatically sync links while you browse</div>
               </div>
             </div>
 
@@ -542,15 +509,16 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <FontAwesomeIcon icon={faSync} style={{ color: '#60A5FA', fontSize: '12px' }} />
-                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#E2E8F0' }}>Platform Explorer</span>
+                  <FontAwesomeIcon icon={faSync} style={{ color: '#60A5FA', fontSize: 'var(--font-sm)' }} />
+                  <span style={{ fontSize: 'var(--font-sm)', fontWeight: 600, color: '#E2E8F0', fontFamily: defaultFontFamily }}>Platform Explorer</span>
                 </div>
                 <FontAwesomeIcon
                   icon={faAngleRight}
                   style={{
                     color: '#64748B',
                     transform: showPlatformConfig ? 'rotate(90deg)' : 'none',
-                    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                    transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    fontSize: 'var(--font-sm)'
                   }}
                 />
               </div>
@@ -570,61 +538,150 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
                   <style>{`.scrollbar-hidden::-webkit-scrollbar { width: 0px; background: transparent; }`}</style>
 
                   {/* Built-in Platforms */}
-                  {BUILT_IN_PLATFORMS.map(platform => (
-                    <div key={platform.name} className="platform-item" style={{
-                      padding: '10px 12px',
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#F1F5F9' }}>{platform.name}</span>
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                          {scrapingStats[platform.name] > 0 && (
-                            <span className="ai-chip" style={{ fontSize: '9px', padding: '2px 6px', borderColor: 'rgba(59, 130, 246, 0.3)', color: '#60A5FA', background: 'rgba(59, 130, 246, 0.1)' }}>
-                              {scrapingStats[platform.name]} links
-                            </span>
-                          )}
-                          <span style={{ fontSize: '9px', opacity: 0.5, fontWeight: 700, textTransform: 'uppercase', color: '#94A3B8' }}>SYSTEM</span>
-                        </div>
-                      </div>
-                      <span style={{ fontSize: '10px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: '8px', opacity: 0.5 }} />
-                        {platform.domains[0]} {platform.domains.length > 1 && `+${platform.domains.length - 1} more`}
-                      </span>
-                    </div>
-                  ))}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                    gap: '8px',
+                    padding: '4px'
+                  }}>
+                    {BUILT_IN_PLATFORMS.map(platform => {
+                      const isEnabled = platformSettings[platform.name] !== false;
+                      const style = PLATFORM_STYLES[platform.name] || DEFAULT_PLATFORM_STYLE;
 
-                  {/* Custom Platforms */}
-                  {Object.entries(customSelectors).map(([domain, config]) => (
-                    <div key={domain} className="platform-item" style={{
-                      padding: '10px 12px',
-                      background: 'rgba(16, 185, 129, 0.03)',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#F1F5F9' }}>{domain}</span>
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                          {scrapingStats[domain] > 0 && (
-                            <span className="ai-chip" style={{ fontSize: '9px', padding: '2px 6px', borderColor: 'rgba(16, 185, 129, 0.3)', color: '#34D399', background: 'rgba(16, 185, 129, 0.1)' }}>
-                              {scrapingStats[domain]} links
-                            </span>
-                          )}
-                          <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: '#10B981' }}>CUSTOM</span>
-                        </div>
-                      </div>
-                      <span style={{ fontSize: '9px', color: '#64748B', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: 'rgba(0,0,0,0.2)', padding: '2px 4px', borderRadius: '4px' }}>
-                        {config.selector || (typeof config === 'string' ? config : 'Unknown Selector')}
-                      </span>
-                    </div>
-                  ))}
+                      return (
+                        <div key={platform.name} className="platform-item" style={{
+                          padding: '10px',
+                          background: isEnabled ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0,0,0,0.2)',
+                          borderRadius: '12px',
+                          border: isEnabled ? `1px solid ${style.borderColor}` : '1px solid rgba(255,255,255,0.05)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          transition: 'all 0.2s ease',
+                          opacity: isEnabled ? 1 : 0.6
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              {(() => {
+                                const domain = platform.domains[0];
+                                const url = `https://${domain}`;
+                                const iconUrl = getFaviconUrl(url, 32);
+                                return iconUrl ? (
+                                  <img
+                                    src={iconUrl}
+                                    alt={platform.name}
+                                    style={{
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '4px',
+                                      objectFit: 'contain'
+                                    }}
+                                    onError={(e) => e.target.style.display = 'none'}
+                                  />
+                                ) : null;
+                              })()}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontSize: 'var(--font-sm)', fontWeight: 600, color: '#F1F5F9', fontFamily: defaultFontFamily }}>{platform.name}</span>
+                                <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: '#64748B' }}>{platform.type}</span>
+                              </div>
+                            </div>
+                            <div
+                              onClick={(e) => { e.stopPropagation(); togglePlatform(platform.name); }}
+                              style={{
+                                cursor: 'pointer',
+                                color: isEnabled ? '#10B981' : '#475569',
+                                transition: 'color 0.2s',
+                                fontSize: '14px'
+                              }}
+                            >
+                              <FontAwesomeIcon icon={isEnabled ? faToggleOn : faToggleOff} />
+                            </div>
+                          </div>
 
-                  {/* Monitored Discovery Domains */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                            {scrapingStats[platform.name] > 0 ? (
+                              <span className="ai-chip" style={{ fontSize: '9px', padding: '2px 6px', borderColor: style.borderColor, color: style.textColor, background: style.color }}>
+                                {scrapingStats[platform.name]} links
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '9px', color: '#475569' }}>Ready</span>
+                            )}
+                            {/* <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: '8px', opacity: 0.3, color: '#CBD5E1' }} /> */}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Custom Platforms */}
+                    {Object.entries(customSelectors).map(([domain, config]) => {
+                      const isEnabled = config.enabled !== false;
+
+                      return (
+                        <div key={domain} className="platform-item" style={{
+                          padding: '10px',
+                          background: isEnabled ? 'rgba(16, 185, 129, 0.03)' : 'rgba(0,0,0,0.2)',
+                          borderRadius: '12px',
+                          border: isEnabled ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(255,255,255,0.05)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          transition: 'all 0.2s ease',
+                          opacity: isEnabled ? 1 : 0.6
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%', overflow: 'hidden' }}>
+                              {(() => {
+                                const url = `https://${domain}`;
+                                const iconUrl = getFaviconUrl(url, 32);
+                                return iconUrl ? (
+                                  <img
+                                    src={iconUrl}
+                                    alt={domain}
+                                    style={{
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '4px',
+                                      objectFit: 'contain'
+                                    }}
+                                    onError={(e) => e.target.style.display = 'none'}
+                                  />
+                                ) : null;
+                              })()}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                                <span style={{ fontSize: 'var(--font-sm)', fontWeight: 600, color: '#F1F5F9', fontFamily: defaultFontFamily, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{domain}</span>
+                                <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: '#10B981' }}>CUSTOM</span>
+                              </div>
+                            </div>
+                            <div
+                              onClick={(e) => { e.stopPropagation(); togglePlatform(domain); }}
+                              style={{
+                                cursor: 'pointer',
+                                color: isEnabled ? '#10B981' : '#475569',
+                                transition: 'color 0.2s',
+                                fontSize: '14px',
+                                flexShrink: 0,
+                                marginLeft: '8px'
+                              }}
+                            >
+                              <FontAwesomeIcon icon={isEnabled ? faToggleOn : faToggleOff} />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                            {scrapingStats[domain] > 0 ? (
+                              <span className="ai-chip" style={{ fontSize: '9px', padding: '2px 6px', borderColor: 'rgba(16, 185, 129, 0.3)', color: '#34D399', background: 'rgba(16, 185, 129, 0.1)' }}>
+                                {scrapingStats[domain]} links
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '9px', color: '#475569' }}>Ready</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Monitored Discovery Domains (as readonly items in list) */}
                   {allowedDomains.map(domain => {
                     const isBuiltIn = BUILT_IN_PLATFORMS.some(p => p.domains.includes(domain));
                     const isCustom = customSelectors[domain];
@@ -640,14 +697,14 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
                         gap: '4px'
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#F1F5F9' }}>{domain}</span>
+                          <span style={{ fontSize: 'var(--font-sm)', fontWeight: 600, color: '#F1F5F9', fontFamily: defaultFontFamily }}>{domain}</span>
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                             {scrapingStats[domain] > 0 && (
-                              <span className="ai-chip" style={{ fontSize: '9px', padding: '2px 6px', borderColor: 'rgba(251, 191, 36, 0.3)', color: '#FBBF24', background: 'rgba(251, 191, 36, 0.1)' }}>
+                              <span className="ai-chip" style={{ fontSize: 'var(--font-xs)', padding: '2px 6px', borderColor: 'rgba(251, 191, 36, 0.3)', color: '#FBBF24', background: 'rgba(251, 191, 36, 0.1)' }}>
                                 {scrapingStats[domain]} links
                               </span>
                             )}
-                            <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: '#F59E0B' }}>MONITORED</span>
+                            <span style={{ fontSize: 'var(--font-xs)', fontWeight: 700, textTransform: 'uppercase', color: '#F59E0B' }}>MONITORED</span>
                           </div>
                         </div>
                       </div>
@@ -657,140 +714,7 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
               )}
             </div>
 
-            <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
 
-            {/* Monitored Domains Section */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="settings-label">App Filters & Discovery</div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  placeholder="domain.com"
-                  className="ai-input"
-                  value={newDomain}
-                  onChange={(e) => setNewDomain(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddDomain()}
-                  style={{
-                    flex: 1,
-                    margin: 0,
-                    fontSize: '12px',
-                    height: '36px',
-                    background: 'rgba(0,0,0,0.2)'
-                  }}
-                />
-                <button
-                  className="ai-button"
-                  onClick={handleAddDomain}
-                  style={{
-                    margin: 0,
-                    padding: '0 16px',
-                    height: '36px',
-                    fontSize: '12px',
-                    fontWeight: 600
-                  }}
-                >
-                  Watch
-                </button>
-              </div>
-
-              <div style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '8px',
-                padding: '2px'
-              }}>
-                {allowedDomains.map(domain => (
-                  <div key={domain} className="ai-chip" style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '4px 10px',
-                    borderRadius: '20px',
-                    fontSize: '11px',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    transition: 'all 0.2s ease'
-                  }}>
-                    <span style={{ color: '#CBD5E1' }}>{domain}</span>
-                    <FontAwesomeIcon
-                      icon={faTimes}
-                      onClick={() => handleRemoveDomain(domain)}
-                      style={{ cursor: 'pointer', fontSize: '10px', color: '#64748B' }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />
-
-            {/* Config Portability Section */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="settings-label">Engine Configuration</div>
-              <textarea
-                placeholder='Paste platform profile (JSON)...'
-                className="ai-input"
-                value={importConfig}
-                onChange={(e) => setImportConfig(e.target.value)}
-                style={{
-                  width: '100%',
-                  height: '60px',
-                  fontSize: '11px',
-                  fontFamily: 'monospace',
-                  margin: 0,
-                  resize: 'none',
-                  background: 'rgba(0,0,0,0.2)',
-                  padding: '10px'
-                }}
-              />
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  className="ai-button"
-                  onClick={handleImportConfig}
-                  disabled={!importConfig.trim()}
-                  style={{
-                    flex: 1,
-                    margin: 0,
-                    fontSize: '12px',
-                    opacity: importConfig.trim() ? 1 : 0.5,
-                    filter: importConfig.trim() ? 'none' : 'grayscale(1)'
-                  }}
-                >
-                  Sync Profile
-                </button>
-                <button
-                  onClick={handleExportConfig}
-                  style={{
-                    flex: 1,
-                    padding: '8px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '10px',
-                    color: '#94A3B8',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  Export Current
-                </button>
-              </div>
-            </div>
-
-            {importStatus.message && (
-              <div style={{
-                fontSize: '11px',
-                padding: '10px',
-                borderRadius: '8px',
-                textAlign: 'center',
-                background: importStatus.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                color: importStatus.type === 'success' ? '#34D399' : '#F87171',
-                border: `1px solid ${importStatus.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`
-              }}>
-                {importStatus.message}
-              </div>
-            )}
           </div>
         )}
 

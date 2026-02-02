@@ -645,15 +645,38 @@ async function scrapeNewChats() {
  */
 let autoScrapeTimeout = null;
 async function autoScrape() {
-  // Check if auto-scraping is enabled in settings
+  // Check settings
   try {
-    const settings = await chrome.storage.local.get(['autoScrapeEnabled']);
+    const settings = await chrome.storage.local.get(['autoScrapeEnabled', 'platformSettings', 'domainSelectors']);
+
+    // 1. Global Auto-Scrape Check
     if (settings.autoScrapeEnabled === false) {
-      console.log('[ChatScraper] Auto-scraping is disabled in settings');
+      console.log('[ChatScraper] Auto-scraping is disabled globally');
       return;
     }
+
+    const hostname = window.location.hostname.replace('www.', '');
+
+    // 2. Domain-Specific (DB-Synced) Check
+    // This is the preferred method as it comes from the unified DB
+    if (settings.domainSelectors && settings.domainSelectors[hostname]) {
+      if (settings.domainSelectors[hostname].enabled === false) {
+        console.log(`[ChatScraper] Scraping is disabled for this domain (via DB): ${hostname}`);
+        return;
+      }
+    }
+
+    // 3. Platform Name Check (Legacy/Fallback)
+    const config = PLATFORM_CONFIGS[hostname];
+    if (config && settings.platformSettings) {
+      const platformName = config.name;
+      if (settings.platformSettings[platformName] === false) {
+        console.log(`[ChatScraper] Scraping is disabled for platform: ${platformName}`);
+        return;
+      }
+    }
   } catch (e) {
-    console.debug('[ChatScraper] Could not check autoScrapeEnabled setting, defaulting to enabled');
+    console.debug('[ChatScraper] Could not check settings, defaulting to enabled', e);
   }
 
   // Clear any pending auto-scrape

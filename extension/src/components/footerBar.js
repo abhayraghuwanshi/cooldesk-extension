@@ -26,7 +26,7 @@ export function injectFooterBar() {
         top: 50%;
         right: 0px;
         z-index: 2147483647;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         cursor: move;
         user-select: none;
         transition: transform 0.2s ease;
@@ -66,6 +66,7 @@ export function injectFooterBar() {
         position: relative;
         overflow: hidden;
         padding-right: 8px;
+        font-family: inherit;
       }
 
       .toggle-btn:hover {
@@ -110,12 +111,15 @@ export function injectFooterBar() {
         padding: 8px 12px;
         border-radius: 8px;
         font-size: 14px;
+        font-weight: 500;
         white-space: nowrap;
         opacity: 0;
         visibility: hidden;
         transition: all 0.3s ease;
         backdrop-filter: blur(10px);
         pointer-events: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border: 1px solid rgba(255,255,255,0.1);
       }
 
       .tooltip::after {
@@ -193,6 +197,7 @@ export function injectFooterBar() {
         pointer-events: none;
         position: relative;
         margin-right: 16px; /* Align visually with center of toggle btn */
+        font-family: inherit;
       }
 
       .floating-container.expanded .action-btn {
@@ -231,11 +236,13 @@ export function injectFooterBar() {
         padding: 4px 8px;
         border-radius: 4px;
         font-size: 12px;
+        font-weight: 500;
         white-space: nowrap;
         opacity: 0;
         visibility: hidden;
         transition: all 0.2s ease;
         pointer-events: none;
+        backdrop-filter: blur(4px);
       }
 
       .action-btn:hover .action-tooltip {
@@ -278,22 +285,22 @@ export function injectFooterBar() {
 
       .spotlight-container {
         width: 100%;
-        max-width: 580px;
+        max-width: 600px;
         margin: 0 16px;
-        background: linear-gradient(180deg, rgba(24, 24, 27, 0.98) 0%, rgba(18, 18, 21, 0.98) 100%);
+        background: linear-gradient(180deg, rgba(30, 30, 33, 0.98) 0%, rgba(20, 20, 23, 0.98) 100%);
         backdrop-filter: blur(40px) saturate(180%);
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 14px;
+        border-radius: 16px;
         box-shadow:
           0 0 0 1px rgba(0, 0, 0, 0.4),
           0 25px 50px -12px rgba(0, 0, 0, 0.6),
-          0 0 80px -20px rgba(96, 165, 250, 0.1);
+          0 0 80px -20px rgba(96, 165, 250, 0.15);
         overflow: hidden;
         animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         display: flex;
         flex-direction: column;
         color: white;
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
 
       @keyframes slideDown {
@@ -302,10 +309,10 @@ export function injectFooterBar() {
       }
 
       .spotlight-search-box {
-        padding: 16px 20px;
+        padding: 18px 24px;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 14px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         background: rgba(255, 255, 255, 0.02);
       }
@@ -313,7 +320,7 @@ export function injectFooterBar() {
       .spotlight-prompt {
         font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
         font-weight: 500;
-        font-size: 18px;
+        font-size: 20px;
         color: #60a5fa;
         user-select: none;
       }
@@ -324,7 +331,7 @@ export function injectFooterBar() {
         border: none;
         outline: none;
         color: #fafafa;
-        font-size: 16px;
+        font-size: 18px;
         font-family: inherit;
         font-weight: 400;
         padding: 0;
@@ -336,22 +343,23 @@ export function injectFooterBar() {
         font-weight: 400;
       }
 
-      /* Pinned Section */
+      /* Pinned Section - Enhanced */
       .spotlight-pins {
-        padding: 12px 12px 8px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(255, 255, 255, 0.015);
       }
 
       .spotlight-pins-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
         padding: 0 4px;
       }
 
       .spotlight-pins-title {
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -361,7 +369,7 @@ export function injectFooterBar() {
       .spotlight-pins-grid {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 10px;
       }
 
       .pin-item {
@@ -374,22 +382,26 @@ export function injectFooterBar() {
         border-radius: 8px;
         cursor: pointer;
         transition: all 0.15s ease;
-        max-width: 160px;
+        max-width: 180px;
+        position: relative;
+        overflow: hidden;
       }
 
       .pin-item:hover {
         background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.15);
         transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       }
 
       .pin-item:active {
         transform: translateY(0);
+        box-shadow: none;
       }
 
       .pin-icon {
-        width: 20px;
-        height: 20px;
+        width: 18px;
+        height: 18px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -415,13 +427,16 @@ export function injectFooterBar() {
 
       .pin-item .pin-remove {
         opacity: 0;
-        margin-left: auto;
-        padding: 2px;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 4px;
         color: #71717a;
         cursor: pointer;
         transition: all 0.15s;
-        font-size: 14px;
-        line-height: 1;
+        border-radius: 4px;
       }
 
       .pin-item:hover .pin-remove {
@@ -429,11 +444,15 @@ export function injectFooterBar() {
       }
 
       .pin-remove:hover {
+        background: rgba(239, 68, 68, 0.1);
         color: #ef4444;
       }
 
       .pin-add {
-        padding: 8px 14px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
         background: transparent;
         border: 1px dashed rgba(255, 255, 255, 0.15);
         border-radius: 8px;
@@ -447,7 +466,7 @@ export function injectFooterBar() {
       .pin-add:hover {
         background: rgba(255, 255, 255, 0.04);
         border-color: rgba(255, 255, 255, 0.25);
-        color: rgba(255, 255, 255, 0.6);
+        color: rgba(255, 255, 255, 0.7);
       }
 
       .spotlight-results {
@@ -1255,15 +1274,11 @@ export function injectFooterBar() {
 
     // Render pinned items
     const renderPins = () => {
-      if (pinnedItems.length === 0) {
-        spotlightPins.style.display = 'none';
-        return;
-      }
-
+      // Always show the section now, so users can pin the current page comfortably
       spotlightPins.style.display = 'block';
 
       const getPinIcon = (pin) => {
-        if (pin.favicon && (pin.favicon.startsWith('http') || pin.favicon.startsWith('data:'))) {
+        if (pin.favicon && (pin.favicon.startsWith('http') || pin.favicon.startsWith('chrome-extension') || pin.favicon.startsWith('data:'))) {
           return `<img src="${pin.favicon}" onerror="this.parentNode.innerHTML='🔗';" />`;
         }
         return '🔗';
@@ -1274,9 +1289,13 @@ export function injectFooterBar() {
         return title.length > 12 ? title.slice(0, 12) + '…' : title;
       };
 
+      // Check if current page is already pinned to avoid duplicates
+      const currentUrl = window.location.href;
+      const isCurrentPinned = pinnedItems.some(p => p.url === currentUrl);
+
       spotlightPins.innerHTML = `
         <div class="spotlight-pins-header">
-          <span class="spotlight-pins-title">Pinned</span>
+          <span class="spotlight-pins-title">Pinned Quick Access</span>
         </div>
         <div class="spotlight-pins-grid">
           ${pinnedItems.map((pin, i) => `
@@ -1286,25 +1305,64 @@ export function injectFooterBar() {
               <span class="pin-remove" data-index="${i}">×</span>
             </div>
           `).join('')}
+          ${(!isCurrentPinned && pinnedItems.length < 8) ? `
+            <div class="pin-add" id="pin-current-page" title="Pin this page">
+              <span style="font-size:14px; line-height:1;">+</span>
+              <span>This Page</span>
+            </div>
+          ` : ''}
         </div>
       `;
 
       // Add click listeners for pins
       spotlightPins.querySelectorAll('.pin-item').forEach(item => {
         item.onclick = (e) => {
-          if (e.target.classList.contains('pin-remove')) {
+          if (e.target.classList.contains('pin-remove') || e.target.closest('.pin-remove')) {
             e.stopPropagation();
-            const idx = parseInt(e.target.dataset.index);
+            const idx = parseInt(item.dataset.index);
             removePin(idx);
             return;
           }
           const url = item.dataset.url;
           if (url) {
+            // If it's the current page, just close spotlight
+            if (url === window.location.href) {
+              toggleSpotlight();
+              return;
+            }
             window.open(url, '_blank');
             toggleSpotlight();
           }
         };
       });
+
+      // Add click listener for "Pin Current"
+      const pinCurrentBtn = spotlightPins.querySelector('#pin-current-page');
+      if (pinCurrentBtn) {
+        pinCurrentBtn.onclick = () => {
+          const title = document.title;
+          const url = window.location.href;
+
+          // Get best favicon
+          let favicon = '';
+          const iconLinks = [
+            document.querySelector('link[rel="icon"]'),
+            document.querySelector('link[rel="shortcut icon"]'),
+            document.querySelector('link[rel="apple-touch-icon"]')
+          ];
+          const link = iconLinks.find(l => l && l.href);
+          if (link) favicon = link.href;
+          else {
+            try {
+              favicon = new URL('/favicon.ico', window.location.origin).href;
+            } catch (e) {
+              favicon = '';
+            }
+          }
+
+          addPin({ title, url, favicon, type: 'page' });
+        };
+      }
     };
 
     const toggleSpotlight = () => {

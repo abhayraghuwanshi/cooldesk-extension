@@ -86,9 +86,8 @@ export const getFaviconUrl = (url, _size = 32, favIconUrl = null) => {
     // Only resolve favicons for http/https pages
     if (!['http:', 'https:'].includes(u.protocol)) return null;
 
-    // 2️⃣ Use icon.horse - most reliable high-quality favicon aggregator
-    // Automatically finds best icon (apple-touch-icon, favicon, etc) and serves at good resolution
-    return `https://icon.horse/icon/${u.hostname}`;
+    // 2️⃣ Use DuckDuckGo - simpler and often more reliable for varied domains
+    return `https://icons.duckduckgo.com/ip3/${u.hostname}.ico`;
   } catch {
     return null;
   }

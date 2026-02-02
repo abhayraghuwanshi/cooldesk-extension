@@ -6,7 +6,7 @@
 // Single database configuration
 export const DB_CONFIG = {
     NAME: 'cooldesk-unified-db',
-    VERSION: 2, // Incremented to add SCRAPED_CHATS store
+    VERSION: 4, // Incremented to ensure SCRAPED_CONFIGS store exists
     STORES: {
         WORKSPACES: 'workspaces',
         WORKSPACE_URLS: 'workspace_urls',
@@ -16,8 +16,8 @@ export const DB_CONFIG = {
         PINS: 'pins',
         TIME_TRACKING: 'time_tracking',
         ACTIVITY_SERIES: 'activity_series',
-        SETTINGS: 'settings',
         UI_STATE: 'ui_state',
+        SCRAPED_CONFIGS: 'scraped_configs', // New store for scraping rules
         METADATA: 'metadata' // For tracking migrations, health, etc.
     }
 }
@@ -50,6 +50,14 @@ export const SCHEMAS = {
             { name: 'by_scrapedAt', keyPath: 'scrapedAt', options: { unique: false } },
             { name: 'by_url', keyPath: 'url', options: { unique: false } },
             { name: 'by_platform_scrapedAt', keyPath: ['platform', 'scrapedAt'], options: { unique: false } }
+        ]
+    },
+
+    [DB_CONFIG.STORES.SCRAPED_CONFIGS]: {
+        keyPath: 'domain',
+        indexes: [
+            { name: 'by_updatedAt', keyPath: 'updatedAt', options: { unique: false } },
+            { name: 'by_source', keyPath: 'source', options: { unique: false } } // 'manual', 'imported', 'auto'
         ]
     },
 
@@ -196,9 +204,67 @@ export const MIGRATIONS = {
                 description: 'Database schema version'
             })
         }
-    }
+    },
 
     // Future migrations will be added here as version 3, 4, etc.
+    3: {
+        description: 'Add SCRAPED_CONFIGS store for managing scraping rules',
+        up: (db, transaction) => {
+            console.log('[Migration v3] Adding SCRAPED_CONFIGS store...')
+
+            if (!db.objectStoreNames.contains(DB_CONFIG.STORES.SCRAPED_CONFIGS)) {
+                const schema = SCHEMAS[DB_CONFIG.STORES.SCRAPED_CONFIGS]
+                console.log('[Migration v3] Creating scraped_configs store')
+                const store = db.createObjectStore(DB_CONFIG.STORES.SCRAPED_CONFIGS, { keyPath: schema.keyPath })
+
+                // Create indexes
+                schema.indexes.forEach(indexDef => {
+                    try {
+                        store.createIndex(indexDef.name, indexDef.keyPath, indexDef.options)
+                        console.log(`[Migration v3] Created index: ${indexDef.name}`)
+                    } catch (error) {
+                        console.warn(`[Migration v3] Failed to create index ${indexDef.name}:`, error)
+                    }
+                })
+
+                console.log('[Migration v3] SCRAPED_CONFIGS store created successfully')
+            }
+
+            // Update metadata
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 3,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+    // Ensure SCRAPED_CONFIGS exists (retry/fix for v3)
+    4: {
+        description: 'Ensure SCRAPED_CONFIGS store exists',
+        up: (db, transaction) => {
+            if (!db.objectStoreNames.contains(DB_CONFIG.STORES.SCRAPED_CONFIGS)) {
+                console.log('[Migration v4] Creating missing SCRAPED_CONFIGS store')
+                const schema = SCHEMAS[DB_CONFIG.STORES.SCRAPED_CONFIGS]
+                const store = db.createObjectStore(DB_CONFIG.STORES.SCRAPED_CONFIGS, { keyPath: schema.keyPath })
+
+                schema.indexes.forEach(indexDef => {
+                    store.createIndex(indexDef.name, indexDef.keyPath, indexDef.options)
+                })
+            }
+            // Update metadata
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 4,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    }
 }
 
 // Database connection singleton
