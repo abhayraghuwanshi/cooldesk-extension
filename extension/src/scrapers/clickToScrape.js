@@ -526,7 +526,9 @@ async function saveSelectorForDomain(selectorInfo) {
     const result = await chrome.storage.local.get('domainSelectors');
     const selectors = result.domainSelectors || {};
 
+    const existing = selectors[hostKey] || {};
     selectors[hostKey] = {
+      ...existing, // Preserve existing config (like excludedPatterns)
       selector: selectorInfo.full,
       container: selectorInfo.container,
       links: selectorInfo.links,
@@ -576,17 +578,50 @@ async function deleteSelectorForDomain() {
 /**
  * Scrape links using a CSS selector
  */
-function scrapeWithSelector(selector, limit = 0) {
+function scrapeWithSelector(selector, limit = 0, config = {}) {
   const links = [];
   const seenUrls = new Set();
 
+  // Helper to check exclusions
+  const isExcluded = (url) => {
+    if (!config) return false;
+
+    // Check excluded patterns (path based)
+    if (config.excludedPatterns && Array.isArray(config.excludedPatterns)) {
+      try {
+        const urlObj = new URL(url);
+        const path = urlObj.pathname;
+
+        for (const pattern of config.excludedPatterns) {
+          if (pattern.includes('*')) {
+            const regexStr = '^' + pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$';
+            if (new RegExp(regexStr).test(path)) return true;
+          } else {
+            if (path === pattern || path.startsWith(pattern)) return true;
+          }
+        }
+      } catch (e) { }
+    }
+
+    // Check excluded domains
+    if (config.excludedDomains && Array.isArray(config.excludedDomains)) {
+      try {
+        const hostname = new URL(url).hostname;
+        if (config.excludedDomains.includes(hostname)) return true;
+      } catch (e) { }
+    }
+
+    return false;
+  };
+
   try {
+    console.log('[ClickToScrape] Scrape request for selector:', selector);
     const elements = document.querySelectorAll(selector);
     console.log(`[ClickToScrape] Found ${elements.length} elements with selector: ${selector}`);
 
     let elementList = Array.from(elements);
 
-    // Apply limit if specified (take latest/last items as they are usually new)
+    // Apply limit if specified
     if (limit > 0 && elementList.length > limit) {
       console.log(`[ClickToScrape] Limiting to last ${limit} items (from ${elementList.length})`);
       elementList = elementList.slice(-limit);
@@ -601,15 +636,13 @@ function scrapeWithSelector(selector, limit = 0) {
       if (link) {
         url = link.href;
       } else {
-        // Dynamic Discovery: Search the document for ANY link containing this ID
-        // This avoids hardcoding platform-specific URL structures
+        // Dynamic Discovery
         const id = extractIdFromElement(el);
         if (id) {
           const foundLink = document.querySelector(`a[href*="${id}"]`);
           if (foundLink) {
             url = foundLink.href;
           } else if (window.location.hostname.includes('figma.com')) {
-            // Minimal fallback for Figma cards where links are only active on click
             url = `${window.location.origin}/design/${id}`;
           } else if (window.location.hostname.includes('gemini.google.com')) {
             url = `${window.location.origin}/app/${id}`;
@@ -818,11 +851,6 @@ async function autoScrape() {
  * Listen for messages from background/popup
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'ENTER_SELECT_MODE') {
-    enterSelectMode();
-    sendResponse({ success: true });
-    return true;
-  }
 
   if (message.type === 'EXIT_SELECT_MODE') {
     exitSelectMode();
@@ -837,7 +865,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      const links = scrapeWithSelector(saved.selector);
+      const links = scrapeWithSelector(saved.selector, 0, saved);
       sendResponse({
         success: true,
         links,

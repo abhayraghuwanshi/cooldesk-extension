@@ -185,6 +185,7 @@ export function initializeDataCollection() {
   chrome.runtime.onInstalled.addListener(async () => {
     console.log('[Background] Extension installed - populating data')
     try {
+      await seedGitHubConfig();
       await populateAndStore()
     } catch (e) {
       console.error('[Background] Error during onInstalled populate:', e)
@@ -229,5 +230,47 @@ export function initializeData() {
   initializeDataCollection();
 }
 
-export { collectBookmarks, collectHistory };
+
+// Seed GitHub scraping configuration
+async function seedGitHubConfig() {
+  const GITHUB_HOST = 'github.com';
+  try {
+    const result = await chrome.storage.local.get('domainSelectors');
+    const selectors = result.domainSelectors || {};
+
+    if (!selectors[GITHUB_HOST]) {
+      console.log('[Background] Seeding GitHub scraping config...');
+      selectors[GITHUB_HOST] = {
+        selector: "ul li a[href]",
+        container: "ul",
+        links: "li a[href]",
+        sample: {
+          title: "cooldesk-extension",
+          url: "https://github.com/abhayraghuwanshi/cooldesk-extension"
+        },
+        excludedPatterns: [
+          "/topics/*",
+          "/security",
+          "/features",
+          "/site/terms",
+          "/site/privacy",
+          "/contact",
+          "/about"
+        ],
+        excludedDomains: [
+          "docs.github.com",
+          "status.github.com"
+        ],
+        savedAt: Date.now(),
+        source: 'seed'
+      };
+      await chrome.storage.local.set({ domainSelectors: selectors });
+    }
+  } catch (e) {
+    console.error('[Background] Failed to seed GitHub config:', e);
+  }
+}
+
+export { collectBookmarks, collectHistory, seedGitHubConfig };
+
 
