@@ -677,7 +677,35 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   const initializeCommands = () => {
     if (!annyang) return null;
 
+    try {
+      const recognition = annyang.getSpeechRecognizer();
+      if (recognition) {
+        // Attempt to set local processing
+        if ('processLocally' in recognition) {
+          recognition.processLocally = true;
+        }
+
+        // Add direct error listener for fallback because annyang might swallow or abstract it
+        // We need to capture the specific instance error to unset the flag
+        const originalOnError = recognition.onerror;
+        recognition.onerror = function (event) {
+          if (event.error === 'language-not-supported' && recognition.processLocally) {
+            console.warn('[CoolSearch] Local language pack missing, disabling processLocally and retrying...');
+            recognition.processLocally = false;
+            // We might need to restart annyang for this to take effect if it stopped
+            try { annyang.abort(); setTimeout(() => annyang.start(), 100); } catch (e) { }
+            // Do NOT propagate to originalOnError to avoid noise
+            return;
+          }
+          if (originalOnError) originalOnError.apply(this, arguments);
+        };
+      }
+    } catch (e) {
+      console.warn('Failed to set processLocally on annyang recognizer', e);
+    }
+
     const commands = {
+
       // Number commands
       'show numbers': () => {
         console.log('[CoolSearch] Show numbers command');

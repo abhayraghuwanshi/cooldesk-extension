@@ -257,13 +257,13 @@ export function injectFooterBar() {
       .spotlight-overlay {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.6);
         backdrop-filter: blur(20px);
         display: none;
         z-index: 2147483647;
         align-items: flex-start;
         justify-content: center;
-        padding-top: 10vh;
+        padding-top: 8vh;
         animation: fadeIn 0.15s ease-out;
       }
 
@@ -278,41 +278,42 @@ export function injectFooterBar() {
 
       .spotlight-container {
         width: 100%;
-        max-width: 640px;
+        max-width: 580px;
         margin: 0 16px;
-        background: linear-gradient(180deg, rgba(28, 28, 32, 0.98) 0%, rgba(22, 22, 26, 0.98) 100%);
+        background: linear-gradient(180deg, rgba(24, 24, 27, 0.98) 0%, rgba(18, 18, 21, 0.98) 100%);
         backdrop-filter: blur(40px) saturate(180%);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
         box-shadow:
-          0 0 0 1px rgba(0, 0, 0, 0.3),
-          0 25px 50px -12px rgba(0, 0, 0, 0.5),
-          0 0 100px -20px rgba(96, 165, 250, 0.15);
+          0 0 0 1px rgba(0, 0, 0, 0.4),
+          0 25px 50px -12px rgba(0, 0, 0, 0.6),
+          0 0 80px -20px rgba(96, 165, 250, 0.1);
         overflow: hidden;
-        animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         display: flex;
         flex-direction: column;
         color: white;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
       }
 
       @keyframes slideDown {
-        from { transform: translateY(-20px) scale(0.98); opacity: 0; }
+        from { transform: translateY(-16px) scale(0.98); opacity: 0; }
         to { transform: translateY(0) scale(1); opacity: 1; }
       }
 
       .spotlight-search-box {
-        padding: 20px 24px;
+        padding: 16px 20px;
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 12px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         background: rgba(255, 255, 255, 0.02);
       }
 
       .spotlight-prompt {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-weight: 600;
-        font-size: 20px;
+        font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+        font-weight: 500;
+        font-size: 18px;
         color: #60a5fa;
         user-select: none;
       }
@@ -322,8 +323,8 @@ export function injectFooterBar() {
         background: transparent;
         border: none;
         outline: none;
-        color: #f8fafc;
-        font-size: 18px;
+        color: #fafafa;
+        font-size: 16px;
         font-family: inherit;
         font-weight: 400;
         padding: 0;
@@ -331,36 +332,147 @@ export function injectFooterBar() {
       }
 
       .spotlight-input::placeholder {
-        color: rgba(255, 255, 255, 0.3);
+        color: rgba(255, 255, 255, 0.28);
+        font-weight: 400;
+      }
+
+      /* Pinned Section */
+      .spotlight-pins {
+        padding: 12px 12px 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      }
+
+      .spotlight-pins-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        padding: 0 4px;
+      }
+
+      .spotlight-pins-title {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      .spotlight-pins-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pin-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        max-width: 160px;
+      }
+
+      .pin-item:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.1);
+        transform: translateY(-1px);
+      }
+
+      .pin-item:active {
+        transform: translateY(0);
+      }
+
+      .pin-icon {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        flex-shrink: 0;
+      }
+
+      .pin-icon img {
+        width: 16px;
+        height: 16px;
+        object-fit: contain;
+        border-radius: 3px;
+      }
+
+      .pin-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: #e4e4e7;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .pin-item .pin-remove {
+        opacity: 0;
+        margin-left: auto;
+        padding: 2px;
+        color: #71717a;
+        cursor: pointer;
+        transition: all 0.15s;
+        font-size: 14px;
+        line-height: 1;
+      }
+
+      .pin-item:hover .pin-remove {
+        opacity: 1;
+      }
+
+      .pin-remove:hover {
+        color: #ef4444;
+      }
+
+      .pin-add {
+        padding: 8px 14px;
+        background: transparent;
+        border: 1px dashed rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      .pin-add:hover {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.25);
+        color: rgba(255, 255, 255, 0.6);
       }
 
       .spotlight-results {
-        max-height: 420px;
+        max-height: 340px;
         overflow-y: auto;
         padding: 8px;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 1px;
       }
 
       /* Custom Scrollbar for results */
       .spotlight-results::-webkit-scrollbar {
-        width: 8px;
+        width: 6px;
       }
       .spotlight-results::-webkit-scrollbar-track {
         background: transparent;
-        margin: 8px 0;
+        margin: 4px 0;
       }
       .spotlight-results::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.1);
         border-radius: 10px;
-        border: 2px solid transparent;
-        background-clip: padding-box;
       }
       .spotlight-results::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.2);
-        border: 2px solid transparent;
-        background-clip: padding-box;
+        background: rgba(255, 255, 255, 0.18);
       }
 
       .result-item {
@@ -368,9 +480,9 @@ export function injectFooterBar() {
         display: flex;
         align-items: center;
         gap: 12px;
-        border-radius: 10px;
+        border-radius: 8px;
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: all 0.12s ease;
         border: 1px solid transparent;
         position: relative;
       }
@@ -380,8 +492,8 @@ export function injectFooterBar() {
       }
 
       .result-item.selected {
-        background: rgba(96, 165, 250, 0.12);
-        border-color: rgba(96, 165, 250, 0.2);
+        background: rgba(96, 165, 250, 0.1);
+        border-color: rgba(96, 165, 250, 0.15);
       }
 
       .result-item.selected .result-hint {
@@ -389,29 +501,46 @@ export function injectFooterBar() {
         transform: translateX(0);
       }
 
+      .result-item .pin-btn {
+        opacity: 0;
+        padding: 4px;
+        color: #71717a;
+        cursor: pointer;
+        transition: all 0.12s;
+        font-size: 12px;
+      }
+
+      .result-item:hover .pin-btn {
+        opacity: 1;
+      }
+
+      .pin-btn:hover {
+        color: #fbbf24;
+      }
+
       .result-icon {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(255, 255, 255, 0.06);
-        border-radius: 10px;
-        font-size: 18px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        font-size: 16px;
         flex-shrink: 0;
-        transition: all 0.15s ease;
+        transition: all 0.12s ease;
         overflow: hidden;
       }
 
       .result-icon img {
-        width: 20px;
-        height: 20px;
+        width: 18px;
+        height: 18px;
         object-fit: contain;
         border-radius: 4px;
       }
 
       .result-item.selected .result-icon {
-        background: rgba(96, 165, 250, 0.2);
+        background: rgba(96, 165, 250, 0.15);
       }
 
       .result-content {
@@ -419,23 +548,24 @@ export function injectFooterBar() {
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 1px;
       }
 
       .result-title {
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
-        color: #f1f5f9;
+        color: #fafafa;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         display: block;
-        line-height: 1.3;
+        line-height: 1.4;
+        letter-spacing: -0.01em;
       }
 
       .result-desc {
-        font-size: 12px;
-        color: #64748b;
+        font-size: 11px;
+        color: #71717a;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -444,90 +574,90 @@ export function injectFooterBar() {
       }
 
       .result-badge {
-        font-size: 10px;
-        padding: 3px 8px;
-        border-radius: 6px;
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.5);
-        font-weight: 500;
+        font-size: 9px;
+        padding: 3px 7px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.45);
+        font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.05em;
         flex-shrink: 0;
       }
 
       /* Badge colors by type */
       .result-badge[data-type="tab"] {
-        background: rgba(59, 130, 246, 0.15);
+        background: rgba(59, 130, 246, 0.12);
         color: #60a5fa;
       }
       .result-badge[data-type="workspace-url"] {
-        background: rgba(16, 185, 129, 0.15);
+        background: rgba(16, 185, 129, 0.12);
         color: #34d399;
       }
       .result-badge[data-type="history"] {
-        background: rgba(249, 115, 22, 0.15);
+        background: rgba(249, 115, 22, 0.12);
         color: #fb923c;
       }
       .result-badge[data-type="bookmark"] {
-        background: rgba(234, 179, 8, 0.15);
+        background: rgba(234, 179, 8, 0.12);
         color: #fbbf24;
       }
 
       .result-hint {
-        font-size: 10px;
+        font-size: 9px;
         color: #60a5fa;
         font-weight: 600;
         opacity: 0;
-        transform: translateX(8px);
-        transition: all 0.15s ease;
+        transform: translateX(6px);
+        transition: all 0.12s ease;
         display: flex;
         align-items: center;
-        gap: 4px;
-        padding: 4px 8px;
-        border-radius: 6px;
+        gap: 3px;
+        padding: 3px 6px;
+        border-radius: 4px;
         background: rgba(96, 165, 250, 0.1);
       }
 
       .spotlight-footer {
-        padding: 12px 20px;
-        background: rgba(0, 0, 0, 0.2);
+        padding: 10px 16px;
+        background: rgba(0, 0, 0, 0.25);
         display: flex;
         align-items: center;
-        gap: 20px;
-        font-size: 11px;
-        color: #64748b;
+        gap: 16px;
+        font-size: 10px;
+        color: #52525b;
         border-top: 1px solid rgba(255, 255, 255, 0.04);
       }
 
       .shortcut-hint {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 5px;
       }
 
       .shortcut-key {
-        padding: 2px 6px;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 4px;
-        color: #94a3b8;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        padding: 2px 5px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 3px;
+        color: #71717a;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
         font-weight: 500;
-        font-size: 10px;
+        font-size: 9px;
       }
 
       /* Empty state */
       .spotlight-empty {
-        padding: 40px 20px;
+        padding: 32px 20px;
         text-align: center;
-        color: #64748b;
-        font-size: 14px;
+        color: #52525b;
+        font-size: 13px;
       }
 
       .spotlight-empty-icon {
-        font-size: 32px;
-        margin-bottom: 12px;
-        opacity: 0.5;
+        font-size: 28px;
+        margin-bottom: 10px;
+        opacity: 0.4;
       }
     `;
 
@@ -1052,13 +1182,15 @@ export function injectFooterBar() {
     spotlightContainer.innerHTML = `
       <div class="spotlight-search-box">
         <span class="spotlight-prompt">></span>
-        <input type="text" class="spotlight-input" placeholder="Search tabs, history, or type ! for commands..." spellcheck="false">
+        <input type="text" class="spotlight-input" placeholder="Search tabs, history, workspaces..." spellcheck="false">
       </div>
+      <div class="spotlight-pins"></div>
       <div class="spotlight-results"></div>
       <div class="spotlight-footer">
-        <div class="shortcut-hint"><span class="shortcut-key">↵</span> to Open</div>
-        <div class="shortcut-hint"><span class="shortcut-key">↑↓</span> to Navigate</div>
-        <div class="shortcut-hint"><span class="shortcut-key">ESC</span> to Close</div>
+        <div class="shortcut-hint"><span class="shortcut-key">↵</span> Open</div>
+        <div class="shortcut-hint"><span class="shortcut-key">↑↓</span> Navigate</div>
+        <div class="shortcut-hint"><span class="shortcut-key">Esc</span> Close</div>
+        <div class="shortcut-hint" style="margin-left:auto;"><span class="shortcut-key">⌘P</span> Pin</div>
       </div>
     `;
 
@@ -1067,14 +1199,120 @@ export function injectFooterBar() {
 
     const spotlightInput = spotlightContainer.querySelector('.spotlight-input');
     const spotlightResults = spotlightContainer.querySelector('.spotlight-results');
+    const spotlightPins = spotlightContainer.querySelector('.spotlight-pins');
     let selectedIndex = -1;
     let currentResults = [];
+    let pinnedItems = [];
+
+    // Load pinned items from storage
+    const loadPinnedItems = async () => {
+      try {
+        const data = await chrome.storage.local.get('spotlight_pins');
+        pinnedItems = data.spotlight_pins || [];
+        renderPins();
+      } catch (e) {
+        console.warn('[Spotlight] Failed to load pins:', e);
+        pinnedItems = [];
+      }
+    };
+
+    // Save pinned items to storage
+    const savePinnedItems = async () => {
+      try {
+        await chrome.storage.local.set({ spotlight_pins: pinnedItems });
+      } catch (e) {
+        console.warn('[Spotlight] Failed to save pins:', e);
+      }
+    };
+
+    // Add item to pins
+    const addPin = (item) => {
+      if (pinnedItems.length >= 8) {
+        showNotification('Maximum 8 pins allowed', '#f59e0b');
+        return;
+      }
+      if (pinnedItems.some(p => p.url === item.url)) {
+        showNotification('Already pinned', '#64748b');
+        return;
+      }
+      pinnedItems.push({
+        title: item.title || 'Untitled',
+        url: item.url,
+        favicon: item.favicon || item.icon,
+        type: item.type
+      });
+      savePinnedItems();
+      renderPins();
+      showNotification('Pinned!', '#10b981');
+    };
+
+    // Remove item from pins
+    const removePin = (index) => {
+      pinnedItems.splice(index, 1);
+      savePinnedItems();
+      renderPins();
+    };
+
+    // Render pinned items
+    const renderPins = () => {
+      if (pinnedItems.length === 0) {
+        spotlightPins.style.display = 'none';
+        return;
+      }
+
+      spotlightPins.style.display = 'block';
+
+      const getPinIcon = (pin) => {
+        if (pin.favicon && (pin.favicon.startsWith('http') || pin.favicon.startsWith('data:'))) {
+          return `<img src="${pin.favicon}" onerror="this.parentNode.innerHTML='🔗';" />`;
+        }
+        return '🔗';
+      };
+
+      const getShortTitle = (title) => {
+        if (!title) return 'Link';
+        return title.length > 12 ? title.slice(0, 12) + '…' : title;
+      };
+
+      spotlightPins.innerHTML = `
+        <div class="spotlight-pins-header">
+          <span class="spotlight-pins-title">Pinned</span>
+        </div>
+        <div class="spotlight-pins-grid">
+          ${pinnedItems.map((pin, i) => `
+            <div class="pin-item" data-index="${i}" data-url="${pin.url}">
+              <div class="pin-icon">${getPinIcon(pin)}</div>
+              <span class="pin-label">${getShortTitle(pin.title)}</span>
+              <span class="pin-remove" data-index="${i}">×</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      // Add click listeners for pins
+      spotlightPins.querySelectorAll('.pin-item').forEach(item => {
+        item.onclick = (e) => {
+          if (e.target.classList.contains('pin-remove')) {
+            e.stopPropagation();
+            const idx = parseInt(e.target.dataset.index);
+            removePin(idx);
+            return;
+          }
+          const url = item.dataset.url;
+          if (url) {
+            window.open(url, '_blank');
+            toggleSpotlight();
+          }
+        };
+      });
+    };
 
     const toggleSpotlight = () => {
       const isVisible = spotlightOverlay.classList.toggle('visible');
       if (isVisible) {
         spotlightInput.value = '';
         renderResults([]);
+        loadPinnedItems();
         setTimeout(() => spotlightInput.focus(), 50);
       }
     };
@@ -1132,6 +1370,7 @@ export function injectFooterBar() {
             <span class="result-desc">${res.description || formatUrl(res.url)}</span>
           </div>
           <span class="result-badge" data-type="${res.type || ''}">${getBadgeLabel(res)}</span>
+          ${res.url ? `<span class="pin-btn" data-index="${i}" title="Pin this">📌</span>` : ''}
           <div class="result-hint">
             <span>Open</span>
             <span class="shortcut-key">↵</span>
@@ -1141,7 +1380,16 @@ export function injectFooterBar() {
 
       // Add click listeners
       spotlightResults.querySelectorAll('.result-item').forEach(item => {
-        item.onclick = () => {
+        item.onclick = (e) => {
+          // Handle pin button click
+          if (e.target.classList.contains('pin-btn')) {
+            e.stopPropagation();
+            const idx = parseInt(e.target.dataset.index);
+            if (currentResults[idx]) {
+              addPin(currentResults[idx]);
+            }
+            return;
+          }
           const idx = parseInt(item.dataset.index);
           executeResult(currentResults[idx]);
         };
@@ -1215,6 +1463,12 @@ export function injectFooterBar() {
         }
       } else if (e.key === 'Escape') {
         toggleSpotlight();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+        // Pin the selected item
+        e.preventDefault();
+        if (selectedIndex >= 0 && currentResults[selectedIndex] && currentResults[selectedIndex].url) {
+          addPin(currentResults[selectedIndex]);
+        }
       }
     };
 

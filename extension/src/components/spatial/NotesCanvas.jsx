@@ -759,6 +759,13 @@ export function NotesCanvas({ workspaceId }) {
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
+      // Enable On-Device Recognition (Chrome 139+)
+      // This forces the browser to use local processing if available (requires language pack)
+      if ('processLocally' in recognition) {
+        recognition.processLocally = true;
+      }
+
+
       recognition.onstart = () => {
         setIsRecording(true);
       };
@@ -787,7 +794,44 @@ export function NotesCanvas({ workspaceId }) {
       };
 
       recognition.onerror = (event) => {
-        console.warn('[NotesCanvas] Speech recognition error:', event.error);
+        // Fallback for missing language pack (On-Device mode failure)
+        if (event.error === 'language-not-supported' && recognition.processLocally) {
+          console.log('[NotesCanvas] Local language pack missing, falling back to network recognition...');
+          recognition.stop();
+
+          // Re-initialize without processLocally
+          const fallbackRecognition = new SpeechRecognition();
+          fallbackRecognition.continuous = true;
+          fallbackRecognition.interimResults = true;
+          fallbackRecognition.lang = 'en-US';
+          // Explicitly do NOT set processLocally
+
+          // Copy over handlers
+          fallbackRecognition.onstart = recognition.onstart;
+          fallbackRecognition.onend = recognition.onend;
+          fallbackRecognition.onresult = recognition.onresult;
+          fallbackRecognition.onerror = (e) => {
+            // Only warn if it's not an abort (which happens on stop/restart)
+            if (e.error !== 'aborted') {
+              console.warn('[NotesCanvas] Fallback recognition error:', e.error);
+            }
+            setIsRecording(false);
+            if (streamRef.current) {
+              streamRef.current.getTracks().forEach(track => track.stop());
+              streamRef.current = null;
+            }
+          };
+
+          recognitionRef.current = fallbackRecognition;
+          fallbackRecognition.start();
+          return;
+        }
+
+        // Only warn for actual errors, ignore 'aborted' which can happen during toggle
+        if (event.error !== 'aborted') {
+          console.warn('[NotesCanvas] Speech recognition error:', event.error);
+        }
+
         setIsRecording(false);
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
