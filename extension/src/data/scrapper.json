@@ -1,0 +1,267 @@
+{
+  "platforms": [
+    {
+      "name": "ChatGPT",
+      "domains": ["chatgpt.com", "chat.openai.com"],
+      "type": "AI Chat",
+      "color": "rgba(16, 163, 127, 0.15)",
+      "borderColor": "rgba(16, 163, 127, 0.3)",
+      "textColor": "#6EE7B7",
+      "hoverBg": "rgba(16, 163, 127, 0.25)",
+      "hoverBorder": "rgba(16, 163, 127, 0.5)",
+      "config": {
+        "container": "#stage-slideover-sidebar",
+        "links": "a.group[href]",
+        "excludedDomains": [],
+        "excludedPatterns": ["/g/*/project", "/apps", "/gpts"],
+        "includedPatterns": [],
+        "scrapeLimit": 100,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Claude",
+      "domains": ["claude.ai"],
+      "type": "AI Chat",
+      "color": "rgba(139, 92, 246, 0.15)",
+      "borderColor": "rgba(139, 92, 246, 0.3)",
+      "textColor": "#C4B5FD",
+      "hoverBg": "rgba(139, 92, 246, 0.25)",
+      "hoverBorder": "rgba(139, 92, 246, 0.5)",
+      "config": {
+        "container": ".gap-px > li",
+        "links": "a.items-center[href]",
+        "excludedDomains": [],
+        "excludedPatterns": [],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Gemini",
+      "domains": ["gemini.google.com"],
+      "type": "AI Chat",
+      "color": "rgba(59, 130, 246, 0.15)",
+      "borderColor": "rgba(59, 130, 246, 0.3)",
+      "textColor": "#93C5FD",
+      "hoverBg": "rgba(59, 130, 246, 0.25)",
+      "hoverBorder": "rgba(59, 130, 246, 0.5)",
+      "config": {
+        "container": null,
+        "links": null,
+        "excludedDomains": [],
+        "excludedPatterns": [],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Grok",
+      "domains": ["grok.com"],
+      "type": "AI Chat",
+      "color": "rgba(251, 146, 60, 0.15)",
+      "borderColor": "rgba(251, 146, 60, 0.3)",
+      "textColor": "#FCA5A5",
+      "hoverBg": "rgba(251, 146, 60, 0.25)",
+      "hoverBorder": "rgba(251, 146, 60, 0.5)",
+      "config": {
+        "container": "#radix-_r_44_ > div",
+        "links": "> a.peer\\/menu-button[href]",
+        "excludedDomains": [],
+        "excludedPatterns": [],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Perplexity",
+      "domains": ["perplexity.ai"],
+      "type": "AI Search",
+      "color": "rgba(16, 185, 129, 0.15)",
+      "borderColor": "rgba(16, 185, 129, 0.3)",
+      "textColor": "#A7F3D0",
+      "hoverBg": "rgba(16, 185, 129, 0.25)",
+      "hoverBorder": "rgba(16, 185, 129, 0.5)",
+      "config": {
+        "container": null,
+        "links": null,
+        "excludedDomains": [],
+        "excludedPatterns": [],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "AI Studio",
+      "domains": ["aistudio.google.com"],
+      "type": "AI Dev",
+      "color": "rgba(66, 133, 244, 0.15)",
+      "borderColor": "rgba(66, 133, 244, 0.3)",
+      "textColor": "#93C5FD",
+      "hoverBg": "rgba(66, 133, 244, 0.25)",
+      "hoverBorder": "rgba(66, 133, 244, 0.5)",
+      "config": {
+        "container": "nav.ng-tns-c636821468-1",
+        "links": "li a[href]",
+        "excludedDomains": [],
+        "excludedPatterns": ["/apps"],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Lovable",
+      "domains": ["lovable.dev"],
+      "type": "AI Dev",
+      "color": "rgba(167, 139, 250, 0.15)",
+      "borderColor": "rgba(167, 139, 250, 0.3)",
+      "textColor": "#C4B5FD",
+      "hoverBg": "rgba(167, 139, 250, 0.25)",
+      "hoverBorder": "rgba(167, 139, 250, 0.5)",
+      "config": {
+        "container": ".relative > div",
+        "links": "> a.items-center[href]",
+        "excludedDomains": [],
+        "excludedPatterns": ["/*"],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "GitHub",
+      "domains": ["github.com"],
+      "type": "Development",
+      "color": "rgba(100, 116, 139, 0.15)",
+      "borderColor": "rgba(100, 116, 139, 0.3)",
+      "textColor": "#94A3B8",
+      "hoverBg": "rgba(100, 116, 139, 0.25)",
+      "hoverBorder": "rgba(100, 116, 139, 0.5)",
+      "config": {
+        "container": "ul",
+        "links": "li a[href]",
+        "excludedDomains": ["docs.github.com", "x.com", "leetcode.com", "linkedin.com"],
+        "excludedPatterns": ["/security", "/*/forks", "/topics/*", "/*/stargazers"],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Vercel",
+      "domains": ["vercel.com"],
+      "type": "Development",
+      "color": "rgba(100, 116, 139, 0.15)",
+      "borderColor": "rgba(100, 116, 139, 0.3)",
+      "textColor": "#94A3B8",
+      "hoverBg": "rgba(100, 116, 139, 0.25)",
+      "hoverBorder": "rgba(100, 116, 139, 0.5)",
+      "config": {
+        "container": "div.gap-4.\\@smd-page\\:flex-row",
+        "links": "li a[href]",
+        "excludedDomains": ["github.com"],
+        "excludedPatterns": ["/*/*/*/*", "/*/*/*"],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Figma",
+      "domains": ["figma.com"],
+      "type": "Design",
+      "color": "rgba(242, 78, 30, 0.15)",
+      "borderColor": "rgba(242, 78, 30, 0.3)",
+      "textColor": "#FF8A65",
+      "hoverBg": "rgba(242, 78, 30, 0.25)",
+      "hoverBorder": "rgba(242, 78, 30, 0.5)",
+      "config": {
+        "container": null,
+        "links": null,
+        "excludedDomains": [],
+        "excludedPatterns": [],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Hacker News",
+      "domains": ["news.ycombinator.com"],
+      "type": "Social",
+      "color": "rgba(251, 146, 60, 0.15)",
+      "borderColor": "rgba(251, 146, 60, 0.3)",
+      "textColor": "#FDBA74",
+      "hoverBg": "rgba(251, 146, 60, 0.25)",
+      "hoverBorder": "rgba(251, 146, 60, 0.5)",
+      "config": {
+        "container": null,
+        "links": null,
+        "excludedDomains": [],
+        "excludedPatterns": [],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Stack Overflow",
+      "domains": ["stackoverflow.com"],
+      "type": "Development",
+      "color": "rgba(244, 128, 36, 0.15)",
+      "borderColor": "rgba(244, 128, 36, 0.3)",
+      "textColor": "#FB923C",
+      "hoverBg": "rgba(244, 128, 36, 0.25)",
+      "hoverBorder": "rgba(244, 128, 36, 0.5)",
+      "config": {
+        "container": null,
+        "links": null,
+        "excludedDomains": [],
+        "excludedPatterns": [],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    },
+    {
+      "name": "Notion",
+      "domains": ["notion.so", "www.notion.so"],
+      "type": "Productivity",
+      "color": "rgba(100, 116, 139, 0.15)",
+      "borderColor": "rgba(100, 116, 139, 0.3)",
+      "textColor": "#94A3B8",
+      "hoverBg": "rgba(100, 116, 139, 0.25)",
+      "hoverBorder": "rgba(100, 116, 139, 0.5)",
+      "config": {
+        "container": "nav.notion-sidebar-container",
+        "links": "a[href]",
+        "excludedDomains": [],
+        "excludedPatterns": [],
+        "includedPatterns": [],
+        "scrapeLimit": 50,
+        "titleSource": "auto"
+      }
+    }
+  ],
+  "defaultStyle": {
+    "color": "rgba(100, 116, 139, 0.15)",
+    "borderColor": "rgba(100, 116, 139, 0.3)",
+    "textColor": "#94A3B8",
+    "hoverBg": "rgba(100, 116, 139, 0.25)",
+    "hoverBorder": "rgba(100, 116, 139, 0.5)"
+  },
+  "defaultConfig": {
+    "container": null,
+    "links": null,
+    "excludedDomains": [],
+    "excludedPatterns": [],
+    "includedPatterns": [],
+    "scrapeLimit": 50,
+    "titleSource": "auto"
+  }
+}

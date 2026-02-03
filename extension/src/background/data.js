@@ -1,7 +1,9 @@
 // Data collection and storage operations (bookmarks, history)
 import { addUrlToWorkspace, getSettings, listWorkspaces, saveWorkspace } from '../db/index.js';
+import { saveScrapingConfig } from '../db/unified-api.js';
 import { storageGetWithTTL, storageSetWithTTL } from '../services/extensionApi.js';
 import GenericUrlParser from '../utils/GenericUrlParser.js';
+import scrapperConfig from '../data/scrapper.json';
 
 // Global variable to track last populate time
 let globalLastPopulateTime = 0;
@@ -195,6 +197,9 @@ export function initializeDataCollection() {
   chrome.runtime.onStartup?.addListener(async () => {
     console.log('[Background] Startup - ensuring data present')
     try {
+      // Seed default platform configs on startup too
+      await seedDefaultPlatformConfigs();
+
       // Check cache with TTL (30 minutes)
       const { data: dashboardData, expired } = await storageGetWithTTL('dashboardData', 30 * 60 * 1000);
       if (expired || !dashboardData || (!dashboardData.bookmarks?.length && !dashboardData.history?.length)) {
@@ -231,46 +236,76 @@ export function initializeData() {
 }
 
 
-// Seed GitHub scraping configuration
-async function seedGitHubConfig() {
-  const GITHUB_HOST = 'github.com';
+// Seed default platform scraping configurations from scrapper.json
+async function seedDefaultPlatformConfigs() {
   try {
+    // Use statically imported scrapper config
+    const platforms = scrapperConfig.platforms || [];
+
     const result = await chrome.storage.local.get('domainSelectors');
     const selectors = result.domainSelectors || {};
 
-    if (!selectors[GITHUB_HOST]) {
-      console.log('[Background] Seeding GitHub scraping config...');
-      selectors[GITHUB_HOST] = {
-        selector: "ul li a[href]",
-        container: "ul",
-        links: "li a[href]",
-        sample: {
-          title: "cooldesk-extension",
-          url: "https://github.com/abhayraghuwanshi/cooldesk-extension"
-        },
-        excludedPatterns: [
-          "/topics/*",
-          "/security",
-          "/features",
-          "/site/terms",
-          "/site/privacy",
-          "/contact",
-          "/about"
-        ],
-        excludedDomains: [
-          "docs.github.com",
-          "status.github.com"
-        ],
-        savedAt: Date.now(),
-        source: 'seed'
-      };
+    let seededCount = 0;
+
+    for (const platform of platforms) {
+      // Skip platforms without config
+      if (!platform.config || !platform.config.container) continue;
+
+      // Seed each domain for this platform
+      for (const domain of platform.domains) {
+        // Only seed if not already configured
+        if (!selectors[domain]) {
+          console.log(`[Background] Seeding ${platform.name} (${domain}) scraping config...`);
+
+          const configData = {
+            domain,
+            selector: platform.config.container + ' ' + platform.config.links,
+            container: platform.config.container,
+            links: platform.config.links,
+            full: platform.config.container + ' ' + platform.config.links,
+            excludedPatterns: platform.config.excludedPatterns || [],
+            excludedDomains: platform.config.excludedDomains || [],
+            includedPatterns: platform.config.includedPatterns || [],
+            scrapeLimit: platform.config.scrapeLimit || 50,
+            titleSource: platform.config.titleSource || 'auto',
+            titleSelector: platform.config.titleSelector || null,
+            source: 'native',
+            enabled: true,
+            updatedAt: Date.now()
+          };
+
+          // Save to chrome.storage.local for content script access
+          selectors[domain] = {
+            ...configData,
+            savedAt: Date.now()
+          };
+
+          // Also save to IndexedDB via unified-api
+          try {
+            await saveScrapingConfig(configData);
+          } catch (dbErr) {
+            console.warn(`[Background] Failed to save ${domain} to IndexedDB:`, dbErr);
+          }
+
+          seededCount++;
+        }
+      }
+    }
+
+    if (seededCount > 0) {
       await chrome.storage.local.set({ domainSelectors: selectors });
+      console.log(`[Background] Seeded ${seededCount} platform configs from scrapper.json`);
+    } else {
+      console.log('[Background] All platform configs already exist, skipping seed');
     }
   } catch (e) {
-    console.error('[Background] Failed to seed GitHub config:', e);
+    console.error('[Background] Failed to seed platform configs:', e);
   }
 }
 
-export { collectBookmarks, collectHistory, seedGitHubConfig };
+// Legacy alias for backwards compatibility
+const seedGitHubConfig = seedDefaultPlatformConfigs;
+
+export { collectBookmarks, collectHistory, seedGitHubConfig, seedDefaultPlatformConfigs };
 
 

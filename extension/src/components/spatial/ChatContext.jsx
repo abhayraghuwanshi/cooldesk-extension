@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
 import { listScrapedChats } from '../../db/index.js';
 import { saveScrapingConfig } from '../../db/unified-api.js';
+import scrapperConfig from '../../data/scrapper.json';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { getFaviconUrl } from '../../utils/helpers.js';
 
@@ -15,26 +16,20 @@ import { getFaviconUrl } from '../../utils/helpers.js';
  * - Quick access to scraped platforms
  */
 
-// Platform styling configuration
-const PLATFORM_STYLES = {
-  'ChatGPT': { color: 'rgba(16, 163, 127, 0.15)', borderColor: 'rgba(16, 163, 127, 0.3)', textColor: '#6EE7B7', hoverBg: 'rgba(16, 163, 127, 0.25)', hoverBorder: 'rgba(16, 163, 127, 0.5)' },
-  'Claude': { color: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)', textColor: '#C4B5FD', hoverBg: 'rgba(139, 92, 246, 0.25)', hoverBorder: 'rgba(139, 92, 246, 0.5)' },
-  'Gemini': { color: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)', textColor: '#93C5FD', hoverBg: 'rgba(59, 130, 246, 0.25)', hoverBorder: 'rgba(59, 130, 246, 0.5)' },
-  'Grok': { color: 'rgba(251, 146, 60, 0.15)', borderColor: 'rgba(251, 146, 60, 0.3)', textColor: '#FCA5A5', hoverBg: 'rgba(251, 146, 60, 0.25)', hoverBorder: 'rgba(251, 146, 60, 0.5)' },
-  'Perplexity': { color: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)', textColor: '#A7F3D0', hoverBg: 'rgba(16, 185, 129, 0.25)', hoverBorder: 'rgba(16, 185, 129, 0.5)' },
-  'AI Studio': { color: 'rgba(66, 133, 244, 0.15)', borderColor: 'rgba(66, 133, 244, 0.3)', textColor: '#93C5FD', hoverBg: 'rgba(66, 133, 244, 0.25)', hoverBorder: 'rgba(66, 133, 244, 0.5)' },
-  'Lovable': { color: 'rgba(167, 139, 250, 0.15)', borderColor: 'rgba(167, 139, 250, 0.3)', textColor: '#C4B5FD', hoverBg: 'rgba(167, 139, 250, 0.25)', hoverBorder: 'rgba(167, 139, 250, 0.5)' },
-  'Figma': { color: 'rgba(242, 78, 30, 0.15)', borderColor: 'rgba(242, 78, 30, 0.3)', textColor: '#FF8A65', hoverBg: 'rgba(242, 78, 30, 0.25)', hoverBorder: 'rgba(242, 78, 30, 0.5)' },
-};
+// Platform styling configuration - loaded from scrapper.json
+const PLATFORM_STYLES = scrapperConfig.platforms.reduce((acc, platform) => {
+  acc[platform.name] = {
+    color: platform.color,
+    borderColor: platform.borderColor,
+    textColor: platform.textColor,
+    hoverBg: platform.hoverBg,
+    hoverBorder: platform.hoverBorder
+  };
+  return acc;
+}, {});
 
 // Default style for unknown platforms
-const DEFAULT_PLATFORM_STYLE = {
-  color: 'rgba(100, 116, 139, 0.15)',
-  borderColor: 'rgba(100, 116, 139, 0.3)',
-  textColor: '#94A3B8',
-  hoverBg: 'rgba(100, 116, 139, 0.25)',
-  hoverBorder: 'rgba(100, 116, 139, 0.5)'
-};
+const DEFAULT_PLATFORM_STYLE = scrapperConfig.defaultStyle;
 
 // Storage key for saved links
 const SAVED_LINKS_KEY = 'chatContext_savedLinks';
@@ -58,20 +53,12 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
 
   const [scrapingStats, setScrapingStats] = useState({});
 
-  const BUILT_IN_PLATFORMS = [
-    { name: 'ChatGPT', domains: ['chatgpt.com', 'chat.openai.com'], type: 'AI Chat' },
-    { name: 'Claude', domains: ['claude.ai'], type: 'AI Chat' },
-    { name: 'Gemini', domains: ['gemini.google.com'], type: 'AI Chat' },
-    { name: 'Grok', domains: ['grok.com'], type: 'AI Chat' },
-    { name: 'Perplexity', domains: ['perplexity.ai'], type: 'AI Search' },
-    { name: 'AI Studio', domains: ['aistudio.google.com'], type: 'AI Dev' },
-    { name: 'Lovable', domains: ['lovable.dev'], type: 'AI Dev' },
-    { name: 'GitHub', domains: ['github.com'], type: 'Development' },
-    { name: 'Vercel', domains: ['vercel.com'], type: 'Development' },
-    { name: 'Figma', domains: ['figma.com'], type: 'Design' },
-    { name: 'Hacker News', domains: ['news.ycombinator.com'], type: 'Social' },
-    { name: 'Stack Overflow', domains: ['stackoverflow.com'], type: 'Development' },
-  ];
+  // Built-in platforms loaded from scrapper.json
+  const BUILT_IN_PLATFORMS = scrapperConfig.platforms.map(p => ({
+    name: p.name,
+    domains: p.domains,
+    type: p.type
+  }));
 
   // Load saved links from storage
   const loadSavedLinks = useCallback(() => {
@@ -423,9 +410,9 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
             >
               <FontAwesomeIcon icon={faGear} style={{ transform: showSettings ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }} />
             </div>
-            <div className="panel-action" onClick={loadChats} title="Refresh">
+            {/* <div className="panel-action" onClick={loadChats} title="Refresh">
               <FontAwesomeIcon icon={faSync} />
-            </div>
+            </div> */}
           </div>
         </div>
 

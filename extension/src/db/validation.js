@@ -435,6 +435,10 @@ export const VALIDATION_SCHEMAS = {
         links: {
             [ValidationRules.TYPE]: 'string'
         },
+        full: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 4000
+        },
         sample: {
             [ValidationRules.TYPE]: 'object'
         },
@@ -466,6 +470,14 @@ export const VALIDATION_SCHEMAS = {
         scrapeLimit: {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
+        },
+        titleSource: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.ENUM]: ['auto', 'url', 'selector']
+        },
+        titleSelector: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 2000
         },
         updatedAt: {
             [ValidationRules.REQUIRED]: true,
