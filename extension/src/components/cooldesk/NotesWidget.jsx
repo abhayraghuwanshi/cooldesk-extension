@@ -8,7 +8,7 @@ import annyang from 'annyang';
 import { useEffect, useState } from 'react';
 import { upsertNote as dbUpsertNote } from '../../db/index.js';
 
-export function NotesWidget({ maxNotes = 5, compact = false }) {
+export function NotesWidget({ maxNotes = 5, compact = false, onAddNote }) {
   const [newNoteText, setNewNoteText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -66,7 +66,7 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
       window.dispatchEvent(new CustomEvent('notes-updated', { detail: { note } }));
 
       // Also invoke callback if provided (for parent container refresh)
-      // if (onNoteAdded) onNoteAdded(note);
+      if (onAddNote) onAddNote(note);
 
       setNewNoteText('');
     } catch (error) {
@@ -93,15 +93,14 @@ export function NotesWidget({ maxNotes = 5, compact = false }) {
         position: 'relative',
         borderRadius: '20px',
         overflow: 'hidden',
-        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-        // background: isListening
-        //   ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(220, 38, 38, 0.05) 100%)'
-        //   : 'linear-gradient(135deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%)',
-        backdropFilter: 'blur(12px)',
-        border: 'none',
-        // boxShadow: isListening
-        //   ? '0 8px 24px -4px rgba(239, 68, 68, 0.3)'
-        //   : '0 8px 32px -8px rgba(0, 0, 0, 0.4), 0 4px 16px -4px rgba(0, 0, 0, 0.2)',
+        transition: 'none', // Remove transition to prevent layout thrashing on typing
+        background: isListening
+          ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%)'
+          : 'rgba(15, 23, 42, 0.95)', // High opacity dark background, no blur
+        border: '1px solid rgba(148, 163, 184, 0.1)',
+        boxShadow: isListening
+          ? '0 8px 24px -4px rgba(239, 68, 68, 0.3)'
+          : '0 8px 32px -8px rgba(0, 0, 0, 0.4), 0 4px 16px -4px rgba(0, 0, 0, 0.2)',
       }}>
 
         {/* Action Bar (Top of card) */}

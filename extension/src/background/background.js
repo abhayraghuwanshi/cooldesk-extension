@@ -908,46 +908,12 @@ async function main() {
       return true;
     }
 
-    // Handle calendar scraped events
-    if (msg?.type === 'CALENDAR_EVENTS_SCRAPED') {
-      console.log('[Background:Calendar] 📩 Received calendar events message:', msg);
 
-      (async () => {
-        try {
-          if (msg.success && msg.events) {
-            // Store events
-            console.log(`[Background:Calendar] Saving ${msg.events.length} events to storage...`);
-            await chrome.storage.local.set({
-              calendar_events: msg.events,
-              calendar_last_updated: Date.now()
-            });
-            console.log('[Background:Calendar] ✅ Saved calendar events to storage');
-          } else {
-            console.warn('[Background:Calendar] ⚠️ Calendar scrape failed or empty:', msg.error);
-          }
-
-          // If this came from a scraping tab (checked via sender tab url params or just assumption), close it
-          if (sender.tab && sender.tab.url.includes('scraping=true')) {
-            console.log('[Background:Calendar] Closing scraping tab:', sender.tab.id);
-            await chrome.tabs.remove(sender.tab.id);
-          } else {
-            console.log('[Background:Calendar] Not closing tab (passive scrape or manual):', sender.tab?.url);
-          }
-        } catch (e) {
-          console.error('[Background:Calendar] ❌ Error handling calendar events:', e);
-        }
-      })();
-
-      // Don't need to send response to content script really
-      sendResponse({ received: true });
-      return false;
-    }
 
     // Trigger manual scrape (for testing or user request)
     if (msg?.type === 'TRIGGER_CALENDAR_SCRAPE') {
-      console.log('[Background] Manual trigger for calendar scrape');
-      triggerCalendarScrape();
-      sendResponse({ started: true });
+      console.log('[Background] Manual trigger for calendar scrape: Disabled');
+      sendResponse({ started: false, error: 'Feature disabled' });
       return false;
     }
 
@@ -2605,54 +2571,4 @@ main()
     console.error('[Background] Stack trace:', e.stack);
   });
 
-// Calendar Scraping Logic
-async function triggerCalendarScrape() {
-  try {
-    console.log('[Background:Calendar] 🚀 Triggering calendar scrape...');
-
-    // Check if we already have a scraping tab open?
-    const tabs = await chrome.tabs.query({ url: '*://calendar.google.com/*' });
-    console.log('[Background:Calendar] Found existing calendar tabs:', tabs.length);
-
-    for (const tab of tabs) {
-      if (tab.url.includes('scraping=true')) {
-        console.log('[Background:Calendar] Removing existing scraping tab:', tab.id);
-        await chrome.tabs.remove(tab.id);
-      }
-    }
-
-    // Create a new invisible tab
-    console.log('[Background:Calendar] Creating new hidden calendar tab...');
-    const tab = await chrome.tabs.create({
-      url: 'https://calendar.google.com/calendar/u/0/r/agenda?scraping=true',
-      active: false,
-      pinned: true
-    });
-
-    console.log('[Background:Calendar] ✅ Created hidden calendar tab:', tab.id);
-
-  } catch (error) {
-    console.error('[Background:Calendar] ❌ Failed to trigger calendar scrape:', error);
-  }
-}
-
-// Listen for alarms
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'calendar_scrape_alarm') {
-    console.log('[Background:Calendar] ⏰ Alarm fired: calendar_scrape_alarm');
-    triggerCalendarScrape();
-  }
-});
-
-// Setup alarm on startup
-chrome.runtime.onInstalled.addListener(() => {
-  // Check if alarm exists
-  chrome.alarms.get('calendar_scrape_alarm', (alarm) => {
-    if (!alarm) {
-      console.log('[Background] Creating calendar scrape alarm (every 30 min)');
-      chrome.alarms.create('calendar_scrape_alarm', {
-        periodInMinutes: 30
-      });
-    }
-  });
-});
+// Calendar scraping logic removed as requested

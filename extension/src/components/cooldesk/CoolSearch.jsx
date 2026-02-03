@@ -1,5 +1,3 @@
-import { faMicrophone } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import Fuse from 'fuse.js';
 import React, { useEffect, useRef, useState } from 'react';
@@ -1614,7 +1612,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             </div>
           )}
         </div>
-        <button
+        {/* <button
           type="button"
           className={`cooldesk-voice-btn ${isListening ? 'listening' : ''}`}
           onClick={toggleVoice}
@@ -1644,7 +1642,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               ))}
             </div>
           )}
-        </button>
+        </button> */}
       </form>
 
       {/* Unified Expanded Search Panel */}
