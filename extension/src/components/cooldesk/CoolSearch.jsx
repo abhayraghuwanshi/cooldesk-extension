@@ -198,13 +198,21 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     };
   }, []);
 
-  // Pre-fetch and cache workspace data
+  // Pre-fetch and cache workspace data locally (DB + Storage)
   const loadWorkspaceData = React.useCallback(async () => {
     try {
       const { listWorkspaces } = await import('../../db/index.js');
-      const workspacesResult = await listWorkspaces();
-      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
 
+      // Parallel fetch: Workspaces (DB) and Dashboard Data (Storage)
+      const [workspacesResult, storageResult] = await Promise.all([
+        listWorkspaces(),
+        chrome.storage.local.get(['dashboardData'])
+      ]);
+
+      const workspaces = workspacesResult?.success ? workspacesResult.data : [];
+      const dashboardData = storageResult?.dashboardData || {};
+
+      // 1. Process for CoolSearch Cache & Fuse
       if (Array.isArray(workspaces)) {
         workspacesCache.current = workspaces;
         setIsWorkspaceDataLoaded(true);
@@ -252,6 +260,34 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           keys: ['title', 'url', 'searchText']
         });
       }
+
+      // 2. Process for Voice Command Processor (Replacing background fetch)
+      // Prepare data structure expected by VoiceCommandProcessor
+      const voiceAllItems = [
+        ...(dashboardData.history || []),
+        ...(dashboardData.bookmarks || [])
+      ];
+
+      const voiceSavedItems = workspaces.flatMap(ws =>
+        (ws.urls || []).map(u => ({
+          ...u,
+          workspaceGroup: ws.name,
+          id: `${ws.id}-${u.url}`
+        }))
+      );
+
+      const consolidatedData = {
+        allItems: voiceAllItems,
+        savedItems: voiceSavedItems
+      };
+
+      setWorkspaceData(consolidatedData);
+
+      // Update processor if it exists
+      if (commandProcessorRef.current) {
+        commandProcessorRef.current.updateWorkspaceData(consolidatedData);
+      }
+
     } catch (error) {
       console.warn('[CoolSearch] Failed to cache workspaces:', error);
     }
@@ -653,25 +689,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     return () => window.removeEventListener('focus', fetchCurrentTab);
   }, []);
 
-  // Fetch workspace data for voice commands
-  const fetchWorkspaceData = async () => {
-    try {
-      if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-        const response = await chrome.runtime.sendMessage({
-          action: 'getWorkspaceData'
-        });
 
-        if (response?.success) {
-          setWorkspaceData(response.data);
-          if (commandProcessorRef.current) {
-            commandProcessorRef.current.updateWorkspaceData(response.data);
-          }
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to fetch workspace data:', error);
-    }
-  };
 
   // Initialize voice commands
   const initializeCommands = () => {
@@ -834,8 +852,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
   // Initialize annyang and command processor
   useEffect(() => {
-    // Fetch workspace data on mount
-    fetchWorkspaceData();
+
 
     // Initialize command processor
     if (!commandProcessorRef.current) {

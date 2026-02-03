@@ -547,6 +547,50 @@ export const deleteScrapedChatsByPlatform = withErrorHandling(async (platform) =
     severity: ErrorSeverity.MEDIUM
 })
 
+/**
+ * Get stats for scraped chats (count per platform)
+ */
+export const getScrapedChatStats = withErrorHandling(async () => {
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.SCRAPED_CHATS)
+    const platformIndex = store.index('by_platform')
+
+    const byPlatform = {}
+
+    await new Promise((resolve, reject) => {
+        const keyRequest = platformIndex.openKeyCursor(null, 'nextunique')
+        const platforms = []
+
+        keyRequest.onsuccess = (event) => {
+            const cursor = event.target.result
+            if (cursor) {
+                platforms.push(cursor.key)
+                cursor.continue()
+            } else {
+                // Now count each
+                Promise.all(platforms.map(p =>
+                    new Promise((res) => {
+                        const countReq = platformIndex.count(p)
+                        countReq.onsuccess = () => res({ platform: p, count: countReq.result })
+                        countReq.onerror = () => res({ platform: p, count: 0 })
+                    })
+                )).then(counts => {
+                    counts.forEach(c => byPlatform[c.platform] = c.count)
+                    resolve()
+                }).catch(reject)
+            }
+        }
+        keyRequest.onerror = () => reject(keyRequest.error)
+    })
+
+    return byPlatform
+}, {
+    operation: 'getScrapedChatStats',
+    severity: ErrorSeverity.LOW,
+    fallbackFunction: () => ({})
+})
+
 // ===== NOTES OPERATIONS =====
 
 /**

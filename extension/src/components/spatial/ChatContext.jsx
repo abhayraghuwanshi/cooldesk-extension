@@ -1,9 +1,9 @@
 import { faAngleRight, faArrowRight, faGear, faPlus, faSync, faTimes, faToggleOn, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useState } from 'react';
-import { listScrapedChats } from '../../db/index.js';
-import { saveScrapingConfig } from '../../db/unified-api.js';
 import scrapperConfig from '../../data/scrapper.json';
+import { getScrapedChatStats, listScrapedChats } from '../../db/index.js';
+import { saveScrapingConfig } from '../../db/unified-api.js';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { getFaviconUrl } from '../../utils/helpers.js';
 
@@ -51,7 +51,15 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
   const [customSelectors, setCustomSelectors] = useState({});
   const [allowedDomains, setAllowedDomains] = useState([]);
 
-  const [scrapingStats, setScrapingStats] = useState({});
+  const [scrapingStats, setScrapingStats] = useState(() => {
+    // Initial state from cache if available
+    try {
+      const cached = localStorage.getItem('scraped_stats_cache');
+      return cached ? JSON.parse(cached) : {};
+    } catch {
+      return {};
+    }
+  });
 
   // Built-in platforms loaded from scrapper.json
   const BUILT_IN_PLATFORMS = scrapperConfig.platforms.map(p => ({
@@ -182,16 +190,16 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
     }
   }, []);
 
-  // Load platform stats from DB
+  // Load platform stats from DB with caching
   const loadPlatformStats = useCallback(async () => {
     try {
-      if (typeof chrome !== 'undefined' && chrome.runtime) {
-        const response = await new Promise(resolve => {
-          chrome.runtime.sendMessage({ type: 'GET_SCRAPED_CHATS' }, resolve);
-        });
-        if (response && response.success && response.byPlatform) {
-          setScrapingStats(response.byPlatform);
-        }
+      // 1. Fetch fresh stats
+      const stats = await getScrapedChatStats();
+
+      // 2. Update state and cache if we got results
+      if (stats && Object.keys(stats).length > 0) {
+        setScrapingStats(stats);
+        localStorage.setItem('scraped_stats_cache', JSON.stringify(stats));
       }
     } catch (error) {
       console.error('[ChatContext] Error loading platform stats:', error);
