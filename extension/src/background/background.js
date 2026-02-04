@@ -426,6 +426,21 @@ async function main() {
   } catch { }
 
   chrome.runtime.onInstalled.addListener(async () => {
+    // Log pinning events to debut auto-pinning issue
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.pinned === true) {
+        console.log('[TabDebug] 📌 Tab PINNED externally/automatically:', {
+          tabId,
+          url: tab.url,
+          title: tab.title,
+          timestamp: new Date().toISOString(),
+          changeInfo
+        });
+      } else if (changeInfo.pinned === false) {
+        console.log('[TabDebug] 📍 Tab UNPINNED:', { tabId, url: tab.url });
+      }
+    });
+
     console.log('[Background] Extension installed - populating data')
     try {
       await populateAndStore()
