@@ -347,6 +347,7 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
                   const note = {
                     id: 'note_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
                     url: window.location.href,
+                    title: document.title || 'URL Note',
                     text: '☐ TODO: ' + todoText.trim(),
                     type: 'todo',
                     createdAt: Date.now(),

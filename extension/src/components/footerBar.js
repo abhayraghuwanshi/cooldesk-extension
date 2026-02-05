@@ -26,10 +26,10 @@ export function injectFooterBar() {
         top: 50%;
         right: 0px;
         z-index: 2147483647;
-        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
         cursor: move;
         user-select: none;
-        transition: transform 0.2s ease;
+        transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
         transform: translateY(-50%);
         display: flex;
         flex-direction: column-reverse;
@@ -43,161 +43,102 @@ export function injectFooterBar() {
       }
 
       .floating-container.dragging {
-        transform: translateY(-50%) scale(1.1);
-        opacity: 0.8;
+        transform: translateY(-50%) scale(1.05);
+        opacity: 0.9;
+        cursor: grabbing;
       }
 
-      /* Main Toggle Button - Right Side Curved Style */
+      /* Main Toggle Button - Refined */
       .toggle-btn {
-        width: 60px;
-        height: 60px;
-        border-radius: 30px 0 0 30px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        width: 56px;
+        height: 56px;
+        border-radius: 28px 0 0 28px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
         border-right: none;
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(20px);
+        background: rgba(20, 20, 20, 0.6);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
         color: white;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: -2px 0 16px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        box-shadow: 
+          0 4px 12px rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
         position: relative;
         overflow: hidden;
-        padding-right: 8px;
+        padding-right: 4px;
         font-family: inherit;
       }
 
       .toggle-btn:hover {
-        transform: translateX(-4px) scale(1.05);
-        box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
-        background: rgba(255, 255, 255, 0.15);
-        border-color: rgba(255, 255, 255, 0.3);
-      }
-
-      .toggle-btn:active {
-        transform: translateX(-2px) scale(1.02);
-        box-shadow: -2px 0 12px rgba(0, 0, 0, 0.1);
+        transform: translateX(-4px);
+        background: rgba(30, 30, 30, 0.7);
+        border-color: rgba(255, 255, 255, 0.25);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
       }
 
       /* Icon */
       .btn-icon {
-        width: 24px;
-        height: 24px;
-        transition: transform 0.3s ease;
+        width: 28px;
+        height: 28px;
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
       }
 
       .toggle-btn:hover .btn-icon {
-        transform: scale(1.1);
-      }
-
-      .toggle-btn:hover img.btn-icon {
-        filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4)) brightness(1.1);
-      }
-
-      .toggle-btn:hover svg.btn-icon {
-        filter: brightness(1.2);
+        transform: scale(1.1) rotate(-5deg);
       }
 
       /* Hover tooltip */
       .tooltip {
         position: absolute;
-        right: 80px;
+        right: 70px;
         top: 50%;
-        transform: translateY(-50%);
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 14px;
+        transform: translateY(-50%) translateX(10px);
+        background: rgba(0, 0, 0, 0.85);
+        color: rgba(255, 255, 255, 0.95);
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 13px;
         font-weight: 500;
         white-space: nowrap;
         opacity: 0;
         visibility: hidden;
-        transition: all 0.3s ease;
-        backdrop-filter: blur(10px);
+        transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        backdrop-filter: blur(12px);
         pointer-events: none;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        border: 1px solid rgba(255,255,255,0.1);
-      }
-
-      .tooltip::after {
-        content: '';
-        position: absolute;
-        left: 100%;
-        top: 50%;
-        transform: translateY(-50%);
-        border: 6px solid transparent;
-        border-left-color: rgba(0, 0, 0, 0.8);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.08);
       }
 
       .floating-container:hover .tooltip {
         opacity: 1;
         visibility: visible;
-        transform: translateY(-50%) translateX(-8px);
+        transform: translateY(-50%) translateX(0);
       }
 
-      /* Pulse animation on first load */
-      @keyframes pulse {
-        0% {
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-          border-color: rgba(255, 255, 255, 0.2);
-        }
-        50% {
-          box-shadow: 0 8px 24px rgba(255, 255, 255, 0.2);
-          border-color: rgba(255, 255, 255, 0.4);
-        }
-        100% {
-          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-          border-color: rgba(255, 255, 255, 0.2);
-        }
-      }
-
-      .toggle-btn.pulse {
-        animation: pulse 2s ease-in-out 3;
-      }
-
-      /* Loading state */
-      .toggle-btn.loading {
-        pointer-events: none;
-        opacity: 0.8;
-      }
-
-      .toggle-btn.loading .btn-icon {
-        animation: loading-spin 1s linear infinite;
-      }
-
-
-
-      /* Action Buttons (Hidden by default) */
-      /* Action Buttons (Hidden by default) */
+      /* Action Buttons */
       .action-btn {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
-        min-height: 44px;
-        flex-shrink: 0;
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
-        background: #ffffff;
-        border: 1px solid #e5e7eb;
-        color: #4b5563;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(0,0,0,0.1);
+        color: #333;
         display: flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        font-size: 20px;
-        box-shadow: 
-          0 4px 6px -1px rgba(0, 0, 0, 0.1), 
-          0 2px 4px -1px rgba(0, 0, 0, 0.06),
-          0 0 0 1px rgba(0,0,0,0.05); /* Outline shadow for white backgrounds */
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        font-size: 18px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         opacity: 0;
-        transform: translateY(20px) scale(0.8);
+        transform: translateY(10px) scale(0.8);
         pointer-events: none;
-        position: relative;
-        margin-right: 16px; /* Align visually with center of toggle btn */
-        font-family: inherit;
+        margin-right: 12px;
       }
 
       .floating-container.expanded .action-btn {
@@ -205,73 +146,45 @@ export function injectFooterBar() {
         transform: translateY(0) scale(1);
         pointer-events: auto;
       }
+      
+      .floating-container.expanded .action-btn:nth-child(1) { transition-delay: 0.05s; }
+      .floating-container.expanded .action-btn:nth-child(2) { transition-delay: 0.1s; }
+      .floating-container.expanded .action-btn:nth-child(3) { transition-delay: 0.15s; }
 
       .action-btn:hover {
         transform: scale(1.15) !important;
-        background: white;
+        background: #fff;
         box-shadow: 0 6px 16px rgba(0,0,0,0.2);
       }
       
-      /* SVG Styling - Force visibility and handle colors */
-      .action-btn svg {
-        width: 22px;
-        height: 22px;
-        flex-shrink: 0;
-        stroke: #4b5563;
-        transition: stroke 0.2s;
-      }
-      
-      .action-btn:hover svg { stroke: #2563eb; }
-      .add-note-btn:hover svg { stroke: #10b981; }
-      .highlight-btn:hover svg { stroke: #f59e0b; }
-
-      /* Tooltip for Actions */
       .action-tooltip {
-        position: absolute;
         right: 50px;
-        top: 50%;
-        transform: translateY(-50%) translateX(10px);
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 4px 8px;
+        background: rgba(0,0,0,0.8);
         border-radius: 4px;
         font-size: 12px;
-        font-weight: 500;
-        white-space: nowrap;
+        padding: 4px 8px;
         opacity: 0;
-        visibility: hidden;
-        transition: all 0.2s ease;
+        position: absolute;
         pointer-events: none;
-        backdrop-filter: blur(4px);
+        color: white;
+        transition: opacity 0.2s;
+        white-space: nowrap;
+        top: 50%;
+        transform: translateY(-50%);
       }
+      .action-btn:hover .action-tooltip { opacity: 1; }
 
-      .action-btn:hover .action-tooltip {
-        opacity: 1;
-        visibility: visible;
-        transform: translateY(-50%) translateX(0);
-      }
-      
-      .sticky-editor {
-        animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      }
-      
-      @keyframes popIn {
-        from { transform: scale(0.8) rotate(-5deg); opacity: 0; }
-        to { transform: scale(1) rotate(0deg); opacity: 1; }
-      }
-
-      /* Spotlight Modal Styles */
+      /* Spotlight Modal Styles - Premium Mac Aesthetic */
       .spotlight-overlay {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.6);
-        backdrop-filter: blur(20px);
+        background: rgba(0, 0, 0, 0.2); /* Softer overlay */
         display: none;
         z-index: 2147483647;
         align-items: flex-start;
         justify-content: center;
-        padding-top: 8vh;
-        animation: fadeIn 0.15s ease-out;
+        padding-top: 15vh;
+        animation: fadeIn 0.2s ease-out;
       }
 
       .spotlight-overlay.visible {
@@ -285,44 +198,53 @@ export function injectFooterBar() {
 
       .spotlight-container {
         width: 100%;
-        max-width: 600px;
-        margin: 0 16px;
-        background: linear-gradient(180deg, rgba(30, 30, 33, 0.98) 0%, rgba(20, 20, 23, 0.98) 100%);
+        max-width: 680px; /* Wider */
+        margin: 0 20px;
+        
+        /* Premium Glass Material */
+        background: rgba(22, 22, 24, 0.75);
         backdrop-filter: blur(40px) saturate(180%);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 16px;
+        -webkit-backdrop-filter: blur(40px) saturate(180%);
+        
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px; /* Smoother corners */
+        
+        /* Deep, layered shadows */
         box-shadow:
-          0 0 0 1px rgba(0, 0, 0, 0.4),
-          0 25px 50px -12px rgba(0, 0, 0, 0.6),
-          0 0 80px -20px rgba(96, 165, 250, 0.15);
-        overflow: hidden;
-        animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          0 0 0 1px rgba(0, 0, 0, 0.5), /* Inner dark stroke */
+          0 20px 50px -12px rgba(0, 0, 0, 0.6),
+          0 0 1px inset rgba(255, 255, 255, 0.1); /* Inner light stroke */
+          
+        overflow: hidden; /* Key for rounded corners */
+        animation: spotlightEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         display: flex;
         flex-direction: column;
-        color: white;
-        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        color: rgba(255, 255, 255, 0.9);
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', sans-serif;
       }
 
-      @keyframes slideDown {
-        from { transform: translateY(-16px) scale(0.98); opacity: 0; }
-        to { transform: translateY(0) scale(1); opacity: 1; }
+      @keyframes spotlightEnter {
+        from { transform: scale(0.96) translateY(10px); opacity: 0; }
+        to { transform: scale(1) translateY(0); opacity: 1; }
       }
 
+      /* Search Box Area */
       .spotlight-search-box {
-        padding: 18px 24px;
+        padding: 18px 22px;
         display: flex;
         align-items: center;
         gap: 14px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(255, 255, 255, 0.02);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       }
 
       .spotlight-prompt {
-        font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
         font-weight: 500;
-        font-size: 20px;
-        color: #60a5fa;
+        font-size: 22px;
+        background: linear-gradient(135deg, #60a5fa, #a78bfa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         user-select: none;
+        padding-left: 2px;
       }
 
       .spotlight-input {
@@ -330,36 +252,35 @@ export function injectFooterBar() {
         background: transparent;
         border: none;
         outline: none;
-        color: #fafafa;
-        font-size: 18px;
+        color: #ffffff;
+        font-size: 22px; /* Larger, clearer text */
         font-family: inherit;
-        font-weight: 400;
-        padding: 0;
+        font-weight: 300;
         letter-spacing: -0.01em;
+        caret-color: #60a5fa;
       }
 
       .spotlight-input::placeholder {
-        color: rgba(255, 255, 255, 0.28);
-        font-weight: 400;
+        color: rgba(255, 255, 255, 0.3);
+        font-weight: 300;
       }
 
-      /* Pinned Section - Enhanced */
+      /* Pinned Section */
       .spotlight-pins {
-        padding: 16px 20px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(255, 255, 255, 0.015);
+        padding: 14px 20px 8px;
+        background: rgba(0, 0, 0, 0.15); /* Subtle dark band */
       }
 
       .spotlight-pins-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         padding: 0 4px;
       }
 
       .spotlight-pins-title {
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -369,316 +290,249 @@ export function injectFooterBar() {
       .spotlight-pins-grid {
         display: flex;
         flex-wrap: wrap;
-        gap: 10px;
+        gap: 8px;
       }
 
       .pin-item {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 8px 12px;
-        background: rgba(255, 255, 255, 0.04);
+        padding: 6px 10px;
+        background: rgba(255, 255, 255, 0.06);
         border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 8px;
+        border-radius: 6px;
         cursor: pointer;
-        transition: all 0.15s ease;
-        max-width: 180px;
-        position: relative;
-        overflow: hidden;
+        transition: all 0.2s ease;
+        max-width: 160px;
       }
 
       .pin-item:hover {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.2);
         transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      }
-
-      .pin-item:active {
-        transform: translateY(0);
-        box-shadow: none;
-      }
-
-      .pin-icon {
-        width: 18px;
-        height: 18px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        flex-shrink: 0;
-      }
-
-      .pin-icon img {
-        width: 16px;
-        height: 16px;
-        object-fit: contain;
-        border-radius: 3px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       }
 
       .pin-label {
         font-size: 12px;
         font-weight: 500;
-        color: #e4e4e7;
+        color: rgba(255, 255, 255, 0.9);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
-
-      .pin-item .pin-remove {
-        opacity: 0;
-        width: 20px;
-        height: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-left: 4px;
-        color: #71717a;
-        cursor: pointer;
-        transition: all 0.15s;
-        border-radius: 4px;
-      }
-
-      .pin-item:hover .pin-remove {
-        opacity: 1;
-      }
-
-      .pin-remove:hover {
-        background: rgba(239, 68, 68, 0.1);
-        color: #ef4444;
-      }
+      
+      .pin-icon { opacity: 0.9; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+      .pin-icon img { width: 100%; height: 100%; border-radius: 3px; }
 
       .pin-add {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 8px 12px;
+        padding: 6px 10px;
         background: transparent;
-        border: 1px dashed rgba(255, 255, 255, 0.15);
-        border-radius: 8px;
+        border: 1px dashed rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 11px;
         cursor: pointer;
-        transition: all 0.15s ease;
-        color: rgba(255, 255, 255, 0.4);
-        font-size: 12px;
-        font-weight: 500;
+        display: flex; 
+        align-items: center; 
+        gap: 6px;
+        transition: all 0.2s;
       }
-
       .pin-add:hover {
-        background: rgba(255, 255, 255, 0.04);
-        border-color: rgba(255, 255, 255, 0.25);
-        color: rgba(255, 255, 255, 0.7);
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.4);
+        color: rgba(255, 255, 255, 0.8);
       }
 
+      /* Results List */
       .spotlight-results {
-        max-height: 340px;
+        max-height: 420px;
         overflow-y: auto;
-        padding: 8px;
+        padding: 12px;
         display: flex;
         flex-direction: column;
-        gap: 1px;
-      }
-
-      /* Custom Scrollbar for results */
-      .spotlight-results::-webkit-scrollbar {
-        width: 6px;
-      }
-      .spotlight-results::-webkit-scrollbar-track {
-        background: transparent;
-        margin: 4px 0;
-      }
-      .spotlight-results::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-      }
-      .spotlight-results::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.18);
+        gap: 2px;
       }
 
       .result-item {
-        padding: 10px 12px;
+        padding: 10px 14px;
         display: flex;
         align-items: center;
-        gap: 12px;
-        border-radius: 8px;
+        gap: 14px;
+        border-radius: 8px; /* Mac style rounded highlights */
         cursor: pointer;
-        transition: all 0.12s ease;
-        border: 1px solid transparent;
+        transition: background 0.1s ease;
+        border: 1px solid transparent; /* Prevent layout shift */
         position: relative;
       }
 
+      /* Selection State - The Blue Highlight */
+      .result-item.selected {
+        background: rgba(255, 255, 255, 0.1); /* Or the Mac Blue: #007AFF with text tweak */
+        /* For "Dark Mode Glass", a light overlay is often preferred over solid blue */
+      }
+      
       .result-item:hover {
         background: rgba(255, 255, 255, 0.04);
       }
-
-      .result-item.selected {
-        background: rgba(96, 165, 250, 0.1);
-        border-color: rgba(96, 165, 250, 0.15);
-      }
-
-      .result-item.selected .result-hint {
-        opacity: 1;
-        transform: translateX(0);
-      }
-
-      .result-item .pin-btn {
-        opacity: 0;
-        padding: 4px;
-        color: #71717a;
-        cursor: pointer;
-        transition: all 0.12s;
-        font-size: 12px;
-      }
-
-      .result-item:hover .pin-btn {
-        opacity: 1;
-      }
-
-      .pin-btn:hover {
-        color: #fbbf24;
+      .result-item.selected:hover {
+        background: rgba(255, 255, 255, 0.12); /* Slightly lighter */
       }
 
       .result-icon {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        font-size: 16px;
+        font-size: 18px;
         flex-shrink: 0;
-        transition: all 0.12s ease;
-        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
       }
-
-      .result-icon img {
-        width: 18px;
-        height: 18px;
-        object-fit: contain;
-        border-radius: 4px;
-      }
-
-      .result-item.selected .result-icon {
-        background: rgba(96, 165, 250, 0.15);
-      }
-
-      .result-content {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 1px;
-      }
+      
+      .result-icon img { width: 20px; height: 20px; border-radius: 4px; object-fit: contain; }
 
       .result-title {
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 500;
-        color: #fafafa;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        color: rgba(255, 255, 255, 0.95);
         display: block;
-        line-height: 1.4;
-        letter-spacing: -0.01em;
+        margin-bottom: 2px;
+        letter-spacing: -0.005em;
       }
 
       .result-desc {
-        font-size: 11px;
-        color: #71717a;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
         display: block;
-        line-height: 1.3;
+        white-space: nowrap; 
+        overflow: hidden; 
+        text-overflow: ellipsis; 
+        max-width: 400px;
       }
 
       .result-badge {
-        font-size: 9px;
-        padding: 3px 7px;
-        border-radius: 4px;
-        background: rgba(255, 255, 255, 0.06);
-        color: rgba(255, 255, 255, 0.45);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        flex-shrink: 0;
-      }
-
-      /* Badge colors by type */
-      .result-badge[data-type="tab"] {
-        background: rgba(59, 130, 246, 0.12);
-        color: #60a5fa;
-      }
-      .result-badge[data-type="workspace-url"] {
-        background: rgba(16, 185, 129, 0.12);
-        color: #34d399;
-      }
-      .result-badge[data-type="history"] {
-        background: rgba(249, 115, 22, 0.12);
-        color: #fb923c;
-      }
-      .result-badge[data-type="bookmark"] {
-        background: rgba(234, 179, 8, 0.12);
-        color: #fbbf24;
-      }
-
-      .result-hint {
-        font-size: 9px;
-        color: #60a5fa;
-        font-weight: 600;
-        opacity: 0;
-        transform: translateX(6px);
-        transition: all 0.12s ease;
-        display: flex;
-        align-items: center;
-        gap: 3px;
-        padding: 3px 6px;
-        border-radius: 4px;
-        background: rgba(96, 165, 250, 0.1);
-      }
-
-      .spotlight-footer {
-        padding: 10px 16px;
-        background: rgba(0, 0, 0, 0.25);
-        display: flex;
-        align-items: center;
-        gap: 16px;
         font-size: 10px;
-        color: #52525b;
-        border-top: 1px solid rgba(255, 255, 255, 0.04);
+        padding: 3px 8px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08); /* Neutral pill */
+        color: rgba(255, 255, 255, 0.6);
+        font-weight: 500;
+        margin-left: auto; /* Push to right */
+        transition: all 0.2s;
       }
-
-      .shortcut-hint {
+      
+      /* Hints on selection */
+      .result-hint {
+        opacity: 0;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.5);
         display: flex;
         align-items: center;
-        gap: 5px;
+        gap: 6px;
+        padding-left: 12px;
+        transition: opacity 0.2s;
       }
-
-      .shortcut-key {
-        padding: 2px 5px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 3px;
-        color: #71717a;
-        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      .result-item.selected .result-hint { opacity: 1; }
+      .result-item.selected .result-badge { opacity: 0; display: none; } /* Hide badge to show hint? Or keep both? Keeping badge is better context */
+      
+      /* Re-eval: Keep badge, show hint NEXT to it if space? */
+      /* Let's hide badge on selection to show "Open ↵" clean look */
+      
+      /* Footer - clean status bar */
+      .spotlight-footer {
+        padding: 8px 20px;
+        background: rgba(0, 0, 0, 0.2);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        gap: 20px;
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 11px;
         font-weight: 500;
-        font-size: 9px;
+        height: 36px;
+        align-items: center;
       }
-
-      /* Empty state */
-      .spotlight-empty {
-        padding: 32px 20px;
+      
+      .shortcut-hint { display: flex; align-items: center; gap: 6px; }
+      .shortcut-key {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.8);
+        min-width: 20px;
         text-align: center;
-        color: #52525b;
+      }
+      
+      /* Scrollbar */
+      .spotlight-results::-webkit-scrollbar { width: 10px; }
+      .spotlight-results::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 5px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      .spotlight-results::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(255, 255, 255, 0.2);
+      }
+      
+      /* AI Actions Section */
+      .spotlight-ai-actions {
+        padding: 4px 22px 16px; /* Optimized spacing */
+        display: flex;
+        gap: 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08); /* Separator from results */
+      }
+      
+      .spotlight-ai-btn {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        color: rgba(255, 255, 255, 0.85);
         font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        font-family: inherit;
+        backdrop-filter: blur(10px);
+        flex: 1; /* Make it stretch nicely */
+        justify-content: center; /* Center content */
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .spotlight-ai-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      
+      .spotlight-ai-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      }
+      
+      .spotlight-ai-btn .btn-shine {
+        position: absolute;
+        top: 0; left: -100%;
+        width: 50%; height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+        transform: skewX(-20deg);
+        transition: 0.5s;
+      }
+      .spotlight-ai-btn:hover .btn-shine {
+        left: 200%;
+        transition: 1s ease-in-out;
       }
 
-      .spotlight-empty-icon {
-        font-size: 28px;
-        margin-bottom: 10px;
-        opacity: 0.4;
-      }
-    `;
+        `;
 
     // Inject Global Styles for Highlights (Must be in Light DOM)
     // Always remove and re-add to ensure they are fresh and working
@@ -1206,26 +1060,17 @@ export function injectFooterBar() {
         <input type="text" class="spotlight-input" placeholder="Search tabs, history, workspaces..." spellcheck="false">
       </div>
       <div class="spotlight-pins"></div>
-      <div class="spotlight-ai-actions" style="padding: 0 20px 12px; display: flex; gap: 8px;">
-        <button id="spotlight-summarise-btn" style="
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 12px;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 8px;
-          color: #e4e4e7;
-          font-size: 12px;
-          font-weight: 500;
-          cursor: pointer;
-          transition: all 0.2s;
-          font-family: inherit;
-        " onmouseover="this.style.background='rgba(255, 255, 255, 0.12)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.08)'">
-          <span style="font-size: 16px;">✨</span> Summarise Page
+      
+      <div class="spotlight-ai-actions">
+        <button id="spotlight-summarise-btn" class="spotlight-ai-btn">
+          <div class="btn-shine"></div>
+          <span style="font-size: 16px;">✨</span> 
+          <span>Summarise Page</span>
         </button>
       </div>
+      
       <div class="spotlight-results"></div>
+      
       <div class="spotlight-footer">
         <div class="shortcut-hint"><span class="shortcut-key">↵</span> Open</div>
         <div class="shortcut-hint"><span class="shortcut-key">↑↓</span> Navigate</div>
@@ -1451,7 +1296,7 @@ export function injectFooterBar() {
     const renderResults = (results = []) => {
       console.log('[Spotlight:Content] Rendering results:', results.length);
       currentResults = results;
-      selectedIndex = results.length > 0 ? 0 : -1;
+      selectedIndex = -1; // Don't auto-select first item - let user choose with arrow keys
 
       if (results.length === 0) {
         spotlightResults.innerHTML = '';
@@ -1577,13 +1422,23 @@ export function injectFooterBar() {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         if (currentResults.length > 0) {
-          selectedIndex = (selectedIndex + 1) % currentResults.length;
+          // If nothing selected, select first item. Otherwise, move down.
+          if (selectedIndex === -1) {
+            selectedIndex = 0;
+          } else {
+            selectedIndex = (selectedIndex + 1) % currentResults.length;
+          }
           updateSelection();
         }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         if (currentResults.length > 0) {
-          selectedIndex = (selectedIndex - 1 + currentResults.length) % currentResults.length;
+          // If nothing selected, select last item. Otherwise, move up.
+          if (selectedIndex === -1) {
+            selectedIndex = currentResults.length - 1;
+          } else {
+            selectedIndex = (selectedIndex - 1 + currentResults.length) % currentResults.length;
+          }
           updateSelection();
         }
       } else if (e.key === 'Enter') {
@@ -1591,6 +1446,23 @@ export function injectFooterBar() {
         if (selectedIndex >= 0 && currentResults[selectedIndex]) {
           console.log('[Spotlight:Content] Executing:', currentResults[selectedIndex].title);
           executeResult(currentResults[selectedIndex]);
+        } else if (spotlightInput.value.trim()) {
+          // No results or no selection - fall back to default search engine
+          const query = spotlightInput.value.trim();
+          console.log('[Spotlight:Content] No results, opening default search for:', query);
+
+          // Try Chrome's default search engine first
+          if (chrome?.search?.query) {
+            chrome.search.query({
+              text: query,
+              disposition: 'NEW_TAB'
+            });
+          } else {
+            // Fallback to Google
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, '_blank');
+          }
+
+          toggleSpotlight();
         }
       } else if (e.key === 'Escape') {
         toggleSpotlight();
@@ -1845,19 +1717,25 @@ export function injectFooterBar() {
         // Step 2: Create a robust regex
         const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-        // Normalize search string: condense multiple spaces to single space for the pattern base
-        const normalizedSearch = searchStr.replace(/\s+/g, ' ').trim();
+        // Robust Tokenization: Split by ANY whitespace (newlines, tabs, spaces, nbsp)
+        const tokens = searchStr.trim().split(/[\s\u00A0]+/);
 
-        let pattern = escapeRegExp(normalizedSearch);
+        // Rebuild pattern: 
+        // 1. Escape each token
+        // 2. Join with flexible whitespace pattern matching:
+        //    - Standard spaces (\s)
+        //    - Newlines (\n, \r)
+        //    - Non-breaking spaces (\u00A0)
+        //    - Zero or more times (*)
+        const flexibleWhitespace = '[\\s\\n\\r\\u00A0]*';
+        const pattern = tokens.map(escapeRegExp).join(flexibleWhitespace);
 
-        // Match zero or more whitespace/newlines between words
-        pattern = pattern.replace(/ /g, '[\\s\\n]*');
+        // Handle smart quotes in the final pattern
+        const finalPattern = pattern
+          .replace(/'/g, "['’]")
+          .replace(/"/g, '["“”]');
 
-        // Handle smart quotes
-        pattern = pattern.replace(/'/g, "['’]");
-        pattern = pattern.replace(/"/g, '["“”]');
-
-        const regex = new RegExp(pattern, 'gmi');
+        const regex = new RegExp(finalPattern, 'gmi');
 
         // Step 3: Find matches
         let match;
@@ -1890,101 +1768,17 @@ export function injectFooterBar() {
                 range.setStart(m.node, nodeStart);
                 range.setEnd(m.node, nodeEnd);
 
-                const mark = document.createElement('mark');
+                const mark = document.createElement('span');
                 mark.className = 'cooldesk-text-highlight';
                 mark.dataset.id = note.id;
                 mark.title = 'CoolDesk Highlight';
 
-                // Styles: Minimal "Highlighter" Look
-                // Strictly no layout impact: no padding, no border, no margin
-                // Styles: Minimal "Highlighter" Look
-                // Strictly no layout impact: no padding, no border, no margin
-                mark.style.backgroundColor = 'rgba(250, 204, 21, 0.3)'; // Default Yellow for dark text
-                mark.style.color = 'inherit';
-
-                // Dynamic Contrast: Switch highlight color if original text is light (e.g. white on dark mode)
-                // Robust detection: traverse UP the DOM to find the effective color
-                try {
-                  // Helper function to find effective text color
-                  const getEffectiveTextColor = (node) => {
-                    let element = node.parentElement;
-                    while (element) {
-                      const style = window.getComputedStyle(element);
-                      const color = style.color;
-                      // Skip transparent/default colors
-                      if (color && color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') {
-                        return color;
-                      }
-                      element = element.parentElement;
-                      if (!element || element === document.body) break;
-                    }
-                    // Fallback: check body
-                    const bodyStyle = window.getComputedStyle(document.body);
-                    return bodyStyle.color || 'rgb(0, 0, 0)';
-                  };
-
-                  const effectiveColor = getEffectiveTextColor(m.node);
-                  const rgb = effectiveColor.match(/\d+/g);
-
-                  console.log('[CoolDesk] Detected color:', effectiveColor, 'RGB:', rgb);
-
-                  if (rgb && rgb.length >= 3) {
-                    const r = parseInt(rgb[0]);
-                    const g = parseInt(rgb[1]);
-                    const b = parseInt(rgb[2]);
-                    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-
-                    console.log('[CoolDesk] Brightness:', brightness, '(threshold: 128)');
-
-                    if (brightness > 128) { // Light text detected
-                      // Use VIOLET background for light text (high contrast!)
-                      // Use setProperty with !important to force this color
-                      mark.style.setProperty('background-color', 'rgba(139, 92, 246, 0.6)', 'important');
-                      mark.dataset.mode = 'light-text'; // Set mode for hover handlers
-                      console.log('[CoolDesk] ✓ Applied VIOLET background for light text');
-                    } else {
-                      console.log('[CoolDesk] ✓ Keeping YELLOW background for dark text');
-                    }
-                  }
-                } catch (e) {
-                  console.warn('[CoolDesk] Color detection failed:', e);
-                }
-
+                // Simple underline style
+                mark.style.textDecoration = 'underline';
+                mark.style.textDecorationColor = '#8b5cf6'; // Violet underline
+                mark.style.textDecorationThickness = '2px';
+                mark.style.textUnderlineOffset = '2px';
                 mark.style.cursor = 'pointer';
-                // Remove border/padding to strictly preserve original line-height and layout
-                mark.style.padding = '0';
-                // Small negative horizontal margin to eliminate side gaps
-                mark.style.marginLeft = '-0.5px';
-                mark.style.marginRight = '-0.5px';
-                mark.style.marginTop = '0';  // No vertical margin - let box-decoration-break handle it
-                mark.style.marginBottom = '0';
-                mark.style.border = 'none';
-                mark.style.borderRadius = '0';
-
-                // Make each line fragment independent (like native text selection)
-                mark.style.display = 'inline';
-                mark.style.boxDecorationBreak = 'clone';  // Each line is independent
-                mark.style.webkitBoxDecorationBreak = 'clone';  // Safari support
-                mark.style.lineHeight = 'inherit';
-                mark.style.verticalAlign = 'baseline';
-                mark.style.letterSpacing = 'inherit';
-                mark.style.wordSpacing = 'inherit';
-
-                mark.style.transition = 'background-color 0.2s ease';
-                mark.onmouseenter = () => {
-                  if (mark.dataset.mode === 'light-text') {
-                    mark.style.backgroundColor = 'rgba(139, 92, 246, 0.8)'; // Darker violet on hover
-                  } else {
-                    mark.style.backgroundColor = 'rgba(250, 204, 21, 0.5)'; // Darker yellow on hover
-                  }
-                };
-                mark.onmouseleave = () => {
-                  if (mark.dataset.mode === 'light-text') {
-                    mark.style.backgroundColor = 'rgba(139, 92, 246, 0.6)';
-                  } else {
-                    mark.style.backgroundColor = 'rgba(250, 204, 21, 0.3)';
-                  }
-                };
 
                 mark.onclick = async (e) => {
                   e.stopPropagation();
@@ -1995,7 +1789,7 @@ export function injectFooterBar() {
                         chrome.runtime.sendMessage({ action: 'deleteUrlNote', noteId: note.id }, resolve);
                       });
 
-                      document.querySelectorAll(`mark.cooldesk-text-highlight[data-id="${note.id}"]`).forEach(el => {
+                      document.querySelectorAll(`span.cooldesk-text-highlight[data-id="${note.id}"]`).forEach(el => {
                         const parent = el.parentNode;
                         while (el.firstChild) parent.insertBefore(el.firstChild, el);
                         parent.removeChild(el);
@@ -2019,7 +1813,7 @@ export function injectFooterBar() {
         }
 
         if (foundAny) {
-          console.log('[CoolDesk] Highlight applied for:', normalizedSearch.substring(0, 20) + '...');
+          console.log('[CoolDesk] Highlight applied for:', searchStr.substring(0, 20) + '...');
         }
 
       } catch (e) {

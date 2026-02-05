@@ -75,15 +75,18 @@
 }
 
 .ProseMirror h2 {
-    font-size: 1.6em;
+    font-size: 1.5em;
     font-weight: 600;
     margin-top: 1.5rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.8rem;
     color: var(--text);
+    /* Add subtle underline */
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border-secondary);
 }
 
 .ProseMirror h3 {
-    font-size: 1.3em;
+    font-size: 1.25em;
     font-weight: 600;
     margin-top: 1.2rem;
     margin-bottom: 0.5rem;
@@ -94,17 +97,25 @@
 .ProseMirror ul:not([data-type="taskList"]),
 .ProseMirror ol {
     padding: 0 1.5rem;
-    margin: 0.5rem 0 0.5rem 0.5rem;
+    margin: 0.5rem 0 0.8rem 0;
 }
 
 .ProseMirror ul:not([data-type="taskList"]) li {
     list-style-type: disc;
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.4rem;
+    padding-left: 0.2rem;
+    /* Proper bullet spacing */
+}
+
+/* Custom bullet color */
+.ProseMirror ul:not([data-type="taskList"]) li::marker {
+    color: var(--accent-blue);
 }
 
 .ProseMirror ol li {
     list-style-type: decimal;
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.4rem;
+    padding-left: 0.2rem;
 }
 
 /* Task Lists (Checkboxes) - Aggressive Reset for Tailwind/Prose */

@@ -451,11 +451,85 @@ export function NotesCanvas({ workspaceId }) {
     return sortedFolders;
   }, [notes]);
 
+  // Group highlights by URL
+  const groupedHighlights = useMemo(() => {
+    const groups = {};
+    highlights.forEach(h => {
+      // Use URL as key
+      const url = h.url || 'Unknown URL';
+      if (!groups[url]) {
+        groups[url] = {
+          id: `group-${url}`, // Virtual ID
+          url,
+          title: h.title && h.title !== 'Untitled Note' ? h.title : new URL(url).hostname, // Better title fallback
+          count: 0,
+          notes: [],
+          updatedAt: h.updatedAt || h.createdAt || 0
+        };
+      } else if (groups[url].title === new URL(url).hostname && h.title && h.title !== 'Untitled Note') {
+        // Upgrade title if we find a better one in a later highlight
+        groups[url].title = h.title;
+      }
+
+      groups[url].count++;
+      groups[url].notes.push(h);
+
+      // Update timestamp to latest highlight
+      const hTime = new Date(h.updatedAt || h.createdAt || 0).getTime();
+      const gTime = new Date(groups[url].updatedAt).getTime();
+      if (hTime > gTime) {
+        groups[url].updatedAt = h.updatedAt || h.createdAt;
+      }
+    });
+
+    return Object.values(groups).sort((a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
+  }, [highlights]);
+
+  // Handle selection of a highlight group
+  const handleGroupSelect = useCallback((group) => {
+    // 1. Create a "Virtual" Note that concatenates all highlights
+    // 2. We use HTML to format them nicely
+    const combinedHtml = `
+      <h2>Highlights from ${group.title}</h2>
+      <p>Source: <a href="${group.url}" target="_blank">${group.url}</a></p>
+      <ul>
+        ${group.notes.map(n => `<li>${n.text || 'Empty Highlight'}</li>`).join('')}
+      </ul>
+    `;
+
+    const virtualNote = {
+      id: group.id,
+      title: `${group.title} (${group.count})`,
+      text: combinedHtml,
+      url: group.url,
+      folder: 'Highlights',
+      isReadOnly: true, // Optional: prevent saving this as a new note for now
+      updatedAt: group.updatedAt
+    };
+
+    setActiveNote(virtualNote);
+    setNoteContent(combinedHtml);
+    setNoteTitle(virtualNote.title);
+    setNoteFolder('Highlights');
+    setNoteUrl(group.url);
+    setAutoSaveStatus('idle'); // Don't auto-save this virtual note
+    setIsEditing(true);
+
+    if (window.innerWidth < 800) {
+      setShowSidebar(false);
+    }
+  }, []);
+
   // Filtered notes - show specific lists based on active folder
   const filteredNotes = useMemo(() => {
     if (activeFolder === 'URL Notes') {
       return urlNotes.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     } else if (activeFolder === 'Highlights') {
+      // For Highlights folder, we use groupedHighlights for the list, 
+      // but filteredNotes might still be used elsewhere. 
+      // Actually, we replaced the usage in the render method, so this might be fine.
       return highlights.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     } else {
       return notes
@@ -616,7 +690,21 @@ export function NotesCanvas({ workspaceId }) {
     const temp = document.createElement('div');
     temp.innerHTML = html;
     const text = temp.textContent || temp.innerText || '';
-    return text.trim().split('\n')[0].substring(0, 50) || 'Untitled Note';
+    const extracted = text.trim().split('\n')[0].substring(0, 50);
+
+    if (extracted && extracted.length > 0) return extracted;
+
+    // Fallbacks if no content text
+    if (activeNote?.title && activeNote.title !== 'Untitled Note') return activeNote.title;
+    if (activeNote?.url) {
+      try {
+        return new URL(activeNote.url).hostname;
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return 'Untitled Note';
   };
 
   // Handle content change
@@ -804,10 +892,76 @@ export function NotesCanvas({ workspaceId }) {
     }
   }, [activeFolder, activeNote, loadNotes, loadUrlNotes]);
 
+  // Helper to auto-format plain text summaries into Rich Text
+  const formatAutoSummary = useCallback((text) => {
+    if (!text || text.includes('<h2>') || text.includes('<strong>')) return text; // Already formatted
+
+    // Detect if this is likely an auto-generated summary or structured text
+    // We check for "AI Summary:", bullet points, OR markdown bolding which is common in AI outputs
+    const hasSummaryHeader = text.includes('AI Summary:');
+    const hasBullets = text.includes('•') || text.match(/^\s*- /m);
+    const hasMarkdownBold = text.includes('**');
+
+    // If it looks like plain text without any structure, leave it alone to avoid messing up user notes
+    if (!hasSummaryHeader && !hasBullets && !hasMarkdownBold) return text;
+
+    let html = text;
+
+    // 1. Convert "AI Summary:" title to H2
+    if (html.includes('AI Summary:')) {
+      html = html.replace(/AI Summary:/g, '<h2>AI Summary</h2>');
+    }
+
+    // 2. Process lines (Lists and Paragraphs)
+    const lines = html.split('\n');
+    let inList = false;
+    let newLines = [];
+
+    lines.forEach(line => {
+      let trimmed = line.trim();
+
+      // Handle Markdown Bold: **text** -> <strong>text</strong>
+      if (trimmed.includes('**')) {
+        trimmed = trimmed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      }
+
+      const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-');
+
+      if (isBullet) {
+        if (!inList) {
+          newLines.push('<ul>');
+          inList = true;
+        }
+        // Remove bullet char and wrap in li
+        const content = trimmed.substring(1).trim();
+        newLines.push(`<li>${content}</li>`);
+      } else {
+        if (inList) {
+          newLines.push('</ul>');
+          inList = false;
+        }
+        // Wrap non-empty text in p tags if NOT a header
+        if (trimmed && !trimmed.startsWith('<h')) {
+          newLines.push(`<p>${trimmed}</p>`);
+        } else if (trimmed) {
+          newLines.push(trimmed);
+        }
+      }
+    });
+
+    if (inList) newLines.push('</ul>');
+
+    return newLines.join('');
+  }, []);
+
   // Select note (workspace or URL note)
   const selectNote = useCallback((note) => {
     setActiveNote(note);
-    setNoteContent(note.text || '');
+
+    // Auto-format if it's a raw AI summary
+    const formattedContent = formatAutoSummary(note.text || '');
+    setNoteContent(formattedContent);
+
     setNoteTitle(note.title || '');
     setNoteFolder(note.folder || '');
     setNoteUrl(note.url || '');
@@ -818,7 +972,7 @@ export function NotesCanvas({ workspaceId }) {
     if (window.innerWidth < 800) {
       setShowSidebar(false);
     }
-  }, []);
+  }, [formatAutoSummary]);
 
   // Create new note
   const createNewNote = useCallback(() => {
@@ -963,14 +1117,26 @@ export function NotesCanvas({ workspaceId }) {
                   />
                   <FontAwesomeIcon icon={faHighlighter} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
                   <span style={{ flex: 1 }}>Highlights</span>
-                  <span className="note-count">{highlights.length}</span>
+                  <span className="note-count">{groupedHighlights.length}</span>
                 </div>
                 {expandedFolders.has('Highlights') && (
                   <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    {highlights.length === 0 ? (
+                    {groupedHighlights.length === 0 ? (
                       <div style={{ padding: '8px', fontSize: 'var(--font-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>No highlights</div>
                     ) : (
-                      highlights.map(note => renderSidebarNoteItem(note))
+                      groupedHighlights.map(group => (
+                        <SidebarNoteItem
+                          key={group.id}
+                          note={{
+                            ...group,
+                            text: `${group.count} highlights`, // Preview text
+                            type: 'group' // Special type for styling if needed
+                          }}
+                          isActive={activeNote?.id === group.id}
+                          onSelect={() => handleGroupSelect(group)}
+                          onDelete={() => { /* No-op for group delete for now */ }}
+                        />
+                      ))
                     )}
                   </div>
                 )}
@@ -1107,126 +1273,105 @@ export function NotesCanvas({ workspaceId }) {
         }}>
           {isEditing ? (
             <>
-              {/* URL Context Banner for URL Notes */}
-              {activeNote?.url && (
-                <div className="notes-url-banner" style={{
-                  padding: '12px 16px',
-                  background: 'linear-gradient(135deg, var(--accent-blue-soft), var(--surface-2))',
-                  border: '1px solid var(--accent-blue-border)',
-                  borderRadius: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  flexShrink: 0,
-                  marginBottom: '12px'
-                }}>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 'var(--font-2xl)',
-                    color: 'var(--accent-blue)'
-                  }}>
-                    <FontAwesomeIcon icon={faLink} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: 'var(--font-xs)',
-                      color: 'var(--text-secondary)',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em',
-                      fontWeight: 600,
-                      marginBottom: '4px'
-                    }}>
-                      Note for URL
-                    </div>
-                    <a
-                      href={activeNote.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        fontSize: 'var(--font-md)',
-                        color: 'var(--accent-blue)',
-                        textDecoration: 'none',
-                        fontWeight: 500,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        display: 'block'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                      onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
-                    >
-                      {activeNote.url}
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {/* Title and Folder Inputs - Same Line */}
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
-                {/* Sidebar Toggle */}
-                <button
-                  onClick={() => setShowSidebar(!showSidebar)}
-                  title={showSidebar ? "Hide Sidebar" : "Show Sidebar"}
-                  style={{
-                    padding: '8px',
-                    borderRadius: '8px',
-                    background: 'var(--surface-2)',
-                    border: '1px solid var(--border-primary)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s ease',
-                    height: '36px',
-                    width: '36px',
-                    flexShrink: 0
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--surface-3)';
-                    e.currentTarget.style.color = 'var(--text)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'var(--surface-2)';
-                    e.currentTarget.style.color = 'var(--text-secondary)';
-                  }}
-                >
-                  <FontAwesomeIcon icon={faListUl} />
-                </button>
-
-                {/* Folder Input */}
-                <div style={{ position: 'relative', width: '160px', flexShrink: 0 }}>
-                  <FontAwesomeIcon
-                    icon={faFolder}
+              {/* Header Section: Unified Controls & Context */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
+                {/* Row 1: Main Controls (Sidebar | Folder | Title | Share) */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {/* Sidebar Toggle */}
+                  <button
+                    onClick={() => setShowSidebar(!showSidebar)}
+                    title={showSidebar ? "Hide Sidebar" : "Show Sidebar"}
                     style={{
-                      position: 'absolute',
-                      left: '10px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: 'var(--text-muted)',
-                      fontSize: 'var(--font-sm)',
-                      pointerEvents: 'none'
+                      padding: '8px',
+                      borderRadius: '10px',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border-primary)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                      height: '40px',
+                      width: '40px',
+                      flexShrink: 0
                     }}
-                  />
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--surface-3)';
+                      e.currentTarget.style.color = 'var(--text)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'var(--surface-2)';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faListUl} />
+                  </button>
+
+                  {/* Folder Input */}
+                  <div style={{ position: 'relative', width: '180px', flexShrink: 0 }}>
+                    <FontAwesomeIcon
+                      icon={faFolder}
+                      style={{
+                        position: 'absolute',
+                        left: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: 'var(--text-muted)',
+                        fontSize: 'var(--font-sm)',
+                        pointerEvents: 'none'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Folder"
+                      value={noteFolder}
+                      onChange={handleFolderChange}
+                      list="existing-folders"
+                      style={{
+                        width: '100%',
+                        padding: '0 12px 0 34px',
+                        borderRadius: '10px',
+                        background: 'var(--surface-2)',
+                        border: '1px solid var(--border-primary)',
+                        color: 'var(--text)',
+                        fontSize: 'var(--font-sm)',
+                        height: '40px',
+                        fontWeight: 500,
+                        boxSizing: 'border-box',
+                        outline: 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = 'var(--accent-blue)';
+                        e.target.style.background = 'var(--surface-3)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = 'var(--border-primary)';
+                        e.target.style.background = 'var(--surface-2)';
+                      }}
+                    />
+                    <datalist id="existing-folders">
+                      {folders.filter(f => f !== 'All Notes').map(f => <option key={f} value={f} />)}
+                    </datalist>
+                  </div>
+
+                  {/* Title Input */}
                   <input
                     type="text"
-                    placeholder="Folder"
-                    value={noteFolder}
-                    onChange={handleFolderChange}
-                    list="existing-folders"
+                    placeholder="Note Title"
+                    value={noteTitle}
+                    onChange={handleTitleChange}
                     style={{
-                      width: '100%',
-                      padding: '8px 10px 8px 30px',
-                      borderRadius: '8px',
+                      flex: 1,
+                      padding: '0 16px',
+                      borderRadius: '10px',
                       background: 'var(--surface-2)',
                       border: '1px solid var(--border-primary)',
                       color: 'var(--text)',
-                      fontSize: 'var(--font-md)',
-                      height: '36px',
+                      fontSize: 'var(--font-lg)',
+                      fontWeight: 600,
+                      height: '40px',
                       boxSizing: 'border-box',
                       outline: 'none',
                       transition: 'all 0.2s ease'
@@ -1240,92 +1385,101 @@ export function NotesCanvas({ workspaceId }) {
                       e.target.style.background = 'var(--surface-2)';
                     }}
                   />
-                  <datalist id="existing-folders">
-                    {folders.filter(f => f !== 'All Notes').map(f => <option key={f} value={f} />)}
-                  </datalist>
+
+                  {/* Share Button (P2P) */}
+                  {activeTeam && (
+                    <button
+                      onClick={() => setIsShareModalOpen(true)}
+                      title={`Share currently open note`}
+                      style={{
+                        padding: '0 16px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, var(--accent-purple), var(--accent-blue))',
+                        border: 'none',
+                        color: 'white',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'all 0.2s ease',
+                        height: '40px',
+                        flexShrink: 0,
+                        fontWeight: 600,
+                        fontSize: 'var(--font-sm)',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                        justifyContent: 'center',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.opacity = '0.9';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faSync} style={{ fontSize: 'var(--font-sm)' }} />
+                      <span>Share</span>
+                    </button>
+                  )}
+
+                  {/* Share Modal */}
+                  <div onClick={e => e.stopPropagation()}>
+                    <ShareNoteModal
+                      isOpen={isShareModalOpen}
+                      onClose={() => setIsShareModalOpen(false)}
+                      note={{
+                        ...activeNote,
+                        text: noteContentRef.current || noteContent,
+                        title: noteTitle || 'Untitled Note',
+                        folder: noteFolder || 'Shared'
+                      }}
+                      activeTeamId={activeTeam?.id}
+                    />
+                  </div>
                 </div>
 
-                {/* Share Modal moved to end of header or outside to avoid layout issues, keeping modal here is fine as it's absolute/fixed usually, but button needs to move */}
-
-                <ShareNoteModal
-                  isOpen={isShareModalOpen}
-                  onClose={() => setIsShareModalOpen(false)}
-                  note={{
-                    ...activeNote,
-                    text: noteContentRef.current || noteContent, // Ensure latest content
-                    title: noteTitle || 'Untitled Note',
-                    folder: noteFolder || 'Shared'
-                  }}
-                  activeTeamId={activeTeam?.id}
-                />
-
-                {/* Title Input */}
-                <input
-                  type="text"
-                  placeholder="Note Title"
-                  value={noteTitle}
-                  onChange={handleTitleChange}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    background: 'var(--surface-2)',
-                    border: '1px solid var(--border-primary)',
-                    color: 'var(--text)',
-                    fontSize: 'var(--font-xl)',
-                    fontWeight: 600,
-                    height: '36px',
-                    boxSizing: 'border-box',
-                    outline: 'none',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = 'var(--accent-blue)';
-                    e.target.style.background = 'var(--surface-3)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = 'var(--border-primary)';
-                    e.target.style.background = 'var(--surface-2)';
-                  }}
-                />
-
-                {/* Share Button (P2P) - Moved to Right */}
-                {activeTeam && (
-                  <button
-                    onClick={() => setIsShareModalOpen(true)}
-                    title={`Share currently open note`}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      background: 'linear-gradient(135deg, var(--accent-purple), var(--accent-blue))',
-                      border: 'none',
-                      color: 'white',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      transition: 'all 0.2s ease',
-                      height: '36px',
-                      flexShrink: 0,
-                      fontWeight: 600,
-                      fontSize: 'var(--font-sm)',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                      minWidth: '80px',
-                      justifyContent: 'center',
-                      marginLeft: '8px'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.opacity = '0.9';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.opacity = '1';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faSync} style={{ fontSize: 'var(--font-sm)' }} />
-                    <span style={{ fontSize: 'var(--font-sm)' }}>Share</span>
-                  </button>
+                {/* Row 2: URL Context (if present) - Subtle Chip */}
+                {activeNote?.url && (
+                  <div style={{ paddingLeft: '4px' }}>
+                    <a
+                      href={activeNote.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        background: 'rgba(59, 130, 246, 0.08)',
+                        border: '1px solid rgba(59, 130, 246, 0.15)',
+                        color: 'var(--accent-blue)',
+                        fontSize: 'var(--font-xs)',
+                        fontWeight: 500,
+                        textDecoration: 'none',
+                        transition: 'all 0.2s ease',
+                        maxWidth: '100%',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
+                        e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(59, 130, 246, 0.08)';
+                        e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.15)';
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faLink} style={{ fontSize: '10px' }} />
+                      <span style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {activeNote.url.replace(/^https?:\/\/(www\.)?/, '')}
+                      </span>
+                    </a>
+                  </div>
                 )}
               </div>
 
