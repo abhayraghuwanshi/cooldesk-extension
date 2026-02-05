@@ -1,5 +1,6 @@
 // Import appstore.json data
 import appstoreData from './appstore.json';
+import { APPSTORE_VERSION } from './appstoreVersion.js';
 
 class URLCategory {
   constructor(name, urls = [], patterns = []) {
@@ -130,10 +131,27 @@ class CategoryManager {
     const category = this.categories.get(categoryName);
     return category ? category.urls : [];
   }
+
+  /**
+   * Check if a URL is uncategorized (not in dictionary)
+   * @param {string} url - URL to check
+   * @returns {boolean} True if URL is not in any category
+   */
+  isUncategorized(url) {
+    return this.categorizeUrl(url) === 'uncategorized';
+  }
+
+  /**
+   * Get the current dictionary version
+   * @returns {number} Version number
+   */
+  getVersion() {
+    return APPSTORE_VERSION;
+  }
 }
 
 // Export singleton instance
 const categoryManager = new CategoryManager();
 
-export { CategoryManager, URLCategory, categoryManager };
+export { CategoryManager, URLCategory, categoryManager, APPSTORE_VERSION };
 export default categoryManager;

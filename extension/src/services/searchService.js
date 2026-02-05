@@ -276,10 +276,94 @@ function getIconForType(type) {
 // Not used by default quickSearch anymore, but might be needed if direct DB access is restored.
 function openDatabase() { /* ... */ }
 
+// --- Natural Language Search (Nano AI Enhanced) ---
+
+/**
+ * Detect if a query is natural language (vs simple keyword)
+ * @param {string} query - Search query
+ * @returns {boolean}
+ */
+export function isNaturalLanguageQuery(query) {
+  if (!query || query.length < 10) return false;
+
+  // Check for question words
+  const questionWords = ['what', 'where', 'how', 'when', 'why', 'which', 'find', 'show', 'get'];
+  const queryLower = query.toLowerCase();
+  if (questionWords.some(w => queryLower.startsWith(w + ' '))) return true;
+
+  // Check for question mark
+  if (query.includes('?')) return true;
+
+  // Check for phrases (3+ words)
+  const words = query.trim().split(/\s+/);
+  if (words.length >= 3) return true;
+
+  return false;
+}
+
+/**
+ * Natural language search using Nano AI for semantic ranking
+ * Falls back to quickSearch if Nano is unavailable
+ * @param {string} query - Natural language query
+ * @param {number} maxResults - Max results to return
+ * @returns {Promise<Array>} Search results with AI ranking
+ */
+export async function naturalLanguageSearch(query, maxResults = 15) {
+  if (!query || !query.trim()) return [];
+
+  console.log('[SearchService] naturalLanguageSearch:', query);
+
+  // First, get regular search results
+  const baseResults = await quickSearch(query, 30);
+
+  // If not a natural language query or no results, return base results
+  if (!isNaturalLanguageQuery(query) || baseResults.length === 0) {
+    return baseResults.slice(0, maxResults);
+  }
+
+  // Try to use Nano AI for semantic ranking
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'NANO_AI_SEARCH',
+      query: query,
+      items: baseResults.map(r => ({
+        title: r.title || '',
+        url: r.url || '',
+        description: r.description || '',
+        type: r.type
+      })),
+      limit: maxResults
+    });
+
+    if (response?.success && response.results?.length > 0) {
+      console.log('[SearchService] Nano AI ranked results:', response.results.length);
+
+      // Map back to full result objects
+      return response.results.map((aiResult, idx) => {
+        const original = baseResults.find(r =>
+          r.title === aiResult.title && r.url === aiResult.url
+        ) || baseResults[idx];
+
+        return {
+          ...original,
+          ...aiResult,
+          _aiRanked: true
+        };
+      });
+    }
+  } catch (e) {
+    console.warn('[SearchService] Nano AI search failed, using base results:', e);
+  }
+
+  return baseResults.slice(0, maxResults);
+}
+
 export default {
   quickSearch,
   searchTabs,
   searchHistory,
   searchBookmarks,
-  searchWorkspaces
+  searchWorkspaces,
+  naturalLanguageSearch,
+  isNaturalLanguageQuery
 };

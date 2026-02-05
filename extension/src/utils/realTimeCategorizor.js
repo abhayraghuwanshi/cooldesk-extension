@@ -3,8 +3,10 @@
  * Optimized with in-memory caching, debouncing, and idle-time processing
  */
 
+import { needsReclassification } from '../data/appstoreVersion.js';
 import categoryManager from '../data/categories.js';
-import { addUrlToWorkspace, listWorkspaces, saveWorkspace } from '../db/index.js';
+import { addUrlToWorkspace, getUrlRecord, listWorkspaces, saveWorkspace, upsertUrl } from '../db/index.js';
+import { NanoAIService } from '../services/nanoAIService.js';
 import GenericUrlParser from './GenericUrlParser.js';
 
 // --- State Management ---
@@ -21,6 +23,193 @@ const MAX_SESSION_CACHE = 500;
 let debounceTimer = null;
 const DEBOUNCE_DELAY = 1500; // 1.5s wait after navigation stops
 const processingQueue = new Map(); // url -> {title, tabId, timestamp}
+
+// Nano AI classification queue (for uncategorized URLs)
+const nanoClassificationQueue = new Map();
+let nanoInitialized = false;
+
+// URLs/patterns that should NOT be classified or saved
+const SKIP_URL_PATTERNS = [
+  // Search engines and results
+  /^https?:\/\/(www\.)?google\.[a-z.]+\/search/i,
+  /^https?:\/\/(www\.)?bing\.com\/search/i,
+  /^https?:\/\/(www\.)?duckduckgo\.com\/\?/i,
+  /^https?:\/\/search\.yahoo\.com/i,
+  /^https?:\/\/(www\.)?baidu\.com\/s/i,
+  // Browser internal pages
+  /^chrome:\/\//i,
+  /^chrome-extension:\/\//i,
+  /^about:/i,
+  /^edge:\/\//i,
+  /^brave:\/\//i,
+  // Auth and login flows (temporary)
+  /\/oauth/i,
+  /\/auth\//i,
+  /\/login/i,
+  /\/signin/i,
+  /\/callback/i,
+  /accounts\.google\.com/i,
+  // Empty or data URLs
+  /^data:/i,
+  /^javascript:/i,
+  /^blob:/i,
+  // Error pages
+  /\/404/i,
+  /\/error/i,
+  // Tracking/analytics
+  /doubleclick\.net/i,
+  /google-analytics\.com/i,
+  /googletagmanager\.com/i,
+  // Local development
+  /^https?:\/\/localhost/i,
+  /^https?:\/\/127\.0\.0\.1/i,
+  /^https?:\/\/0\.0\.0\.0/i
+];
+
+/**
+ * Check if a URL should be skipped (not classified/saved)
+ * @param {string} url - URL to check
+ * @returns {boolean} True if URL should be skipped
+ */
+function shouldSkipUrl(url) {
+  if (!url) return true;
+
+  // Check against skip patterns
+  for (const pattern of SKIP_URL_PATTERNS) {
+    if (pattern.test(url)) {
+      return true;
+    }
+  }
+
+  // Skip URLs with too many query parameters (likely tracking/temp)
+  try {
+    const urlObj = new URL(url);
+    const params = urlObj.searchParams;
+    if (params.toString().length > 500) {
+      return true; // Very long query string = probably tracking
+    }
+    // Skip if URL has common tracking params
+    if (params.has('utm_source') || params.has('fbclid') || params.has('gclid')) {
+      // Don't skip entirely, but don't save these - just classify
+      // Actually, let's be lenient and just skip tracking-heavy URLs
+    }
+  } catch {
+    return true; // Invalid URL
+  }
+
+  return false;
+}
+
+/**
+ * Check if a URL should be classified with Nano AI
+ * @param {string} url - URL to check
+ * @returns {Promise<boolean>}
+ */
+async function shouldClassifyWithNano(url) {
+  try {
+    // First check if URL should be skipped entirely
+    if (shouldSkipUrl(url)) {
+      return false;
+    }
+
+    // Check if Nano is available
+    if (!nanoInitialized) {
+      const status = await NanoAIService.init();
+      nanoInitialized = true;
+      if (!status.available) {
+        return false;
+      }
+    }
+
+    if (!NanoAIService.isAvailable()) {
+      return false;
+    }
+
+    // Check if URL already has a Nano classification
+    const urlRecord = await getUrlRecord(url);
+    if (urlRecord?.extra?.ai?.source === 'nano') {
+      // Check if it needs reclassification due to dictionary update
+      return needsReclassification(urlRecord);
+    }
+
+    return true; // Not classified yet, should use Nano
+  } catch (e) {
+    console.warn('[RealTime] Error checking Nano eligibility:', e);
+    return false;
+  }
+}
+
+/**
+ * Queue a URL for Nano AI classification
+ * @param {string} url - URL to classify
+ * @param {string} title - Page title
+ */
+function queueNanoClassification(url, title) {
+  // Double-check: don't queue URLs that should be skipped
+  if (shouldSkipUrl(url)) {
+    console.debug(`[RealTime] Skipping Nano classification for filtered URL: ${url.slice(0, 50)}...`);
+    return;
+  }
+
+  nanoClassificationQueue.set(url, { title, timestamp: Date.now() });
+
+  // Process queue with debounce
+  setTimeout(async () => {
+    if (!nanoClassificationQueue.has(url)) return;
+
+    const data = nanoClassificationQueue.get(url);
+    nanoClassificationQueue.delete(url);
+
+    try {
+      // Get workspace names for context
+      const workspaces = await listWorkspaces();
+      const workspaceNames = (workspaces?.data || workspaces || [])
+        .map(ws => ws.name)
+        .filter(Boolean);
+
+      // Classify with Nano
+      const result = await NanoAIService.classifyUrl(url, {
+        workspaces: workspaceNames,
+        title: data.title
+      });
+
+      if (result && result.category && result.category !== 'other') {
+        console.log(`[RealTime] 🤖 Nano classified "${url}" as "${result.category}"`);
+
+        // Store the classification in URL record
+        await upsertUrl({
+          url,
+          extra: {
+            ai: {
+              nanoCategory: result.category,
+              isNew: result.isNew,
+              confidence: result.confidence,
+              source: 'nano',
+              version: result.version,
+              classifiedAt: Date.now()
+            }
+          }
+        });
+
+        // If category matches an existing workspace, add the URL
+        if (!result.isNew && workspaceNames.includes(result.category)) {
+          const ws = (workspaces?.data || workspaces || []).find(
+            w => w.name.toLowerCase() === result.category.toLowerCase()
+          );
+          if (ws) {
+            await addUrlToWorkspace(url, ws.id, {
+              title: data.title || url,
+              addedAt: Date.now()
+            });
+            console.log(`[RealTime] ➕ Added Nano-classified URL to workspace: ${result.category}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[RealTime] Nano classification failed:', e);
+    }
+  }, 2000); // 2s delay for Nano classification
+}
 
 /**
  * Initialize the workspace cache from DB
@@ -190,6 +379,18 @@ export function setupRealTimeCategorizor() {
         };
       }
 
+      // 4b. If uncategorized, try Nano AI classification
+      if (!parsed && category === 'uncategorized') {
+        // Check if we should use Nano AI
+        const shouldUseNano = await shouldClassifyWithNano(url);
+        if (shouldUseNano) {
+          // Queue for Nano classification (async, non-blocking)
+          queueNanoClassification(url, enhancedTitle);
+        }
+        // Still skip for now - Nano result will be used on next visit
+        return;
+      }
+
       if (!parsed) {
         // console.debug(`[RealTime] ⏭️ Skipped: No parser or category for ${url}`);
         return;
@@ -271,7 +472,7 @@ export function setupRealTimeCategorizor() {
         addedAt: Date.now()
       });
 
-      console.log(`[RealTime] ✅ Workspace actions completed for "${workspaceName}"`);
+      console.log(`[RealTime] Workspace actions completed for "${workspaceName}"`);
 
       // Broadcast change
       try {
@@ -281,7 +482,7 @@ export function setupRealTimeCategorizor() {
       } catch (e) { }
 
     } catch (error) {
-      console.error('[RealTime] ❌ Error processing URL:', error);
+      console.error('[RealTime] Error processing URL:', error);
     }
   };
 
@@ -332,7 +533,7 @@ export function setupRealTimeCategorizor() {
       } catch (e) { }
     });
 
-    console.log('[RealTime] ✅ Setup listeners complete. Waiting for tab events...');
+    console.log('[RealTime] Setup listeners complete. Waiting for tab events...');
 
   };
 

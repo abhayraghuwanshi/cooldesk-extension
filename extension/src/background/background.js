@@ -210,6 +210,7 @@ import { forceIndexRebuild, initializeSearchIndexer } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
+import { NanoAIService } from '../services/nanoAIService.js';
 
 // Initialize Search Indexer (Background Service)
 initializeSearchIndexer(); // Re-enabled for spotlight search
@@ -392,6 +393,15 @@ async function main() {
   // The scraping mechanism is more reliable and doesn't interfere with other features
   console.log('[Background] Real-time categorization disabled (using scraping mechanism)');
 
+  // Initialize Nano AI Service (lazy - just checks availability)
+  try {
+    NanoAIService.init().then(status => {
+      console.log('[Background] Nano AI status:', status);
+    });
+  } catch (e) {
+    console.warn('[Background] Nano AI init skipped:', e.message);
+  }
+
   // Bridge DB change broadcasts to UI: when RTC updates workspaces, refresh dashboard
   try {
     const bc = new BroadcastChannel('ws_db_changes');
@@ -570,6 +580,71 @@ async function main() {
         console.error('[Background] Failed to handle GET_TAB_ACTIVITY:', e);
         sendResponse({ ok: false, error: e.message });
       }
+      return true;
+    }
+
+    // Handle Nano AI requests
+    if (msg?.type === 'NANO_AI_STATUS') {
+      (async () => {
+        try {
+          const status = NanoAIService.getStatus();
+          sendResponse({ success: true, ...status });
+        } catch (e) {
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'NANO_AI_SUMMARIZE') {
+      (async () => {
+        try {
+          if (!NanoAIService.isAvailable()) {
+            sendResponse({ success: false, error: 'Nano AI not available' });
+            return;
+          }
+          const summary = await NanoAIService.summarize(msg.text, msg.maxLength || 100);
+          sendResponse({ success: true, summary });
+        } catch (e) {
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'NANO_AI_CLASSIFY') {
+      (async () => {
+        try {
+          if (!NanoAIService.isAvailable()) {
+            sendResponse({ success: false, error: 'Nano AI not available' });
+            return;
+          }
+          const result = await NanoAIService.classifyUrl(msg.url, msg.context || {});
+          sendResponse({ success: true, ...result });
+        } catch (e) {
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'NANO_AI_SEARCH') {
+      (async () => {
+        try {
+          if (!NanoAIService.isAvailable()) {
+            sendResponse({ success: false, error: 'Nano AI not available' });
+            return;
+          }
+          const results = await NanoAIService.naturalLanguageSearch(
+            msg.query,
+            msg.items,
+            msg.limit || 10
+          );
+          sendResponse({ success: true, results });
+        } catch (e) {
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
       return true;
     }
 

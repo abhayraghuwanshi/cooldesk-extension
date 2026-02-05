@@ -426,3 +426,58 @@
 .tab-recent-badge span {
   font-size: 9px;
 }
+
+/* ========== Tab Summary (AI Summarize) ========== */
+
+.tab-summary {
+  position: relative;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.08) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 8px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tab-summary-content {
+  font-size: var(--font-sm, 11px);
+  color: var(--text-primary, #E5E7EB);
+  line-height: 1.5;
+  padding-right: 20px;
+}
+
+.tab-summary-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #94A3B8);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 10px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.tab-summary-close:hover {
+  opacity: 1;
+  color: var(--text-primary, #F1F5F9);
+}
+
+/* Summarize button style */
+.tab-action-btn.summarize-btn:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #A78BFA;
+}
+
+.tab-action-btn.summarize-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

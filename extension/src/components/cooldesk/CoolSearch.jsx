@@ -1,4 +1,4 @@
-import { faMicrophone } from '@fortawesome/free-solid-svg-icons';
+import { faMicrophone, faRobot } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import Fuse from 'fuse.js';
@@ -7,6 +7,7 @@ import { executeAction } from '../../services/commandActions.js';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser } from '../../services/commandParser.js';
 import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
+import { naturalLanguageSearch, isNaturalLanguageQuery } from '../../services/searchService.js';
 import { ExpandedSearchPanel } from './ExpandedSearchPanel.jsx';
 
 // Separate cache outside component to persist across re-mounts if needed, 
@@ -31,6 +32,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   // Search suggestions state
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [autocompleteHint, setAutocompleteHint] = useState(''); // Ghost text for autocomplete
+  const [isAISearch, setIsAISearch] = useState(false); // NL search indicator
 
   // Performance Optimizations
   const workspacesCache = useRef(null);
@@ -483,6 +485,36 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       try {
         const allSuggestions = [];
         const seenUrls = new Set();
+
+        // Check if this looks like a natural language query
+        const useNLSearch = isNaturalLanguageQuery(searchValue);
+        setIsAISearch(useNLSearch);
+
+        // If NL query, try AI-powered search first
+        if (useNLSearch) {
+          try {
+            const nlResults = await naturalLanguageSearch(searchValue, 10);
+            if (nlResults && nlResults.length > 0) {
+              nlResults.forEach((item, index) => {
+                if (!seenUrls.has(item.url)) {
+                  allSuggestions.push({
+                    title: item.title,
+                    description: item.description || (item._aiRanked ? 'AI matched' : ''),
+                    url: item.url,
+                    type: item.type || 'search',
+                    score: 2000 - index, // High priority for AI results
+                    matchQuality: 100,
+                    _aiRanked: item._aiRanked
+                  });
+                  seenUrls.add(item.url);
+                }
+              });
+            }
+          } catch (e) {
+            console.warn('[CoolSearch] NL search failed, falling back:', e);
+            setIsAISearch(false);
+          }
+        }
 
         // 1. Search workspace URLs (Using Cache + Fuse Instance)
         if (fuseInstance.current) {
@@ -1545,12 +1577,17 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           fontFamily: "'Fira Code', monospace",
           fontWeight: '700',
           fontSize: '18px',
-          color: 'var(--accent-color, #34C759)',
+          color: isAISearch ? '#A78BFA' : 'var(--accent-color, #34C759)',
           marginRight: '4px',
           userSelect: 'none',
           display: 'flex',
-          alignItems: 'center'
-        }}>{'>'}</span>
+          alignItems: 'center',
+          transition: 'color 0.2s ease'
+        }}>
+          {isAISearch ? (
+            <FontAwesomeIcon icon={faRobot} style={{ fontSize: '14px' }} title="AI-powered search" />
+          ) : '>'}
+        </span>
         <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
           <input
             ref={inputRef}

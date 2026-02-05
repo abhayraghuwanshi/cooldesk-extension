@@ -1,9 +1,48 @@
 
-import { faChevronDown, faExternalLinkAlt, faGlobe, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faExternalLinkAlt, faGlobe, faMagic, faSpinner, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { getFaviconUrl } from '../../utils/helpers.js';
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
+
+/**
+ * Get page text content from a tab via content script
+ */
+async function getTabPageText(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        // Extract main content text from the page
+        const selectors = [
+          'article',
+          'main',
+          '[role="main"]',
+          '.content',
+          '.post-content',
+          '.article-content',
+          '#content',
+          '.entry-content'
+        ];
+
+        for (const selector of selectors) {
+          const el = document.querySelector(selector);
+          if (el && el.innerText?.length > 100) {
+            return el.innerText.slice(0, 5000);
+          }
+        }
+
+        // Fallback to body
+        const body = document.body?.innerText || '';
+        return body.slice(0, 5000);
+      }
+    });
+    return results?.[0]?.result || '';
+  } catch (e) {
+    console.warn('Failed to get page text:', e);
+    return '';
+  }
+}
 
 /**
  * TabCard - Card component for displaying browser tabs in spatial interface
@@ -11,6 +50,10 @@ const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
  * Memoized to prevent unnecessary re-renders
  */
 export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isPinned = false, isActive = false, isLastActive = false }) {
+  const [summary, setSummary] = useState(null);
+  const [summarizing, setSummarizing] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
+
   if (!tab) return null;
 
   const { url, title, favIconUrl } = tab;
@@ -30,6 +73,46 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
   const handlePin = (e) => {
     e.stopPropagation();
     onPin?.(tab);
+  };
+
+  const handleSummarize = async (e) => {
+    e.stopPropagation();
+
+    if (summary) {
+      setShowSummary(!showSummary);
+      return;
+    }
+
+    setSummarizing(true);
+    try {
+      // Get page text from the tab
+      const pageText = await getTabPageText(tab.id);
+
+      if (!pageText || pageText.length < 50) {
+        setSummary('Not enough content to summarize.');
+        setShowSummary(true);
+        return;
+      }
+
+      // Request summarization from background
+      const response = await chrome.runtime.sendMessage({
+        type: 'NANO_AI_SUMMARIZE',
+        text: pageText,
+        maxLength: 80
+      });
+
+      if (response?.success) {
+        setSummary(response.summary);
+      } else {
+        setSummary(response?.error || 'Summarization unavailable');
+      }
+      setShowSummary(true);
+    } catch (err) {
+      setSummary('Failed to summarize: ' + err.message);
+      setShowSummary(true);
+    } finally {
+      setSummarizing(false);
+    }
   };
 
   return (
@@ -79,8 +162,32 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
         </div>
       </div>
 
+      {/* Summary display */}
+      {showSummary && summary && (
+        <div className="tab-summary" onClick={(e) => e.stopPropagation()}>
+          <div className="tab-summary-content">{summary}</div>
+          <button
+            className="tab-summary-close"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowSummary(false);
+            }}
+          >
+            <FontAwesomeIcon icon={faTimes} />
+          </button>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="tab-actions">
+        <button
+          className="tab-action-btn summarize-btn"
+          onClick={handleSummarize}
+          title={summary ? (showSummary ? 'Hide summary' : 'Show summary') : 'Summarize with AI'}
+          disabled={summarizing}
+        >
+          <FontAwesomeIcon icon={summarizing ? faSpinner : faMagic} spin={summarizing} />
+        </button>
         <button
           className="tab-action-btn pin-btn"
           onClick={handlePin}
