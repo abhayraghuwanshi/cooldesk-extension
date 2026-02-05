@@ -1,3 +1,14 @@
+import {
+  faBook,
+  faBriefcase,
+  faComment,
+  faEdit,
+  faFileAlt,
+  faHome,
+  faLayerGroup,
+  faPlus,
+  faRobot
+} from '@fortawesome/free-solid-svg-icons';
 import annyang from 'annyang';
 import Fuse from 'fuse.js';
 import React, { useEffect, useRef, useState } from 'react';
@@ -318,14 +329,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     // ... logic continuation handled below by copying ...
   });
 
-  // Memoized update functions to prevent loops
-  const updateCommandSuggestions = React.useCallback((suggestions) => {
-    setCommandSuggestions(suggestions);
-  }, []);
-
-  const updateSearchSuggestions = React.useCallback((suggestions) => {
-    setSearchSuggestions(suggestions);
-  }, []);
 
   // Re-implementing the main search effect efficiently
   useEffect(() => {
@@ -343,7 +346,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             icon: '📁',
             category: 'Select Destination'
           })).filter(c => c.title.toLowerCase().includes(query));
-          updateCommandSuggestions(cards);
+          setCommandSuggestions(cards);
         };
 
         if (workspacesCache.current) {
@@ -355,7 +358,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             processDestinations(ws);
           });
         }
-        updateSearchSuggestions([]);
+        setSearchSuggestions([]);
         setSelectedSuggestionIndex(-1);
         return;
       }
@@ -383,105 +386,78 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         ];
       } else if (activePill.prefix === '/notes') {
         pillSuggestions = [
-          { command: '/notes view', title: 'View All Notes', description: 'Open the full notes manager', icon: '📚', category: 'Nav' },
-          { command: '/notes last', title: 'Open Last Note', description: 'Instantly resume your latest thought', icon: '🔖', category: 'Nav' },
-          { command: '/notes create', title: 'Create New Note', description: 'Start a new empty note', icon: '📝', category: 'Action' }
+          { command: '/notes view', title: 'View All Notes', description: 'Open the full notes manager', icon: faBook, category: 'Nav' },
+          { command: '/notes last', title: 'Open Last Note', description: 'Instantly resume your latest thought', icon: faEdit, category: 'Nav' },
+          { command: '/notes create', title: 'Create New Note', description: 'Start a new empty note', icon: faPlus, category: 'Action' }
         ];
+
+        // Dynamic Create Note
+        if (query && query.trim().length > 0) {
+          pillSuggestions.unshift({
+            command: `__create_note__:${query}`,
+            title: `Create Note: "${query}"`,
+            description: 'Press Enter to save this note',
+            icon: faPlus,
+            category: 'Create',
+            type: 'dynamic-action'
+          });
+        }
       }
 
       const filtered = query === ''
         ? pillSuggestions
         : pillSuggestions.filter(s =>
+          (s.type === 'dynamic-action') || // Always show dynamic
           (s.title?.toLowerCase().includes(query)) ||
           (s.description?.toLowerCase().includes(query))
         );
 
-      updateCommandSuggestions(filtered);
-      updateSearchSuggestions([]);
+      setCommandSuggestions(filtered);
+      setSearchSuggestions([]);
       setSelectedSuggestionIndex(-1);
       return;
     }
 
-    // 2. Handle Slash Commands & ! Commands
-    if (searchValue.startsWith('/') || searchValue.startsWith('!')) {
-      const isBang = searchValue.startsWith('!');
+    // 2. Handle Slash Commands Only
+    if (searchValue.startsWith('/')) {
       const query = searchValue.slice(1).toLowerCase();
 
       const fetchFlattenedSuggestions = async () => {
-        let allOptions = [];
+        // Simplified Command List
+        const commands = [
+          // Navigation
+          { command: '/notes', title: 'Notes', description: 'Go to Notes', icon: faEdit, category: 'Nav' },
+          { command: '/chat', title: 'Chat', description: 'Go to AI Chat', icon: faComment, category: 'Nav' },
+          { command: '/tabs', title: 'Tabs', description: 'Manage Tabs', icon: faLayerGroup, category: 'Nav' },
+          { command: '/workspaces', title: 'Workspaces', description: 'Manage Workspaces', icon: faBriefcase, category: 'Nav' },
+          { command: '/overview', title: 'Dashboard', description: 'Go to Dashboard', icon: faHome, category: 'Nav' },
 
-        if (isBang) {
-          // ! Commands from CommandParser
-          allOptions = CommandParser.getAllCommands().map(cmd => ({
-            command: cmd.command.split(' ')[0], // Clean command for input e.g. !go
-            title: cmd.command,
-            description: cmd.description,
-            icon: cmd.category === 'AI' ? '🤖' : cmd.category === 'Navigation' ? '🧭' : '⚙️',
-            category: cmd.category
-          }));
-        } else {
-          // / Commands
-          const navigationCommands = [
-            { command: '/notes', title: 'Notes Manager', description: 'Navigate to Notes view', icon: '📝', category: 'Nav' },
-            { command: '/workspace', title: 'Workspaces', description: 'Navigate to Workspace view', icon: '💼', category: 'Nav' },
-            { command: '/chat', title: 'AI Chat', description: 'Navigate to Chat view', icon: '💬', category: 'Nav' },
-            { command: '/tabs', title: 'Tab Manager', description: 'Navigate to Tabs view', icon: '📑', category: 'Nav' },
-            { command: '/overview', title: 'Dashboard', description: 'Navigate to Overview', icon: '🏠', category: 'Nav' }
-          ];
-
-          // Predictive additions using cache
-          const quickSaves = [];
-          if (currentTab && workspacesCache.current) {
-            workspacesCache.current.forEach(ws => {
-              quickSaves.push({
-                command: `/add tab ${currentTab.url} ${ws.name}`,
-                title: `Save to "${ws.name}"`,
-                description: `Add this tab to your "${ws.name}" workspace`,
-                icon: '📁',
-                category: 'Quick Save',
-                metadata: { url: currentTab.url, workspaceName: ws.name }
-              });
-            });
-          }
-
-          const predictiveActions = [
-            { command: '/save', title: 'Save All Tabs', description: 'Snapshot all tabs to workspace', icon: '💾', category: 'Action' },
-            { command: '/share community', title: 'Share Work', description: 'Post to community hub', icon: '🌍', category: 'Action' },
-            { command: '/add note', title: 'New Note', description: 'Create a quick thought', icon: '📝', category: 'Action' },
-            { command: '/add workspace', title: 'New Workspace', description: 'Create project space', icon: '📁', category: 'Action' }
-          ];
-
-          allOptions = [...quickSaves, ...predictiveActions, ...navigationCommands];
-        }
+          // Simple AI Actions
+          { command: '/summarise', title: 'Summarise', description: 'Summarise current page', icon: faFileAlt, category: 'AI' },
+          { command: '/rewrite', title: 'Rewrite', description: 'Rewrite selected text', icon: faEdit, category: 'AI' }
+        ];
 
         if (query === '') {
-          updateCommandSuggestions(allOptions.slice(0, 10));
+          setCommandSuggestions(commands);
         } else {
-          const matches = allOptions.filter(opt => {
+          const matches = commands.filter(opt => {
             const searchStr = `${opt.title} ${opt.command} ${opt.category} ${opt.description}`.toLowerCase();
             return searchStr.includes(query) ||
               query.split('').every((char, i) => searchStr.indexOf(char, i) !== -1);
           });
 
           matches.sort((a, b) => {
-            const aTitle = (a.title || '').toLowerCase();
-            const bTitle = (b.title || '').toLowerCase();
             const aCmd = a.command.toLowerCase();
             const bCmd = b.command.toLowerCase();
-            const prefix = isBang ? '!' : '/';
-            if (aCmd === prefix + query) return -1;
-            if (bCmd === prefix + query) return 1;
-            const aStarts = aTitle.startsWith(query) || aCmd.startsWith(prefix + query);
-            const bStarts = bTitle.startsWith(query) || bCmd.startsWith(prefix + query);
-            if (aStarts && !bStarts) return -1;
-            if (!aStarts && bStarts) return 1;
-            const prio = { 'Quick Save': 1, 'Action': 2, 'Nav': 3, 'AI': 1, 'Navigation': 2 };
-            const aPrio = prio[a.category] || 4;
-            const bPrio = prio[b.category] || 4;
-            if (aPrio !== bPrio) return aPrio - bPrio;
-            return aTitle.localeCompare(bTitle);
+            // Exact match priority
+            if (aCmd === '/' + query) return -1;
+            if (bCmd === '/' + query) return 1;
+            // Starts with priority
+            if (aCmd.startsWith('/' + query) && !bCmd.startsWith('/' + query)) return -1;
+            if (!aCmd.startsWith('/' + query) && bCmd.startsWith('/' + query)) return 1;
+            return 0;
           });
-          updateCommandSuggestions(matches.slice(0, 10));
+          setCommandSuggestions(matches);
 
           // Ghost text logic
           if (matches.length > 0 && query.length > 0) {
@@ -498,7 +474,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       };
 
       fetchFlattenedSuggestions();
-      updateSearchSuggestions([]);
+      setSearchSuggestions([]);
       setSelectedSuggestionIndex(-1);
       return;
     }
@@ -508,8 +484,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
     // If input is effectively empty or just command triggers, clear everything
     if (!searchValue || searchValue.trim() === '' || (searchValue.startsWith('!') && searchValue.length < 2) || (searchValue.startsWith('/') && searchValue.length < 2) || /^https?:\/\//i.test(searchValue)) {
-      updateSearchSuggestions([]);
-      updateCommandSuggestions([]);
+      setSearchSuggestions([]);
+      setCommandSuggestions([]);
       return;
     }
 
@@ -632,10 +608,10 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         });
 
         const finalSuggestions = allSuggestions.slice(0, 8);
-        updateSearchSuggestions(finalSuggestions);
+        setSearchSuggestions(finalSuggestions);
       } catch (error) {
         console.warn('[CoolSearch] Failed to fetch suggestions:', error);
-        updateSearchSuggestions([]);
+        setSearchSuggestions([]);
       }
     };
 
@@ -647,7 +623,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     }, 250);
 
     return () => clearTimeout(timeoutId);
-  }, [searchValue, activePill, updateCommandSuggestions, updateSearchSuggestions]);
+  }, [searchValue, activePill, setCommandSuggestions, setSearchSuggestions]);
 
   useEffect(() => {
     // Global shortcuts
@@ -1042,7 +1018,25 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       return;
     }
 
-    const activeSuggestions = commandSuggestions.length > 0 ? commandSuggestions : searchSuggestions;
+    // Sort active suggestions consistently to match visual layout
+    const rawSuggestions = commandSuggestions.length > 0 ? commandSuggestions : searchSuggestions;
+
+    // Helper to get category string
+    const getCat = (s) => {
+      if (s.category) return s.category.toUpperCase();
+      if (s.type === 'workspace-url') return 'WORKSPACES';
+      if (s.type === 'history') return 'HISTORY';
+      if (s.type === 'bookmark') return 'BOOKMARKS';
+      return 'SUGGESTIONS';
+    };
+
+    const activeSuggestions = [...rawSuggestions].sort((a, b) => {
+      const catA = getCat(a);
+      const catB = getCat(b);
+      if (catA === catB) return 0;
+      return catA.localeCompare(catB);
+    });
+
     const isCommandMode = commandSuggestions.length > 0;
 
     // Tab key: Autocomplete or Pill conversion
@@ -1105,16 +1099,133 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
     // Navigation through suggestions
     if (activeSuggestions.length > 0) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      if (e.key === 'ArrowRight') {
         e.preventDefault();
         setSelectedSuggestionIndex(prev =>
           prev < activeSuggestions.length - 1 ? prev + 1 : 0
         );
-      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         setSelectedSuggestionIndex(prev =>
           prev > 0 ? prev - 1 : activeSuggestions.length - 1
         );
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        // Column-Aware Down Navigation
+        setSelectedSuggestionIndex(prev => {
+          // Safe handling for initial selection
+          if (prev < 0 || !activeSuggestions[prev]) return 0;
+
+          // 1. Identify current group and intra-group index/column
+          const currentItem = activeSuggestions[prev];
+          const getCat = (s) => {
+            if (!s) return 'SUGGESTIONS';
+            if (s.category) return s.category.toUpperCase();
+            if (s.type === 'workspace-url') return 'WORKSPACES';
+            if (s.type === 'history') return 'HISTORY';
+            if (s.type === 'bookmark') return 'BOOKMARKS';
+            return 'SUGGESTIONS';
+          };
+          const currentCat = getCat(currentItem);
+
+          // Find start/end of current group
+          let groupStart = prev;
+          while (groupStart > 0 && getCat(activeSuggestions[groupStart - 1]) === currentCat) groupStart--;
+
+          const indexInGroup = prev - groupStart;
+          const col = indexInGroup % 2; // 0 (Left) or 1 (Right)
+
+          // 2. Try to find next item in same column within same group
+          if (prev + 2 < activeSuggestions.length && getCat(activeSuggestions[prev + 2]) === currentCat) {
+            return prev + 2;
+          }
+
+          // 3. Try to jump to next group
+          // Find start of next group
+          let nextGroupStart = prev + 1;
+          while (nextGroupStart < activeSuggestions.length && getCat(activeSuggestions[nextGroupStart]) === currentCat) nextGroupStart++;
+
+          if (nextGroupStart < activeSuggestions.length) {
+            // Target same column in next group
+            const target = nextGroupStart + col;
+            if (target < activeSuggestions.length && getCat(activeSuggestions[target]) === getCat(activeSuggestions[nextGroupStart])) {
+              return target;
+            }
+            // Fallback: If Col 1 doesn't exist, use Col 0 (nextGroupStart)
+            return nextGroupStart;
+          }
+
+          // 4. End of list? Loop to top
+          return 0;
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        // Column-Aware Up Navigation
+        setSelectedSuggestionIndex(prev => {
+          // Safe handling
+          if (prev < 0 || !activeSuggestions[prev]) return activeSuggestions.length - 1;
+
+          const currentItem = activeSuggestions[prev];
+          const getCat = (s) => {
+            if (!s) return 'SUGGESTIONS';
+            if (s.category) return s.category.toUpperCase();
+            if (s.type === 'workspace-url') return 'WORKSPACES';
+            if (s.type === 'history') return 'HISTORY';
+            if (s.type === 'bookmark') return 'BOOKMARKS';
+            return 'SUGGESTIONS';
+          };
+          const currentCat = getCat(currentItem);
+
+          let groupStart = prev;
+          while (groupStart > 0 && getCat(activeSuggestions[groupStart - 1]) === currentCat) groupStart--;
+          const indexInGroup = prev - groupStart;
+          const col = indexInGroup % 2;
+
+          // 1. Try to find prev item in same column within same group
+          if (prev - 2 >= groupStart) {
+            return prev - 2;
+          }
+
+          // 2. Jump to previous group
+          let prevGroupEnd = groupStart - 1;
+          if (prevGroupEnd >= 0) {
+            const prevGroupCat = getCat(activeSuggestions[prevGroupEnd]);
+
+            // Find start of prev group
+            let prevGroupStart = prevGroupEnd;
+            while (prevGroupStart > 0 && getCat(activeSuggestions[prevGroupStart - 1]) === prevGroupCat) prevGroupStart--;
+
+            // We want to land on the BOTTOM-MOST item of the SAME column.
+            // Last index in group is 'prevGroupEnd'.
+            // Check its column.
+            const lastIndexInGroup = prevGroupEnd - prevGroupStart;
+            const lastCol = lastIndexInGroup % 2;
+
+            if (lastCol === col) return prevGroupEnd;
+
+            // If last item is Col 0 (Even) but we want Col 1 (Odd), verify if prev item exists
+            if (lastCol === 0 && col === 1) {
+              // Does prevGroupEnd have a neighbor? No, if it's Col 0 and last, it has no right neighbor.
+              // So we must land on Col 0 (fallback).
+              return prevGroupEnd;
+            }
+
+            // If last item is Col 1 (Odd) but we want Col 0 (Even):
+            // Then prevGroupEnd-1 is the Bottom-Right? No, Right is higher index.
+            // 0 1
+            // 2 3
+            // If prevGroupEnd is 3 (Col 1). We want Col 0.
+            // Bottom-Left is 2 (prevGroupEnd - 1).
+            if (lastCol === 1 && col === 0) {
+              if (prevGroupEnd - 1 >= prevGroupStart) return prevGroupEnd - 1;
+            }
+
+            return prevGroupEnd;
+          }
+
+          // 3. Top of list? Loop to bottom
+          return activeSuggestions.length - 1;
+        });
       } else if (e.key === 'Escape') {
         setCommandSuggestions([]);
         setSearchSuggestions([]);
@@ -1262,6 +1373,14 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         '/share': 'SHARE',
         '/notes': 'NOTES'
       };
+
+      // Handle Dynamic Note Creation
+      if (cmd.startsWith('__create_note__:')) {
+        const noteContent = cmd.replace('__create_note__:', '');
+        const executeCmd = `/add note ${noteContent}`;
+        handleSubmit({ preventDefault: () => { } }, executeCmd);
+        return;
+      }
 
       // Check if command requires arguments
       const requiresArgs = ['!jump', '!go', '!spot', '!history', '!answer', '!write', '!ws', '/add', '/share'];
@@ -1543,15 +1662,52 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     };
   };
 
+  // Ensure suggestions are sorted by category to match visual grid layout
+  const sortedSuggestions = React.useMemo(() => {
+    const raw = commandSuggestions.length > 0 ? commandSuggestions : searchSuggestions;
+
+    // Helper to get category string
+    const getCat = (s) => {
+      if (s.category) return s.category.toUpperCase();
+      if (s.type === 'workspace-url') return 'WORKSPACES';
+      if (s.type === 'history') return 'HISTORY';
+      if (s.type === 'bookmark') return 'BOOKMARKS';
+      return 'SUGGESTIONS';
+    };
+
+    // Stable sort
+    return [...raw].sort((a, b) => {
+      const catA = getCat(a);
+      const catB = getCat(b);
+      if (catA === catB) return 0;
+      // Optional: Define explicit category order if needed
+      return catA.localeCompare(catB);
+    });
+  }, [commandSuggestions, searchSuggestions]);
+
+  const isResultsOpen = sortedSuggestions.length > 0;
+
   return (
-    <div className={`cooldesk-search-container mode-${commandMode}`}>
+    <div className={`cooldesk-search-container mode-${commandMode}`} style={{
+      display: 'flex',
+      flexDirection: 'column',
+      width: '100%',
+      position: 'relative',
+      zIndex: 10002 // Ensure container is above other elements
+    }}>
       <form
         onSubmit={handleSubmit}
         className={`cooldesk-search-box command-${commandMode} ${isListening ? 'listening' : ''}`}
         onClick={() => inputRef.current?.focus()}
         style={{
           cursor: 'text',
-          position: 'relative'
+          position: 'relative',
+          flexShrink: 0,
+          borderBottomLeftRadius: isResultsOpen ? '0' : '12px',
+          borderBottomRightRadius: isResultsOpen ? '0' : '12px',
+          borderBottom: isResultsOpen ? 'none' : undefined,
+          transition: 'border-radius 0.1s ease', // Faster transition for shape change
+          zIndex: 10003
         }}
       >
         {/* Modern Accent Glow */}
@@ -1649,42 +1805,11 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             </div>
           )}
         </div>
-        {/* <button
-          type="button"
-          className={`cooldesk-voice-btn ${isListening ? 'listening' : ''}`}
-          onClick={toggleVoice}
-          title={isListening ? 'Stop listening' : 'Voice search'}
-        >
-          <FontAwesomeIcon
-            icon={faMicrophone}
-          />
-          {isListening && (
-            <div style={{
-              display: 'flex',
-              gap: 3,
-              alignItems: 'center',
-              marginLeft: 8,
-              position: 'relative',
-              zIndex: 1
-            }}>
-              {waveformData.map((v, i) => (
-                <div key={i} style={{
-                  width: 2.5,
-                  height: `${6 + v * 14}px`,
-                  background: 'currentColor',
-                  opacity: 0.9,
-                  borderRadius: 2,
-                  transition: 'height 0.1s ease'
-                }} />
-              ))}
-            </div>
-          )}
-        </button> */}
       </form>
 
       {/* Unified Expanded Search Panel */}
       <ExpandedSearchPanel
-        isOpen={commandSuggestions.length > 0 || searchSuggestions.length > 0}
+        isOpen={isResultsOpen}
         suggestions={commandSuggestions.length > 0 ? commandSuggestions : searchSuggestions}
         selectedIndex={selectedSuggestionIndex}
         searchValue={searchValue}
@@ -1692,6 +1817,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         onHover={handleHover}
         onClose={handleClose}
         onSelect={handleSelect}
+        isResultsOpen={isResultsOpen}
       />
 
       {/* Command Feedback */}

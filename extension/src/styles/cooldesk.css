@@ -28,13 +28,14 @@
   width: 100%;
 
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Changed from center to allow expansion */
   justify-content: space-between;
   gap: 12px;
   flex-shrink: 0;
   z-index: 10000;
-  height: 64px;
-  padding: 0 16px;
+  min-height: 64px; /* Changed from fixed height */
+  height: auto;     /* Allow growth */
+  padding: 10px 16px; /* Added top padding to vertically center the 44px items in 64px min-height */
   /* Reduced padding from 32px */
   /* Internal content padding */
   background: rgba(15, 23, 42, 0.9);
@@ -45,6 +46,7 @@
   border-radius: 16px;
   /* Pill corners */
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .header-left {

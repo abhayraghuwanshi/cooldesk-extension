@@ -1,7 +1,6 @@
-// ... (imports remain the same)
-import { faArrowRight } from '@fortawesome/free-solid-svg-icons';
+import { faRobot, faSearch, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export const ExpandedSearchPanel = React.memo(function ExpandedSearchPanel({
     isOpen,
@@ -14,241 +13,395 @@ export const ExpandedSearchPanel = React.memo(function ExpandedSearchPanel({
     activePill
 }) {
     const panelRef = useRef(null);
+    const [showAISection, setShowAISection] = useState(false);
 
-    // Close on click outside
+    // Detect AI search queries
+    useEffect(() => {
+        if (!isOpen || !searchValue || searchValue.length < 5) {
+            setShowAISection(false);
+            return;
+        }
+
+        const isNLQuery = searchValue.length >= 10 ||
+            searchValue.includes('?') ||
+            /^(what|where|how|when|why|which|find|show|get)\s/i.test(searchValue);
+
+        setShowAISection(isNLQuery);
+    }, [isOpen, searchValue]);
+
+    // Close on Escape key
     useEffect(() => {
         if (!isOpen) return;
 
-        const handleClickOutside = (e) => {
-            if (panelRef.current && !panelRef.current.contains(e.target)) {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
                 onClose?.();
             }
         };
 
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
 
     if (!isOpen || suggestions.length === 0) return null;
 
+    const isCommandMode = searchValue.startsWith('/') || searchValue.startsWith('!');
+
+    // Inline results panel - renders inside the search container
     return (
         <div
             ref={panelRef}
-            className="expanded-search-panel"
+            className="expanded-search-panel inline-results"
             style={{
-                position: 'absolute',
-                top: 'calc(100% + 12px)',
-                left: 0,
-                right: 0,
-                maxHeight: '60vh',
-                background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%)',
-                backdropFilter: 'blur(24px)',
-                border: '1px solid rgba(139, 92, 246, 0.3)',
-                borderRadius: '16px',
-                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(139, 92, 246, 0.1)',
+                position: 'relative',
+                width: '100%',
+                marginTop: '0',
+
+                borderTop: 'none', // Remove top border to merge
+
+                // // Radius - Top corners sharp, bottom corners rounded
+                // borderTopLeftRadius: '0',
+                // borderTopRightRadius: '0',
+                // borderBottomLeftRadius: '12px',
+                // borderBottomRightRadius: '12px',
+
                 overflow: 'hidden',
-                zIndex: 2000,
-                animation: 'expandedPanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                willChange: 'transform, opacity' // Optimization for animation
+                maxHeight: '60vh',
+                display: 'flex',
+                flexDirection: 'column',
+                zIndex: 10001,
+                // boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
             }}
         >
-            {/* Header */}
+            {/* Premium Header */}
             <div style={{
-                padding: '16px 20px',
-                borderBottom: '1px solid rgba(139, 92, 246, 0.15)',
-                background: activePill
-                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.02) 100%)'
-                    : 'linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.03) 100%)',
+                padding: '12px 16px',
+                borderBottom: '1px solid rgba(139, 92, 246, 0.1)',
+                background: 'rgba(15, 23, 42, 0.4)', // Slightly transparent to blend
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                flexShrink: 0
             }}>
-                <div style={{
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: '#94A3B8',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em'
-                }}>
-                    {searchValue.startsWith('/') ? 'Navigation Commands' :
-                        searchValue.startsWith('!') ? 'Voice Commands' :
-                            `${suggestions.length} Results`}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: showAISection ? '#A78BFA' : '#34C759',
+                        boxShadow: showAISection ? '0 0 8px rgba(139, 92, 246, 0.6)' : '0 0 8px rgba(52, 199, 89, 0.6)'
+                    }} />
+                    <span style={{
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#E2E8F0', // Brighter text
+                        letterSpacing: '0.02em'
+                    }}>
+                        {isCommandMode ? 'COMMANDS' : showAISection ? 'AI RESULTS' : 'SUGGESTIONS'}
+                        <span style={{
+                            color: '#64748B',
+                            marginLeft: '8px',
+                            fontWeight: 500,
+                            background: 'rgba(255,255,255,0.05)',
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            fontSize: '11px'
+                        }}>
+                            {suggestions.length}
+                        </span>
+                    </span>
                 </div>
-                <div style={{
-                    fontSize: '11px',
-                    color: '#64748B',
-                    fontStyle: 'italic'
-                }}>
-                    {searchValue.startsWith('/') && suggestions.length > 0 ?
-                        '↹ Tab Complete • ↑↓ Navigate • Enter Select • Esc Close' :
-                        '↑↓ Navigate • Enter Select • Esc Close'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                        fontSize: '10px',
+                        color: '#64748B',
+                        fontFamily: "'Fira Code', monospace",
+                        opacity: 0.7
+                    }}>
+                        TAB to navigate
+                    </span>
+                    <button
+                        onClick={onClose}
+                        style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.05)',
+                            borderRadius: '4px',
+                            width: '20px',
+                            height: '20px',
+                            cursor: 'pointer',
+                            color: '#94A3B8',
+                            fontSize: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.target.style.background = 'rgba(239, 68, 68, 0.1)';
+                            e.target.style.color = '#EF4444';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.target.style.background = 'rgba(255,255,255,0.05)';
+                            e.target.style.color = '#94A3B8';
+                        }}
+                    >
+                        <FontAwesomeIcon icon={faTimes} />
+                    </button>
                 </div>
             </div>
 
-            {/* Results List / Action Cards */}
+            {/* AI indicator banner - Sleeker */}
+            {showAISection && (
+                <div style={{
+                    padding: '8px 16px',
+                    background: 'linear-gradient(90deg, rgba(139, 92, 246, 0.1) 0%, transparent 100%)',
+                    borderBottom: '1px solid rgba(139, 92, 246, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                }}>
+                    <FontAwesomeIcon icon={faRobot} style={{ color: '#C4B5FD', fontSize: '11px' }} />
+                    <span style={{ fontSize: '11px', color: '#C4B5FD', fontWeight: 500 }}>
+                        Thinking: "{searchValue.slice(0, 40)}{searchValue.length > 40 ? '...' : ''}"
+                    </span>
+                </div>
+            )}
+
             <div style={{
-                maxHeight: 'calc(60vh - 60px)',
+                flex: 1,
                 overflowY: 'auto',
-                padding: activePill ? '16px' : '8px',
-                display: activePill ? 'grid' : 'block',
-                gridTemplateColumns: activePill ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'none',
-                gap: '12px'
+                overflowX: 'hidden',
+                padding: activePill ? '8px' : '0' // Remove global padding for list view to let headers flush
             }}>
-                {suggestions.map((suggestion, idx) => {
-                    if (activePill) {
-                        return (
-                            <div
-                                key={idx}
-                                className={`holographic-card ${selectedIndex === idx ? 'active' : ''}`}
-                                onMouseEnter={() => onHover?.(idx)}
-                                onClick={() => onSelect?.(suggestion, idx)}
-                            >
-                                <div style={{
-                                    fontSize: '24px',
-                                    marginBottom: '12px',
-                                    color: selectedIndex === idx ? '#A78BFA' : '#94A3B8'
-                                }}>
-                                    {suggestion.icon || '✨'}
-                                </div>
-                                <div style={{
-                                    fontSize: '14px',
-                                    fontWeight: 700,
-                                    color: '#F8FAFC',
-                                    marginBottom: '4px'
-                                }}>
-                                    {suggestion.title || suggestion.command}
-                                </div>
-                                <div style={{
-                                    fontSize: '11px',
-                                    color: '#94A3B8',
-                                    lineHeight: '1.4'
-                                }}>
-                                    {suggestion.description}
-                                </div>
-                                {selectedIndex === idx && (
-                                    <div style={{
-                                        position: 'absolute',
-                                        bottom: '8px',
-                                        right: '12px',
-                                        fontSize: '10px',
-                                        color: '#A78BFA',
-                                        fontWeight: 600
-                                    }}>SELECT ↵</div>
-                                )}
-                            </div>
-                        );
-                    }
-
-                    return (
-                        <div
-                            key={idx}
-                            className={`expanded-search-item ${selectedIndex === idx ? 'selected' : ''}`}
-                            onMouseEnter={() => onHover?.(idx)}
-                            onClick={() => onSelect?.(suggestion, idx)}
-                            style={{
-                                padding: '14px 16px',
-                                borderRadius: '10px',
-                                marginBottom: '4px',
-                                cursor: 'pointer',
-                                background: selectedIndex === idx
-                                    ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.12) 100%)'
-                                    : 'transparent',
-                                border: selectedIndex === idx
-                                    ? '1px solid rgba(139, 92, 246, 0.3)'
-                                    : '1px solid transparent',
-                                transition: 'all 0.15s ease',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '14px'
-                            }}
-                        >
-                            {/* Icon/Favicon */}
-                            <div style={{
-                                width: '32px',
-                                height: '32px',
-                                flexShrink: 0,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRadius: '8px',
-                                background: 'rgba(139, 92, 246, 0.1)',
-                                fontSize: '16px'
-                            }}>
-                                {suggestion.icon ? (
-                                    <span>{suggestion.icon}</span>
-                                ) : suggestion.favicon ? (
-                                    <img
-                                        src={suggestion.favicon}
-                                        alt=""
-                                        style={{ width: '20px', height: '20px', borderRadius: '4px' }}
-                                        onError={(e) => { e.target.style.display = 'none'; }}
-                                    />
-                                ) : (
-                                    <span style={{ color: '#A78BFA' }}>🔗</span>
-                                )}
-                            </div>
-
-                            {/* Content */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{
-                                    fontSize: '14px',
-                                    fontWeight: 500,
-                                    color: '#F1F5F9',
-                                    marginBottom: '4px',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap'
-                                }}>
-                                    {suggestion.title || suggestion.command}
-                                </div>
-                                <div style={{
-                                    fontSize: '12px',
-                                    color: '#94A3B8',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap'
-                                }}>
-                                    {suggestion.description || suggestion.url}
-                                </div>
-                            </div>
-
-                            {/* Badge */}
-                            <div style={{
-                                flexShrink: 0,
-                                padding: '4px 10px',
-                                borderRadius: '6px',
-                                fontSize: '11px',
-                                fontWeight: 500,
-                                background: suggestion.type === 'workspace-url' ? 'rgba(139, 92, 246, 0.15)' :
-                                    suggestion.type === 'bookmark' ? 'rgba(251, 191, 36, 0.15)' :
-                                        suggestion.type === 'history' ? 'rgba(59, 130, 246, 0.15)' :
-                                            'rgba(52, 199, 89, 0.15)',
-                                color: suggestion.type === 'workspace-url' ? '#C4B5FD' :
-                                    suggestion.type === 'bookmark' ? '#FCD34D' :
-                                        suggestion.type === 'history' ? '#93C5FD' :
-                                            '#86EFAC'
-                            }}>
-                                {suggestion.type === 'workspace-url' ? '📎 Workspace' :
-                                    suggestion.type === 'bookmark' ? '⭐ Bookmark' :
-                                        suggestion.type === 'history' ? '🕐 History' :
-                                            suggestion.category || 'Command'}
-                            </div>
-
-                            {/* Arrow indicator for selected */}
-                            {selectedIndex === idx && (
-                                <FontAwesomeIcon
-                                    icon={faArrowRight}
+                {activePill ? (
+                    // Grid layout for pill actions
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                        gap: '8px',
+                        padding: '4px'
+                    }}>
+                        {suggestions.map((suggestion, idx) => {
+                            const isSelected = selectedIndex === idx;
+                            return (
+                                <div
+                                    key={idx}
+                                    onMouseEnter={() => onHover?.(idx)}
+                                    onClick={() => onSelect?.(suggestion, idx)}
                                     style={{
-                                        color: '#A78BFA',
-                                        fontSize: '14px',
-                                        flexShrink: 0
+                                        padding: '12px',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        background: isSelected ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                                        border: isSelected ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid rgba(255,255,255,0.06)',
+                                        transition: 'all 0.1s ease'
                                     }}
-                                />
-                            )}
-                        </div>
-                    );
-                })}
+                                >
+                                    <div style={{ fontSize: '18px', marginBottom: '6px' }}>
+                                        {suggestion.icon ? (
+                                            typeof suggestion.icon === 'object' ?
+                                                <FontAwesomeIcon icon={suggestion.icon} style={{ fontSize: '18px', color: '#A78BFA' }} /> :
+                                                suggestion.icon
+                                        ) : '✨'}
+                                    </div>
+                                    <div style={{ fontSize: '12px', fontWeight: 500, color: '#E2E8F0', marginBottom: '2px' }}>
+                                        {suggestion.title || suggestion.command}
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#64748B' }}>
+                                        {suggestion.description}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    // Grouped Grid Layout
+                    (() => {
+                        // 1. Group items preserving index
+                        const groups = {};
+                        const groupOrder = []; // To maintain insertion order of categories
+
+                        suggestions.forEach((suggestion, originalIndex) => {
+                            let category = 'SUGGESTIONS';
+                            if (suggestion.category) category = suggestion.category.toUpperCase();
+                            else if (suggestion.type === 'workspace-url') category = 'WORKSPACES';
+                            else if (suggestion.type === 'history') category = 'HISTORY';
+                            else if (suggestion.type === 'bookmark') category = 'BOOKMARKS';
+
+                            if (!groups[category]) {
+                                groups[category] = [];
+                                groupOrder.push(category);
+                            }
+                            groups[category].push({ ...suggestion, originalIndex });
+                        });
+
+                        // 2. Render groups
+                        return groupOrder.map((category) => (
+                            <div key={category} style={{ marginBottom: '12px' }}>
+                                {/* Category Header */}
+                                <div style={{
+                                    padding: '12px 0 8px 0',
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    color: '#94A3B8',
+                                    letterSpacing: '0.05em',
+                                    fontFamily: "'Fira Code', monospace",
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                }}>
+                                    {category}
+                                    <div style={{ height: '1px', flex: 1, background: 'rgba(255,255,255,0.05)' }} />
+                                </div>
+
+                                {/* Grid Container */}
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(2, 1fr)', // Force 2 columns side-by-side
+                                    gap: '8px'
+                                }}>
+                                    {groups[category].map((item) => {
+                                        const { originalIndex, ...suggestion } = item;
+                                        const isSelected = selectedIndex === originalIndex;
+                                        const hasAIRank = suggestion._aiRanked;
+
+                                        return (
+                                            <div
+                                                key={originalIndex}
+                                                onMouseEnter={() => onHover?.(originalIndex)}
+                                                onClick={() => onSelect?.(suggestion, originalIndex)}
+                                                style={{
+                                                    padding: '10px 12px',
+                                                    borderRadius: '12px',
+                                                    cursor: 'pointer',
+                                                    // Merged aesthetic: Very subtle highlight, no borders
+                                                    background: isSelected ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    transition: 'all 0.1s ease',
+                                                    position: 'relative',
+                                                    overflow: 'hidden'
+                                                }}
+                                            >
+                                                {/* Selection Bar - Subtle & Integrated */}
+                                                {isSelected && (
+                                                    <div style={{
+                                                        position: 'absolute',
+                                                        left: '0',
+                                                        top: '12%',
+                                                        bottom: '12%',
+                                                        width: '3px',
+                                                        borderRadius: '0 4px 4px 0',
+                                                        background: '#A78BFA', // Muted accent
+                                                        opacity: 0.8
+                                                    }} />
+                                                )}
+
+                                                {/* Icon */}
+                                                <div style={{
+                                                    width: '36px',
+                                                    height: '36px',
+                                                    flexShrink: 0,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    borderRadius: '10px',
+                                                    // No background for icon to merge better, just color change
+                                                    background: isSelected ? 'rgba(255,255,255,0.05)' : 'transparent',
+                                                    fontSize: '15px',
+                                                    color: isSelected ? '#A78BFA' : '#64748B', // Highlight icon with accent on select
+                                                    transition: 'all 0.15s ease'
+                                                }}>
+                                                    {suggestion.icon ? (
+                                                        typeof suggestion.icon === 'object' ?
+                                                            <FontAwesomeIcon icon={suggestion.icon} /> :
+                                                            <span>{suggestion.icon}</span>
+                                                    ) : suggestion.favicon ? (
+                                                        <img
+                                                            src={suggestion.favicon}
+                                                            alt=""
+                                                            style={{ width: '18px', height: '18px', borderRadius: '4px' }}
+                                                            onError={(e) => { e.target.style.display = 'none'; }}
+                                                        />
+                                                    ) : (
+                                                        <FontAwesomeIcon icon={faSearch} style={{ fontSize: '12px', opacity: 0.5 }} />
+                                                    )}
+                                                </div>
+
+                                                {/* Content */}
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{
+                                                        fontSize: '13px',
+                                                        fontWeight: 500,
+                                                        color: '#F1F5F9',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap',
+                                                    }}>
+                                                        {suggestion.title || suggestion.command}
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: '11px',
+                                                        color: '#64748B',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap',
+                                                        marginTop: '2px'
+                                                    }}>
+                                                        {suggestion.description || suggestion.url}
+                                                    </div>
+                                                </div>
+
+                                                {/* Type Badge (Optional, small) */}
+                                                <div style={{
+                                                    fontSize: '9px',
+                                                    fontWeight: 600,
+                                                    color: 'rgba(255,255,255,0.2)',
+                                                    textTransform: 'uppercase'
+                                                }}>
+                                                    {suggestion.type === 'workspace-url' ? 'WS' : ''}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ));
+                    })()
+                )}
             </div>
-        </div >
+
+            {/* Footer */}
+            <div style={{
+                padding: '6px 12px',
+                borderTop: '1px solid rgba(139, 92, 246, 0.1)',
+                background: 'rgba(0,0,0,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexShrink: 0
+            }}>
+                <span style={{ fontSize: '9px', color: '#4B5563' }}>
+                    {showAISection ? 'AI powered' : 'Tab to complete'}
+                </span>
+                <span style={{ fontSize: '9px', color: '#374151' }}>
+                    nano
+                </span>
+            </div>
+
+            <style>{`
+                .inline-results {
+                    animation: slideDown 0.15s ease-out;
+                }
+                @keyframes slideDown {
+                    from { opacity: 0; transform: translateY(-4px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                .inline-results > div:nth-child(3) > div:hover {
+                    background: rgba(139, 92, 246, 0.08) !important;
+                }
+            `}</style>
+        </div>
     );
 });
