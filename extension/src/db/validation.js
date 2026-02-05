@@ -553,6 +553,60 @@ export const VALIDATION_SCHEMAS = {
         data: {
             [ValidationRules.TYPE]: 'object'
         }
+    },
+
+    // Daily memory validation schema
+    dailyMemory: {
+        id: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MIN_LENGTH]: 1
+        },
+        userId: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MIN_LENGTH]: 1
+        },
+        date: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.PATTERN]: /^\d{4}-\d{2}-\d{2}$/
+        },
+        sessionIds: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'string',
+                maxItems: 100
+            }
+        },
+        topUrls: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'object',
+                maxItems: 20
+            }
+        },
+        noteCount: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        highlightCount: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        summary: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 5000
+        },
+        createdAt: {
+            [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        updatedAt: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        }
     }
 }
 
@@ -771,7 +825,7 @@ export function validateAndSanitize(data, schemaName, options = {}) {
 
     // Add timestamps if missing
     const now = Date.now()
-    if (schemaName === 'workspace' || schemaName === 'note' || schemaName === 'urlNote' || schemaName === 'pin' || schemaName === 'scrapedConfig') {
+    if (schemaName === 'workspace' || schemaName === 'note' || schemaName === 'urlNote' || schemaName === 'pin' || schemaName === 'scrapedConfig' || schemaName === 'dailyMemory') {
         if (!sanitized.createdAt) sanitized.createdAt = now
         if (!sanitized.updatedAt) sanitized.updatedAt = now
     }

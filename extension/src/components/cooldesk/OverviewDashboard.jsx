@@ -5,6 +5,7 @@ import { getUrlAnalytics } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { sortWorkspacesByActivity } from '../../utils/ranking.js';
+import { ResumeWorkWidget } from '../widgets/ResumeWorkWidget';
 import { NotesWidget } from './NotesWidget';
 import { PomodoroWidget } from './PomodoroWidget';
 import { WorkspaceCard } from './WorkspaceCard';
@@ -143,6 +144,9 @@ export function OverviewDashboard({
         }}>
             {/* Left Column: Workspaces + Notes */}
             <div className="overview-left-column">
+                {/* Resume Work Widget - Shows last active session */}
+                <ResumeWorkWidget />
+
                 {/* Pomodoro Widget Section */}
                 <div className="    " style={{ marginTop: '24px' }}>
                     <h3 style={{

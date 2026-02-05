@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
+import { TimelineView } from '../memory/TimelineView';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import { WorkspaceCard } from './WorkspaceCard';
 
@@ -636,6 +637,25 @@ export function WorkspaceList({
                                 )}
                             </div>
                         )}
+
+                        {/* Browse Memory Timeline Section */}
+                        <div style={{ marginTop: '32px' }}>
+                            <h3 style={{
+                                fontSize: 'var(--font-2xl, 20px)',
+                                fontWeight: 600,
+                                color: 'var(--text-secondary, #94A3B8)',
+                                fontFamily: defaultFontFamily,
+                                marginBottom: '16px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}>
+                                Browse Memory
+                            </h3>
+                            <TimelineView />
+                        </div>
 
                     </>
                 ) : (

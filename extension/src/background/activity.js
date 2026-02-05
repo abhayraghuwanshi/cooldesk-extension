@@ -529,6 +529,10 @@ async function accumulateTime(url, now = Date.now()) {
     enforceMapSizeLimit(tabSessions);
     enforceMapSizeLimit(urlSessions);
     enforceMapSizeLimit(urlSessionIds);
+
+    // CRITICAL: Reset the timestamp to prevent double-counting time
+    // This ensures the next accumulation only counts NEW time since this point
+    currentActive.since = now;
 }
 
 // Tab event handlers
@@ -611,6 +615,7 @@ function handleTabUpdated(tabId, changeInfo, tab) {
 // Initialize activity tracking
 export function initializeActivityTracking() {
     let flushIntervalId = null;
+    let accumulateIntervalId = null;
     let isUserActive = true;
 
     // Start flush interval
@@ -625,6 +630,17 @@ export function initializeActivityTracking() {
         }
     };
 
+    // Start accumulation interval - tracks time even during passive viewing
+    const startAccumulateInterval = () => {
+        if (!accumulateIntervalId) {
+            accumulateIntervalId = setInterval(() => {
+                if (isUserActive && currentActive.url && currentActive.since) {
+                    accumulateTime(currentActive.url, Date.now());
+                }
+            }, 5000); // Accumulate every 5 seconds
+        }
+    };
+
     // Stop flush interval
     const stopFlushInterval = () => {
         if (flushIntervalId) {
@@ -633,8 +649,17 @@ export function initializeActivityTracking() {
         }
     };
 
-    // Start the interval initially
+    // Stop accumulation interval
+    const stopAccumulateInterval = () => {
+        if (accumulateIntervalId) {
+            clearInterval(accumulateIntervalId);
+            accumulateIntervalId = null;
+        }
+    };
+
+    // Start both intervals initially
     startFlushInterval();
+    startAccumulateInterval();
 
     // NOTE: Daily cleanup is now handled by chrome.alarms in background.js
     // Removed duplicate 24-hour setInterval to reduce CPU usage
@@ -679,13 +704,18 @@ export function initializeActivityTracking() {
     chrome.idle.onStateChanged.addListener((state) => {
         const now = Date.now();
         if (state === 'idle' || state === 'locked') {
-            // User is idle - pause flushing to save CPU
+            // User is idle - accumulate time up to this point and pause tracking
             isUserActive = false;
 
-            if (currentActive.url) accumulateTime(currentActive.url, now);
-            currentActive.since = 0;
+            // Accumulate time for the currently active tab before pausing
+            if (currentActive.url && currentActive.since) {
+                accumulateTime(currentActive.url, now);
+            }
+
+            // Flush accumulated data
             flushActivityBatch().catch(() => { });
             flushTimeSeriesEvents().catch(() => { });
+
             // Clear sessions on idle (natural session break)
             try {
                 if (urlSessions && typeof urlSessions.clear === 'function') {
@@ -732,10 +762,14 @@ export function initializeActivityTracking() {
             currentSessionId = `session_${now}_${Math.random().toString(36).substr(2, 9)}`;
             sessionStartTime = now;
         } else if (state === 'active') {
-            // User is active - resume flushing
+            // User is active - resume tracking with fresh timestamp
             isUserActive = true;
 
-            if (currentActive.tabId && currentActive.url) currentActive.since = now;
+            // Reset the 'since' timestamp to resume tracking from now
+            if (currentActive.tabId && currentActive.url) {
+                currentActive.since = now;
+            }
+
             flushActivityBatch().catch(() => { });
         }
     });

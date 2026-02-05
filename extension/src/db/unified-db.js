@@ -6,7 +6,7 @@
 // Single database configuration
 export const DB_CONFIG = {
     NAME: 'cooldesk-unified-db',
-    VERSION: 4, // Incremented to ensure SCRAPED_CONFIGS store exists
+    VERSION: 5, // Added DAILY_MEMORY store for everyday browse memory
     STORES: {
         WORKSPACES: 'workspaces',
         WORKSPACE_URLS: 'workspace_urls',
@@ -18,6 +18,7 @@ export const DB_CONFIG = {
         ACTIVITY_SERIES: 'activity_series',
         UI_STATE: 'ui_state',
         SCRAPED_CONFIGS: 'scraped_configs', // New store for scraping rules
+        DAILY_MEMORY: 'daily_memory', // Daily browsing summaries
         METADATA: 'metadata' // For tracking migrations, health, etc.
     }
 }
@@ -115,6 +116,15 @@ export const SCHEMAS = {
     [DB_CONFIG.STORES.UI_STATE]: {
         keyPath: 'id',
         indexes: []
+    },
+
+    [DB_CONFIG.STORES.DAILY_MEMORY]: {
+        keyPath: 'id',
+        indexes: [
+            { name: 'by_userId', keyPath: 'userId', options: { unique: false } },
+            { name: 'by_date', keyPath: 'date', options: { unique: false } },
+            { name: 'by_userId_date', keyPath: ['userId', 'date'], options: { unique: true } }
+        ]
     },
 
     [DB_CONFIG.STORES.METADATA]: {
@@ -259,6 +269,40 @@ export const MIGRATIONS = {
             metadataStore.put({
                 key: 'schema_version',
                 value: 4,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+    5: {
+        description: 'Add DAILY_MEMORY store for everyday browse memory feature',
+        up: (db, transaction) => {
+            console.log('[Migration v5] Adding DAILY_MEMORY store...')
+
+            if (!db.objectStoreNames.contains(DB_CONFIG.STORES.DAILY_MEMORY)) {
+                const schema = SCHEMAS[DB_CONFIG.STORES.DAILY_MEMORY]
+                console.log('[Migration v5] Creating daily_memory store')
+                const store = db.createObjectStore(DB_CONFIG.STORES.DAILY_MEMORY, { keyPath: schema.keyPath })
+
+                // Create indexes
+                schema.indexes.forEach(indexDef => {
+                    try {
+                        store.createIndex(indexDef.name, indexDef.keyPath, indexDef.options)
+                        console.log(`[Migration v5] Created index: ${indexDef.name}`)
+                    } catch (error) {
+                        console.warn(`[Migration v5] Failed to create index ${indexDef.name}:`, error)
+                    }
+                })
+
+                console.log('[Migration v5] DAILY_MEMORY store created successfully')
+            }
+
+            // Update metadata
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 5,
                 type: 'system',
                 timestamp: Date.now(),
                 description: 'Database schema version'

@@ -206,11 +206,11 @@ import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
 import { CommandParser } from '../services/commandParser.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
+import { NanoAIService } from '../services/nanoAIService.js';
 import { forceIndexRebuild, initializeSearchIndexer } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
-import { NanoAIService } from '../services/nanoAIService.js';
 
 // Initialize Search Indexer (Background Service)
 initializeSearchIndexer(); // Re-enabled for spotlight search
