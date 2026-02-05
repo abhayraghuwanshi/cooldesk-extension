@@ -23,7 +23,7 @@ import { ExpandedSearchPanel } from './ExpandedSearchPanel.jsx';
 // though component state is usually fine. Let's use component state but allow ref fetching.
 // Actually, let's keep it simple with refs inside component.
 
-export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placeholder = "Search or type ! for commands..." }) {
+export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placeholder = "Search or type / for commands..." }) {
   const [searchValue, setSearchValue] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -390,17 +390,26 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           { command: '/notes last', title: 'Open Last Note', description: 'Instantly resume your latest thought', icon: faEdit, category: 'Nav' },
           { command: '/notes create', title: 'Create New Note', description: 'Start a new empty note', icon: faPlus, category: 'Action' }
         ];
-
-        // Dynamic Create Note
+      } else if (activePill.prefix === '/notes create') {
+        // Dynamic Create Note Mode
         if (query && query.trim().length > 0) {
-          pillSuggestions.unshift({
+          pillSuggestions = [{
             command: `__create_note__:${query}`,
             title: `Create Note: "${query}"`,
             description: 'Press Enter to save this note',
             icon: faPlus,
             category: 'Create',
             type: 'dynamic-action'
-          });
+          }];
+        } else {
+          // Empty state / Hint
+          pillSuggestions = [{
+            command: '',
+            title: 'Type to create note...',
+            description: 'Your note will be saved instantly',
+            icon: faEdit,
+            category: 'Info'
+          }];
         }
       }
 
@@ -426,7 +435,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         // Simplified Command List
         const commands = [
           // Navigation
-          { command: '/notes', title: 'Notes', description: 'Go to Notes', icon: faEdit, category: 'Nav' },
+          { command: '/notes', title: 'Notes', description: 'Go to Notes', icon: faBook, category: 'Nav' },
+          { command: '/notes create', title: 'Create Note', description: 'Quickly add a new note', icon: faPlus, category: 'Action' },
           { command: '/chat', title: 'Chat', description: 'Go to AI Chat', icon: faComment, category: 'Nav' },
           { command: '/tabs', title: 'Tabs', description: 'Manage Tabs', icon: faLayerGroup, category: 'Nav' },
           { command: '/workspaces', title: 'Workspaces', description: 'Manage Workspaces', icon: faBriefcase, category: 'Nav' },
@@ -974,7 +984,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     const value = e.target.value;
 
     // Detect space after command for Pill creation
-    if (!activePill && value.endsWith(' ')) {
+    if (value.endsWith(' ')) {
       const trimmed = value.trim().toLowerCase();
       const supportedPills = {
         '/add': 'ADD',
@@ -982,7 +992,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         '/notes': 'NOTES',
         '/workspace': 'WORKSPACE',
         '/chat': 'CHAT',
-        '/tabs': 'TABS'
+        '/tabs': 'TABS',
+        '/create': 'CREATE',
+        '/notes create': 'CREATE'
       };
 
       if (supportedPills[trimmed]) {
@@ -1371,7 +1383,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       const supportedPrefixes = {
         '/add': 'ADD',
         '/share': 'SHARE',
-        '/notes': 'NOTES'
+        '/notes': 'NOTES',
+        '/notes create': 'CREATE',
+        '/create': 'CREATE'
       };
 
       // Handle Dynamic Note Creation
@@ -1383,12 +1397,12 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       }
 
       // Check if command requires arguments
-      const requiresArgs = ['!jump', '!go', '!spot', '!history', '!answer', '!write', '!ws', '/add', '/share'];
+      const requiresArgs = ['!jump', '!go', '!spot', '!history', '!answer', '!write', '!ws', '/add', '/share', '/notes', '/create'];
       const baseCmd = cmd.split(' ')[0];
       const needsMore = requiresArgs.includes(baseCmd) && cmd.split(' ').length === 1;
 
       // Flattened Execution: If it's a fully composed command, execute immediately
-      if (item.category === 'Quick Save' || item.category === 'Select Destination' || (cmd.split(' ').length > 1 && !needsMore)) {
+      if (item.category === 'Quick Save' || item.category === 'Select Destination' || (cmd.split(' ').length > 1 && !needsMore && !supportedPrefixes[cmd])) {
         handleSubmit({ preventDefault: () => { } }, cmd);
         return;
       }
@@ -1404,7 +1418,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
       // Command Pivot: If it needs args, just fill and wait
       if (needsMore || supportedPrefixes[cmd]) {
-        setSearchValue(cmd + ' ');
+        setSearchValue(cmd + ' '); // Actually, if we use supportedPrefixes, we typically set searchValue to '' below
         setCommandSuggestions([]);
         setSelectedSuggestionIndex(-1);
         if (supportedPrefixes[cmd]) {

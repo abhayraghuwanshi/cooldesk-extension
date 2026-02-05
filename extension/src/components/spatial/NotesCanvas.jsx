@@ -1589,7 +1589,6 @@ style.textContent = `
     .notes-sidebar {
         width: 280px;
         transition: transform 0.3s ease;
-        padding-left: 8px;
     }
     .folder-text {
         display: inline;

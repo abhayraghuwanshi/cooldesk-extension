@@ -1046,6 +1046,8 @@ export function injectFooterBar() {
 
       // Focus
       setTimeout(() => textarea.focus(), 50);
+
+      return stickyNote;
     };
 
     // ... (rest of logic) ...
@@ -1204,6 +1206,25 @@ export function injectFooterBar() {
         <input type="text" class="spotlight-input" placeholder="Search tabs, history, workspaces..." spellcheck="false">
       </div>
       <div class="spotlight-pins"></div>
+      <div class="spotlight-ai-actions" style="padding: 0 20px 12px; display: flex; gap: 8px;">
+        <button id="spotlight-summarise-btn" style="
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 8px;
+          color: #e4e4e7;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-family: inherit;
+        " onmouseover="this.style.background='rgba(255, 255, 255, 0.12)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.08)'">
+          <span style="font-size: 16px;">✨</span> Summarise Page
+        </button>
+      </div>
       <div class="spotlight-results"></div>
       <div class="spotlight-footer">
         <div class="shortcut-hint"><span class="shortcut-key">↵</span> Open</div>
@@ -1219,6 +1240,58 @@ export function injectFooterBar() {
     const spotlightInput = spotlightContainer.querySelector('.spotlight-input');
     const spotlightResults = spotlightContainer.querySelector('.spotlight-results');
     const spotlightPins = spotlightContainer.querySelector('.spotlight-pins');
+    const summariseBtn = spotlightContainer.querySelector('#spotlight-summarise-btn');
+
+    if (summariseBtn) {
+      summariseBtn.onclick = async () => {
+        toggleSpotlight(); // Close spotlight
+
+        // 1. Show processing note
+        const processingNote = spawnNewStickyNote('Generating summary...', 'text');
+        const textarea = processingNote.querySelector('textarea');
+
+        // 2. Extract content (simplified)
+        const content = document.body.innerText.slice(0, 10000); // Increased context limit
+
+        try {
+          let summary = '';
+
+          // Delegate to Background Service (which handles Nano AI / Fallbacks)
+          try {
+            const response = await new Promise(resolve => {
+              chrome.runtime.sendMessage({
+                type: 'NANO_AI_SUMMARIZE',
+                text: content,
+                maxLength: 500
+              }, resolve);
+            });
+
+            if (response && response.success) {
+              summary = response.summary;
+            } else {
+              console.warn('[Spotlight] Background summary failed:', response?.error);
+            }
+          } catch (err) {
+            console.warn('[Spotlight] Message sending failed:', err);
+          }
+
+          if (!summary) {
+            // Fallback simulation or basic truncation
+            summary = "AI Summary:\n\n" +
+              "• " + document.title + "\n" +
+              "• Key content extracted from " + window.location.hostname + "...\n\n" +
+              "(Note: Native AI model not enabled or available. Please enable Chrome Built-in AI flags.)";
+          }
+
+          // 3. Update note
+          if (textarea) textarea.value = summary;
+
+        } catch (e) {
+          if (textarea) textarea.value = "Failed to generate summary: " + e.message;
+        }
+      };
+    }
+
     let selectedIndex = -1;
     let currentResults = [];
     let pinnedItems = [];
@@ -2716,8 +2789,8 @@ function isBadTitle(domTitle, urlTitle) {
 
   // Looks like a domain (contains .vercel.app, .netlify.app, etc.)
   if (title.includes('.vercel.app') || title.includes('.netlify.app') ||
-      title.includes('.github.io') || title.includes('.com') ||
-      title.includes('.app') || title.includes('.dev')) {
+    title.includes('.github.io') || title.includes('.com') ||
+    title.includes('.app') || title.includes('.dev')) {
     return true;
   }
 
@@ -2793,7 +2866,7 @@ function isPreviewDeployment(urlStr) {
 
     // Edit/branch URLs often contain these patterns
     if (href.includes('/edit/') || href.includes('/edt-') ||
-        hostname.includes('-edit-') || hostname.includes('-edt-')) {
+      hostname.includes('-edit-') || hostname.includes('-edt-')) {
       return true;
     }
 
