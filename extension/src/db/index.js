@@ -38,7 +38,7 @@ export {
     // Scraped Config operations
     deleteScrapingConfig, deleteUrlNote, deleteWorkspace, deleteWorkspaceById, getAllActivity,
     // Utility functions
-    getDatabaseHealth, getScrapedChat, getScrapingConfig,
+    getDatabaseHealth, getScrapedChat, getScrapedChatStats, getScrapingConfig,
     // Settings operations
     getSettings, getTimeSeriesDataRange, getTimeSeriesStorageStats,
     // UI State operations

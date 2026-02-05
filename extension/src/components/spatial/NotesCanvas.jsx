@@ -69,91 +69,6 @@ const SidebarNoteItem = memo(({ note, isActive, onSelect, onDelete }) => (
   </div>
 ));
 
-// Default notes to help users understand CoolDesk features
-/* const DEFAULT_NOTES = [
-  {
-    id: 'guide_welcome',
-    title: 'Welcome to CoolDesk',
-    folder: 'Getting Started',
-    type: 'richtext',
-    text: `<p>CoolDesk is your personal productivity companion that helps you organize your browsing, take notes, and stay focused.</p>
-<h2>Quick Tips</h2>
-<ul>
-<li><strong>Create Notes</strong> - Click the + button to create new notes</li>
-<li><strong>Organize with Folders</strong> - Use folders to categorize your notes</li>
-<li><strong>Rich Text Editing</strong> - Format your notes with bold, italic, headings, and lists</li>
-<li><strong>Voice Input</strong> - Use the microphone button to dictate notes</li>
-<li><strong>Auto-Save</strong> - Your notes are automatically saved as you type</li>
-</ul>
-<p>Check out the other notes in the <strong>Getting Started</strong> folder for more tips!</p>`
-  },
-  {
-    id: 'guide_workspaces',
-    title: 'Workspaces & Tab Management',
-    folder: 'Getting Started',
-    type: 'richtext',
-    text: `<p>CoolDesk helps you organize your browser tabs into workspaces for better productivity.</p>
-<h2>Workspace Features</h2>
-<ul>
-<li><strong>Create Workspaces</strong> - Group related tabs together (Work, Research, Personal)</li>
-<li><strong>Auto Tab Cleanup</strong> - Automatically close inactive tabs to reduce clutter</li>
-<li><strong>Recently Closed</strong> - Easily restore tabs you accidentally closed</li>
-<li><strong>Tab Limits</strong> - Set limits to prevent tab overload</li>
-</ul>
-<h2>Protected Tabs</h2>
-<p>The following tabs are never auto-closed:</p>
-<ul>
-<li>Pinned tabs</li>
-<li>Active/current tab</li>
-<li>Tabs playing audio/video</li>
-<li>Important domains (Gmail, GitHub, etc.)</li>
-</ul>`
-  },
-  {
-    id: 'guide_highlights',
-    title: 'Highlights & URL Notes',
-    folder: 'Getting Started',
-    type: 'richtext',
-    text: `<p>Capture information from any webpage directly into CoolDesk!</p>
-<h2>Text Highlights</h2>
-<ul>
-<li><strong>Select any text</strong> on a webpage</li>
-<li><strong>Click the CoolDesk button</strong> that appears</li>
-<li>Your highlight is saved with the source URL</li>
-<li>Find all highlights in the <strong>Highlights</strong> folder</li>
-</ul>
-<h2>URL Notes</h2>
-<ul>
-<li>Add notes specific to any webpage</li>
-<li>Notes are linked to the URL for easy reference</li>
-<li>Find all URL notes in the <strong>URL Notes</strong> folder</li>
-</ul>
-<p><em>Tip: Highlights and URL notes automatically include the source webpage link!</em></p>`
-  },
-  {
-    id: 'guide_keyboard',
-    title: 'Keyboard Shortcuts & Tips',
-    folder: 'Getting Started',
-    type: 'richtext',
-    text: `<p>Speed up your workflow with these shortcuts:</p>
-<h2>Note Editor</h2>
-<ul>
-<li><strong>Ctrl+B</strong> - Bold text</li>
-<li><strong>Ctrl+I</strong> - Italic text</li>
-<li><strong>Tab</strong> - Insert indent</li>
-</ul>
-<h2>Pro Tips</h2>
-<ul>
-<li>Use checkboxes for task lists</li>
-<li>Pin important notes to keep them at the top</li>
-<li>Use search to quickly find notes</li>
-</ul>
-<h2>Themes</h2>
-<p>Customize CoolDesk with different themes! Go to settings to switch between light, dark, and accent color themes.</p>`
-  }
-]; */
-
-
 
 
 // Cache key for instant load
@@ -482,6 +397,20 @@ export function NotesCanvas({ workspaceId }) {
       unsubscribe();
     };
   }, [activeTeam, loadNotes]);
+
+  // Listen for global note updates (e.g. from Dashboard widget)
+  useEffect(() => {
+    const handleNotesUpdated = (event) => {
+      console.log('[NotesCanvas] 🔄 Received external update event:', event.detail);
+      // Reload notes silently (background update)
+      loadNotes(false);
+    };
+
+    window.addEventListener('notes-updated', handleNotesUpdated);
+    return () => {
+      window.removeEventListener('notes-updated', handleNotesUpdated);
+    };
+  }, [loadNotes]);
 
   // Consolidated data loading logic moved up to avoid TDZ issues
 

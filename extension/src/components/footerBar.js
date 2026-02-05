@@ -2298,6 +2298,8 @@ let currentShowNotification = null;
 let pendingSelectorInfo = null;
 let excludedDomains = new Set();
 let scrapeLimit = 50; // Default limit for scraped items
+let titleSelector = null; // Custom CSS selector for title extraction
+let titleSource = 'auto'; // 'auto', 'selector', 'url'
 
 /**
  * Get hostname for storage key
@@ -2602,28 +2604,146 @@ function getMeaningfulClasses(element) {
  */
 function extractLinkTitle(link) {
   const strategies = [
+    // 1. Explicit title/aria-label attributes (highest priority)
     () => link.getAttribute('title'),
     () => link.getAttribute('aria-label'),
     () => link.querySelector('[title]')?.getAttribute('title'),
-    () => link.querySelector('.truncate')?.textContent?.trim(),
-    () => link.querySelector('span, p')?.textContent?.trim(),
+
+    // 2. Look for project/item name in dedicated elements
+    () => link.querySelector('[class*="project-name"], [class*="projectName"]')?.textContent?.trim(),
+    () => link.querySelector('[class*="repo-name"], [class*="repoName"]')?.textContent?.trim(),
+    () => link.querySelector('[data-testid*="name"], [data-testid*="title"]')?.textContent?.trim(),
+
+    // 3. Headers inside the link
+    () => link.querySelector('h1, h2, h3, h4, h5, h6')?.textContent?.trim(),
+
+    // 4. Common truncate patterns (but validate length)
+    () => {
+      const truncate = link.querySelector('.truncate, [class*="truncate"]');
+      if (truncate) {
+        const text = truncate.textContent?.trim();
+        // Only use if it looks like a real title (not partial)
+        if (text && text.length >= 3 && !text.match(/^[a-z]{1,4}$/)) {
+          return text;
+        }
+      }
+      return null;
+    },
+
+    // 5. First meaningful span/p (skip icons, badges)
+    () => {
+      const spans = link.querySelectorAll('span, p');
+      for (const span of spans) {
+        // Skip if it's likely an icon or badge
+        if (span.querySelector('svg, img')) continue;
+        if (span.classList.contains('sr-only')) continue;
+
+        const text = span.textContent?.trim();
+        // Must be a reasonable title length
+        if (text && text.length >= 3 && text.length < 150) {
+          // Avoid partial words (likely truncated CSS issues)
+          if (!text.match(/^[a-z]{1,4}$/) && !text.match(/^[A-Z][a-z]$/)) {
+            return text;
+          }
+        }
+      }
+      return null;
+    },
+
+    // 6. Full text content (cleaned)
     () => {
       const clone = link.cloneNode(true);
-      clone.querySelectorAll('svg, img').forEach(el => el.remove());
-      const text = clone.textContent?.trim();
-      return text && text.length > 0 && text.length < 200 ? text : null;
+      clone.querySelectorAll('svg, img, .sr-only, [aria-hidden="true"]').forEach(el => el.remove());
+      const text = clone.textContent?.trim().replace(/\s+/g, ' ');
+      if (text && text.length >= 3 && text.length < 200) {
+        return text;
+      }
+      return null;
     },
   ];
 
   for (const strategy of strategies) {
     try {
       const title = strategy();
-      if (title && title.trim().length > 0) {
+      if (title && title.trim().length >= 3) {
         return title.trim().replace(/\s+/g, ' ');
       }
     } catch { continue; }
   }
   return null;
+}
+
+/**
+ * Extract title from URL as fallback
+ * Useful when DOM title extraction fails
+ */
+function extractTitleFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    const segments = pathname.split('/').filter(Boolean);
+
+    // Get the last meaningful segment (usually the project/item name)
+    for (let i = segments.length - 1; i >= 0; i--) {
+      const seg = segments[i];
+      // Skip UUIDs and numeric IDs
+      if (seg.length === 36 && seg.split('-').length === 5) continue;
+      if (/^\d+$/.test(seg)) continue;
+      if (seg.length < 2) continue;
+
+      // Format: replace hyphens/underscores with spaces, title case
+      return seg
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a DOM-extracted title looks bad/truncated
+ * Returns true if we should use URL title instead
+ */
+function isBadTitle(domTitle, urlTitle) {
+  if (!domTitle) return true;
+
+  const title = domTitle.trim().toLowerCase();
+  const urlLower = urlTitle?.toLowerCase() || '';
+
+  // Too short (likely truncated)
+  if (title.length < 3) return true;
+
+  // Looks like a domain (contains .vercel.app, .netlify.app, etc.)
+  if (title.includes('.vercel.app') || title.includes('.netlify.app') ||
+      title.includes('.github.io') || title.includes('.com') ||
+      title.includes('.app') || title.includes('.dev')) {
+    return true;
+  }
+
+  // Is a substring of the URL title (likely truncated)
+  // e.g., "atecost" is part of "calculatecost-cloud"
+  if (urlLower && urlLower.replace(/[-_\s]/g, '').includes(title.replace(/[-_\s]/g, ''))) {
+    // But only if significantly shorter
+    if (title.length < urlLower.length * 0.6) {
+      return true;
+    }
+  }
+
+  // Single word with no vowels or very few vowels (likely truncated)
+  if (!title.includes(' ')) {
+    const vowels = title.match(/[aeiou]/gi);
+    if (!vowels || vowels.length < title.length * 0.15) {
+      return true;
+    }
+  }
+
+  // All lowercase short string (likely partial)
+  if (title.length < 8 && title === title.toLowerCase() && !title.includes(' ')) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -2653,17 +2773,78 @@ function countSimilarLinks(link) {
 }
 
 /**
- * Scrape links using selector
- * @param {string} selector - CSS selector
- * @param {Set<string>} domainsToExclude - Domains to skip
+ * Check if URL is a preview/branch deployment (Vercel, Netlify, etc.)
  */
-function scrapeWithSelector(selector, domainsToExclude = new Set()) {
+function isPreviewDeployment(urlStr) {
+  try {
+    const url = new URL(urlStr);
+    const hostname = url.hostname.toLowerCase();
+    const href = url.href.toLowerCase();
+
+    // Vercel preview patterns: project-git-branch-user.vercel.app
+    if (hostname.includes('.vercel.app') && hostname.includes('-git-')) {
+      return true;
+    }
+
+    // Netlify deploy previews: deploy-preview-123--sitename.netlify.app
+    if (hostname.includes('.netlify.app') && hostname.includes('deploy-preview')) {
+      return true;
+    }
+
+    // Edit/branch URLs often contain these patterns
+    if (href.includes('/edit/') || href.includes('/edt-') ||
+        hostname.includes('-edit-') || hostname.includes('-edt-')) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if this is an external link (different domain than current page)
+ */
+function isExternalLink(urlStr) {
+  try {
+    const url = new URL(urlStr);
+    const linkHost = url.hostname.replace(/^www\./, '').toLowerCase();
+    const currentHost = window.location.hostname.replace(/^www\./, '').toLowerCase();
+
+    // Direct match - same domain
+    if (linkHost === currentHost) return false;
+
+    // Subdomain of current host (e.g., api.example.com)
+    if (linkHost.endsWith('.' + currentHost)) return false;
+
+    // On platform dashboards, links to deployed apps are external
+    // e.g., on vercel.com, *.vercel.app links are deployed sites, not projects
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Scrape links using selector
+ * @param {string} selector - CSS selector for link containers
+ * @param {Set<string>} domainsToExclude - Domains to skip
+ * @param {Object} options - Additional options
+ * @param {string} options.titleSelector - CSS selector for title element within each container
+ * @param {string} options.titleSource - Where to get title: 'auto', 'selector', 'url'
+ */
+function scrapeWithSelector(selector, domainsToExclude = new Set(), options = {}) {
+  const { titleSelector = null, titleSource = 'auto' } = options;
   const links = [];
   const seenUrls = new Set();
 
   try {
     const elements = document.querySelectorAll(selector);
     console.log(`[CoolDesk Scraper] Selector "${selector}" matched ${elements.length} elements`);
+    if (titleSelector) {
+      console.log(`[CoolDesk Scraper] Using title selector: "${titleSelector}"`);
+    }
     if (domainsToExclude.size > 0) {
       console.log(`[CoolDesk Scraper] Excluding domains:`, Array.from(domainsToExclude));
     }
@@ -2675,7 +2856,13 @@ function scrapeWithSelector(selector, domainsToExclude = new Set()) {
       const url = link.href;
       if (!url || !url.startsWith('http')) continue;
 
-      // Check if domain is excluded
+      // Skip external links (different domain)
+      if (isExternalLink(url)) continue;
+
+      // Skip preview/branch deployments (Vercel -git-, Netlify deploy-preview, etc.)
+      if (isPreviewDeployment(url)) continue;
+
+      // Check if domain is excluded by user
       try {
         const domain = new URL(url).hostname.replace(/^www\./, '');
         if (domainsToExclude.has(domain)) continue;
@@ -2686,9 +2873,32 @@ function scrapeWithSelector(selector, domainsToExclude = new Set()) {
       if (seenUrls.has(normalizedUrl)) continue;
       seenUrls.add(normalizedUrl);
 
-      // Try to get title from the card/container, not just the link
+      // Get title based on source preference
       const card = el.tagName === 'A' ? el.parentElement : el;
-      const title = extractLinkTitle(link) || extractCardTitle(card);
+      let title = null;
+
+      if (titleSource === 'url') {
+        // User wants URL-based titles only
+        title = extractTitleFromUrl(url);
+      } else if (titleSource === 'selector' && titleSelector) {
+        // User specified a custom title selector
+        title = extractTitleWithSelector(el, card, titleSelector);
+      } else {
+        // Auto mode: try custom selector first, then fallbacks
+        if (titleSelector) {
+          title = extractTitleWithSelector(el, card, titleSelector);
+        }
+        if (!title) {
+          title = extractLinkTitle(link) || extractCardTitle(card);
+        }
+
+        // URL-based fallback if DOM title looks bad
+        const urlTitle = extractTitleFromUrl(url);
+        if (urlTitle && isBadTitle(title, urlTitle)) {
+          title = urlTitle;
+        }
+      }
+
       if (!title || title.length < 2) continue;
 
       // Skip generic/navigation titles
@@ -2704,11 +2914,43 @@ function scrapeWithSelector(selector, domainsToExclude = new Set()) {
       });
     }
 
-    console.log(`[CoolDesk Scraper] Found ${links.length} unique links (after domain filtering)`);
+    console.log(`[CoolDesk Scraper] Found ${links.length} unique links (after filtering)`);
   } catch (error) {
     console.error('[CoolDesk Scraper] Selector error:', error);
   }
   return links;
+}
+
+/**
+ * Extract title using a custom selector
+ * Searches within the element and its parents
+ */
+function extractTitleWithSelector(el, card, titleSelector) {
+  try {
+    // Try within the element first
+    let titleEl = el.querySelector(titleSelector);
+    if (!titleEl && card) {
+      titleEl = card.querySelector(titleSelector);
+    }
+    // Try parent levels
+    if (!titleEl) {
+      let parent = card?.parentElement;
+      for (let i = 0; i < 3 && parent && !titleEl; i++) {
+        titleEl = parent.querySelector(titleSelector);
+        parent = parent.parentElement;
+      }
+    }
+
+    if (titleEl) {
+      const text = titleEl.textContent?.trim();
+      if (text && text.length >= 2 && text.length < 200) {
+        return text;
+      }
+    }
+  } catch (e) {
+    console.warn('[CoolDesk Scraper] Title selector error:', e);
+  }
+  return null;
 }
 
 /**
@@ -2737,26 +2979,46 @@ function normalizeUrlForDedup(url) {
 
 /**
  * Extract title from card element (not just link)
+ * Searches up to 3 levels of parent elements
  */
 function extractCardTitle(card) {
   if (!card) return null;
 
   // Look for common title patterns in cards
   const titleSelectors = [
+    // Specific project/item name classes
+    '[class*="project-name"]', '[class*="projectName"]',
+    '[class*="repo-name"]', '[class*="repoName"]',
+    '[class*="item-name"]', '[class*="itemName"]',
+    '[data-testid*="name"]', '[data-testid*="title"]',
+    // Headers
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    // Generic title/name classes
     '[class*="title"]', '[class*="name"]', '[class*="heading"]',
+    // Truncate (but with validation)
     '.truncate', '[class*="truncate"]',
     'strong', 'b',
   ];
 
-  for (const selector of titleSelectors) {
-    const el = card.querySelector(selector);
-    if (el) {
-      const text = el.textContent?.trim();
-      if (text && text.length > 1 && text.length < 200) {
-        return text;
-      }
+  // Search in card and up to 2 parent levels
+  let searchElement = card;
+  for (let level = 0; level < 3 && searchElement; level++) {
+    for (const selector of titleSelectors) {
+      try {
+        const el = searchElement.querySelector(selector);
+        if (el) {
+          const text = el.textContent?.trim();
+          // Validate: must be reasonable length, not a partial word
+          if (text && text.length >= 3 && text.length < 200) {
+            // Skip if it looks like truncated garbage (1-4 lowercase letters)
+            if (!text.match(/^[a-z]{1,4}$/)) {
+              return text;
+            }
+          }
+        }
+      } catch { /* invalid selector, skip */ }
     }
+    searchElement = searchElement.parentElement;
   }
 
   return null;
@@ -2820,7 +3082,10 @@ async function saveSelectorForDomain(selectorInfo) {
       excludedDomains: Array.from(selectorInfo.excludedDomains || []),
       excludedPatterns: Array.from(selectorInfo.excludedPatterns || []),
       includedPatterns: Array.from(selectorInfo.includedPatterns || []),
-      scrapeLimit: selectorInfo.scrapeLimit || 0
+      scrapeLimit: selectorInfo.scrapeLimit || 0,
+      // Title extraction settings
+      titleSelector: selectorInfo.titleSelector || null,
+      titleSource: selectorInfo.titleSource || 'auto', // 'auto', 'selector', 'url'
     };
 
     selectors[hostKey] = newConfig;
@@ -3153,6 +3418,7 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
   let showPatterns = false;
   let domainsHtml = '';
   let patternsHtml = '';
+  let titleSourceHtml = '';
   let tableHtml = '';
   let totalAvailable = 0;
 
@@ -3163,8 +3429,11 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
     if (!includedPatterns) includedPatterns = new Set();
 
     if (selectorInfo && selectorInfo.full) {
-      // 1. Filter by Domain first
-      const domainFilteredLinks = scrapeWithSelector(selectorInfo.full, excludedDomains);
+      // 1. Filter by Domain first (with title options)
+      const domainFilteredLinks = scrapeWithSelector(selectorInfo.full, excludedDomains, {
+        titleSelector: titleSelector,
+        titleSource: titleSource,
+      });
 
       // 2. Analyze Patterns
       const patterns = analyzePathPatterns(domainFilteredLinks);
@@ -3271,7 +3540,48 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
         `;
       }
 
-      // C. Table View
+      // C. Title Source Selector (only when locked)
+      if (isSelectionLocked) {
+        titleSourceHtml = `
+          <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 10px; opacity: 0.7; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+              Title Source
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <label style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: ${titleSource === 'auto' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${titleSource === 'auto' ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255,255,255,0.1)'}; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                <input type="radio" name="titleSource" value="auto" ${titleSource === 'auto' ? 'checked' : ''} style="width: 12px; height: 12px; accent-color: #6366f1;"/>
+                Auto
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: ${titleSource === 'url' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${titleSource === 'url' ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255,255,255,0.1)'}; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                <input type="radio" name="titleSource" value="url" ${titleSource === 'url' ? 'checked' : ''} style="width: 12px; height: 12px; accent-color: #6366f1;"/>
+                From URL
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: ${titleSource === 'selector' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${titleSource === 'selector' ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255,255,255,0.1)'}; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                <input type="radio" name="titleSource" value="selector" ${titleSource === 'selector' ? 'checked' : ''} style="width: 12px; height: 12px; accent-color: #6366f1;"/>
+                Custom Selector
+              </label>
+            </div>
+            ${titleSource === 'selector' ? `
+              <div style="margin-top: 8px;">
+                <input id="cooldesk-title-selector" type="text" placeholder="CSS selector (e.g. h3, .title, [data-name])" value="${titleSelector || ''}" style="
+                  width: 100%;
+                  padding: 6px 8px;
+                  background: rgba(0,0,0,0.2);
+                  border: 1px solid rgba(255,255,255,0.1);
+                  border-radius: 4px;
+                  color: white;
+                  font-size: 11px;
+                  font-family: monospace;
+                  outline: none;
+                  box-sizing: border-box;
+                "/>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      // D. Table View
       if (isTableVisible && isSelectionLocked) {
         const rows = finalLinks.slice(0, 100).map((l, i) => `
           <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
@@ -3386,6 +3696,7 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
 
         ${domainsHtml}
         ${patternsHtml}
+        ${titleSourceHtml}
         ${tableHtml}
       </div>
       
@@ -3554,6 +3865,38 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
     limitInput.onkeydown = (e) => e.stopPropagation(); // Allow typing
   }
 
+  // Title Source Radio Buttons
+  const titleSourceRadios = selectTooltip.querySelectorAll('input[name="titleSource"]');
+  titleSourceRadios.forEach(radio => {
+    radio.onchange = (e) => {
+      e.stopPropagation();
+      titleSource = e.target.value;
+      // Re-render to show/hide selector input and refresh data
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    };
+    radio.onclick = (e) => e.stopPropagation();
+  });
+
+  // Title Selector Input
+  const titleSelectorInput = selectTooltip.querySelector('#cooldesk-title-selector');
+  if (titleSelectorInput) {
+    titleSelectorInput.onchange = (e) => {
+      e.stopPropagation();
+      titleSelector = e.target.value.trim() || null;
+      // Re-render to update preview with new selector
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    };
+    titleSelectorInput.onclick = (e) => e.stopPropagation();
+    titleSelectorInput.onkeydown = (e) => {
+      e.stopPropagation();
+      // Refresh on Enter
+      if (e.key === 'Enter') {
+        titleSelector = e.target.value.trim() || null;
+        renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+      }
+    };
+  }
+
   // Cancel
   const cancelBtn = selectTooltip.querySelector('#cooldesk-scrape-cancel');
   if (cancelBtn) {
@@ -3586,7 +3929,9 @@ function renderTooltipContent(link, selectorInfo, domains, includedCount, title,
         excludedDomains: Array.from(excludedDomains),
         excludedPatterns: Array.from(excludedPatterns),
         includedPatterns: Array.from(includedPatterns),
-        scrapeLimit: scrapeLimit
+        scrapeLimit: scrapeLimit,
+        titleSelector: titleSelector,
+        titleSource: titleSource,
       };
 
       // Auto-save the config with filters!
@@ -3750,10 +4095,34 @@ function handleSelectClick(e) {
 
   // LOCK SELECTION
   isSelectionLocked = true;
-  highlightLink(link); // Re-render in locked state
+
+  // Load saved title settings for this domain (if any)
+  loadTitleSettings().then(() => {
+    highlightLink(link); // Re-render in locked state with loaded settings
+  });
 
   if (currentShowNotification) {
     currentShowNotification('Selection Locked. Review & Confirm.', '#10b981', 3000);
+  }
+}
+
+/**
+ * Load saved title settings from storage
+ */
+async function loadTitleSettings() {
+  try {
+    const hostKey = getHostKey();
+    const result = await chrome.storage.local.get('domainSelectors');
+    const selectors = result.domainSelectors || {};
+    const config = selectors[hostKey];
+
+    if (config) {
+      titleSelector = config.titleSelector || null;
+      titleSource = config.titleSource || 'auto';
+      console.log(`[CoolDesk Scraper] Loaded title settings: source=${titleSource}, selector=${titleSelector}`);
+    }
+  } catch (error) {
+    console.warn('[CoolDesk Scraper] Failed to load title settings:', error);
   }
 }
 
@@ -3857,6 +4226,8 @@ function exitLinkSelectMode() {
   currentShowNotification = null;
   pendingSelectorInfo = null;
   excludedDomains.clear();
+  titleSelector = null;
+  titleSource = 'auto';
 
   console.log('[CoolDesk Scraper] Select mode deactivated');
 }
@@ -3893,8 +4264,11 @@ async function autoScrapeIfConfigured() {
     // Wait for page to load dynamic content
     await new Promise(resolve => setTimeout(resolve, 2500));
 
-    // Scrape raw
-    const rawLinks = scrapeWithSelector(config.selector);
+    // Scrape raw with title options
+    const rawLinks = scrapeWithSelector(config.selector, new Set(), {
+      titleSelector: config.titleSelector || null,
+      titleSource: config.titleSource || 'auto',
+    });
 
     if (rawLinks.length === 0) {
       console.log('[CoolDesk Scraper] No links found with auto-config');

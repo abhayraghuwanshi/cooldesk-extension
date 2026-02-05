@@ -144,6 +144,7 @@ export function TabManagement() {
   const handleTabPin = useCallback(async (tab) => {
     try {
       if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
+        console.log('[TabManagement] Manual PIN toggle for tab:', tab.id, !tab.pinned);
         await chrome.tabs.update(tab.id, { pinned: !tab.pinned });
       }
     } catch (error) {
@@ -344,7 +345,7 @@ export function TabManagement() {
               chrome.runtime.sendMessage({
                 type: 'TOGGLE_AUTO_GROUP',
                 enabled: newState
-              }).catch(() => {/* ignore errors */});
+              }).catch(() => {/* ignore errors */ });
             }}
             style={{
               background: autoGroupEnabled

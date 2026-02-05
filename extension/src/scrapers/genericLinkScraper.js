@@ -1,338 +1,280 @@
 /**
- * Generic Link Scraper - Auto-detects navigation links on any website
- * No CSS knowledge required - uses heuristics to find meaningful links
+ * Generic Link Scraper - URL Pattern Detection & Clustering
  *
- * Uses URL API instead of regex for cleaner, more maintainable code
+ * Instead of exclusion lists, this scraper:
+ * 1. Extracts URL templates (e.g., /users/{id} from /users/123, /users/456)
+ * 2. Clusters links by their URL pattern
+ * 3. Scores patterns based on content likelihood
+ * 4. Returns grouped results for easy filtering
+ *
+ * Based on research from:
+ * - Scrapinghub page_clustering algorithm
+ * - WHATWG URL Pattern Standard
+ * - Web usage mining pattern detection
  */
 
 /**
- * Configuration for navigation detection - pure data, no regex
+ * ============================================
+ * URL PATTERN DETECTION
+ * ============================================
  */
-const CONFIG = {
-  // CSS selectors for finding navigation areas
-  navSelectors: [
-    'nav', 'aside',
-    '[role="navigation"]', '[role="complementary"]', '[role="menu"]',
-    '.sidebar', '#sidebar', '.sidenav', '.side-nav',
-    '.menu', '.nav-menu', '.navigation',
-    '.tree', '.tree-view',
-    '.repo-list', '.project-list', '.workspace-list',
-  ],
-
-  // Keywords in class/id that indicate navigation
-  navKeywords: ['sidebar', 'sidenav', 'menu', 'nav', 'tree', 'list', 'repo', 'project', 'workspace'],
-
-  // URL path segments to exclude (non-content pages)
-  excludePaths: [
-    'login', 'signin', 'sign-in', 'signup', 'sign-up', 'register',
-    'logout', 'signout', 'sign-out',
-    'about', 'contact', 'privacy', 'terms', 'legal', 'tos',
-    'help', 'support', 'faq', 'docs', 'documentation',
-    'pricing', 'plans', 'subscribe', 'upgrade', 'billing',
-    'settings', 'preferences', 'account', 'profile',
-    'blog', 'news', 'press', 'careers', 'jobs',
-    'enterprise', 'business', 'teams',
-  ],
-
-  // Known platforms with their display names
-  platforms: {
-    'github.com': 'GitHub',
-    'gitlab.com': 'GitLab',
-    'bitbucket.org': 'Bitbucket',
-    'vercel.com': 'Vercel',
-    'netlify.app': 'Netlify',
-    'netlify.com': 'Netlify',
-    'render.com': 'Render',
-    'railway.app': 'Railway',
-    'heroku.com': 'Heroku',
-    'fly.io': 'Fly.io',
-    'console.cloud.google.com': 'Google Cloud',
-    'console.firebase.google.com': 'Firebase',
-    'console.aws.amazon.com': 'AWS',
-    'portal.azure.com': 'Azure',
-    'supabase.com': 'Supabase',
-    'planetscale.com': 'PlanetScale',
-    'neon.tech': 'Neon',
-    'notion.so': 'Notion',
-    'linear.app': 'Linear',
-    'figma.com': 'Figma',
-    'miro.com': 'Miro',
-    'slack.com': 'Slack',
-    'discord.com': 'Discord',
-    'trello.com': 'Trello',
-    'asana.com': 'Asana',
-    'monday.com': 'Monday',
-    'clickup.com': 'ClickUp',
-    'jira.atlassian.com': 'Jira',
-    'confluence.atlassian.com': 'Confluence',
-  },
-};
 
 /**
- * Parse URL using the built-in URL API (no regex needed)
+ * Detect the type of a URL segment
  */
-function parseUrl(href, baseOrigin) {
-  try {
-    // Handle relative URLs
-    const url = new URL(href, baseOrigin);
-    return {
-      valid: true,
-      href: url.href,
-      hostname: url.hostname,
-      pathname: url.pathname,
-      segments: url.pathname.split('/').filter(Boolean),
-      isExternal: url.hostname !== new URL(baseOrigin).hostname,
-      isAnchor: href.startsWith('#'),
-      isJavascript: href.toLowerCase().startsWith('javascript:'),
-      isMailto: href.toLowerCase().startsWith('mailto:'),
-    };
-  } catch {
-    return { valid: false };
-  }
-}
+function detectSegmentType(segment) {
+  if (!segment) return { type: 'empty', pattern: '' };
 
-/**
- * Check if a URL path contains excluded segments
- */
-function hasExcludedPath(segments) {
-  const lowerSegments = segments.map(s => s.toLowerCase());
-  return CONFIG.excludePaths.some(excluded =>
-    lowerSegments.includes(excluded)
-  );
-}
-
-/**
- * Extract a unique ID from URL path segments (no regex)
- */
-function extractIdFromSegments(segments) {
-  // Look for UUID-like segments (8-4-4-4-12 format)
-  for (const segment of segments) {
-    if (isUUID(segment)) {
-      return segment;
-    }
+  // UUID: 8-4-4-4-12 hex format
+  if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(segment)) {
+    return { type: 'uuid', pattern: '{uuid}' };
   }
 
-  // Look for hex hash segments (7-40 chars, all hex)
-  for (const segment of segments) {
-    if (isHexHash(segment)) {
-      return segment;
-    }
+  // Hex hash: 7-40 hex characters (git commits, short IDs)
+  if (/^[a-f0-9]{7,40}$/i.test(segment)) {
+    return { type: 'hash', pattern: '{hash}' };
   }
 
-  // Look for numeric IDs
-  for (const segment of segments) {
-    if (isNumericId(segment)) {
-      return segment;
-    }
+  // Numeric ID
+  if (/^\d+$/.test(segment)) {
+    return { type: 'numeric', pattern: '{id}' };
   }
 
-  // Return last meaningful segment
-  const meaningful = segments.filter(s => s.length > 1 && !CONFIG.excludePaths.includes(s.toLowerCase()));
-  return meaningful.length > 0 ? meaningful[meaningful.length - 1] : null;
-}
-
-/**
- * Check if string is a UUID (without regex)
- */
-function isUUID(str) {
-  if (str.length !== 36) return false;
-  const parts = str.split('-');
-  if (parts.length !== 5) return false;
-  if (parts[0].length !== 8 || parts[1].length !== 4 ||
-      parts[2].length !== 4 || parts[3].length !== 4 ||
-      parts[4].length !== 12) return false;
-  return parts.every(part => isHexString(part));
-}
-
-/**
- * Check if string is a hex hash (7-40 hex chars)
- */
-function isHexHash(str) {
-  if (str.length < 7 || str.length > 40) return false;
-  return isHexString(str);
-}
-
-/**
- * Check if string contains only hex characters
- */
-function isHexString(str) {
-  const hexChars = '0123456789abcdefABCDEF';
-  for (const char of str) {
-    if (!hexChars.includes(char)) return false;
-  }
-  return true;
-}
-
-/**
- * Check if string is a numeric ID
- */
-function isNumericId(str) {
-  if (str.length === 0 || str.length > 20) return false;
-  for (const char of str) {
-    if (char < '0' || char > '9') return false;
-  }
-  return true;
-}
-
-/**
- * Detect platform name from hostname
- */
-function detectPlatform(hostname) {
-  // Direct match
-  if (CONFIG.platforms[hostname]) {
-    return CONFIG.platforms[hostname];
+  // Slug with ID suffix (e.g., "my-project-abc123")
+  if (/^[a-z0-9-]+-[a-z0-9]{6,}$/i.test(segment)) {
+    return { type: 'slug-id', pattern: '{slug}' };
   }
 
-  // Check if hostname ends with a known platform domain
-  for (const [domain, name] of Object.entries(CONFIG.platforms)) {
-    if (hostname.endsWith(domain) || hostname.includes(domain.split('.')[0])) {
-      return name;
-    }
+  // Base64-like (long alphanumeric, often IDs)
+  if (/^[A-Za-z0-9_-]{20,}$/.test(segment)) {
+    return { type: 'base64', pattern: '{token}' };
   }
 
-  // Capitalize first part of hostname as fallback
-  const name = hostname.replace(/^www\./, '').split('.')[0];
-  return name.charAt(0).toUpperCase() + name.slice(1);
+  // Static segment
+  return { type: 'static', pattern: segment };
 }
 
 /**
- * Check if element is inside a navigation area
+ * Convert a URL path to a pattern template
+ * /users/123/posts/456 -> /users/{id}/posts/{id}
  */
-function isInNavArea(element) {
-  // Check direct selector match
-  const navSelector = CONFIG.navSelectors.join(', ');
-  const navParent = element.closest(navSelector);
-  if (navParent) return true;
-
-  // Check if any parent has nav-related class/id
-  let parent = element.parentElement;
-  while (parent && parent !== document.body) {
-    const className = (parent.className || '').toLowerCase();
-    const id = (parent.id || '').toLowerCase();
-
-    for (const keyword of CONFIG.navKeywords) {
-      if (className.includes(keyword) || id.includes(keyword)) {
-        return true;
-      }
-    }
-    parent = parent.parentElement;
-  }
-
-  return false;
+function urlToPattern(pathname) {
+  const segments = pathname.split('/').filter(Boolean);
+  const patternSegments = segments.map(seg => detectSegmentType(seg).pattern);
+  return '/' + patternSegments.join('/');
 }
 
 /**
- * Check if element is in header/footer area
+ * Calculate pattern score - higher = more likely to be content
  */
-function isInHeaderFooter(element) {
-  return !!element.closest('header, footer, [role="banner"], [role="contentinfo"]');
-}
-
-/**
- * Extract title from link element using multiple strategies
- */
-function extractTitle(linkEl) {
-  const strategies = [
-    () => linkEl.getAttribute('title'),
-    () => linkEl.getAttribute('aria-label'),
-    () => linkEl.querySelector('[title]')?.getAttribute('title'),
-    () => linkEl.querySelector('.truncate')?.textContent?.trim(),
-    () => linkEl.querySelector('span:not(.icon)')?.textContent?.trim(),
-    () => {
-      const text = linkEl.textContent?.trim();
-      // Only use if reasonable length
-      return (text && text.length > 1 && text.length < 150) ? text : null;
-    },
-  ];
-
-  for (const strategy of strategies) {
-    try {
-      const title = strategy();
-      if (title && title.trim().length > 1) {
-        // Clean up whitespace
-        return title.trim().replace(/\s+/g, ' ');
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
-}
-
-/**
- * Score a link element to determine usefulness
- */
-function scoreLink(linkEl, parsedUrl) {
+function scorePattern(pattern, urls) {
   let score = 0;
 
-  // Invalid or special links
-  if (!parsedUrl.valid || parsedUrl.isAnchor || parsedUrl.isJavascript || parsedUrl.isMailto) {
-    return -100;
-  }
+  // Patterns with dynamic segments are likely content lists
+  const dynamicCount = (pattern.match(/\{[^}]+\}/g) || []).length;
+  score += dynamicCount * 20;
 
-  // External links (lower priority but not excluded)
-  if (parsedUrl.isExternal) {
-    score -= 50;
-  }
+  // More URLs matching = more confidence it's a real pattern
+  score += Math.min(urls.length * 5, 50);
 
-  // In navigation area = strong signal
-  if (isInNavArea(linkEl)) {
-    score += 30;
-  }
+  // Depth bonus - deeper paths often more specific
+  const depth = pattern.split('/').filter(Boolean).length;
+  score += depth * 5;
 
-  // In header/footer = likely not content
-  if (isInHeaderFooter(linkEl)) {
-    score -= 40;
-  }
-
-  // Has excluded path segments
-  if (hasExcludedPath(parsedUrl.segments)) {
+  // Penalize patterns that are too generic (just /{id})
+  if (pattern === '/{id}' || pattern === '/{uuid}' || pattern === '/{hash}') {
     score -= 30;
   }
 
-  // Has meaningful text
-  const text = linkEl.textContent?.trim() || '';
-  if (text.length > 2 && text.length < 100) {
-    score += 20;
-  }
-
-  // In a list item = likely navigation
-  if (linkEl.closest('li, [role="listitem"]')) {
-    score += 10;
-  }
-
-  // Has truncate class = likely list item
-  if (linkEl.querySelector('.truncate') || linkEl.classList.contains('truncate')) {
-    score += 15;
-  }
-
-  // Has icon/avatar = often meaningful
-  if (linkEl.querySelector('svg, img')) {
-    score += 5;
-  }
-
-  // Has ID-like segment in URL = content link
-  const hasId = parsedUrl.segments.some(s => isUUID(s) || isHexHash(s) || isNumericId(s));
-  if (hasId) {
-    score += 10;
+  // Penalize very shallow paths
+  if (depth < 2) {
+    score -= 20;
   }
 
   return score;
 }
 
 /**
- * Main scraping function - finds meaningful links automatically
+ * ============================================
+ * LINK EXTRACTION & CLUSTERING
+ * ============================================
+ */
+
+/**
+ * Known platforms with their display names
+ */
+const PLATFORMS = {
+  'github.com': 'GitHub',
+  'gitlab.com': 'GitLab',
+  'bitbucket.org': 'Bitbucket',
+  'vercel.com': 'Vercel',
+  'netlify.app': 'Netlify',
+  'netlify.com': 'Netlify',
+  'render.com': 'Render',
+  'railway.app': 'Railway',
+  'heroku.com': 'Heroku',
+  'fly.io': 'Fly.io',
+  'console.cloud.google.com': 'Google Cloud',
+  'console.firebase.google.com': 'Firebase',
+  'supabase.com': 'Supabase',
+  'planetscale.com': 'PlanetScale',
+  'neon.tech': 'Neon',
+  'notion.so': 'Notion',
+  'linear.app': 'Linear',
+  'figma.com': 'Figma',
+  'miro.com': 'Miro',
+  'trello.com': 'Trello',
+  'asana.com': 'Asana',
+  'monday.com': 'Monday',
+  'clickup.com': 'ClickUp',
+};
+
+/**
+ * Detect platform name from hostname
+ */
+function detectPlatform(hostname) {
+  const clean = hostname.replace(/^www\./, '');
+
+  if (PLATFORMS[clean]) return PLATFORMS[clean];
+
+  for (const [domain, name] of Object.entries(PLATFORMS)) {
+    if (clean.includes(domain.split('.')[0])) return name;
+  }
+
+  // Capitalize hostname
+  const name = clean.split('.')[0];
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
+ * Extract title from link element
+ */
+function extractTitle(linkEl) {
+  // Priority order for title extraction
+  const title =
+    linkEl.getAttribute('title') ||
+    linkEl.getAttribute('aria-label') ||
+    linkEl.querySelector('[title]')?.getAttribute('title') ||
+    linkEl.querySelector('.truncate, .text-truncate, [class*="truncate"]')?.textContent?.trim() ||
+    linkEl.textContent?.trim();
+
+  if (!title || title.length < 2 || title.length > 200) return null;
+
+  // Clean whitespace
+  return title.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Check if link is likely a navigation/action link (not content)
+ */
+function isNavigationLink(linkEl, pathname) {
+  // Check if in header/footer
+  if (linkEl.closest('header, footer, [role="banner"], [role="contentinfo"]')) {
+    return true;
+  }
+
+  // Action keywords in path
+  const actionKeywords = ['login', 'logout', 'signin', 'signup', 'settings', 'preferences',
+    'account', 'profile', 'help', 'support', 'contact', 'about', 'privacy', 'terms'];
+  const lowerPath = pathname.toLowerCase();
+  if (actionKeywords.some(kw => lowerPath.includes(kw))) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if URL is a preview/branch deployment (Vercel, Netlify, etc.)
+ */
+function isPreviewDeployment(href, hostname) {
+  const lowerHref = href.toLowerCase();
+  const lowerHost = hostname.toLowerCase();
+
+  // Vercel preview patterns: project-git-branch-user.vercel.app
+  // These contain -git- in the subdomain
+  if (lowerHost.includes('.vercel.app') && lowerHost.includes('-git-')) {
+    return true;
+  }
+
+  // Netlify deploy previews: deploy-preview-123--sitename.netlify.app
+  if (lowerHost.includes('.netlify.app') && lowerHost.includes('deploy-preview')) {
+    return true;
+  }
+
+  // Edit/branch URLs often contain these patterns
+  if (lowerHref.includes('/edit/') || lowerHref.includes('/edt-') ||
+      lowerHref.includes('-edit-') || lowerHref.includes('-edt-')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if this is an external link (different domain than current page)
+ */
+function isExternalLink(linkHostname, currentHostname) {
+  // Normalize hostnames
+  const linkHost = linkHostname.replace(/^www\./, '').toLowerCase();
+  const currentHost = currentHostname.replace(/^www\./, '').toLowerCase();
+
+  // Direct match
+  if (linkHost === currentHost) return false;
+
+  // Check if it's a subdomain of the current host
+  // e.g., api.example.com is not external to example.com
+  if (linkHost.endsWith('.' + currentHost)) return false;
+
+  // On platform dashboards (vercel.com, netlify.com), links to deployed apps
+  // (*.vercel.app, *.netlify.app) should be considered external since they're
+  // just links to the deployed sites, not project management pages
+  return true;
+}
+
+/**
+ * Parse and validate URL
+ */
+function parseUrl(href, origin, currentHostname) {
+  try {
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:')) {
+      return null;
+    }
+
+    const url = new URL(href, origin);
+
+    // Skip external links
+    if (isExternalLink(url.hostname, currentHostname)) {
+      return null;
+    }
+
+    // Skip preview/branch deployments
+    if (isPreviewDeployment(url.href, url.hostname)) {
+      return null;
+    }
+
+    return {
+      href: url.href,
+      pathname: url.pathname,
+      hostname: url.hostname,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Main scraping function with pattern clustering
  */
 async function scrapeLinksGeneric(options = {}) {
   const {
-    minScore = 10,
-    maxLinks = 100,
+    maxLinks = 200,
     waitTime = 2000,
+    minPatternScore = 10,
   } = options;
 
-  const hostname = window.location.hostname.replace(/^www\./, '');
   const origin = window.location.origin;
+  const hostname = window.location.hostname.replace(/^www\./, '');
   const platform = detectPlatform(hostname);
 
   console.log(`[GenericScraper] Scanning ${platform} (${hostname})...`);
@@ -340,68 +282,140 @@ async function scrapeLinksGeneric(options = {}) {
   // Wait for dynamic content
   await new Promise(resolve => setTimeout(resolve, waitTime));
 
-  // Find all links
+  // Collect all links
   const allLinks = document.querySelectorAll('a[href]');
   console.log(`[GenericScraper] Found ${allLinks.length} total links`);
 
-  const results = [];
+  // Group links by pattern
+  const patternGroups = new Map(); // pattern -> { urls: [], links: [] }
   const seenUrls = new Set();
 
   for (const linkEl of allLinks) {
     const href = linkEl.getAttribute('href');
-    if (!href) continue;
-
-    const parsed = parseUrl(href, origin);
-    if (!parsed.valid) continue;
+    const parsed = parseUrl(href, origin, hostname);
+    if (!parsed) continue;
 
     // Skip duplicates
     if (seenUrls.has(parsed.href)) continue;
     seenUrls.add(parsed.href);
 
-    // Score the link
-    const score = scoreLink(linkEl, parsed);
-    if (score < minScore) continue;
+    // Skip navigation links
+    if (isNavigationLink(linkEl, parsed.pathname)) continue;
 
     // Extract title
     const title = extractTitle(linkEl);
     if (!title) continue;
 
-    // Extract ID
-    const linkId = extractIdFromSegments(parsed.segments) ||
-                   parsed.segments.join('/') ||
-                   btoa(parsed.href).substring(0, 16);
+    // Get pattern for this URL
+    const pattern = urlToPattern(parsed.pathname);
 
-    results.push({
+    // Add to pattern group
+    if (!patternGroups.has(pattern)) {
+      patternGroups.set(pattern, { urls: [], links: [] });
+    }
+
+    const group = patternGroups.get(pattern);
+    group.urls.push(parsed.href);
+    group.links.push({
       url: parsed.href,
-      linkId,
+      pathname: parsed.pathname,
       title,
-      platform,
-      score,
-      scrapedAt: Date.now(),
+      pattern,
     });
 
-    if (results.length >= maxLinks) break;
+    if (seenUrls.size >= maxLinks) break;
   }
 
-  // Sort by score (highest first)
-  results.sort((a, b) => b.score - a.score);
+  // Score and filter patterns
+  const scoredPatterns = [];
+  for (const [pattern, group] of patternGroups) {
+    const score = scorePattern(pattern, group.urls);
 
-  console.log(`[GenericScraper] Found ${results.length} meaningful links`);
+    if (score >= minPatternScore) {
+      scoredPatterns.push({
+        pattern,
+        score,
+        count: group.links.length,
+        links: group.links,
+        // Generate a readable label
+        label: generatePatternLabel(pattern),
+      });
+    }
+  }
+
+  // Sort by score (best patterns first)
+  scoredPatterns.sort((a, b) => b.score - a.score);
+
+  // Flatten links for backwards compatibility, but include pattern info
+  const allFilteredLinks = [];
+  for (const pg of scoredPatterns) {
+    for (const link of pg.links) {
+      allFilteredLinks.push({
+        ...link,
+        patternScore: pg.score,
+        patternLabel: pg.label,
+        platform,
+        scrapedAt: Date.now(),
+        linkId: extractLinkId(link.pathname),
+      });
+    }
+  }
+
+  console.log(`[GenericScraper] Found ${scoredPatterns.length} patterns, ${allFilteredLinks.length} links`);
 
   return {
     success: true,
     platform,
     hostname,
-    links: results,
+    // Pattern-grouped results (new)
+    patterns: scoredPatterns,
+    // Flat link list (backwards compatible)
+    links: allFilteredLinks,
     totalFound: allLinks.length,
-    filteredCount: results.length,
+    filteredCount: allFilteredLinks.length,
     scrapedAt: Date.now(),
   };
 }
 
 /**
- * Allowlist management functions
+ * Generate human-readable label for a pattern
  */
+function generatePatternLabel(pattern) {
+  // Remove leading slash and replace patterns with readable names
+  return pattern
+    .replace(/^\//, '')
+    .replace(/\{uuid\}/g, '*')
+    .replace(/\{hash\}/g, '*')
+    .replace(/\{id\}/g, '*')
+    .replace(/\{slug\}/g, '*')
+    .replace(/\{token\}/g, '*')
+    || '/';
+}
+
+/**
+ * Extract a unique ID from pathname
+ */
+function extractLinkId(pathname) {
+  const segments = pathname.split('/').filter(Boolean);
+
+  // Find first dynamic segment
+  for (const seg of segments) {
+    const type = detectSegmentType(seg);
+    if (type.type !== 'static') {
+      return seg;
+    }
+  }
+
+  // Fallback to last segment
+  return segments[segments.length - 1] || pathname;
+}
+
+/**
+ * ============================================
+ * ALLOWLIST MANAGEMENT
+ * ============================================
+ */
+
 async function getAllowlist() {
   try {
     const result = await chrome.storage.local.get('genericScraperAllowlist');
@@ -413,15 +427,11 @@ async function getAllowlist() {
 
 async function isDomainAllowed(hostname) {
   const allowlist = await getAllowlist();
-  const cleanHostname = hostname.replace(/^www\./, '');
+  const clean = hostname.replace(/^www\./, '');
 
   return allowlist.some(pattern => {
-    // Exact match
-    if (pattern === cleanHostname) return true;
-    // Wildcard match (*.example.com)
-    if (pattern.startsWith('*.')) {
-      return cleanHostname.endsWith(pattern.slice(1));
-    }
+    if (pattern === clean) return true;
+    if (pattern.startsWith('*.') && clean.endsWith(pattern.slice(1))) return true;
     return false;
   });
 }
@@ -429,16 +439,14 @@ async function isDomainAllowed(hostname) {
 async function addDomainToAllowlist(hostname) {
   try {
     const allowlist = await getAllowlist();
-    const cleanHostname = hostname.replace(/^www\./, '');
+    const clean = hostname.replace(/^www\./, '');
 
-    if (!allowlist.includes(cleanHostname)) {
-      allowlist.push(cleanHostname);
+    if (!allowlist.includes(clean)) {
+      allowlist.push(clean);
       await chrome.storage.local.set({ genericScraperAllowlist: allowlist });
-      console.log(`[GenericScraper] Added ${cleanHostname} to allowlist`);
     }
     return true;
-  } catch (error) {
-    console.error('[GenericScraper] Failed to add domain:', error);
+  } catch {
     return false;
   }
 }
@@ -446,20 +454,29 @@ async function addDomainToAllowlist(hostname) {
 async function removeDomainFromAllowlist(hostname) {
   try {
     const allowlist = await getAllowlist();
-    const cleanHostname = hostname.replace(/^www\./, '');
-    const index = allowlist.indexOf(cleanHostname);
+    const clean = hostname.replace(/^www\./, '');
+    const index = allowlist.indexOf(clean);
 
     if (index > -1) {
       allowlist.splice(index, 1);
       await chrome.storage.local.set({ genericScraperAllowlist: allowlist });
-      console.log(`[GenericScraper] Removed ${cleanHostname} from allowlist`);
     }
     return true;
-  } catch (error) {
-    console.error('[GenericScraper] Failed to remove domain:', error);
+  } catch {
     return false;
   }
 }
+
+/**
+ * ============================================
+ * EXPORTS
+ * ============================================
+ */
+
+// Configuration exposed for customization
+const CONFIG = {
+  PLATFORMS,
+};
 
 // Export for global access
 window.GenericLinkScraper = {
@@ -469,6 +486,8 @@ window.GenericLinkScraper = {
   addDomainToAllowlist,
   removeDomainFromAllowlist,
   detectPlatform,
+  urlToPattern,
+  detectSegmentType,
   CONFIG,
 };
 

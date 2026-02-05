@@ -184,6 +184,7 @@ export function CoolDeskContainer({
   const handleTabPin = useCallback(async (tab) => {
     try {
       if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
+        console.log('[TabDebug] Manual pin toggle requested for tab:', tab.id, !pinnedTabs.has(tab.id));
         const isPinned = pinnedTabs.has(tab.id);
         await chrome.tabs.update(tab.id, { pinned: !isPinned });
 
