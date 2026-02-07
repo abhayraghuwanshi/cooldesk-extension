@@ -209,6 +209,7 @@ import { CommandParser } from '../services/commandParser.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
 import { scheduleDailySummary } from '../services/memory/dailySummaryGenerator.js';
 import { NanoAIService } from '../services/nanoAIService.js';
+import { syncOrchestrator } from '../services/syncOrchestrator.js';
 import { forceIndexRebuild, initializeSearchIndexer } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
@@ -389,6 +390,13 @@ async function main() {
     initializeWorkspaces();
   } catch (e) {
     console.error('[Background] Error initializing Workspaces module:', e);
+  }
+
+  // Initialize Sync Orchestrator
+  try {
+    syncOrchestrator.init();
+  } catch (e) {
+    console.error('[Background] Error initializing Sync Orchestrator:', e);
   }
 
   // Real-time categorization DISABLED - using scraping mechanism instead

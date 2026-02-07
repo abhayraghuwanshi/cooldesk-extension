@@ -1,0 +1,296 @@
+[Environment] Running as: extension
+main-DsnACfVh.js:227 [CoolDesk] Module loaded. OverviewDashboard: ƒ no({savedWorkspaces:s=[],onWorkspaceClick:e,activeWorkspaceId:t,expandedWorkspaceId:a,onAddNote:n,pinnedWorkspaces:r=[],onAddUrl:i}){const[g,k]=c.useState(()=>{try{const m=localStorage.getItem("coold…
+main-DsnACfVh.js:227 [RealTime] 🚀 Initializing Real-Time Categorizor...
+syncOrchestrator-CYFcl0jK.js:1 [Unified DB] Opening database: cooldesk-unified-db v7
+main-DsnACfVh.js:2 [Chrome Polyfill] Initialization complete
+main-DsnACfVh.js:227 [App] Wallpaper enabled changed to: true
+syncOrchestrator-CYFcl0jK.js:1 [Unified DB] Successfully opened database
+main-DsnACfVh.js:227 [CoolDesk] Initializing P2P Service (Lazy)...
+index-DQyKfrrD.js:56 Applied base font size: 14px with scale variables
+index-DQyKfrrD.js:56 Applied font family: System Default
+main-DsnACfVh.js:229 [App] Persisting workspace change: {activeTab: 'workspace', workspace: ''}
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] Initializing for environment: extension
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] Host sync enabled: true
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] isExtension: true
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] isElectronApp: false
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] Setting up Extension WebSocket sync
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Connecting to: ws://127.0.0.1:4000
+main-DsnACfVh.js:227 [RealTime] Workspace cache initialized with 9 items
+syncService-DKylZ4BJ.js:1 [TabCoordinator] Initialized with tabId: tab_1770483674165_39tyt4j1kcs
+index-DQyKfrrD.js:2 [P2P Storage] Initializing storage for team: 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Connected
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] Connection established, starting full sync...
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] Starting full sync
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] Initialization complete
+NotesCanvas-DoRc2mvD.js:1 [NotesCanvas] Starting consolidated data fetch... (background)
+main-DsnACfVh.js:229 [App] Initial restoration, UI data: {success: true, id: 'default', lastActiveTab: 'saved', lastWorkspace: 'Entertainment', updatedAt: 1770483666634, …}
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: sync-state
+main-DsnACfVh.js:229 [App] Persisting workspace change: {activeTab: 'saved', workspace: 'Entertainment'}
+index-DQyKfrrD.js:2 [P2P Storage] Accessed shared-notices for team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b, current length: 0
+index-DQyKfrrD.js:56 [Team Manager] Initialized with teams: 1
+syncService-DKylZ4BJ.js:1 [P2P Sync] Connecting to team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b...
+syncService-DKylZ4BJ.js:1 [TabCoordinator] Initializing team: 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+syncService-DKylZ4BJ.js:1 [TabCoordinator] Starting election for team: 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+syncService-DKylZ4BJ.js:1 [TabCoordinator] Becoming leader for team: 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+syncService-DKylZ4BJ.js:1 [P2P Sync] Tab coordination initialized
+syncService-DKylZ4BJ.js:1 [P2P Sync] Leadership check: {isLeader: true, isLeaderTab: true, leaderId: 'tab_1770483674165_39tyt4j1kcs', tabId: 'tab_1770483674165_39tyt4j1kcs'}
+syncService-DKylZ4BJ.js:1 [P2P Sync] This tab is the leader, creating P2P connection
+syncService-DKylZ4BJ.js:1 [P2P Sync] Creating P2P connection for team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+syncService-DKylZ4BJ.js:1 [P2P Sync] Creating WebRTC provider for team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b with signaling: wss://signaling-server.raghuwanshi-abhay405.workers.dev/1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+syncService-DKylZ4BJ.js:1 [P2P Sync] Using encryption key: ***5VM=
+syncService-DKylZ4BJ.js:1 [P2P Sync] Awareness created for team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b, clientID: 300096182
+syncService-DKylZ4BJ.js:1 [P2P Sync] WebRTC provider created for team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+index-DQyKfrrD.js:2 [P2P Storage] Added new member to team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b: QuickTiger44 (Viewer)
+index-DQyKfrrD.js:2 [P2P Storage] Cleaned up 0 duplicate members from team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+syncService-DKylZ4BJ.js:1 [P2P Sync] Team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b status: undefined
+NotesCanvas-DoRc2mvD.js:1 [NotesCanvas] Data loaded in 460ms
+index-DQyKfrrD.js:2 [P2P Storage] Team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b synced with local storage
+index-DQyKfrrD.js:2 [P2P Storage] Accessed shared-notices for team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b, current length: 4
+index-DQyKfrrD.js:2 [Team Manager] Cleaning up 2 old/duplicate notices
+index-DQyKfrrD.js:56 [Team Manager] Initialized with teams: 1
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Entertainment (ws_1770146438883_gzz5kr)
+main-DsnACfVh.js:229 [App] Workspace persisted successfully
+main-DsnACfVh.js:229 [App] Full UI state: {success: true, data: {…}}
+main-DsnACfVh.js:229 [App] UI data: {id: 'default', success: true, lastActiveTab: 'workspace', lastWorkspace: '', updatedAt: 1770483674767, …}
+main-DsnACfVh.js:229 [App] Workspace restoration check: {currentWorkspace: 'Entertainment', savedLastWorkspace: '', availableWorkspaces: Array(9)}
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Utilities (ws_1770146438776_w5xo5j)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Ai (ws_1770146438993_8l3in1)
+main-DsnACfVh.js:229 [App] Workspace persisted successfully
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Social (ws_1770146438902_7gcwqp)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Finance (ws_1770285158451_s70t7l)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Information (ws_1770146438932_kb5zwn)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Creativity (ws_1770146439127_fmqcls)
+main-DsnACfVh.js:227 [AutoCreate] Hash Check: {hasLastHash: false, lastHash: undefined, currentHash: '990656186', urlCount: 535, match: false}
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Productivity (ws_1770146439173_z49v5t)
+nanoAIService-C93vM8VC.js:1 [GenericUrlParser] createWorkspacesFromUrls processing: 432 URLs
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Education (ws_1770146439088_w3hvgq)
+nanoAIService-C93vM8VC.js:1 [GenericUrlParser] parseMultiple result: {totalGroups: 0, chatgptGroups: 0, stats: {…}}
+nanoAIService-C93vM8VC.js:1 [GenericUrlParser] createWorkspacesFromUrls got 0 groups
+main-DsnACfVh.js:227 [AutoCreate] Saving new hash: 990656186
+main-DsnACfVh.js:227 [RealTime] Setup listeners complete. Waiting for tab events...
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Entertainment (ws_1770146438883_gzz5kr)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Utilities (ws_1770146438776_w5xo5j)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Ai (ws_1770146438993_8l3in1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Social (ws_1770146438902_7gcwqp)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Finance (ws_1770285158451_s70t7l)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Information (ws_1770146438932_kb5zwn)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Creativity (ws_1770146439127_fmqcls)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Productivity (ws_1770146439173_z49v5t)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Education (ws_1770146439088_w3hvgq)
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: dashboard-updated
+syncService-DKylZ4BJ.js:1 [P2P Sync] Team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b peers: 1 WebRTC peers: ['324170a2-6292-4927-b290-0116f20db855']
+syncService-DKylZ4BJ.js:1 [P2P Sync] ✅ Connected to 1 peer(s)
+syncService-DKylZ4BJ.js:1 [P2P Sync] Peer 324170a2-6292-4927-b290-0116f20db855 connection state: {connected: false, connectionState: undefined, iceConnectionState: undefined, iceGatheringState: undefined}
+main-DsnACfVh.js:227 [CoolDesk] Hydrated snapshot: {historyCount: 483, bookmarkCount: 56, mergedCount: 535, uniqueGroups: Array(0), sampleAI: {…}}
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: dashboard-updated
+syncOrchestrator-CYFcl0jK.js:1 [Violation] 'message' handler took 167ms
+syncService-DKylZ4BJ.js:1 [P2P Sync] Added member SmartLion52 to team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b
+syncService-DKylZ4BJ.js:1 [P2P Sync] Team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b SYNCED: true
+syncService-DKylZ4BJ.js:1 [P2P Sync] ✅ Team 1e5e11abb0aa0af394f6d679ab5be3b6d468f75b successfully synced!
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: workspaces-updated
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Entertainment (ws_1770146438883_gzz5kr)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Utilities (ws_1770146438776_w5xo5j)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Ai (ws_1770146438993_8l3in1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Social (ws_1770146438902_7gcwqp)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Finance (ws_1770285158451_s70t7l)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Information (ws_1770146438932_kb5zwn)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Creativity (ws_1770146439127_fmqcls)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Productivity (ws_1770146439173_z49v5t)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved workspace: Education (ws_1770146439088_w3hvgq)
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: notes-updated
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: url-notes-updated
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: pins-updated
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Search (search)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Fork 0 (fork)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Actions (actions)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Onboard Smoothly (cooldesk-onboard-smoothly)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Issues (issues)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Projects (projects)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Pull requests (pulls)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Insights (pulse)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Security (security)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Settings (settings)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Abhayraghuwanshi (abhayraghuwanshi)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Everyday Browse Memory (6984b5d5-4d80-8320-9456-bdd5a8c52476)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Native bridge update process (6983bc26-94ac-8323-b4f5-f0db0a11d2b1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: 3 commits (commits)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Contact (/)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/Ai-Meeting-Board (Ai-Meeting-Board)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/Behalf-Back (Behalf-Back)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/Behalf-Front (Behalf-Front)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/Gpt-dumps (Gpt-dumps)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/calculatecost.cloud (calculatecost.cloud)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/cooldesk-extension (cooldesk-extension)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: alumnicelliitr (dashboard)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Authenticator app (app)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: SMS Code (confirm)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: 2FA recovery code (recovery)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/tradify-consult (tradify-consult)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/tradify-consult (abhayraghuwanshis-projects)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: 3dfolio (3dfolio)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Behalf (behalf)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Calculatecost Cloud (calculatecost-cloud)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: K8s Ingress Gen (k8s-ingress-gen)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Image Fetching Service (05bbb906-0968-4011-b4f7-470739e26490)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: DevOps content strategy for tool promotion (05d262ea-ef2f-4065-869b-22f9cba23b74)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Testing REST Adapter Repository with Mocked Scheduler (0d4ba622-6712-4243-ad2b-f0f786e3fb36)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk web app landing page (1bca9c6a-4485-48d8-ac31-bbc36dd4b1c6)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Fetch Quests by Location and Cache by User Country (306e2a35-2e04-45ad-8e97-617b48f252fe)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Bulk Category Processing Strategy (36e933a2-8935-4f0e-9f61-226d42bebb84)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Determining API Call Capacity for Pods (4165e502-75e4-45dd-8f61-908dbcc703fd)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Writing Spring Boot Tests for a Multi-Module Maven Project (58403326-8b5f-4698-b7b1-60f0b926b7b1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Troubleshooting MinIO Deployment on Railways (5c0caa5f-b1c2-45b8-b932-39f0802a5ed1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Delivery Request Management (654ceeda-e124-4dc4-a953-6e688c35d3ad)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Security Review of Spring Security Configuration (67207bd9-d0ef-412a-821b-a82b50e15f8f)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Chrome URL Categorization AI Sync (8581a0f5-e8a8-4138-b5dc-5dbe1410674c)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Mocking Spring Controllers with Lombok's @RequiredArgsConstructor (8f76ea2f-e81c-4f02-b255-73015e73aac6)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Improving website copywriting (a9b45142-7381-4914-a6b1-cb95d75a7499)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Windsurf and Claude Integration (b0b6e1b2-f2df-43be-ba97-3674e2f05f3e)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Caching based on location in QuestService (cdbd5b53-d8d0-4fed-bce2-a6999e26d942)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Mocking LocalDate for testing (d1d999ba-588a-4890-aa93-69993097c255)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Displaying Content Based on User Login Status (dc530d84-10ac-47de-9839-18e7610af7f0)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Centralizing GitHub Actions Workflows for Microservices (dfdafefb-f1fe-4974-a084-d71cf4d0348d)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Understanding the GitHub Actions ref parameter (e1ba9c7d-2331-4f95-a981-f7b88369e5eb)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: E-commerce Store and Inventory Management (f84f1dca-98fb-4437-bfc7-9cad3341bc33)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: DevOps content strategy for tool promotion (a75ffa9e-e9d3-49a0-a216-874fc0f0f639)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Pasta Storage Safety (696a76b3-7078-8322-a736-4c9e4721a1c3)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Trailer Prompt (696ba300-e388-8322-8f8e-95b8fd68276c)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: App Promo Video Tools (696bc9bd-56b4-8321-9d3a-dea583b5d6d6)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Post Ideas for X (696bcfbb-6498-8322-b765-ca5c528f8e69)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit post for websites (696cbcbb-55a0-8324-ae91-fda8b1ec896e)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Trailer Script (696cdacd-b770-8332-a335-7b0d7c8e6026)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Streamlabs Mic Setup (696e6cd5-d0d4-832a-b9d7-783882807552)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit post drafts (696f3895-5b64-8322-895c-ea226c6d46bb)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk LinkedIn Post Ideas (6970e3e5-680c-8321-8d79-e4fe557bc4d3)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Rebranding P2P Link Share (697250a7-1e74-8322-af77-17309a561ca5)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Naming Advice (69725562-1be0-8320-b426-a7ee642d8599)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Image generation prompts (6972838c-a6bc-8322-b450-45b525c6cfeb)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: SEO for Chrome Tab (6973f56d-97ac-8324-a22e-ebf7845a56b6)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: r/cooldesk Welcome Post (6973fa8a-70c8-8320-a587-d8a3a3ec79b8)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Image Creation Request (69746c06-c554-8321-8a81-6a787ab1076b)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Text-based Video Prompt (69764d62-0ec8-8321-b75c-e0e80088122f)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: AI in Extensions Usage (697665ba-e2b0-8323-96cd-d33acb65c970)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Animating Dashboard UI (697716c2-14bc-8324-9bab-4ad494cec149)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Notion Notes in Extension (69779cd4-c220-8324-aa24-eaf1eec14759)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Link communicate clarification (697914f8-9348-8322-af87-14860459246b)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: AI Meme Reel Ideas (69791b42-baf0-8323-af79-dbb2d8756798)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Widgets for Cooldesk (6979eefe-83b4-8322-baf3-dad3eb243781)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit post for scraper (697b5688-49f8-8323-8a5f-6bba3ab41db1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Productivity Story (697bb425-ea14-8320-8382-4a9feb60af6e)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: AI and Chrome Extensions (697d9e79-c8f4-83ab-81e0-c8ada0fcb388)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: LLM-Optimized Blog List (697de542-5188-8321-a55c-7c24c191fe57)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit post ideas scraping (6980a13f-8ebc-8323-beba-96500b40553c)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit Post Ideas (6980e221-75c4-8321-9af1-d7a199afa2d0)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Codex (codex)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Images (images)
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: scraped-chats-updated
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraping config for: github.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Search (search)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Fork 0 (fork)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Actions (actions)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Synced config to chrome.storage.local for github.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Onboard Smoothly (cooldesk-onboard-smoothly)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraping config for: chatgpt.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Issues (issues)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Projects (projects)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Pull requests (pulls)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Synced config to chrome.storage.local for chatgpt.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Insights (pulse)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraping config for: vercel.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Security (security)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Settings (settings)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Abhayraghuwanshi (abhayraghuwanshi)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Everyday Browse Memory (6984b5d5-4d80-8320-9456-bdd5a8c52476)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Synced config to chrome.storage.local for vercel.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Native bridge update process (6983bc26-94ac-8323-b4f5-f0db0a11d2b1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraping config for: claude.ai
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: 3 commits (commits)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Contact (/)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/Ai-Meeting-Board (Ai-Meeting-Board)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Synced config to chrome.storage.local for claude.ai
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/Behalf-Back (Behalf-Back)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/Behalf-Front (Behalf-Front)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/Gpt-dumps (Gpt-dumps)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/calculatecost.cloud (calculatecost.cloud)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/cooldesk-extension (cooldesk-extension)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: alumnicelliitr (dashboard)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Authenticator app (app)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: SMS Code (confirm)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: 2FA recovery code (recovery)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/tradify-consult (tradify-consult)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: abhayraghuwanshi/tradify-consult (abhayraghuwanshis-projects)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: 3dfolio (3dfolio)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Behalf (behalf)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Calculatecost Cloud (calculatecost-cloud)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: K8s Ingress Gen (k8s-ingress-gen)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Image Fetching Service (05bbb906-0968-4011-b4f7-470739e26490)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: DevOps content strategy for tool promotion (05d262ea-ef2f-4065-869b-22f9cba23b74)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Testing REST Adapter Repository with Mocked Scheduler (0d4ba622-6712-4243-ad2b-f0f786e3fb36)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk web app landing page (1bca9c6a-4485-48d8-ac31-bbc36dd4b1c6)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Fetch Quests by Location and Cache by User Country (306e2a35-2e04-45ad-8e97-617b48f252fe)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Bulk Category Processing Strategy (36e933a2-8935-4f0e-9f61-226d42bebb84)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Determining API Call Capacity for Pods (4165e502-75e4-45dd-8f61-908dbcc703fd)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Writing Spring Boot Tests for a Multi-Module Maven Project (58403326-8b5f-4698-b7b1-60f0b926b7b1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Troubleshooting MinIO Deployment on Railways (5c0caa5f-b1c2-45b8-b932-39f0802a5ed1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Delivery Request Management (654ceeda-e124-4dc4-a953-6e688c35d3ad)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Security Review of Spring Security Configuration (67207bd9-d0ef-412a-821b-a82b50e15f8f)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Chrome URL Categorization AI Sync (8581a0f5-e8a8-4138-b5dc-5dbe1410674c)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Mocking Spring Controllers with Lombok's @RequiredArgsConstructor (8f76ea2f-e81c-4f02-b255-73015e73aac6)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Improving website copywriting (a9b45142-7381-4914-a6b1-cb95d75a7499)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Windsurf and Claude Integration (b0b6e1b2-f2df-43be-ba97-3674e2f05f3e)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Caching based on location in QuestService (cdbd5b53-d8d0-4fed-bce2-a6999e26d942)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Mocking LocalDate for testing (d1d999ba-588a-4890-aa93-69993097c255)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Displaying Content Based on User Login Status (dc530d84-10ac-47de-9839-18e7610af7f0)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Centralizing GitHub Actions Workflows for Microservices (dfdafefb-f1fe-4974-a084-d71cf4d0348d)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Understanding the GitHub Actions ref parameter (e1ba9c7d-2331-4f95-a981-f7b88369e5eb)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: E-commerce Store and Inventory Management (f84f1dca-98fb-4437-bfc7-9cad3341bc33)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: DevOps content strategy for tool promotion (a75ffa9e-e9d3-49a0-a216-874fc0f0f639)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Pasta Storage Safety (696a76b3-7078-8322-a736-4c9e4721a1c3)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Trailer Prompt (696ba300-e388-8322-8f8e-95b8fd68276c)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: App Promo Video Tools (696bc9bd-56b4-8321-9d3a-dea583b5d6d6)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Post Ideas for X (696bcfbb-6498-8322-b765-ca5c528f8e69)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit post for websites (696cbcbb-55a0-8324-ae91-fda8b1ec896e)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Trailer Script (696cdacd-b770-8332-a335-7b0d7c8e6026)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Streamlabs Mic Setup (696e6cd5-d0d4-832a-b9d7-783882807552)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit post drafts (696f3895-5b64-8322-895c-ea226c6d46bb)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk LinkedIn Post Ideas (6970e3e5-680c-8321-8d79-e4fe557bc4d3)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Rebranding P2P Link Share (697250a7-1e74-8322-af77-17309a561ca5)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Naming Advice (69725562-1be0-8320-b426-a7ee642d8599)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Image generation prompts (6972838c-a6bc-8322-b450-45b525c6cfeb)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: SEO for Chrome Tab (6973f56d-97ac-8324-a22e-ebf7845a56b6)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: r/cooldesk Welcome Post (6973fa8a-70c8-8320-a587-d8a3a3ec79b8)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Image Creation Request (69746c06-c554-8321-8a81-6a787ab1076b)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Text-based Video Prompt (69764d62-0ec8-8321-b75c-e0e80088122f)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: AI in Extensions Usage (697665ba-e2b0-8323-96cd-d33acb65c970)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Animating Dashboard UI (697716c2-14bc-8324-9bab-4ad494cec149)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Notion Notes in Extension (69779cd4-c220-8324-aa24-eaf1eec14759)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Link communicate clarification (697914f8-9348-8322-af87-14860459246b)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: AI Meme Reel Ideas (69791b42-baf0-8323-af79-dbb2d8756798)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Widgets for Cooldesk (6979eefe-83b4-8322-baf3-dad3eb243781)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit post for scraper (697b5688-49f8-8323-8a5f-6bba3ab41db1)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Cooldesk Productivity Story (697bb425-ea14-8320-8382-4a9feb60af6e)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: AI and Chrome Extensions (697d9e79-c8f4-83ab-81e0-c8ada0fcb388)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: LLM-Optimized Blog List (697de542-5188-8321-a55c-7c24c191fe57)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit post ideas scraping (6980a13f-8ebc-8323-beba-96500b40553c)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Reddit Post Ideas (6980e221-75c4-8321-9af1-d7a199afa2d0)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Codex (codex)
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraped chat: Images (images)
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: scraped-configs-updated
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraping config for: github.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Synced config to chrome.storage.local for github.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraping config for: chatgpt.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Synced config to chrome.storage.local for chatgpt.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraping config for: vercel.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Synced config to chrome.storage.local for vercel.com
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Saved scraping config for: claude.ai
+syncOrchestrator-CYFcl0jK.js:1 [Unified API] Synced config to chrome.storage.local for claude.ai
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: daily-memory-updated
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: settings-updated
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: ui-state-updated
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] Found 3 local tabs
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] Syncing 1 tabs after filtering
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Pushing 1 tabs
+syncOrchestrator-CYFcl0jK.js:1 [SyncOrchestrator] Full sync complete
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: dashboard-updated
+syncOrchestrator-CYFcl0jK.js:1 [Violation] 'message' handler took 176ms
+syncOrchestrator-CYFcl0jK.js:1 [SyncWS] Message received: tabs-updated

@@ -381,6 +381,13 @@ export const VALIDATION_SCHEMAS = {
         updatedAt: {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
+        },
+        // Fields that may come from sync responses
+        success: {
+            [ValidationRules.TYPE]: 'boolean'
+        },
+        data: {
+            [ValidationRules.TYPE]: 'object'
         }
     },
 
@@ -407,12 +414,31 @@ export const VALIDATION_SCHEMAS = {
         platform: {
             [ValidationRules.REQUIRED]: true,
             [ValidationRules.TYPE]: 'string',
-            [ValidationRules.ENUM]: ['ChatGPT', 'Claude', 'Gemini']
+            // Allow any platform/domain - scraping works for all URLs, not just AI platforms
+            [ValidationRules.MIN_LENGTH]: 1,
+            [ValidationRules.MAX_LENGTH]: 200
         },
         scrapedAt: {
             [ValidationRules.REQUIRED]: true,
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
+        },
+        // Optional fields that may come from sync
+        source: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 100
+        },
+        messages: {
+            [ValidationRules.TYPE]: 'array'
+        },
+        metadata: {
+            [ValidationRules.TYPE]: 'object'
+        },
+        updatedAt: {
+            [ValidationRules.TYPE]: 'number'
+        },
+        createdAt: {
+            [ValidationRules.TYPE]: 'number'
         }
     },
 
@@ -481,6 +507,11 @@ export const VALIDATION_SCHEMAS = {
         },
         updatedAt: {
             [ValidationRules.REQUIRED]: true,
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        // Added during sync to chrome.storage.local
+        savedAt: {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
         }
@@ -803,7 +834,9 @@ export function validateData(data, schemaName, context = {}) {
  * Validate and sanitize data before database operations
  */
 export function validateAndSanitize(data, schemaName, options = {}) {
-    const validation = validateData(data, schemaName, options.context)
+    // Pass strict option to context for validateData
+    const context = { ...options.context, strict: options.strict }
+    const validation = validateData(data, schemaName, context)
 
     if (!validation.valid) {
         const errorMessage = `Validation failed for ${schemaName}: ${validation.errors.map(e => e.message).join(', ')

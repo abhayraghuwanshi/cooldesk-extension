@@ -37,7 +37,7 @@
     "http://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' wss://signaling-server.raghuwanshi-abhay405.workers.dev http://localhost:5173 ws://localhost:5173; frame-src https://www.google.com"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' wss://signaling-server.raghuwanshi-abhay405.workers.dev http://localhost:5173 ws://localhost:5173 http://127.0.0.1:4000 ws://127.0.0.1:4000 http://localhost:4000 ws://localhost:4000; frame-src https://www.google.com"
   },
   "web_accessible_resources": [
     {

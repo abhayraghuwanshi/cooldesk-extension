@@ -37,6 +37,10 @@ export {
     deleteScrapedChatsByPlatform,
     // Scraped Config operations
     deleteScrapingConfig, deleteUrlNote, deleteWorkspace, deleteWorkspaceById, getAllActivity,
+    // Daily Memory operations
+    getDailyMemory,
+    // Dashboard operations
+    getDashboard,
     // Utility functions
     getDatabaseHealth, getScrapedChat, getScrapedChatStats, getScrapingConfig,
     // Settings operations
@@ -48,15 +52,15 @@ export {
     // Initialization
     initializeDatabase, listAllUrlNotes,
     // Legacy compatibility functions
-    listAllUrls,
+    listAllUrls, listDailyMemory,
     // Notes operations
-    listNotes, listPings,
+    listNotes, listPings, listPins,
     // Scraped Chats operations
     listScrapedChats, listScrapingConfigs,
     // Workspace operations
     listWorkspaces, listWorkspaceUrls, putActivityRow,
     // Activity & Time Tracking operations
-    putActivityTimeSeriesEvent, saveNote, saveScrapedChat, saveScrapingConfig, saveSettings, saveUIState, saveUrlNote, saveWorkspace, subscribeDailyNotesChanges, subscribePinsChanges, subscribeSettingsChanges, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType, upsertNote, upsertPing, upsertUrl
+    putActivityTimeSeriesEvent, saveDailyMemory, saveDashboard, saveNote, saveScrapedChat, saveScrapingConfig, saveSettings, saveUIState, saveUrlNote, saveWorkspace, subscribeDailyNotesChanges, subscribePinsChanges, subscribeSettingsChanges, subscribeWorkspaceChanges, updateItemWorkspace, updateWorkspaceGridType, upsertNote, upsertPing, upsertUrl
 } from './unified-api.js'
 
 // Export error handling utilities

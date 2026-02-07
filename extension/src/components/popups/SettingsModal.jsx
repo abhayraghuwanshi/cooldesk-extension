@@ -2,6 +2,7 @@ import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/fr
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveWorkspace } from '../../db';
+import { useSync } from '../../hooks/useSync'; // Added hook
 import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet } from '../../services/extensionApi';
 import { loadSyncConfig } from '../../services/syncConfig';
@@ -26,6 +27,8 @@ export function SettingsModal({
   onWallpaperUrlChange,
   onWallpaperOpacityChange
 }) {
+  const { syncStatus: globalSyncStatus, triggerSync, lastSyncTime: globalLastSyncTime } = useSync(); // Use sync hook
+
   const [localSettings, setLocalSettings] = useState(settings || {});
   const [activeTabId, setActiveTabId] = useState('general'); // general, themes, data, display, about
   const [suggesting, setSuggesting] = useState(false);
@@ -599,7 +602,87 @@ export function SettingsModal({
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Sync Status - NEW */}
+                    <div style={{
+                      padding: 16,
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: 12,
+                      border: '1px solid rgba(255,255,255,0.04)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 500, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          Host Connection
+                          <span style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: syncStatus?.hostAvailable ? '#4ade80' : (syncStatus?.hostAvailable === false ? '#ef4444' : '#fbbf24'),
+                            boxShadow: syncStatus?.hostAvailable ? '0 0 8px rgba(74, 222, 128, 0.5)' : 'none'
+                          }} />
+                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+                          {syncStatus?.hostAvailable
+                            ? 'Connected to Desktop App'
+                            : (syncStatus?.hostAvailable === false ? 'Disconnected (Is the app running?)' : 'Checking connection...')}
+                        </div>
+                      </div>
+                      {syncStatus?.hostAvailable === false && (
+                        <button
+                          onClick={() => loadSettingsSync()}
+                          style={{
+                            fontSize: 12, padding: '4px 10px', borderRadius: 6,
+                            background: 'rgba(255,255,255,0.1)', color: '#fff',
+                            border: 'none', cursor: 'pointer'
+                          }}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Manual Sync Control */}
+                    <div style={{
+                      padding: 16,
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: 12,
+                      border: '1px solid rgba(255,255,255,0.04)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 500, color: '#fff' }}>Force Sync</div>
+                        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+                          {globalSyncStatus === 'syncing'
+                            ? 'Syncing data...'
+                            : (globalLastSyncTime ? `Last synced: ${new Date(globalLastSyncTime).toLocaleTimeString()}` : 'Manually trigger a full sync')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={triggerSync}
+                        disabled={globalSyncStatus === 'syncing' || !syncStatus?.hostAvailable}
+                        style={{
+                          fontSize: 12, padding: '6px 12px', borderRadius: 6,
+                          background: globalSyncStatus === 'syncing' ? 'rgba(255,255,255,0.05)' : 'rgba(59, 130, 246, 0.2)',
+                          color: globalSyncStatus === 'syncing' ? '#9ca3af' : '#60a5fa',
+                          border: '1px solid ' + (globalSyncStatus === 'syncing' ? 'transparent' : 'rgba(59, 130, 246, 0.3)'),
+                          cursor: (globalSyncStatus === 'syncing' || !syncStatus?.hostAvailable) ? 'default' : 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faDatabase} spin={globalSyncStatus === 'syncing'} />
+                        {globalSyncStatus === 'syncing' ? 'Syncing...' : 'Sync Now'}
+                      </button>
+                    </div>
+
+                    <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
+                    <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
                     {/* Version Info */}
+
                     <div style={{
                       padding: 16,
                       background: 'rgba(255,255,255,0.03)',

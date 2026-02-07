@@ -237,14 +237,14 @@ export function ActivityFeed() {
             if (typeof chrome !== 'undefined') {
                 // Listen to tab events for real-time updates
                 if (chrome.tabs) {
-                    chrome.tabs.onCreated.addListener(debouncedUpdate);
-                    chrome.tabs.onRemoved.addListener(debouncedUpdate);
-                    chrome.tabs.onUpdated.addListener(debouncedUpdate);
-                    chrome.tabs.onActivated.addListener(debouncedUpdate);
+                    if (chrome.tabs.onCreated) chrome.tabs.onCreated.addListener(debouncedUpdate);
+                    if (chrome.tabs.onRemoved) chrome.tabs.onRemoved.addListener(debouncedUpdate);
+                    if (chrome.tabs.onUpdated) chrome.tabs.onUpdated.addListener(debouncedUpdate);
+                    if (chrome.tabs.onActivated) chrome.tabs.onActivated.addListener(debouncedUpdate);
                 }
 
                 // Listen to storage changes for chat and calendar updates
-                if (chrome.storage) {
+                if (chrome.storage && chrome.storage.onChanged) {
                     const storageListener = (changes) => {
                         /*
                         if (changes.calendar_events) {
@@ -257,12 +257,12 @@ export function ActivityFeed() {
 
                     return () => {
                         if (chrome.tabs) {
-                            chrome.tabs.onCreated.removeListener(debouncedUpdate);
-                            chrome.tabs.onRemoved.removeListener(debouncedUpdate);
-                            chrome.tabs.onUpdated.removeListener(debouncedUpdate);
-                            chrome.tabs.onActivated.removeListener(debouncedUpdate);
+                            if (chrome.tabs.onCreated) chrome.tabs.onCreated.removeListener(debouncedUpdate);
+                            if (chrome.tabs.onRemoved) chrome.tabs.onRemoved.removeListener(debouncedUpdate);
+                            if (chrome.tabs.onUpdated) chrome.tabs.onUpdated.removeListener(debouncedUpdate);
+                            if (chrome.tabs.onActivated) chrome.tabs.onActivated.removeListener(debouncedUpdate);
                         }
-                        if (chrome.storage) {
+                        if (chrome.storage && chrome.storage.onChanged) {
                             chrome.storage.onChanged.removeListener(storageListener);
                         }
                     };
@@ -430,9 +430,9 @@ export function ActivityFeed() {
         // Sort final result by timestamp
         return result.sort((a, b) => {
             const tsA = a.type === 'tab-group' ? a.latestTimestamp :
-                       a.type === 'chat-group' ? a.latestTimestamp : a.timestamp;
+                a.type === 'chat-group' ? a.latestTimestamp : a.timestamp;
             const tsB = b.type === 'tab-group' ? b.latestTimestamp :
-                       b.type === 'chat-group' ? b.latestTimestamp : b.timestamp;
+                b.type === 'chat-group' ? b.latestTimestamp : b.timestamp;
             return tsB - tsA;
         });
     }, [feedItems, activeTab]);

@@ -5,11 +5,11 @@
 
 // Default sync configuration
 const DEFAULT_SYNC_CONFIG = {
-  enableHostSync: false,          // Master switch for localhost sync
+  enableHostSync: true,           // Master switch for localhost sync (enabled by default)
   hostUrl: 'http://127.0.0.1:4000', // Host server URL
   websocketUrl: 'ws://127.0.0.1:4000', // WebSocket URL
   syncWorkspaces: true,           // Sync workspaces to host
-  syncTabs: true,                // Sync tabs to host  
+  syncTabs: true,                // Sync tabs to host
   syncActivity: true,            // Sync activity to host
   syncSettings: true,            // Sync settings to host
   syncDashboard: true,           // Sync dashboard to host
@@ -21,6 +21,7 @@ const DEFAULT_SYNC_CONFIG = {
 };
 
 let syncConfig = { ...DEFAULT_SYNC_CONFIG };
+let hostAvailable = null; // Cached host availability check
 
 /**
  * Load sync configuration from storage
@@ -59,6 +60,40 @@ export async function saveSyncConfig(newConfig) {
  */
 export function getSyncConfig() {
   return { ...syncConfig };
+}
+
+/**
+ * Check if the Electron host server is reachable
+ * Caches the result to avoid repeated health checks
+ */
+export async function checkHostAvailable() {
+  // Return cached result if we checked recently (within 30 seconds)
+  if (hostAvailable !== null) {
+    return hostAvailable;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(`${syncConfig.hostUrl}/health`, {
+      method: 'GET',
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+    hostAvailable = res.ok;
+
+    // Clear cache after 30 seconds
+    setTimeout(() => { hostAvailable = null; }, 30000);
+
+    return hostAvailable;
+  } catch {
+    hostAvailable = false;
+    // Clear cache after 10 seconds on failure (retry sooner)
+    setTimeout(() => { hostAvailable = null; }, 10000);
+    return false;
+  }
 }
 
 /**

@@ -6,7 +6,7 @@
 // Single database configuration
 export const DB_CONFIG = {
     NAME: 'cooldesk-unified-db',
-    VERSION: 5, // Added DAILY_MEMORY store for everyday browse memory
+    VERSION: 7, // Added DASHBOARD store
     STORES: {
         WORKSPACES: 'workspaces',
         WORKSPACE_URLS: 'workspace_urls',
@@ -19,6 +19,8 @@ export const DB_CONFIG = {
         UI_STATE: 'ui_state',
         SCRAPED_CONFIGS: 'scraped_configs', // New store for scraping rules
         DAILY_MEMORY: 'daily_memory', // Daily browsing summaries
+        SETTINGS: 'settings', // Application settings
+        DASHBOARD: 'dashboard', // Dashboard layout/widgets
         METADATA: 'metadata' // For tracking migrations, health, etc.
     }
 }
@@ -109,6 +111,11 @@ export const SCHEMAS = {
     },
 
     [DB_CONFIG.STORES.SETTINGS]: {
+        keyPath: 'id',
+        indexes: []
+    },
+
+    [DB_CONFIG.STORES.DASHBOARD]: {
         keyPath: 'id',
         indexes: []
     },
@@ -303,6 +310,60 @@ export const MIGRATIONS = {
             metadataStore.put({
                 key: 'schema_version',
                 value: 5,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+
+    6: {
+        description: 'Ensure ALL stores exist (Settings fix)',
+        up: (db, transaction) => {
+            console.log('[Migration v6] Checking consistency of all stores...')
+
+            Object.entries(SCHEMAS).forEach(([storeName, schema]) => {
+                if (!db.objectStoreNames.contains(storeName)) {
+                    console.log(`[Migration v6] Creating missing store: ${storeName}`)
+                    const store = db.createObjectStore(storeName, { keyPath: schema.keyPath })
+
+                    if (schema.indexes) {
+                        schema.indexes.forEach(indexDef => {
+                            try {
+                                store.createIndex(indexDef.name, indexDef.keyPath, indexDef.options)
+                            } catch (error) {
+                                console.warn(`[Migration v6] Failed to create index ${indexDef.name}:`, error)
+                            }
+                        })
+                    }
+                }
+            })
+
+            // Update metadata
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 6,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+
+    7: {
+        description: 'Add DASHBOARD store',
+        up: (db, transaction) => {
+            console.log('[Migration v7] Adding DASHBOARD store...')
+            if (!db.objectStoreNames.contains(DB_CONFIG.STORES.DASHBOARD)) {
+                const schema = SCHEMAS[DB_CONFIG.STORES.DASHBOARD]
+                db.createObjectStore(DB_CONFIG.STORES.DASHBOARD, { keyPath: schema.keyPath })
+            }
+
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 7,
                 type: 'system',
                 timestamp: Date.now(),
                 description: 'Database schema version'

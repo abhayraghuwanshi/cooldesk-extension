@@ -1,12 +1,17 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { initChromePolyfill } from './services/chromePolyfill';
+
+// Initialize Chrome API polyfill for Electron environment
+initChromePolyfill();
+
 import './App.css'; // MUST BE LAST to override theme backgrounds
+import './components/onboarding/OnboardingTour.css'; // Preload onboarding styles
 import './search.css';
 import './styles/bento-layout.css';
 import './styles/components.css';
 import './styles/theme.css';
 import './styles/themes/components-vars.css';
 import './styles/wallpaper-enhancements.css';
-import './components/onboarding/OnboardingTour.css'; // Preload onboarding styles
 
 // Add icons to the library
 import { library } from '@fortawesome/fontawesome-svg-core';
@@ -16,6 +21,7 @@ import categoryManager from './data/categories';
 import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, getWorkspace, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
 import { useDashboardData } from './hooks/useDashboardData';
 import { useOnboarding } from './hooks/useOnboarding';
+import { useSync } from './hooks/useSync';
 import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageSet } from './services/extensionApi';
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
@@ -92,6 +98,9 @@ export default function App() {
 
   // Onboarding hook
   const { shouldShowOnboarding, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
+
+  // Sync hook for Electron ↔ Extension synchronization
+  const { syncStatus, syncWorkspaces, isElectron, environment } = useSync();
 
   const [savedWorkspaces, setSavedWorkspaces] = useState([])
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
@@ -1005,7 +1014,7 @@ export default function App() {
           // One-time migration from chrome.storage.local -> IndexedDB
           if (!Array.isArray(workspaces) || workspaces.length === 0) {
             try {
-              const legacy = await chrome.storage.local.get(['workspaces'])
+              const legacy = await storageGet(['workspaces'])
               const legacyList = Array.isArray(legacy?.workspaces) ? legacy.workspaces : []
               if (legacyList.length) {
                 // Save each to IndexedDB
@@ -1252,6 +1261,10 @@ export default function App() {
         console.log('[App] handleAddSavedUrlToWorkspace: refreshed workspaces', { count: Array.isArray(refreshed) ? refreshed.length : 0 });
       } catch { }
       setSavedWorkspaces(Array.isArray(refreshed) ? refreshed : []);
+      // Sync workspaces to Electron app if available
+      if (syncWorkspaces) {
+        syncWorkspaces(refreshed).catch(err => console.warn('[App] Sync failed:', err));
+      }
       try { alert('Link added to workspace'); } catch { }
     } catch (e) {
       console.error('Failed to add URL to workspace:', e);
@@ -1307,6 +1320,10 @@ export default function App() {
               const refreshedResult = await listWorkspaces({ limit: 1000 });
               if (refreshedResult?.success) {
                 setSavedWorkspaces(refreshedResult.data);
+                // Sync to Electron app
+                if (syncWorkspaces) {
+                  syncWorkspaces(refreshedResult.data).catch(err => console.warn('[App] Sync failed:', err));
+                }
                 // Optionally switch to it
                 // setWorkspace(newWorkspace.name);
               }

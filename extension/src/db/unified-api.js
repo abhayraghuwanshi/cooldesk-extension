@@ -144,7 +144,7 @@ export const getWorkspace = withErrorHandling(async (id) => {
 /**
  * Save or update a workspace
  */
-export const saveWorkspace = withErrorHandling(async (workspaceData) => {
+export const saveWorkspace = withErrorHandling(async (workspaceData, options = {}) => {
     // Validate and sanitize data
     const workspace = validateAndSanitize(workspaceData, 'workspace')
 
@@ -170,11 +170,13 @@ export const saveWorkspace = withErrorHandling(async (workspaceData) => {
             console.log(`[Unified API] Saved workspace: ${workspace.name} (${workspace.id})`)
 
             // Notify listeners
-            try {
-                const bc = new BroadcastChannel('ws_db_changes')
-                bc.postMessage({ type: 'workspacesChanged' })
-                bc.close()
-            } catch { }
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('ws_db_changes')
+                    bc.postMessage({ type: 'workspacesChanged' })
+                    bc.close()
+                } catch { }
+            }
 
             resolve(workspace)
         }
@@ -461,9 +463,9 @@ export const getScrapedChat = withErrorHandling(async (chatId) => {
 /**
  * Save or update a scraped chat
  */
-export const saveScrapedChat = withErrorHandling(async (chatData) => {
-    // Validate and sanitize data
-    const chat = validateAndSanitize(chatData, 'scrapedChat')
+export const saveScrapedChat = withErrorHandling(async (chatData, options = {}) => {
+    // Validate and sanitize data (strict: false allows extra fields from sync)
+    const chat = validateAndSanitize(chatData, 'scrapedChat', { strict: false })
 
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readwrite')
@@ -474,6 +476,16 @@ export const saveScrapedChat = withErrorHandling(async (chatData) => {
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
             console.log(`[Unified API] Saved scraped chat: ${chat.title} (${chat.chatId})`)
+
+            // Notify listeners
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('scraped_chats_db_changes')
+                    bc.postMessage({ type: 'scrapedChatsChanged' })
+                    bc.close()
+                } catch { }
+            }
+
             resolve(chat)
         }
         request.onerror = () => reject(request.error)
@@ -500,6 +512,14 @@ export const deleteScrapedChat = withErrorHandling(async (chatId) => {
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
             console.log(`[Unified API] Deleted scraped chat: ${chatId}`)
+
+            // Notify listeners
+            try {
+                const bc = new BroadcastChannel('scraped_chats_db_changes')
+                bc.postMessage({ type: 'scrapedChatsChanged' })
+                bc.close()
+            } catch { }
+
             resolve(true)
         }
         request.onerror = () => reject(request.error)
@@ -536,6 +556,14 @@ export const deleteScrapedChatsByPlatform = withErrorHandling(async (platform) =
 
             tx.oncomplete = () => {
                 console.log(`[Unified API] Deleted ${deletedCount} chats from ${platform}`)
+
+                // Notify listeners
+                try {
+                    const bc = new BroadcastChannel('scraped_chats_db_changes')
+                    bc.postMessage({ type: 'scrapedChatsChanged' })
+                    bc.close()
+                } catch { }
+
                 resolve(deletedCount)
             }
             tx.onerror = () => reject(tx.error)
@@ -623,7 +651,7 @@ export const listNotes = withErrorHandling(async (options = {}) => {
 /**
  * Save or update a note
  */
-export const saveNote = withErrorHandling(async (noteData) => {
+export const saveNote = withErrorHandling(async (noteData, options = {}) => {
     const note = validateAndSanitize(noteData, 'note')
 
     const db = await getUnifiedDB()
@@ -651,7 +679,17 @@ export const saveNote = withErrorHandling(async (noteData) => {
 
             // Now save the new note
             const putRequest = store.put(note)
-            putRequest.onsuccess = () => resolve(note)
+            putRequest.onsuccess = () => {
+                // Notify listeners
+                if (!options.skipNotify) {
+                    try {
+                        const bc = new BroadcastChannel('notes_db_changes')
+                        bc.postMessage({ type: 'notesChanged' })
+                        bc.close()
+                    } catch { }
+                }
+                resolve(note)
+            }
             putRequest.onerror = () => reject(putRequest.error)
         }
 
@@ -692,7 +730,7 @@ export const getUrlNotes = withErrorHandling(async (url) => {
 /**
  * Save a URL note
  */
-export const saveUrlNote = withErrorHandling(async (noteData) => {
+export const saveUrlNote = withErrorHandling(async (noteData, options = {}) => {
     const note = validateAndSanitize({
         id: noteData.id || generateId(),
         ...noteData
@@ -704,7 +742,17 @@ export const saveUrlNote = withErrorHandling(async (noteData) => {
 
     const request = store.put(note)
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(note)
+        request.onsuccess = () => {
+            // Notify listeners
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('url_notes_db_changes')
+                    bc.postMessage({ type: 'urlNotesChanged' })
+                    bc.close()
+                } catch { }
+            }
+            resolve(note)
+        }
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -775,7 +823,7 @@ export const getSettings = withErrorHandling(async () => {
 /**
  * Save settings
  */
-export const saveSettings = withErrorHandling(async (settingsData) => {
+export const saveSettings = withErrorHandling(async (settingsData, options = {}) => {
     const settings = validateAndSanitize({
         id: 'default',
         ...settingsData,
@@ -791,11 +839,13 @@ export const saveSettings = withErrorHandling(async (settingsData) => {
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
             // Notify settings change
-            try {
-                const bc = new BroadcastChannel('settings_db_changes')
-                bc.postMessage({ type: 'settingsChanged' })
-                bc.close()
-            } catch { }
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('settings_db_changes')
+                    bc.postMessage({ type: 'settingsChanged' })
+                    bc.close()
+                } catch { }
+            }
 
             resolve(settings)
         }
@@ -858,7 +908,7 @@ export const getUIState = withErrorHandling(async () => {
 /**
  * Save UI state
  */
-export const saveUIState = withErrorHandling(async (uiStateData) => {
+export const saveUIState = withErrorHandling(async (uiStateData, options = {}) => {
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.UI_STATE, 'readwrite')
     const store = tx.objectStore(DB_CONFIG.STORES.UI_STATE)
@@ -917,7 +967,17 @@ export const saveUIState = withErrorHandling(async (uiStateData) => {
     const request = store.put(uiState)
 
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(uiState)
+        request.onsuccess = () => {
+            // Notify listeners
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('ui_state_db_changes')
+                    bc.postMessage({ type: 'uiStateChanged' })
+                    bc.close()
+                } catch { }
+            }
+            resolve(uiState)
+        }
         request.onerror = () => reject(request.error)
     })
 }, {
@@ -1255,7 +1315,7 @@ export const listPings = withErrorHandling(async (options = {}) => {
 /**
  * Upsert a pin (legacy compatibility)
  */
-export const upsertPing = withErrorHandling(async (pingData) => {
+export const upsertPing = withErrorHandling(async (pingData, options = {}) => {
     const pin = validateAndSanitize({
         id: pingData.id || pingData.url,
         url: pingData.url,
@@ -1273,11 +1333,13 @@ export const upsertPing = withErrorHandling(async (pingData) => {
         const putRequest = store.put(pin)
         putRequest.onsuccess = () => {
             // Notify listeners
-            try {
-                const bc = new BroadcastChannel('ws_db_changes')
-                bc.postMessage({ type: 'pinsChanged' })
-                bc.close()
-            } catch { }
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('ws_db_changes')
+                    bc.postMessage({ type: 'pinsChanged' })
+                    bc.close()
+                } catch { }
+            }
             resolve(pin)
         }
         putRequest.onerror = () => reject(putRequest.error)
@@ -1757,6 +1819,13 @@ export const saveScrapingConfig = withErrorHandling(async (configData) => {
         request.onsuccess = async () => {
             console.log(`[Unified API] Saved scraping config for: ${config.domain}`)
 
+            // Notify listeners
+            try {
+                const bc = new BroadcastChannel('scraped_configs_db_changes')
+                bc.postMessage({ type: 'scrapedConfigsChanged' })
+                bc.close()
+            } catch { }
+
             // SYNC TO chrome.storage.local
             try {
                 if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
@@ -1800,6 +1869,13 @@ export const deleteScrapingConfig = withErrorHandling(async (domain) => {
         request.onsuccess = async () => {
             console.log(`[Unified API] Deleted scraping config for: ${domain}`)
 
+            // Notify listeners
+            try {
+                const bc = new BroadcastChannel('scraped_configs_db_changes')
+                bc.postMessage({ type: 'scrapedConfigsChanged' })
+                bc.close()
+            } catch { }
+
             // SYNC TO chrome.storage.local
             try {
                 if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
@@ -1821,5 +1897,139 @@ export const deleteScrapingConfig = withErrorHandling(async (domain) => {
     })
 }, {
     operation: 'deleteScrapingConfig',
+    severity: ErrorSeverity.MEDIUM
+})
+
+/**
+ * Get daily memory
+ */
+export const getDailyMemory = withErrorHandling(async (date) => {
+    if (!date) return [] // or all?
+
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.DAILY_MEMORY, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.DAILY_MEMORY)
+
+    // Assuming ID is date string or we filter by date property
+    // If store uses date as key:
+    const request = store.get(date)
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result || null)
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'getDailyMemory',
+    severity: ErrorSeverity.LOW
+})
+
+/**
+ * Save daily memory
+ */
+export const saveDailyMemory = withErrorHandling(async (memoryData) => {
+    const memory = validateAndSanitize(memoryData, 'dailyMemory')
+
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.DAILY_MEMORY, 'readwrite')
+    const store = tx.objectStore(DB_CONFIG.STORES.DAILY_MEMORY)
+
+    const request = store.put(memory)
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+            // Notify listeners
+            try {
+                const bc = new BroadcastChannel('ws_db_changes')
+                bc.postMessage({ type: 'dailyMemoryChanged', date: memory.date })
+                bc.close()
+            } catch { }
+            resolve(memory)
+        }
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'saveDailyMemory',
+    severity: ErrorSeverity.MEDIUM
+})
+
+/**
+ * List all daily memories (for sync)
+ */
+export const listDailyMemory = withErrorHandling(async () => {
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.DAILY_MEMORY, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.DAILY_MEMORY)
+
+    const request = store.getAll()
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result || [])
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'listDailyMemory',
+    severity: ErrorSeverity.LOW,
+    fallbackFunction: () => []
+})
+
+/**
+ * List all pins (alias for listPings with better name)
+ */
+export const listPins = listPings
+
+
+// ===== DASHBOARD OPERATIONS =====
+
+/**
+ * Get dashboard state
+ */
+export const getDashboard = withErrorHandling(async () => {
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.DASHBOARD, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.DASHBOARD)
+
+    const request = store.get('default')
+    const result = await new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result)
+        request.onerror = () => reject(request.error)
+    })
+
+    return result || { id: 'default' }
+}, {
+    operation: 'getDashboard',
+    severity: ErrorSeverity.LOW,
+    strategy: ErrorStrategy.FALLBACK,
+    fallbackFunction: () => ({ id: 'default' })
+})
+
+/**
+ * Save dashboard state
+ */
+export const saveDashboard = withErrorHandling(async (dashboardData, options = {}) => {
+    const dashboard = {
+        id: 'default',
+        ...dashboardData,
+        updatedAt: Date.now()
+    }
+
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.DASHBOARD, 'readwrite')
+    const store = tx.objectStore(DB_CONFIG.STORES.DASHBOARD)
+
+    const request = store.put(dashboard)
+
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => {
+            // Notify dashboard change
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('dashboard_db_changes')
+                    bc.postMessage({ type: 'dashboardChanged' })
+                    bc.close()
+                } catch { }
+            }
+            resolve(dashboard)
+        }
+        request.onerror = () => reject(request.error)
+    })
+}, {
+    operation: 'saveDashboard',
     severity: ErrorSeverity.MEDIUM
 })

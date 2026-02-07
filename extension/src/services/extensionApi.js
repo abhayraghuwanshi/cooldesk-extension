@@ -3,7 +3,7 @@
 //   import { hasRuntime, sendMessage, onMessage, tabs } from '../services/extensionApi'
 //   const resp = await sendMessage({ action: 'getTimeSpent' })
 
-import { isHostSyncEnabled, getHostUrl, getWebSocketUrl } from './syncConfig';
+import { getHostUrl, getWebSocketUrl, isHostSyncEnabled } from './syncConfig';
 
 // --- Minimal WebSocket client to talk to the Electron host (gated by sync config) ---
 let _ws = null;
@@ -269,6 +269,195 @@ export async function getHostDashboard() {
   }
 }
 
+// --- Host Notes helpers ---
+export async function setHostNotes(notes) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Array.isArray(notes) ? notes : []),
+    });
+    return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+export async function getHostNotes() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/notes`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => []);
+    return { ok: true, notes: Array.isArray(data) ? data : [] };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// --- Host URL Notes helpers ---
+export async function setHostUrlNotes(notes) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/url-notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Array.isArray(notes) ? notes : []),
+    });
+    return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+export async function getHostUrlNotes() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/url-notes`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => []);
+    return { ok: true, urlNotes: Array.isArray(data) ? data : [] };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// --- Host Pins helpers ---
+export async function setHostPins(pins) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/pins`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Array.isArray(pins) ? pins : []),
+    });
+    return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+export async function getHostPins() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/pins`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => []);
+    return { ok: true, pins: Array.isArray(data) ? data : [] };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// --- Host Scraped Chats helpers ---
+export async function setHostScrapedChats(chats) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/scraped-chats`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Array.isArray(chats) ? chats : []),
+    });
+    return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+export async function getHostScrapedChats() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/scraped-chats`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => []);
+    return { ok: true, scrapedChats: Array.isArray(data) ? data : [] };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// --- Host Scraped Configs helpers ---
+export async function setHostScrapedConfigs(configs) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/scraped-configs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Array.isArray(configs) ? configs : []),
+    });
+    return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+export async function getHostScrapedConfigs() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/scraped-configs`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => []);
+    return { ok: true, scrapedConfigs: Array.isArray(data) ? data : [] };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// --- Host Daily Memory helpers ---
+export async function setHostDailyMemory(memory) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/daily-memory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Array.isArray(memory) ? memory : []),
+    });
+    return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+export async function getHostDailyMemory() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/daily-memory`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => []);
+    return { ok: true, dailyMemory: Array.isArray(data) ? data : [] };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// --- Host UI State helpers ---
+export async function setHostUiState(state) {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/ui-state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state || {}),
+    });
+    return res.status === 204 ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+export async function getHostUiState() {
+  if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
+  try {
+    const res = await fetch(`${getHostUrl()}/ui-state`);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, uiState: data };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
 // Ask the Electron host if a URL should be redirected before opening.
 // Expected host response shape: { ok: boolean, target?: string }
 export async function getRedirectDecision(url) {
@@ -429,9 +618,9 @@ export async function storageSetWithTTL(key, data) {
   if (!hasStorage()) return false;
   try {
     const timestamp = Date.now();
-    await chrome.storage.local.set({ 
-      [key]: data, 
-      [`${key}_timestamp`]: timestamp 
+    await chrome.storage.local.set({
+      [key]: data,
+      [`${key}_timestamp`]: timestamp
     });
     return true;
   } catch {
