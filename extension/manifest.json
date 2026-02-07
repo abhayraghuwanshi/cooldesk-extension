@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "New Tab by Cooldesk - Start Smarter",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "action": {
     "default_title": "Open CoolDesk Sidebar"
   },
@@ -64,6 +64,16 @@
       ],
       "js": [
         "src/content-scripts/interactionContent.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "src/content-scripts/activity-tracker.js"
       ],
       "run_at": "document_idle"
     }

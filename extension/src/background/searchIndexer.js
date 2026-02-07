@@ -6,7 +6,6 @@
  * Enriched with Activity Data for smart ranking.
  */
 import { getAllActivity, listAllUrlNotes, listNotes, listScrapedChats, listWorkspaces } from '../db/index.js';
-import { CommandParser } from '../services/commandParser.js';
 
 const STORAGE_KEY = 'search_index';
 const MAX_HISTORY = 200;
@@ -147,9 +146,31 @@ async function buildIndex() {
             } catch { return 0; }
         };
 
+        // Helper to filter out low-value URLs (signin, login, etc.)
+        const isLowValueUrl = (url) => {
+            if (!url) return false;
+            const urlLower = url.toLowerCase();
+            const pathLower = urlLower.split('?')[0]; // Ignore query params
+
+            // Exclude common utility/auth pages
+            const excludePatterns = [
+                '/signin', '/login', '/auth', '/logout', '/register', '/signup',
+                '/password', '/reset', '/verify', '/confirm', '/activate',
+                '/oauth', '/sso', '/saml', '/callback', '/redirect',
+                '/error', '/404', '/403', '/500',
+                'accounts.google.com', 'login.microsoftonline.com',
+                'auth0.com/login', 'okta.com/login'
+            ];
+
+            return excludePatterns.some(pattern => pathLower.includes(pattern));
+        };
+
         // --- TABS ---
         if (Array.isArray(tabs)) {
             tabs.forEach(tab => {
+                // Skip low-value URLs
+                if (isLowValueUrl(tab.url)) return;
+
                 index.push({
                     i: `tab_${tab.id}`,
                     t: 'tab',
@@ -159,7 +180,7 @@ async function buildIndex() {
                     f: tab.favIconUrl,
                     c: 'Open Tab',
                     tabId: tab.id, // Add tabId for tab switching
-                    scoreBase: 100 + (index.length < 5 ? 5 : 0) // Slight boost for first tabs
+                    scoreBase: 150 + (index.length < 5 ? 10 : 0) // Higher priority for active tabs
                 });
             });
         }
@@ -178,13 +199,13 @@ async function buildIndex() {
                     l: ws.name,
                     d: `${(ws.urls || []).length} items`,
                     c: 'Workspace',
-                    scoreBase: 90
+                    scoreBase: 110 // Higher priority for workspaces
                 });
 
                 (ws.urls || []).forEach(urlItem => {
                     const url = typeof urlItem === 'string' ? urlItem : urlItem.url;
                     const title = typeof urlItem === 'string' ? '' : urlItem.title;
-                    if (url) {
+                    if (url && !isLowValueUrl(url)) { // Skip low-value URLs
                         totalUrls++;
                         index.push({
                             i: `ws_link_${ws.id}_${url}`,
@@ -194,7 +215,7 @@ async function buildIndex() {
                             d: `in ${ws.name}`,
                             f: typeof urlItem === 'object' ? urlItem.favicon : null,
                             c: 'Saved Link',
-                            scoreBase: 85 + getBoost(url)
+                            scoreBase: 120 + getBoost(url) // Higher priority for saved items
                         });
                     }
                 });
@@ -204,20 +225,9 @@ async function buildIndex() {
             console.warn('[SearchIndexer] No workspaces found to index!');
         }
 
-        // --- COMMANDS ---
-        const commands = CommandParser.getAllCommands();
-        if (Array.isArray(commands)) {
-            commands.forEach(cmd => {
-                index.push({
-                    i: `cmd_${cmd.command}`,
-                    t: 'command',
-                    l: cmd.command,
-                    d: cmd.description,
-                    c: 'Command',
-                    scoreBase: 95
-                });
-            });
-        }
+        // --- COMMANDS REMOVED ---
+        // Commands are no longer indexed to avoid weird/old suggestions
+        // Users can still execute commands by typing them directly
 
         // --- NOTES ---
         if (Array.isArray(notes)) {
@@ -251,6 +261,9 @@ async function buildIndex() {
         // --- HISTORY ---
         if (Array.isArray(historyItems)) {
             historyItems.forEach(h => {
+                // Skip low-value URLs
+                if (isLowValueUrl(h.url)) return;
+
                 const boost = getBoost(h.url);
                 index.push({
                     i: `hist_${h.id}`,
@@ -260,7 +273,7 @@ async function buildIndex() {
                     d: h.url,
                     c: 'History',
                     v: h.visitCount,
-                    scoreBase: 50 + Math.min(h.visitCount || 0, 10) + boost
+                    scoreBase: 70 + Math.min(h.visitCount || 0, 20) + boost // Better scoring for frequently visited
                 });
             });
         }
@@ -269,6 +282,9 @@ async function buildIndex() {
         const flatBookmarks = flattenBookmarks(bookmarkTree);
         if (Array.isArray(flatBookmarks)) {
             flatBookmarks.forEach(b => {
+                // Skip low-value URLs
+                if (isLowValueUrl(b.url)) return;
+
                 index.push({
                     i: `bm_${b.id}`,
                     t: 'bookmark',
@@ -276,7 +292,7 @@ async function buildIndex() {
                     u: b.url,
                     d: b.url,
                     c: 'Bookmark',
-                    scoreBase: 70 + getBoost(b.url)
+                    scoreBase: 90 + getBoost(b.url) // Higher priority for bookmarks
                 });
             });
         }
@@ -284,6 +300,9 @@ async function buildIndex() {
         // --- SCRAPED CHATS ---
         if (Array.isArray(scrapedChats)) {
             scrapedChats.forEach(chat => {
+                // Skip low-value URLs
+                if (isLowValueUrl(chat.url)) return;
+
                 index.push({
                     i: `chat_${chat.chatId}`,
                     t: 'scraped-chat',
@@ -296,14 +315,34 @@ async function buildIndex() {
             });
         }
 
-        // 3. Save to Storage
+        // 3. Deduplicate by URL - keep highest scored entry
+        const urlMap = new Map();
+        index.forEach(item => {
+            if (!item.u) {
+                // No URL (workspace, note, etc.) - keep as is
+                urlMap.set(item.i, item);
+                return;
+            }
+
+            const existing = urlMap.get(item.u);
+            if (!existing || item.scoreBase > existing.scoreBase) {
+                // Keep the higher scored entry
+                urlMap.set(item.u, item);
+            }
+        });
+
+        // Convert back to array
+        index = Array.from(urlMap.values());
+        console.log(`[SearchIndexer] Deduplicated: ${index.length} unique items`);
+
+        // 4. Save to Storage
         const payload = {
             timestamp: Date.now(),
             items: index
         };
 
         await chrome.storage.local.set({ [STORAGE_KEY]: payload });
-        // console.log(`[SearchIndexer] Rebuilt index: ${index.length} items with activity data.`);
+        console.log(`[SearchIndexer] Rebuilt index: ${index.length} items with activity data.`);
 
     } catch (e) {
         console.error('[SearchIndexer] Build failed:', e);
@@ -327,7 +366,7 @@ async function fetchHistory() {
         return await chrome.history.search({
             text: '',
             maxResults: MAX_HISTORY,
-            startTime: Date.now() - (30 * 24 * 60 * 60 * 1000)
+            startTime: Date.now() - (90 * 24 * 60 * 60 * 1000) // 90 days instead of 30
         });
     } catch (e) { return []; }
 }

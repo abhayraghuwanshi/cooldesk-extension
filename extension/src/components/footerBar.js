@@ -394,6 +394,14 @@ export function injectFooterBar() {
       
       .result-icon img { width: 20px; height: 20px; border-radius: 4px; object-fit: contain; }
 
+      .result-content {
+        flex: 1; /* Take up remaining space */
+        min-width: 0; /* Allow text truncation */
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
       .result-title {
         font-size: 14px;
         font-weight: 500;
@@ -420,8 +428,30 @@ export function injectFooterBar() {
         background: rgba(255, 255, 255, 0.08); /* Neutral pill */
         color: rgba(255, 255, 255, 0.6);
         font-weight: 500;
-        margin-left: auto; /* Push to right */
+        margin-left: 8px; /* Space from content */
+        min-width: 60px; /* Fixed minimum width for consistent alignment */
+        text-align: center; /* Center text within badge */
+        flex-shrink: 0; /* Prevent shrinking */
         transition: all 0.2s;
+      }
+
+      .pin-btn {
+        font-size: 14px;
+        padding: 4px 8px;
+        margin-left: 8px;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: all 0.2s;
+        flex-shrink: 0; /* Prevent shrinking */
+        width: 28px; /* Fixed width for consistent alignment */
+        text-align: center;
+        border-radius: 4px;
+      }
+
+      .pin-btn:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.1);
+        transform: scale(1.1);
       }
       
       /* Hints on selection */
@@ -1409,9 +1439,22 @@ export function injectFooterBar() {
       // Use direct search service (no message passing needed)
       console.log('[Spotlight:Content] Searching directly for:', value);
       try {
-        const results = await quickSearch(value, 15);
-        console.log('[Spotlight:Content] Found', results.length, 'results');
-        renderResults(results);
+        // Use AI search for natural language queries (3+ words), otherwise fast keyword search
+        const wordCount = value.split(/\s+/).length;
+        const isNaturalLanguage = wordCount >= 3;
+
+        let results;
+        if (isNaturalLanguage) {
+          console.log('[Spotlight:Content] Using AI semantic search for:', value);
+          results = await naturalLanguageSearch(value, 15);
+        } else {
+          results = await quickSearch(value, 15);
+        }
+
+        // Filter out command type results (old/weird recommendations)
+        const filteredResults = results.filter(r => r.type !== 'command');
+        console.log('[Spotlight:Content] Found', filteredResults.length, 'results (filtered out commands)');
+        renderResults(filteredResults);
       } catch (e) {
         console.error('[Spotlight:Content] Search error:', e);
         renderResults([]);
@@ -1419,6 +1462,11 @@ export function injectFooterBar() {
     };
 
     spotlightInput.onkeydown = (e) => {
+      // CRITICAL: Stop all keyboard events from bubbling to the page
+      // This prevents underlying page elements (GitHub editor, Claude input, etc.)
+      // from capturing keystrokes while the Spotlight search input is focused
+      e.stopPropagation();
+
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         if (currentResults.length > 0) {

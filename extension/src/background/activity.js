@@ -776,7 +776,7 @@ export function initializeActivityTracking() {
 }
 
 // Handle activity messages from content scripts
-export function handleActivityMessage(msg, sender) {
+export async function handleActivityMessage(msg, sender) {
     if (!sender.tab?.url || !msg.type) {
         // console.log('[Activity Debug] Skipping message - missing URL or type:', { hasUrl: !!sender.tab?.url, hasType: !!msg.type });
         return;
@@ -798,6 +798,51 @@ export function handleActivityMessage(msg, sender) {
 
     if (!activityData[cleaned]) {
         activityData[cleaned] = initActivityData(sender.tab.url);
+    }
+
+    // Handle new ACTIVITY_HEARTBEAT messages from modern ActivityTracker
+    if (msg.type === 'ACTIVITY_HEARTBEAT' && msg.metrics) {
+        const now = Date.now();
+        const tabSessionId = createTabSessionId(sender.tab.id, sender.tab.url);
+
+        // Store rich metrics directly
+        const richMetrics = {
+            timeSpent: msg.metrics.timeSpent || 0,
+            visibleTime: msg.metrics.visibleTime || 0,
+            scrollDepth: msg.metrics.scrollDepth || 0,
+            maxScrollDepth: msg.metrics.maxScrollDepth || 0,
+            scrollMilestones: msg.metrics.scrollMilestones || [],
+            clicks: msg.metrics.clicks || 0,
+            keypresses: msg.metrics.keypresses || 0,
+            forms: msg.metrics.forms || 0,
+            interactions: msg.metrics.interactions || [],
+            engagementScore: msg.metrics.engagementScore || 0
+        };
+
+        // Update activity data with rich metrics
+        activityData[cleaned].time = richMetrics.timeSpent;
+        activityData[cleaned].scroll = richMetrics.maxScrollDepth;
+        activityData[cleaned].clicks = richMetrics.clicks;
+        activityData[cleaned].forms = richMetrics.forms;
+        activityData[cleaned].lastVisit = now;
+
+        // Store in time series with rich context
+        await putActivityTimeSeriesEvent({
+            url: cleaned,
+            sessionId: tabSessionId,
+            timestamp: now,
+            metrics: richMetrics,
+            context: {
+                tabId: sender.tab.id,
+                sessionStart: now - richMetrics.timeSpent,
+                duration: richMetrics.timeSpent,
+                wasVisible: richMetrics.visibleTime > 0,
+                hadFocus: richMetrics.engagementScore > 20
+            }
+        });
+
+        activityDirty.add(cleaned);
+        return;
     }
 
     // Create tab-based session ID for this message

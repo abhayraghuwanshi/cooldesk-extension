@@ -197,6 +197,7 @@ import { populateAndStore } from './data.js';
 // NOTE: realTimeCategorizor is lazy-loaded to avoid window reference errors in service worker
 import {
   handleActivityContentScriptMessage,
+  handleActivityMessage,
   handleCleanupTimeSeriesData,
   handleGetActivityData,
   handleGetTimeSeriesStats,
@@ -206,6 +207,7 @@ import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
 import { CommandParser } from '../services/commandParser.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
+import { scheduleDailySummary } from '../services/memory/dailySummaryGenerator.js';
 import { NanoAIService } from '../services/nanoAIService.js';
 import { forceIndexRebuild, initializeSearchIndexer } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
@@ -402,6 +404,14 @@ async function main() {
     console.warn('[Background] Nano AI init skipped:', e.message);
   }
 
+  // Initialize Daily Summary Scheduler
+  try {
+    scheduleDailySummary();
+    console.log('[Background] Daily summary scheduler initialized');
+  } catch (e) {
+    console.warn('[Background] Daily summary scheduler init failed:', e.message);
+  }
+
   // Bridge DB change broadcasts to UI: when RTC updates workspaces, refresh dashboard
   try {
     const bc = new BroadcastChannel('ws_db_changes');
@@ -595,6 +605,29 @@ async function main() {
         console.error('[Background] Failed to handle GET_TAB_ACTIVITY:', e);
         sendResponse({ ok: false, error: e.message });
       }
+      return true;
+    }
+
+    // Handle activity heartbeat from modern ActivityTracker
+    if (msg?.type === 'ACTIVITY_HEARTBEAT') {
+      console.log('[Background] Received ACTIVITY_HEARTBEAT:', {
+        url: msg.url,
+        timeSpent: msg.metrics?.timeSpent,
+        visibleTime: msg.metrics?.visibleTime,
+        scrollDepth: msg.metrics?.scrollDepth,
+        engagementScore: msg.metrics?.engagementScore
+      });
+
+      (async () => {
+        try {
+          await handleActivityMessage?.(msg, sender);
+          sendResponse({ success: true });
+        } catch (e) {
+          console.error('[Background] Failed to handle ACTIVITY_HEARTBEAT:', e);
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+
       return true;
     }
 

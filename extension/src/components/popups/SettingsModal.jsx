@@ -1,7 +1,7 @@
-import { faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
-import { listWorkspaces, saveWorkspace } from '../../db';
+import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveWorkspace } from '../../db';
 import { getSyncStatus } from '../../services/conditionalSync';
 import { sendMessage, storageGet } from '../../services/extensionApi';
 import { loadSyncConfig } from '../../services/syncConfig';
@@ -41,9 +41,21 @@ export function SettingsModal({
   const [syncConfigLoading, setSyncConfigLoading] = useState(false);
   const [sessionTrackingEnabled, setSessionTrackingEnabled] = useState(true);
 
+  // Auto-update State
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(true);
+  const [extensionVersion, setExtensionVersion] = useState('');
+
+  // Auto-backup State
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
+  const [backupFrequency, setBackupFrequency] = useState('weekly'); // daily, weekly, monthly
+  const [lastBackupTime, setLastBackupTime] = useState(null);
+  const [backupInProgress, setBackupInProgress] = useState(false);
+
   // --- Constants & Config ---
   const TABS = [
-    { id: 'general', label: 'AI Models', icon: faRocket, component: SetupTab },
+    { id: 'general', label: 'General', icon: faCog, component: null },
+    { id: 'ai-models', label: 'AI Models', icon: faRocket, component: SetupTab },
     { id: 'teams', label: 'Teams (P2P)', icon: faUsers, component: TeamsTab },
     { id: 'themes', label: 'Aesthetics', icon: faPalette, component: ThemesTab },
     { id: 'data', label: 'Data & Sync', icon: faDatabase, component: ExportData },
@@ -108,9 +120,51 @@ export function SettingsModal({
       // Load Workspaces
       loadLocalWorkspaces();
 
+      // Load Extension Version
+      const manifest = chrome.runtime.getManifest();
+      setExtensionVersion(manifest.version);
+
+      // Load Auto-Update Preference
+      chrome.storage.local.get(['autoUpdateEnabled'], (result) => {
+        setAutoUpdateEnabled(result?.autoUpdateEnabled !== false);
+      });
+
+      // Load Auto-Backup Preferences
+      chrome.storage.local.get(['autoBackupEnabled', 'backupFrequency', 'lastBackupTime'], (result) => {
+        setAutoBackupEnabled(result?.autoBackupEnabled === true);
+        setBackupFrequency(result?.backupFrequency || 'weekly');
+        setLastBackupTime(result?.lastBackupTime || null);
+      });
+
     } catch (e) {
       console.warn('Error specific settings:', e);
     }
+  }, [show]);
+
+  // Listen for extension updates
+  useEffect(() => {
+    if (!show) return;
+
+    const handleUpdateAvailable = (details) => {
+      console.log('Extension update available:', details.version);
+      setUpdateAvailable(true);
+
+      // If auto-update is enabled, reload immediately
+      chrome.storage.local.get(['autoUpdateEnabled'], (result) => {
+        if (result?.autoUpdateEnabled !== false) {
+          console.log('Auto-update enabled, reloading extension...');
+          chrome.runtime.reload();
+        }
+      });
+    };
+
+    // Add listener
+    chrome.runtime.onUpdateAvailable.addListener(handleUpdateAvailable);
+
+    // Cleanup
+    return () => {
+      chrome.runtime.onUpdateAvailable.removeListener(handleUpdateAvailable);
+    };
   }, [show]);
 
   const loadSettingsSync = async () => {
@@ -188,6 +242,145 @@ export function SettingsModal({
       setSessionTrackingEnabled(enabled);
     } catch (err) {
       setError('Failed to toggle session tracking');
+    }
+  };
+
+  const handleToggleAutoUpdate = async (enabled) => {
+    try {
+      await chrome.storage.local.set({ autoUpdateEnabled: enabled });
+      setAutoUpdateEnabled(enabled);
+    } catch (err) {
+      setError('Failed to toggle auto-update');
+    }
+  };
+
+  const handleCheckForUpdates = () => {
+    chrome.runtime.requestUpdateCheck((status, details) => {
+      if (status === 'update_available') {
+        setUpdateAvailable(true);
+        setError(`Update available: v${details.version}`);
+      } else if (status === 'no_update') {
+        setError('You are running the latest version');
+      } else if (status === 'throttled') {
+        setError('Update check throttled. Try again later.');
+      }
+    });
+  };
+
+  const handleInstallUpdate = () => {
+    chrome.runtime.reload();
+  };
+
+  const handleToggleAutoBackup = async (enabled) => {
+    try {
+      await chrome.storage.local.set({ autoBackupEnabled: enabled });
+      setAutoBackupEnabled(enabled);
+
+      if (enabled) {
+        // Schedule next backup
+        scheduleNextBackup();
+      }
+    } catch (err) {
+      setError('Failed to toggle auto-backup');
+    }
+  };
+
+  const handleBackupFrequencyChange = async (frequency) => {
+    try {
+      await chrome.storage.local.set({ backupFrequency: frequency });
+      setBackupFrequency(frequency);
+
+      if (autoBackupEnabled) {
+        scheduleNextBackup();
+      }
+    } catch (err) {
+      setError('Failed to update backup frequency');
+    }
+  };
+
+  const calculateNextBackupTime = (frequency) => {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+
+    switch (frequency) {
+      case 'daily':
+        return now + day;
+      case 'weekly':
+        return now + (7 * day);
+      case 'monthly':
+        return now + (30 * day);
+      default:
+        return now + (7 * day);
+    }
+  };
+
+  const scheduleNextBackup = async () => {
+    const nextTime = calculateNextBackupTime(backupFrequency);
+    await chrome.storage.local.set({ nextBackupTime: nextTime });
+  };
+
+  const performManualBackup = async () => {
+    setBackupInProgress(true);
+    setError('');
+    try {
+      // Use the same export logic from ExportData
+      const db = await getUnifiedDB();
+      const data = { meta: { exportedAt: Date.now(), version: db.version }, stores: {}, storageLocal: {} };
+
+      const storeNames = Object.values(DB_CONFIG.STORES);
+      for (const storeName of storeNames) {
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const request = store.getAll();
+        const rows = await new Promise((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => reject(request.error);
+        });
+        data.stores[storeName] = rows;
+      }
+
+      // Include chrome.storage.local data
+      try {
+        const { pinnedWorkspaces } = await storageGet(['pinnedWorkspaces']);
+        data.storageLocal.pinnedWorkspaces = Array.isArray(pinnedWorkspaces) ? pinnedWorkspaces : [];
+
+        const all = await chrome.storage.local.get(null);
+        let notesByDate = {};
+        for (const [k, v] of Object.entries(all)) {
+          if (k.startsWith('dailyNotes_') && k !== 'dailyNotesSummary' && k !== 'dailyNotesLastUpdate') {
+            notesByDate[k] = v;
+          }
+        }
+        data.storageLocal.dailyNotes = {
+          notesByDate,
+          summary: all.dailyNotesSummary || {},
+          lastUpdate: all.dailyNotesLastUpdate || 0,
+        };
+
+        if (all.domainSelectors) data.storageLocal.domainSelectors = all.domainSelectors;
+        if (all.platformSettings) data.storageLocal.platformSettings = all.platformSettings;
+      } catch { /* ignore */ }
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      a.download = `cooldesk-backup-${ts}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      const now = Date.now();
+      setLastBackupTime(now);
+      await chrome.storage.local.set({ lastBackupTime: now });
+      setError('Backup completed successfully');
+    } catch (err) {
+      console.error('[SettingsModal] Backup failed', err);
+      setError(`Backup failed: ${err.message || err}`);
+    } finally {
+      setBackupInProgress(false);
     }
   };
 
@@ -398,6 +591,257 @@ export function SettingsModal({
             )}
 
             {activeTabId === 'general' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                <section>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Extension Updates</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Manage extension updates and version information.</p>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Version Info */}
+                    <div style={{
+                      padding: 16,
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: 12,
+                      border: '1px solid rgba(255,255,255,0.04)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 500, color: '#fff' }}>Current Version</div>
+                        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>v{extensionVersion}</div>
+                      </div>
+                      {updateAvailable && (
+                        <div style={{
+                          fontSize: 12,
+                          padding: '4px 10px',
+                          borderRadius: 99,
+                          background: 'rgba(34, 197, 94, 0.15)',
+                          color: '#4ade80',
+                          border: '1px solid currentColor'
+                        }}>
+                          Update Available
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Auto-Update Toggle */}
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 16,
+                      padding: 16,
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      border: '1px solid rgba(255,255,255,0.04)',
+                      transition: 'all 0.2s',
+                      color: '#fff'
+                    }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={autoUpdateEnabled}
+                        onChange={(e) => handleToggleAutoUpdate(e.target.checked)}
+                        style={{ width: 18, height: 18, accentColor: '#3b82f6' }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 500 }}>Enable Auto-Update</div>
+                        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+                          Automatically install updates when available (requires extension reload)
+                        </div>
+                      </div>
+                    </label>
+
+                    {/* Update Actions */}
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <button
+                        onClick={handleCheckForUpdates}
+                        style={{
+                          flex: 1,
+                          padding: '12px 16px',
+                          borderRadius: 12,
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: 'rgba(255,255,255,0.05)',
+                          color: '#fff',
+                          fontSize: 13,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+                        }}
+                      >
+                        Check for Updates
+                      </button>
+
+                      {updateAvailable && (
+                        <button
+                          onClick={handleInstallUpdate}
+                          style={{
+                            flex: 1,
+                            padding: '12px 16px',
+                            borderRadius: 12,
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                            color: '#fff',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 6px 16px rgba(59, 130, 246, 0.4)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+                          }}
+                        >
+                          Install Update Now
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
+                <section>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Auto-Backup</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Automatically backup your data on a schedule.</p>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Backup Status */}
+                    {lastBackupTime && (
+                      <div style={{
+                        padding: 16,
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: 12,
+                        border: '1px solid rgba(255,255,255,0.04)'
+                      }}>
+                        <div style={{ fontWeight: 500, color: '#fff', marginBottom: 4 }}>Last Backup</div>
+                        <div style={{ fontSize: 12, opacity: 0.6 }}>
+                          {new Date(lastBackupTime).toLocaleString()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Auto-Backup Toggle */}
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 16,
+                      padding: 16,
+                      background: 'rgba(255,255,255,0.03)',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      border: '1px solid rgba(255,255,255,0.04)',
+                      transition: 'all 0.2s',
+                      color: '#fff'
+                    }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={autoBackupEnabled}
+                        onChange={(e) => handleToggleAutoBackup(e.target.checked)}
+                        style={{ width: 18, height: 18, accentColor: '#3b82f6' }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 500 }}>Enable Auto-Backup</div>
+                        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+                          Automatically backup your data based on the selected frequency
+                        </div>
+                      </div>
+                    </label>
+
+                    {/* Backup Frequency */}
+                    {autoBackupEnabled && (
+                      <div style={{
+                        padding: 16,
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: 12,
+                        border: '1px solid rgba(255,255,255,0.04)'
+                      }}>
+                        <div style={{ fontWeight: 500, color: '#fff', marginBottom: 12 }}>Backup Frequency</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          {['daily', 'weekly', 'monthly'].map(freq => (
+                            <button
+                              key={freq}
+                              onClick={() => handleBackupFrequencyChange(freq)}
+                              style={{
+                                flex: 1,
+                                padding: '8px 12px',
+                                borderRadius: 8,
+                                border: backupFrequency === freq ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
+                                background: backupFrequency === freq ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.05)',
+                                color: backupFrequency === freq ? '#60a5fa' : '#fff',
+                                fontSize: 12,
+                                fontWeight: 500,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                textTransform: 'capitalize'
+                              }}
+                            >
+                              {freq}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Manual Backup Button */}
+                    <button
+                      onClick={performManualBackup}
+                      disabled={backupInProgress}
+                      style={{
+                        padding: '12px 16px',
+                        borderRadius: 12,
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: backupInProgress ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)',
+                        color: backupInProgress ? '#9ca3af' : '#fff',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        cursor: backupInProgress ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => {
+                        if (!backupInProgress) {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        if (!backupInProgress) {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+                        }
+                      }}
+                    >
+                      {backupInProgress ? 'Backing up...' : 'Backup Now'}
+                    </button>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {activeTabId === 'ai-models' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                 <section>
                   <div style={{ marginBottom: 20 }}>
