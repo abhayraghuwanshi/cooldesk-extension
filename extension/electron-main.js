@@ -1465,20 +1465,16 @@ ipcMain.handle('runtime:send-message', async (_event, message) => {
 
         case 'SEARCH_APPS':
             // Search running and installed apps
-            console.log('[Electron] SEARCH_APPS called with query:', message.query);
             const queryApps = (message.query || '').toLowerCase();
             if (!queryApps || queryApps.length < 2) {
-                console.log('[Electron] SEARCH_APPS: query too short');
                 return { results: [] };
             }
 
             try {
-                console.log('[Electron] SEARCH_APPS: fetching apps...');
                 const [running, installed] = await Promise.all([
                     getRunningApps(),
                     getInstalledApps()
                 ]);
-                console.log('[Electron] SEARCH_APPS: found', running.length, 'running,', installed.length, 'installed');
 
                 // Dedupe: don't show installed if already running
                 const runningNames = new Set(running.map(a => a.name?.toLowerCase()));
@@ -1493,10 +1489,9 @@ ipcMain.handle('runtime:send-message', async (_event, message) => {
                                  !runningNames.has(a.name?.toLowerCase()))
                     .slice(0, 5);
 
-                console.log('[Electron] SEARCH_APPS: returning', runningMatches.length, 'running +', installedMatches.length, 'installed matches');
                 return { results: [...runningMatches, ...installedMatches] };
             } catch (e) {
-                console.error('[Electron] SEARCH_APPS failed:', e.message, e.stack);
+                console.error('[Electron] SEARCH_APPS failed:', e.message);
                 return { results: [] };
             }
 

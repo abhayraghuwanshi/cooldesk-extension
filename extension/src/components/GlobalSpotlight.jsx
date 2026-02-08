@@ -1,7 +1,56 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faChrome, faEdge, faFirefox, faSpotify, faDiscord, faSlack, faGithub } from '@fortawesome/free-brands-svg-icons';
+import { faCode, faTerminal, faFolder, faFile, faGlobe, faDesktop, faGamepad, faMusic, faVideo, faImage, faEnvelope, faComments, faCog, faCalculator } from '@fortawesome/free-solid-svg-icons';
 import { storageGet, storageSet } from '../services/extensionApi';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch } from '../services/searchService';
 import './GlobalSpotlight.css';
+
+// Map app names to FontAwesome icons
+const APP_ICONS = {
+    // Browsers
+    'chrome': faChrome,
+    'msedge': faEdge,
+    'firefox': faFirefox,
+    'edge': faEdge,
+    // Dev tools
+    'code': faCode,
+    'vscode': faCode,
+    'visual studio code': faCode,
+    'windowsterminal': faTerminal,
+    'cmd': faTerminal,
+    'powershell': faTerminal,
+    'terminal': faTerminal,
+    'github desktop': faGithub,
+    // Communication
+    'discord': faDiscord,
+    'slack': faSlack,
+    'teams': faComments,
+    'outlook': faEnvelope,
+    'mail': faEnvelope,
+    // Media
+    'spotify': faSpotify,
+    'vlc': faVideo,
+    'photos': faImage,
+    'groove': faMusic,
+    // Games
+    'steam': faGamepad,
+    // System
+    'explorer': faFolder,
+    'notepad': faFile,
+    'calculator': faCalculator,
+    'settings': faCog,
+};
+
+// Get icon for app by name
+function getAppIcon(appName) {
+    if (!appName) return faDesktop;
+    const name = appName.toLowerCase();
+    for (const [key, icon] of Object.entries(APP_ICONS)) {
+        if (name.includes(key)) return icon;
+    }
+    return faDesktop;
+}
 
 // Hook to detect click outside
 function useOnClickOutside(ref, handler) {
@@ -26,6 +75,7 @@ export function GlobalSpotlight() {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [selectedIndex, setSelectedIndex] = useState(-1); // Start with nothing selected
+    const [selectedPinIndex, setSelectedPinIndex] = useState(-1); // For pin navigation
     const [pinnedItems, setPinnedItems] = useState([]);
     const [loading, setLoading] = useState(false);
     const [deepSearch, setDeepSearch] = useState(false);
@@ -46,6 +96,7 @@ export function GlobalSpotlight() {
                 setQuery('');
                 setResults([]);
                 setSelectedIndex(-1);
+                setSelectedPinIndex(-1);
                 if (inputRef.current) {
                     inputRef.current.focus();
                     inputRef.current.select();
@@ -75,21 +126,35 @@ export function GlobalSpotlight() {
         }
     };
 
-    // Toggle Pin
+    // Toggle Pin - supports both URLs and apps
     const togglePin = (item, e) => {
         if (e) e.stopPropagation();
 
-        const exists = pinnedItems.find(p => p.url === item.url);
+        // Use different identifier for apps vs URLs
+        const itemId = item.type === 'app' ? `app:${item.name}` : item.url;
+        const exists = pinnedItems.find(p => {
+            const pinId = p.type === 'app' ? `app:${p.name}` : p.url;
+            return pinId === itemId;
+        });
+
         if (exists) {
-            const newPins = pinnedItems.filter(p => p.url !== item.url);
+            const newPins = pinnedItems.filter(p => {
+                const pinId = p.type === 'app' ? `app:${p.name}` : p.url;
+                return pinId !== itemId;
+            });
             savePinnedItems(newPins);
         } else {
             if (pinnedItems.length >= 8) return; // Max 8
             const newPin = {
-                title: item.title,
-                url: item.url,
+                title: item.title || item.name,
+                url: item.url || null,
                 favicon: item.favicon || item.icon,
-                type: item.type
+                type: item.type,
+                // App-specific fields
+                name: item.name,
+                path: item.path,
+                pid: item.pid,
+                isRunning: item.isRunning
             };
             savePinnedItems([...pinnedItems, newPin]);
         }
@@ -108,8 +173,11 @@ export function GlobalSpotlight() {
             if (!query.trim()) {
                 setResults([]);
                 setSelectedIndex(-1);
+                // Don't reset pin selection when clearing query
                 return;
             }
+            // Reset pin selection when searching
+            setSelectedPinIndex(-1);
             setLoading(true);
             try {
                 // Mock Deep Search Delay
@@ -133,19 +201,15 @@ export function GlobalSpotlight() {
                 }
 
                 // Search OS apps (Electron only)
-                console.log('[GlobalSpotlight] Checking for electronAPI:', !!window.electronAPI, 'sendMessage:', !!window.electronAPI?.sendMessage);
                 if (window.electronAPI?.sendMessage && query.length >= 2) {
                     try {
-                        console.log('[GlobalSpotlight] Calling SEARCH_APPS with query:', query);
                         const appResponse = await window.electronAPI.sendMessage({
                             type: 'SEARCH_APPS',
                             query
                         });
-                        console.log('[GlobalSpotlight] SEARCH_APPS response:', appResponse);
                         if (appResponse?.results?.length > 0) {
                             // Add app results at the beginning
                             searchResults = [...appResponse.results, ...(searchResults || [])];
-                            console.log('[GlobalSpotlight] Added', appResponse.results.length, 'app results');
                         }
                     } catch (e) {
                         console.warn('[GlobalSpotlight] App search failed:', e);
@@ -179,77 +243,166 @@ export function GlobalSpotlight() {
 
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
-        if (results.length === 0) {
-            if (e.key === 'Escape') {
+        // When we have search results, navigate them
+        if (results.length > 0) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedPinIndex(-1); // Clear pin selection
+                setSelectedIndex((prev) => (prev + 1) % results.length);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedPinIndex(-1);
+                setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (selectedIndex >= 0 && results[selectedIndex]) {
+                    handleSelect(results[selectedIndex]);
+                } else if (query.startsWith('http')) {
+                    handleSelect({ url: query, type: 'url' });
+                } else {
+                    handleSelect(results[0]);
+                }
+            } else if (e.key === 'Escape') {
                 e.preventDefault();
                 handleClose();
+            } else if (e.key === 'p' && (e.metaKey || e.ctrlKey) && selectedIndex >= 0) {
+                e.preventDefault();
+                togglePin(results[selectedIndex]);
             }
             return;
         }
 
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            setSelectedIndex((prev) => (prev + 1) % results.length);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            if (selectedIndex >= 0 && results[selectedIndex]) {
-                handleSelect(results[selectedIndex]);
-            } else if (query.startsWith('http')) {
-                handleSelect({ url: query, type: 'url' });
-            } else if (results.length > 0) {
-                // If nothing selected but results exist, select first
-                handleSelect(results[0]);
-            } else if (query.trim()) {
-                // Fallback: Search Google (match footerBar.js behavior)
-                const q = query.trim();
-                console.log('[GlobalSpotlight] No results, searching Google for:', q);
-                if (window.electronAPI?.openExternal) {
-                    window.electronAPI.openExternal(`https://www.google.com/search?q=${encodeURIComponent(q)}`);
-                } else {
-                    window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, '_blank');
-                }
+        // When no results, navigate pins (if we have any and no query)
+        if (pinnedItems.length > 0 && !query.trim()) {
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                setSelectedPinIndex((prev) => (prev + 1) % pinnedItems.length);
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                setSelectedPinIndex((prev) => (prev - 1 + pinnedItems.length) % pinnedItems.length);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                // Move to next row (4 items per row assumed)
+                setSelectedPinIndex((prev) => {
+                    const next = prev + 4;
+                    return next < pinnedItems.length ? next : prev;
+                });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                // Move to previous row
+                setSelectedPinIndex((prev) => {
+                    const next = prev - 4;
+                    return next >= 0 ? next : prev;
+                });
+            } else if (e.key === 'Enter' && selectedPinIndex >= 0) {
+                e.preventDefault();
+                handleSelect(pinnedItems[selectedPinIndex]);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
                 handleClose();
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                // Remove selected pin
+                if (selectedPinIndex >= 0) {
+                    e.preventDefault();
+                    removePin(selectedPinIndex);
+                    setSelectedPinIndex((prev) => Math.min(prev, pinnedItems.length - 2));
+                }
             }
-        } else if (e.key === 'Escape') {
+            return;
+        }
+
+        // Fallback handlers
+        if (e.key === 'Escape') {
             e.preventDefault();
             handleClose();
-        } else if (e.key === 'p' && (e.metaKey || e.ctrlKey) && selectedIndex >= 0) {
-            // Cmd+P to pin
+        } else if (e.key === 'Enter' && query.trim()) {
             e.preventDefault();
-            togglePin(results[selectedIndex]);
+            // Search Google
+            if (window.electronAPI?.openExternal) {
+                window.electronAPI.openExternal(`https://www.google.com/search?q=${encodeURIComponent(query.trim())}`);
+            } else {
+                window.open(`https://www.google.com/search?q=${encodeURIComponent(query.trim())}`, '_blank');
+            }
+            handleClose();
         }
     };
 
     const handleSelect = async (item) => {
         // For tabs, switch to the existing tab instead of opening new
-        if (item.type === 'tab' && item.tabId) {
-            console.log('[Spotlight] Jumping to tab:', item.tabId);
+        if (item.type === 'tab') {
             try {
-                // Use chrome.runtime.sendMessage - works in both extension and Electron (via polyfill)
-                if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-                    chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId }, (response) => {
-                        console.log('[Spotlight] JUMP_TO_TAB response:', response);
+                // For pinned tabs, the tabId might be stale - try to find by URL first
+                if (item.url && window.electronAPI?.sendMessage) {
+                    const tabsResponse = await window.electronAPI.sendMessage({
+                        type: 'SEARCH_TABS',
+                        query: ''  // Get all tabs
                     });
+
+                    // Find a tab matching this URL
+                    const matchingTab = tabsResponse?.results?.find(tab =>
+                        tab.url === item.url ||
+                        tab.url?.replace(/\/$/, '') === item.url?.replace(/\/$/, '')
+                    );
+
+                    if (matchingTab && matchingTab.tabId) {
+                        // Found matching tab - jump to it
+                        if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                            chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: matchingTab.tabId });
+                        } else if (window.electronAPI?.sendMessage) {
+                            await window.electronAPI.sendMessage({ type: 'JUMP_TO_TAB', tabId: matchingTab.tabId });
+                        }
+                        handleClose();
+                        return;
+                    }
                 }
-                handleClose();
-                return;
+
+                // Fallback: use stored tabId if available
+                if (item.tabId) {
+                    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId });
+                    } else if (window.electronAPI?.sendMessage) {
+                        await window.electronAPI.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId });
+                    }
+                    handleClose();
+                    return;
+                }
+
+                // Tab not found - open URL in browser
+                if (item.url) {
+                    if (window.electronAPI?.openExternal) {
+                        window.electronAPI.openExternal(item.url);
+                    } else {
+                        window.open(item.url, '_blank');
+                    }
+                    handleClose();
+                    return;
+                }
             } catch (e) {
-                console.warn('[Spotlight] Failed to switch to tab, opening URL instead:', e);
+                console.warn('[Spotlight] Failed to switch to tab:', e);
             }
         }
 
         // For apps, focus running app or launch installed app
         if (item.type === 'app') {
-            console.log('[Spotlight] Handling app:', item);
             try {
-                if (item.isRunning && item.pid && window.electronAPI?.focusApp) {
-                    // Focus running app window
-                    await window.electronAPI.focusApp(item.pid);
-                } else if (item.path && window.electronAPI?.launchApp) {
-                    // Launch installed app
+                // For pinned apps, we need to find the current running instance
+                // because the stored PID might be stale
+                if (window.electronAPI?.getRunningApps) {
+                    const runningApps = await window.electronAPI.getRunningApps();
+                    const runningInstance = runningApps.find(app =>
+                        app.name?.toLowerCase() === item.name?.toLowerCase()
+                    );
+
+                    if (runningInstance && runningInstance.pid) {
+                        // App is running - focus it
+                        await window.electronAPI.focusApp(runningInstance.pid);
+                        handleClose();
+                        return;
+                    }
+                }
+
+                // App is not running - launch it
+                if (item.path && window.electronAPI?.launchApp) {
                     await window.electronAPI.launchApp(item.path);
                 }
             } catch (e) {
@@ -349,14 +502,28 @@ export function GlobalSpotlight() {
                 <div className="spotlight-pins">
                     <div className="spotlight-pins-header">
                         <span className="spotlight-pins-title">Pinned Quick Access</span>
+                        {pinnedItems.length > 0 && !query.trim() && (
+                            <span className="spotlight-pins-hint">Use arrow keys to navigate</span>
+                        )}
                     </div>
                     <div className="spotlight-pins-grid">
                         {pinnedItems.map((pin, i) => (
-                            <div key={i} className="pin-item" onClick={() => handleSelect(pin)}>
+                            <div
+                                key={i}
+                                className={`pin-item ${pin.type === 'app' ? 'pin-app' : ''} ${i === selectedPinIndex ? 'pin-selected' : ''}`}
+                                onClick={() => handleSelect(pin)}
+                                onMouseEnter={() => setSelectedPinIndex(i)}
+                            >
                                 <div className="pin-icon">
-                                    {pin.favicon ? <img src={pin.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '🔗' }} alt="" /> : '🔗'}
+                                    {pin.type === 'app' ? (
+                                        <FontAwesomeIcon icon={getAppIcon(pin.name)} className="app-icon" />
+                                    ) : pin.favicon ? (
+                                        <img src={pin.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '🔗' }} alt="" />
+                                    ) : (
+                                        <FontAwesomeIcon icon={faGlobe} />
+                                    )}
                                 </div>
-                                <span className="pin-label">{pin.title || 'Link'}</span>
+                                <span className="pin-label">{pin.title || pin.name || 'Link'}</span>
                                 <span className="pin-remove" onClick={(e) => removePin(i, e)}>×</span>
                             </div>
                         ))}
@@ -383,33 +550,42 @@ export function GlobalSpotlight() {
                         {results.map((item, index) => (
                             <div
                                 key={item.id || index}
-                                className={`result-item ${index === selectedIndex ? 'selected' : ''}`}
+                                className={`result-item ${index === selectedIndex ? 'selected' : ''} ${item.type === 'app' ? 'result-app' : ''}`}
                                 onClick={() => handleSelect(item)}
                                 onMouseEnter={() => setSelectedIndex(index)}
                             >
                                 <div className="result-icon">
-                                    {item.favicon ? (
+                                    {item.type === 'app' ? (
+                                        <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
+                                    ) : item.favicon ? (
                                         <img src={item.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = getIcon(item.type) }} alt="" />
                                     ) : (
                                         <span>{getIcon(item.type)}</span>
                                     )}
                                 </div>
                                 <div className="result-content">
-                                    <span className="result-title">{item.title}</span>
-                                    <span className="result-desc">{item.description || formatUrl(item.url)}</span>
+                                    <span className="result-title">{item.title || item.name}</span>
+                                    <span className="result-desc">
+                                        {item.type === 'app'
+                                            ? (item.isRunning ? `Running • ${item.title}` : item.path?.split('\\').pop() || 'Application')
+                                            : (item.description || formatUrl(item.url))}
+                                    </span>
                                 </div>
 
                                 {/* Badge OR Hint */}
                                 {index === selectedIndex ? (
                                     <div className="result-hint">
-                                        <span>Open</span>
+                                        <span>{item.type === 'app' ? (item.isRunning ? 'Focus' : 'Launch') : 'Open'}</span>
                                         <span className="shortcut-key">↵</span>
                                     </div>
                                 ) : (
-                                    <span className="result-badge">{getBadgeLabel(item)}</span>
+                                    <span className={`result-badge ${item.type === 'app' && item.isRunning ? 'badge-running' : ''}`}>
+                                        {getBadgeLabel(item)}
+                                    </span>
                                 )}
 
-                                {item.url && (
+                                {/* Pin button - works for both URLs and apps */}
+                                {(item.url || item.type === 'app') && (
                                     <span
                                         className="pin-btn"
                                         title="Pin this"
