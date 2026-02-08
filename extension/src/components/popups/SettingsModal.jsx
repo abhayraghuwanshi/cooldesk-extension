@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveWorkspace } from '../../db';
 import { useSync } from '../../hooks/useSync'; // Added hook
 import { getSyncStatus } from '../../services/conditionalSync';
-import { sendMessage, storageGet } from '../../services/extensionApi';
+import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
 import { loadSyncConfig } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
 import ExportData from '../settings/ExportData';
@@ -113,7 +113,7 @@ export function SettingsModal({
       }
 
       // Load Session Tracking
-      chrome.storage.local.get(['sessionTracking'], (result) => {
+      storageGet(['sessionTracking']).then((result) => {
         setSessionTrackingEnabled(result?.sessionTracking?.enabled !== false);
       });
 
@@ -124,16 +124,18 @@ export function SettingsModal({
       loadLocalWorkspaces();
 
       // Load Extension Version
-      const manifest = chrome.runtime.getManifest();
-      setExtensionVersion(manifest.version);
+      try {
+        const manifest = chrome.runtime?.getManifest ? chrome.runtime.getManifest() : { version: 'Electron' };
+        setExtensionVersion(manifest.version);
+      } catch { }
 
       // Load Auto-Update Preference
-      chrome.storage.local.get(['autoUpdateEnabled'], (result) => {
+      storageGet(['autoUpdateEnabled']).then((result) => {
         setAutoUpdateEnabled(result?.autoUpdateEnabled !== false);
       });
 
       // Load Auto-Backup Preferences
-      chrome.storage.local.get(['autoBackupEnabled', 'backupFrequency', 'lastBackupTime'], (result) => {
+      storageGet(['autoBackupEnabled', 'backupFrequency', 'lastBackupTime']).then((result) => {
         setAutoBackupEnabled(result?.autoBackupEnabled === true);
         setBackupFrequency(result?.backupFrequency || 'weekly');
         setLastBackupTime(result?.lastBackupTime || null);
@@ -153,20 +155,24 @@ export function SettingsModal({
       setUpdateAvailable(true);
 
       // If auto-update is enabled, reload immediately
-      chrome.storage.local.get(['autoUpdateEnabled'], (result) => {
+      storageGet(['autoUpdateEnabled']).then((result) => {
         if (result?.autoUpdateEnabled !== false) {
           console.log('Auto-update enabled, reloading extension...');
-          chrome.runtime.reload();
+          if (chrome.runtime?.reload) chrome.runtime.reload();
         }
       });
     };
 
     // Add listener
-    chrome.runtime.onUpdateAvailable.addListener(handleUpdateAvailable);
+    if (chrome.runtime?.onUpdateAvailable) {
+      chrome.runtime.onUpdateAvailable.addListener(handleUpdateAvailable);
+    }
 
     // Cleanup
     return () => {
-      chrome.runtime.onUpdateAvailable.removeListener(handleUpdateAvailable);
+      if (chrome.runtime?.onUpdateAvailable) {
+        chrome.runtime.onUpdateAvailable.removeListener(handleUpdateAvailable);
+      }
     };
   }, [show]);
 
@@ -241,7 +247,7 @@ export function SettingsModal({
 
   const handleToggleSessionTracking = async (enabled) => {
     try {
-      await chrome.runtime.sendMessage({ action: 'toggleSessionTracking', enabled });
+      await sendMessage({ action: 'toggleSessionTracking', enabled });
       setSessionTrackingEnabled(enabled);
     } catch (err) {
       setError('Failed to toggle session tracking');
@@ -250,7 +256,7 @@ export function SettingsModal({
 
   const handleToggleAutoUpdate = async (enabled) => {
     try {
-      await chrome.storage.local.set({ autoUpdateEnabled: enabled });
+      await storageSet({ autoUpdateEnabled: enabled });
       setAutoUpdateEnabled(enabled);
     } catch (err) {
       setError('Failed to toggle auto-update');
@@ -258,6 +264,10 @@ export function SettingsModal({
   };
 
   const handleCheckForUpdates = () => {
+    if (!chrome.runtime?.requestUpdateCheck) {
+      setError('Update check not available in this environment');
+      return;
+    }
     chrome.runtime.requestUpdateCheck((status, details) => {
       if (status === 'update_available') {
         setUpdateAvailable(true);
@@ -271,12 +281,12 @@ export function SettingsModal({
   };
 
   const handleInstallUpdate = () => {
-    chrome.runtime.reload();
+    if (chrome.runtime?.reload) chrome.runtime.reload();
   };
 
   const handleToggleAutoBackup = async (enabled) => {
     try {
-      await chrome.storage.local.set({ autoBackupEnabled: enabled });
+      await storageSet({ autoBackupEnabled: enabled });
       setAutoBackupEnabled(enabled);
 
       if (enabled) {
@@ -290,7 +300,7 @@ export function SettingsModal({
 
   const handleBackupFrequencyChange = async (frequency) => {
     try {
-      await chrome.storage.local.set({ backupFrequency: frequency });
+      await storageSet({ backupFrequency: frequency });
       setBackupFrequency(frequency);
 
       if (autoBackupEnabled) {
@@ -319,7 +329,7 @@ export function SettingsModal({
 
   const scheduleNextBackup = async () => {
     const nextTime = calculateNextBackupTime(backupFrequency);
-    await chrome.storage.local.set({ nextBackupTime: nextTime });
+    await storageSet({ nextBackupTime: nextTime });
   };
 
   const performManualBackup = async () => {
@@ -347,7 +357,7 @@ export function SettingsModal({
         const { pinnedWorkspaces } = await storageGet(['pinnedWorkspaces']);
         data.storageLocal.pinnedWorkspaces = Array.isArray(pinnedWorkspaces) ? pinnedWorkspaces : [];
 
-        const all = await chrome.storage.local.get(null);
+        const all = await storageGet(null);
         let notesByDate = {};
         for (const [k, v] of Object.entries(all)) {
           if (k.startsWith('dailyNotes_') && k !== 'dailyNotesSummary' && k !== 'dailyNotesLastUpdate') {
@@ -377,7 +387,7 @@ export function SettingsModal({
 
       const now = Date.now();
       setLastBackupTime(now);
-      await chrome.storage.local.set({ lastBackupTime: now });
+      await storageSet({ lastBackupTime: now });
       setError('Backup completed successfully');
     } catch (err) {
       console.error('[SettingsModal] Backup failed', err);

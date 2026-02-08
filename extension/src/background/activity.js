@@ -36,6 +36,7 @@ function initActivityData(url = '') {
         sessionDurations: [], // Array of individual session durations
         bounced: 0, // Count of sessions < 5s with no interaction
         title: '',
+        favicon: '', // Added favicon tracking
         domain: domain,
         pageType: '', // 'article', 'tool', 'dashboard', etc.
         firstVisit: Date.now(),
@@ -252,7 +253,16 @@ async function flushActivityBatch() {
             const payload = { url, time: activityData[url]?.time || 0, updatedAt: Date.now(), ...activityData[url] };
             // DISABLED: Let tab-based time series system handle all persistence
             // await putActivityRow(payload);
-            batch.push({ url: payload.url, time: payload.time || 0, scroll: Number(payload.scroll) || 0, clicks: Number(payload.clicks) || 0, forms: Number(payload.forms) || 0, updatedAt: payload.updatedAt });
+            batch.push({
+                url: payload.url,
+                title: payload.title || '',
+                favicon: payload.favicon || '',
+                time: payload.time || 0,
+                scroll: Number(payload.scroll) || 0,
+                clicks: Number(payload.clicks) || 0,
+                forms: Number(payload.forms) || 0,
+                updatedAt: payload.updatedAt
+            });
         } catch (e) {
             // If write fails, keep it dirty for next round
             activityDirty.add(url);
@@ -553,6 +563,9 @@ async function handleActivated(tabId) {
             const cleaned = cleanUrl(tab.url);
             if (cleaned && activityData[cleaned]) {
                 activityData[cleaned].title = tab.title || '';
+                if (tab.favIconUrl) {
+                    activityData[cleaned].favicon = tab.favIconUrl;
+                }
                 if (!activityData[cleaned].pageType) {
                     activityData[cleaned].pageType = classifyPageType(tab.url, tab.title || '');
                 }
@@ -604,7 +617,14 @@ function handleTabUpdated(tabId, changeInfo, tab) {
     if (changeInfo.title && currentActive.url) {
         const cleaned = cleanUrl(currentActive.url);
         if (cleaned && activityData[cleaned]) {
-            activityData[cleaned].title = changeInfo.title;
+            activityData[cleaned].title = changeInfo.title || activityData[cleaned].title;
+            // Check changeInfo first, then tab object if available (passed as 3rd arg)
+            if (changeInfo.favIconUrl) {
+                activityData[cleaned].favicon = changeInfo.favIconUrl;
+            } else if (tab?.favIconUrl) {
+                activityData[cleaned].favicon = tab.favIconUrl;
+            }
+
             if (!activityData[cleaned].pageType) {
                 activityData[cleaned].pageType = classifyPageType(currentActive.url, changeInfo.title);
             }

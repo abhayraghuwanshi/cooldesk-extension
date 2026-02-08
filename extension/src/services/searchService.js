@@ -1,3 +1,5 @@
+import { listWorkspaces } from '../db/unified-api';
+
 /**
  * High-Speed Search Service
  * Implements Federated Search pattern:
@@ -136,13 +138,15 @@ export async function quickSearch(query, maxResults = 15) {
 
   if (localResults !== null) {
     // Index Exists. Even if 0 results, we trust it.
-    console.log(`[SearchService] Fast local hit: ${localResults.length} results`);
-    // Log workspace results for debugging
-    const wsResults = localResults.filter(r => r.type === 'workspace' || r.type === 'workspace-url');
-    if (wsResults.length > 0) {
-      console.log('[SearchService] Workspace results:', wsResults.map(r => ({ title: r.title, type: r.type })));
-    }
-    return localResults.slice(0, maxResults);
+    // Filter out workspace folders - only keep actual links/URLs (keep workspace-url)
+    const filteredResults = localResults.filter(r => r.type !== 'workspace');
+    // Deduplicate by URL - keep highest scored item for each URL
+    const dedupedResults = deduplicateByUrl(filteredResults);
+    // Debug: log types found
+    const typeCount = {};
+    localResults.forEach(r => { typeCount[r.type] = (typeCount[r.type] || 0) + 1; });
+    console.log(`[SearchService] Fast local hit: ${dedupedResults.length} results (from ${localResults.length}), types:`, typeCount);
+    return dedupedResults.slice(0, maxResults);
   }
 
   // 2. Index Missing -> Rebuild Trigger + Fallback
@@ -153,14 +157,19 @@ export async function quickSearch(query, maxResults = 15) {
 
   // Use Fallback while index builds
   try {
-    const [tabs, history, bookmarks] = await Promise.all([
+    const [tabs, history, bookmarks, workspaces] = await Promise.all([
       searchTabsFallback(query),
       searchHistoryFallback(query),
-      searchBookmarksFallback(query)
+      searchBookmarksFallback(query),
+      searchWorkspacesFallback(query)
     ]);
 
-    const all = [...tabs, ...history, ...bookmarks];
-    return all.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, maxResults);
+    const all = [...tabs, ...history, ...bookmarks, ...workspaces];
+    // Filter out workspace folders - only keep actual links/URLs
+    const filtered = all.filter(r => r.type !== 'workspace');
+    // Deduplicate by URL - keep highest scored item for each URL
+    const deduped = deduplicateByUrl(filtered);
+    return deduped.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, maxResults);
 
   } catch (e) {
     console.warn('[SearchService] Fallback failed', e);
@@ -201,13 +210,97 @@ export async function searchWorkspaces(query) {
     return [...ws, ...urls].sort((a, b) => b.score - a.score);
   }
 
-  // No fallback for workspaces needed really, as indexer uses DB.
-  // But if we wanted, we could read IndexedDB directly here.
-  return [];
+  // Fallback: Direct DB Access
+  return searchWorkspacesFallback(query);
 }
 
 
 // --- FALLBACKS (Old Logic) ---
+async function searchWorkspacesFallback(query) {
+  // 1. Try Electron IPC (Desktop App)
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    try {
+      return await new Promise((resolve) => {
+        let responded = false;
+        // Short timeout for IPC
+        const timeout = setTimeout(() => {
+          if (!responded) { responded = true; resolve(null); }
+        }, 1000);
+
+        chrome.runtime.sendMessage({ type: 'SEARCH_WORKSPACES', query, maxResults: 20 }, (response) => {
+          if (responded) return;
+          responded = true;
+          clearTimeout(timeout);
+          if (response && response.results) {
+            resolve(response.results);
+          } else {
+            resolve(null); // Fallback to local logic if no results/error
+          }
+        });
+      });
+    } catch (e) {
+      console.warn('IPC Search failed', e);
+    }
+  }
+
+  // 2. Local Fallback (Extension/Web)
+  try {
+    const response = await listWorkspaces();
+    const workspaces = Array.isArray(response) ? response : (response?.data || []);
+    const results = [];
+
+    // Search Workspace Names AND internal URLs
+    for (const ws of workspaces) {
+      // Score the Workspace Itself
+      const wsScore = Math.max(
+        fuzzyScore(ws.name, query),
+        fuzzyScore(ws.description || '', query)
+      );
+
+      if (wsScore > 0) {
+        results.push({
+          id: ws.id,
+          title: ws.name,
+          url: null, // Workspaces don't have a single URL
+          description: ws.description || `${ws.urls ? ws.urls.length : 0} items`,
+          type: 'workspace',
+          icon: ws.icon || '📁',
+          favicon: null,
+          score: wsScore
+        });
+      }
+
+      // Search URLs inside
+      if (ws.urls && Array.isArray(ws.urls) && query.length > 2) {
+        ws.urls.forEach(u => {
+          const uTitle = u.title || new URL(u.url).hostname;
+          const uScore = Math.max(
+            fuzzyScore(uTitle, query),
+            fuzzyScore(u.url, query)
+          );
+
+          if (uScore > 0) {
+            results.push({
+              id: `${ws.id}_${u.url}`,
+              title: uTitle,
+              url: u.url,
+              description: `in ${ws.name}`,
+              type: 'workspace-url',
+              favicon: u.favicon || null,
+              score: uScore,
+              workspaceId: ws.id
+            });
+          }
+        });
+      }
+    }
+
+    return results.sort((a, b) => b.score - a.score);
+  } catch (e) {
+    console.warn('[SearchService] Workspace fallback failed', e);
+    return [];
+  }
+}
 
 function searchTabsFallback(query) {
   if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
@@ -255,6 +348,59 @@ function searchBookmarksFallback(query) {
 }
 
 // --- Helpers ---
+
+/**
+ * Deduplicate results by URL, keeping the highest scored item for each URL
+ * @param {Array} results - Search results array
+ * @returns {Array} Deduplicated results
+ */
+function deduplicateByUrl(results) {
+  const urlMap = new Map();
+
+  for (const item of results) {
+    if (!item.url) {
+      // Items without URL (like commands) - keep as-is using id
+      const key = item.id || Math.random().toString();
+      if (!urlMap.has(key)) {
+        urlMap.set(key, item);
+      }
+      continue;
+    }
+
+    // Normalize URL for comparison (remove trailing slash, fragment)
+    const normalizedUrl = normalizeUrl(item.url);
+
+    if (!urlMap.has(normalizedUrl)) {
+      urlMap.set(normalizedUrl, item);
+    } else {
+      // Keep the one with higher score, or prefer tabs over history
+      const existing = urlMap.get(normalizedUrl);
+      const shouldReplace =
+        (item.score || 0) > (existing.score || 0) ||
+        (item.type === 'tab' && existing.type !== 'tab');
+
+      if (shouldReplace) {
+        urlMap.set(normalizedUrl, item);
+      }
+    }
+  }
+
+  return Array.from(urlMap.values());
+}
+
+/**
+ * Normalize URL for deduplication comparison
+ */
+function normalizeUrl(url) {
+  try {
+    const u = new URL(url);
+    // Remove trailing slash, fragment, and common tracking params
+    let normalized = u.origin + u.pathname.replace(/\/$/, '') + u.search;
+    return normalized.toLowerCase();
+  } catch {
+    return url.toLowerCase();
+  }
+}
 
 function getIconForType(type) {
   const icons = {

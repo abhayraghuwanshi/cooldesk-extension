@@ -270,7 +270,7 @@ async function buildIndex() {
                     t: 'history',
                     l: h.title || h.url,
                     u: h.url,
-                    d: h.url,
+                    d: null, // Let UI format the URL
                     c: 'History',
                     v: h.visitCount,
                     scoreBase: 70 + Math.min(h.visitCount || 0, 20) + boost // Better scoring for frequently visited
@@ -290,7 +290,7 @@ async function buildIndex() {
                     t: 'bookmark',
                     l: b.title,
                     u: b.url,
-                    d: b.url,
+                    d: null, // Let UI format the URL
                     c: 'Bookmark',
                     scoreBase: 90 + getBoost(b.url) // Higher priority for bookmarks
                 });

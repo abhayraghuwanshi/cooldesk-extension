@@ -159,6 +159,10 @@ class SyncWebSocket {
             case 'sync-complete':
                 this.emit('sync-complete', { timestamp });
                 break;
+            case 'jump-to-tab':
+                // Handle tab switching request from Electron desktop app
+                this.handleJumpToTab(payload);
+                break;
             default:
                 console.log('[SyncWS] Unknown message type:', type);
         }
@@ -281,6 +285,38 @@ class SyncWebSocket {
     pushTabs(tabs) {
         console.log(`[SyncWS] Pushing ${tabs?.length} tabs`);
         return this.send('push-tabs', tabs);
+    }
+
+    /**
+     * Handle jump-to-tab request from Electron desktop app
+     * @param {object} payload - { tabId, windowId }
+     */
+    async handleJumpToTab(payload) {
+        const { tabId, windowId } = payload;
+        console.log('[SyncWS] Received jump-to-tab request:', tabId);
+
+        // Only handle in browser extension context (not Electron)
+        if (typeof chrome !== 'undefined' && chrome.tabs?.update) {
+            try {
+                // Activate the tab
+                await chrome.tabs.update(tabId, { active: true });
+
+                // Focus the window if windowId provided
+                if (windowId && chrome.windows?.update) {
+                    await chrome.windows.update(windowId, { focused: true });
+                } else {
+                    // Get the tab to find its window
+                    const tab = await chrome.tabs.get(tabId);
+                    if (tab?.windowId && chrome.windows?.update) {
+                        await chrome.windows.update(tab.windowId, { focused: true });
+                    }
+                }
+
+                console.log('[SyncWS] Successfully jumped to tab:', tabId);
+            } catch (e) {
+                console.warn('[SyncWS] Failed to jump to tab:', e);
+            }
+        }
     }
 
     /**

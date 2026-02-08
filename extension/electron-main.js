@@ -4,7 +4,7 @@
  * Includes HTTP server for browser extension sync and IPC handlers
  */
 
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from 'electron';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { createServer } from 'http';
 import { dirname, join } from 'path';
@@ -15,6 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 let mainWindow;
+let spotlightWindow;
 let httpServer;
 let wss;
 
@@ -655,10 +656,70 @@ function createWindow() {
     });
 
     // Handle external links
+    // Handle external links
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url);
         return { action: 'deny' };
     });
+}
+
+function createSpotlightWindow() {
+    // Get primary display for centering
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.workAreaSize;
+
+    spotlightWindow = new BrowserWindow({
+        width: 800,
+        height: 600,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        resizable: false,
+        movable: true,
+        show: false, // Hidden by default
+        center: true,
+        hasShadow: false, // We render our own shadow in CSS for better control
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: join(__dirname, 'electron-preload.js'),
+            // webSecurity: false, // Consistent with main window
+        }
+    });
+
+    // Load the app with spotlight hash
+    if (process.env.NODE_ENV === 'development') {
+        spotlightWindow.loadURL('http://localhost:5173/#/spotlight');
+    } else {
+        spotlightWindow.loadFile(join(__dirname, 'dist-electron', 'index.html'), { hash: '/spotlight' });
+    }
+
+    // Hide instead of close on blur (optional, but good for spotlight feel)
+    // spotlightWindow.on('blur', () => {
+    //     spotlightWindow.hide();
+    // });
+}
+
+function toggleSpotlight() {
+    if (!spotlightWindow || spotlightWindow.isDestroyed()) {
+        // If the window doesn't exist or is destroyed, we can't toggle it.
+        // This implies createSpotlightWindow() should be called at startup.
+        return;
+    }
+    // Force reload to ensure hash is applied if somehow lost, or just set hash
+    // But for transparency we need to match the 'isSpotlight' check in App.jsx
+    // which checks window.location.hash.
+    // If we just hide/show, the hash stays.
+    if (spotlightWindow.isVisible()) {
+        spotlightWindow.hide();
+    } else {
+        // Re-center if needed (optional)
+        spotlightWindow.center();
+        spotlightWindow.show();
+        spotlightWindow.focus();
+        // Send reset message to clear query?
+    }
 }
 
 // ==========================================
@@ -736,6 +797,150 @@ ipcMain.handle('sync:set-pins', (_event, data) => {
 });
 
 ipcMain.handle('sync:get-scraped-chats', () => syncData.scrapedChats);
+// Runtime Message Handler (Bridge for chrome.runtime.sendMessage)
+ipcMain.handle('runtime:send-message', async (_event, message) => {
+    // console.log('[Electron] Received runtime message:', message.type);
+
+    switch (message.type) {
+        case 'SEARCH_TABS':
+            // Search in synced tabs
+            const queryTabs = (message.query || '').toLowerCase();
+            return {
+                results: syncData.tabs
+                    .filter(t => t.title?.toLowerCase().includes(queryTabs) || t.url?.toLowerCase().includes(queryTabs))
+                    .map(t => ({
+                        id: t.id,
+                        title: t.title,
+                        url: t.url,
+                        description: 'Open Tab',
+                        type: 'tab',
+                        favicon: t.favIconUrl || t.favicon, // SyncOrchestrator sends favIconUrl
+                        tabId: t.id
+                    }))
+                    .slice(0, 10)
+            };
+
+        case 'SEARCH_HISTORY':
+            // Search in synced activity/history
+            const queryHist = (message.query || '').toLowerCase();
+            return {
+                results: syncData.activity
+                    .filter(a => a.title?.toLowerCase().includes(queryHist) || a.url?.toLowerCase().includes(queryHist))
+                    .map(a => {
+                        const timestamp = a.lastVisitTime || a.timestamp || Date.now();
+                        return {
+                            id: a.id || timestamp,
+                            title: a.title || a.url, // Fallback to URL if title is missing
+                            url: a.url,
+                            // description: new Date(timestamp).toLocaleDateString(), // Don't show date
+                            type: 'history',
+                            favicon: a.favicon || a.favIconUrl
+                        };
+                    })
+                    .slice(0, 10)
+            };
+
+        case 'SEARCH_BOOKMARKS':
+            // Search in synced pins
+            const queryBook = (message.query || '').toLowerCase();
+            const pins = syncData.pins
+                .filter(p => p.title?.toLowerCase().includes(queryBook))
+                .map(p => ({
+                    id: p.id || p.url,
+                    title: p.title,
+                    url: p.url,
+                    type: 'bookmark',
+                    favicon: p.favicon || p.icon
+                }));
+            return { results: pins.slice(0, 10) };
+
+        case 'SEARCH_WORKSPACES':
+            // Search in synced workspaces and their URLs
+            const queryWs = (message.query || '').toLowerCase();
+            const wsResults = [];
+
+            // Search Workspace Names
+            if (syncData.workspaces) {
+                // 1. Workspace Containers
+                syncData.workspaces.forEach(ws => {
+                    if (ws.name?.toLowerCase().includes(queryWs)) {
+                        wsResults.push({
+                            id: ws.id,
+                            title: ws.name,
+                            description: `${(ws.urls || []).length} items`,
+                            type: 'workspace',
+                            favicon: null // Generic icon in UI
+                        });
+                    }
+
+                    // 2. URLs inside Workspaces
+                    if (ws.urls && Array.isArray(ws.urls)) {
+                        ws.urls.forEach(u => {
+                            const uTitle = (u.title || '').toLowerCase();
+                            const uUrl = (u.url || '').toLowerCase();
+
+                            if (uTitle.includes(queryWs) || uUrl.includes(queryWs)) {
+                                wsResults.push({
+                                    id: `${ws.id}_${u.url}`,
+                                    title: u.title || new URL(u.url).hostname,
+                                    url: u.url,
+                                    description: `in ${ws.name}`,
+                                    type: 'workspace-url',
+                                    favicon: u.favicon || null,
+                                    workspaceId: ws.id
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+            return { results: wsResults.slice(0, 20) };
+
+        case 'NANO_AI_SEARCH':
+            // Mock AI search for now, or just return items
+            return { success: true, results: [] };
+
+        case 'JUMP_TO_TAB':
+            // Handle tab switching - broadcast to browser extensions via WebSocket
+            console.log('[Electron] JUMP_TO_TAB request for tabId:', message.tabId);
+
+            // Hide spotlight FIRST
+            if (spotlightWindow && !spotlightWindow.isDestroyed()) {
+                spotlightWindow.hide();
+            }
+
+            // On Windows, minimize main window to allow browser to take foreground focus
+            // Windows prevents background apps from stealing focus, but minimizing works
+            if (process.platform === 'win32' && mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.minimize();
+            }
+
+            // Small delay to ensure Electron windows are out of the way
+            // before browser tries to focus
+            setTimeout(() => {
+                // Broadcast to all connected browser extensions to switch to this tab
+                broadcastToClients('jump-to-tab', {
+                    tabId: message.tabId,
+                    windowId: message.windowId
+                });
+            }, 50);
+
+            return { success: true };
+
+        case 'EXECUTE_COMMAND':
+            console.log('[Electron] Execute command:', message.commandValue);
+            return { success: true };
+
+        case 'SPOTLIGHT_HIDE':
+            spotlightWindow?.hide();
+            return { ok: true };
+
+        default:
+            // console.log('[Electron] Runtime message received:', message);
+            return { success: false, error: 'Unknown message type' };
+    }
+});
+
 ipcMain.handle('sync:set-scraped-chats', (_event, data) => {
     syncData.scrapedChats = Array.isArray(data) ? data : [];
     syncData.lastUpdated.scrapedChats = Date.now();
@@ -830,12 +1035,7 @@ ipcMain.handle('get-processes', () => {
     return [];
 });
 
-// Runtime message handler (for chrome.runtime.sendMessage compatibility)
-ipcMain.handle('runtime:send-message', (_event, message) => {
-    // Handle runtime messages - can be extended for specific actions
-    console.log('[Electron] Runtime message received:', message);
-    return { ok: true };
-});
+
 
 // ==========================================
 // APP LIFECYCLE
@@ -850,6 +1050,22 @@ app.whenReady().then(() => {
 
     // Create main window
     createWindow();
+    createSpotlightWindow();
+
+    // Register Global Shortcut
+    // Alt+Space is reserved by Windows. Alt+Shift+S is hard to press.
+    // Using Alt+K as a common "Command Palette" style shortcut.
+    const shortcut = 'Alt+K';
+    const ret = globalShortcut.register(shortcut, () => {
+        console.log('[Electron] Global shortcut triggered:', shortcut);
+        toggleSpotlight();
+    });
+
+    if (!ret) {
+        console.error(`[Electron] Global shortcut registration failed for ${shortcut}`);
+    } else {
+        console.log(`[Electron] Global shortcut registered: ${shortcut}`);
+    }
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {

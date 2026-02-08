@@ -13,6 +13,40 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Allow transparent background for Spotlight window */
+/* Override ALL theme backgrounds when transparent-body is set */
+html:has(body.transparent-body),
+html.transparent-body,
+body.transparent-body,
+body.transparent-body[class*="bg-"],
+html body.transparent-body,
+html body.transparent-body[class*="bg-"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.transparent-body #root,
+.transparent-body .spotlight-root,
+body.transparent-body #root {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* Spotlight root container - always transparent */
+.spotlight-root {
+  background: transparent !important;
+  background-image: none !important;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+}
+
 a {
   font-weight: 500;
   color: #646cff;

@@ -45,6 +45,7 @@ library.add(
 // Lazy load non-critical components
 const SettingsModal = React.lazy(() => import('./components/popups/SettingsModal').then(module => ({ default: module.SettingsModal })));
 const OnboardingTour = React.lazy(() => import('./components/onboarding/OnboardingTour').then(module => ({ default: module.OnboardingTour })));
+const GlobalSpotlight = React.lazy(() => import('./components/GlobalSpotlight').then(module => ({ default: module.GlobalSpotlight })));
 
 
 // Simple error boundary to prevent entire app crash due to child errors
@@ -96,7 +97,32 @@ export default function App() {
   const [addingToWorkspace, setAddingToWorkspace] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Onboarding hook
+  // Spotlight Routing
+  const isSpotlightHash = (hash) => hash === '#/spotlight' || hash === '#spotlight';
+  const [isSpotlight, setIsSpotlight] = useState(isSpotlightHash(window.location.hash));
+  useEffect(() => {
+    const checkHash = () => setIsSpotlight(isSpotlightHash(window.location.hash));
+    window.addEventListener('hashchange', checkHash);
+    return () => window.removeEventListener('hashchange', checkHash);
+  }, []);
+
+  // Set body transparency for Spotlight and remove wallpaper styles
+  useEffect(() => {
+    if (isSpotlight) {
+      document.body.classList.add('transparent-body');
+      document.body.classList.remove('wallpaper-enabled');
+    } else {
+      document.body.classList.remove('transparent-body');
+      // Re-add wallpaper-enabled if it was enabled
+      const wasEnabled = localStorage.getItem('wallpaperEnabled') !== 'false';
+      if (wasEnabled) {
+        document.body.classList.add('wallpaper-enabled');
+      }
+    }
+    return () => document.body.classList.remove('transparent-body');
+  }, [isSpotlight]);
+
+  // Use Onboarding Hook
   const { shouldShowOnboarding, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
 
   // Sync hook for Electron ↔ Extension synchronization
@@ -1276,130 +1302,172 @@ export default function App() {
 
 
   return (
-    <div className={`popup-wrap ${themeClass} ${wallpaperEnabled ? 'wallpaper-enabled' : ''}`} style={{
+    <div className={isSpotlight ? 'spotlight-root' : `popup-wrap ${themeClass} ${wallpaperEnabled ? 'wallpaper-enabled' : ''}`} style={{
       '--section-spacing': '24px',
       '--card-spacing': '16px',
-      position: 'relative'
+      position: 'relative',
+      background: isSpotlight ? 'transparent' : undefined,
+      minHeight: isSpotlight ? '100vh' : undefined
     }}>
-      {/* Cooldesk UI */}
-      <CoolDeskContainer
-        savedWorkspaces={savedWorkspaces}
-        onOpenWorkspace={(ws) => {
-          setWorkspace(ws.name);
-          console.log('[CoolDesk] Opening workspace:', ws.name);
-        }}
-        onOpenAllWorkspace={(ws) => {
-          // Open all URLs in workspace
-          if (ws.urls && Array.isArray(ws.urls)) {
-            ws.urls.forEach((urlObj) => {
-              if (urlObj.url) {
-                window.open(urlObj.url, '_blank');
+      {/* Spotlight Mode - Render ONLY Spotlight */}
+      {isSpotlight && (
+        <React.Suspense fallback={null}>
+          <GlobalSpotlight />
+        </React.Suspense>
+      )}
+
+      {/* Main CoolDesk UI - Only render if NOT in Spotlight mode */}
+      {!isSpotlight && (
+        <>
+          {/* Cooldesk UI */}
+          <CoolDeskContainer
+            savedWorkspaces={savedWorkspaces}
+            onOpenWorkspace={(ws) => {
+              setWorkspace(ws.name);
+              console.log('[CoolDesk] Opening workspace:', ws.name);
+            }}
+            onOpenAllWorkspace={(ws) => {
+              // Open all URLs in workspace
+              if (ws.urls && Array.isArray(ws.urls)) {
+                ws.urls.forEach((urlObj) => {
+                  if (urlObj.url) {
+                    window.open(urlObj.url, '_blank');
+                  }
+                });
               }
-            });
-          }
-        }}
-        onCreateWorkspace={async (workspaceData) => {
-          if (workspaceData && workspaceData.name) {
-            const newId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-            const newWorkspace = {
-              id: newId,
-              name: workspaceData.name,
-              icon: workspaceData.icon || 'globe',
-              description: '',
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-              urls: workspaceData.urls || [],
-              gridType: 'ItemGrid'
-            };
+            }}
+            onCreateWorkspace={async (workspaceData) => {
+              if (workspaceData && workspaceData.name) {
+                const newId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                const newWorkspace = {
+                  id: newId,
+                  name: workspaceData.name,
+                  icon: workspaceData.icon || 'globe',
+                  description: '',
+                  createdAt: Date.now(),
+                  updatedAt: Date.now(),
+                  urls: workspaceData.urls || [],
+                  gridType: 'ItemGrid'
+                };
 
-            try {
-              await saveWorkspace(newWorkspace);
-              console.log('[App] Created workspace via GlobalAddButton:', newWorkspace);
+                try {
+                  await saveWorkspace(newWorkspace);
+                  console.log('[App] Created workspace via GlobalAddButton:', newWorkspace);
 
-              // Refresh list
-              const refreshedResult = await listWorkspaces({ limit: 1000 });
-              if (refreshedResult?.success) {
-                setSavedWorkspaces(refreshedResult.data);
-                // Sync to Electron app
-                if (syncWorkspaces) {
-                  syncWorkspaces(refreshedResult.data).catch(err => console.warn('[App] Sync failed:', err));
+                  // Refresh list
+                  const refreshedResult = await listWorkspaces({ limit: 1000 });
+                  if (refreshedResult?.success) {
+                    setSavedWorkspaces(refreshedResult.data);
+                    // Sync to Electron app
+                    if (syncWorkspaces) {
+                      syncWorkspaces(refreshedResult.data).catch(err => console.warn('[App] Sync failed:', err));
+                    }
+                    // Optionally switch to it
+                    // setWorkspace(newWorkspace.name);
+                  }
+                } catch (err) {
+                  console.error('Failed to create workspace:', err);
+                  alert('Failed to create workspace');
                 }
-                // Optionally switch to it
-                // setWorkspace(newWorkspace.name);
+              } else {
+                // Legacy or fallback behavior
+                setShowCreateWorkspace(true);
               }
-            } catch (err) {
-              console.error('Failed to create workspace:', err);
-              alert('Failed to create workspace');
-            }
-          } else {
-            // Legacy or fallback behavior
-            setShowCreateWorkspace(true);
-          }
-        }}
-        onAddUrlToWorkspace={async (workspaceId, urlData) => {
-          try {
-            // Find workspace by ID
-            const workspace = savedWorkspaces.find(ws => ws.id === workspaceId);
-            if (!workspace) {
-              console.error('Workspace not found:', workspaceId);
-              return;
-            }
+            }}
+            onAddUrlToWorkspace={async (workspaceId, urlData) => {
+              try {
+                // Find workspace by ID
+                const workspace = savedWorkspaces.find(ws => ws.id === workspaceId);
+                if (!workspace) {
+                  console.error('Workspace not found:', workspaceId);
+                  return;
+                }
 
-            // Add URL using existing handler
-            await handleAddSavedUrlToWorkspace(urlData.url, workspace.name);
-            // console.log('[CoolDesk] Added URL to workspace:', { workspace: workspace.name, url: urlData.url });
-          } catch (error) {
-            console.error('[CoolDesk] Failed to add URL:', error);
-          }
-        }}
-        onAddNote={async (noteText) => {
-          // Note: Integrate with your notes system
-          // For now, just log it
-          console.log('[CoolDesk] Adding note:', noteText);
-          // You can add this to SimpleNotes or NotesWidget
-        }}
-        onSearch={(query) => {
-          setSearch(query);
-          console.log('[CoolDesk] Search:', query);
-        }}
-        onOpenSettings={() => {
-          setShowSettings(true);
-        }}
-        themeClass={themeClass}
-        wallpaperEnabled={wallpaperEnabled}
-        wallpaperUrl={wallpaperUrl}
-        wallpaperOpacity={wallpaperOpacity}
-        pinnedWorkspaces={pinnedWorkspaces}
-        onTogglePin={togglePinWorkspace}
-      />
-
-      <React.Suspense fallback={null}>
-        <SettingsModal
-          show={showSettings}
-          onClose={() => setShowSettings(false)}
-          settings={settings}
-          onSave={saveSettings}
-          fontSize={fontSize}
-          onFontSizeChange={handleFontSizeChange}
-          onStartOnboarding={startOnboarding}
-          wallpaperEnabled={wallpaperEnabled}
-          wallpaperUrl={wallpaperUrl}
-          wallpaperOpacity={wallpaperOpacity}
-          onWallpaperEnabledChange={setWallpaperEnabled}
-          onWallpaperUrlChange={setWallpaperUrl}
-          onWallpaperOpacityChange={setWallpaperOpacity}
-        />
-      </React.Suspense>
-
-      {/* Onboarding Tour */}
-      <React.Suspense fallback={null}>
-        {shouldShowOnboarding && (
-          <OnboardingTour
-            onComplete={completeOnboarding}
-            onSkip={skipOnboarding}
+                // Add URL using existing handler
+                await handleAddSavedUrlToWorkspace(urlData.url, workspace.name);
+                // console.log('[CoolDesk] Added URL to workspace:', { workspace: workspace.name, url: urlData.url });
+              } catch (error) {
+                console.error('[CoolDesk] Failed to add URL:', error);
+              }
+            }}
+            onAddNote={async (noteText) => {
+              // Note: Integrate with your notes system
+              // For now, just log it
+              console.log('[CoolDesk] Adding note:', noteText);
+              // You can add this to SimpleNotes or NotesWidget
+            }}
+            onSearch={(query) => {
+              setSearch(query);
+              console.log('[CoolDesk] Search:', query);
+            }}
+            onOpenSettings={() => {
+              setShowSettings(true);
+            }}
+            themeClass={themeClass}
+            wallpaperEnabled={wallpaperEnabled}
+            wallpaperUrl={wallpaperUrl}
+            wallpaperOpacity={wallpaperOpacity}
+            pinnedWorkspaces={pinnedWorkspaces}
+            onTogglePin={togglePinWorkspace}
+            // Note: passing all state/handlers
+            workspace={workspace}
+            setWorkspace={setWorkspace}
+            setThemeClass={setThemeClass}
+            search={search}
+            setSearch={setSearch}
+            focusSearchTick={focusSearchTick}
+            setFocusSearchTick={setFocusSearchTick}
+            settings={settings}
+            setSettings={setSettings}
+            showCreateWorkspace={showCreateWorkspace}
+            setShowCreateWorkspace={setShowCreateWorkspace}
+            addingToWorkspace={addingToWorkspace}
+            setAddingToWorkspace={setAddingToWorkspace}
+            showSettings={showSettings}
+            setShowSettings={setShowSettings}
+            setSavedWorkspaces={setSavedWorkspaces}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            activeSection={activeSection}
+            setActiveSection={setActiveSection}
+            activeSectionTimeoutRef={activeSectionTimeoutRef}
+            setPinnedWorkspaces={setPinnedWorkspaces}
+            activePinnedWorkspace={activePinnedWorkspace}
+            setActivePinnedWorkspace={setActivePinnedWorkspace}
+            unpinWorkspace={unpinWorkspace}
+            showPingsSection={showPingsSection}
+            setShowPingsSection={setShowPingsSection}
+            showFeedSection={showFeedSection}
+            setShowFeedSection={setShowFeedSection}
+            setWallpaperEnabled={setWallpaperEnabled}
+            setWallpaperUrl={setWallpaperUrl}
+            setWallpaperOpacity={setWallpaperOpacity}
+            windowWidth={windowWidth}
+            startOnboarding={startOnboarding}
+            fontSize={fontSize}
+            handleFontSizeChange={handleFontSizeChange}
+            handleShareWorkspaceUrl={handleShareWorkspaceUrl}
           />
-        )}
-      </React.Suspense>
+        </>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && !isSpotlight && (
+        <React.Suspense fallback={null}>
+          <SettingsModal
+            onClose={() => setShowSettings(false)}
+            settings={settings}
+            onSave={(newSettings) => {
+              setSettings(newSettings);
+              saveSettingsDB(newSettings);
+              sendMessage({ action: 'settingsUpdated', settings: newSettings });
+              if (window.electronAPI?.setSettings) {
+                window.electronAPI.setSettings(newSettings);
+              }
+            }}
+          />
+        </React.Suspense>
+      )}
     </div>
-  )
+  );
 }
