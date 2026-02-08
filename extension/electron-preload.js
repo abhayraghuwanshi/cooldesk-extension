@@ -24,7 +24,8 @@ const VALID_CHANNELS = [
     'sync-status',
     'sync-conflict',
     'sync-error',
-    'sync-complete'
+    'sync-complete',
+    'spotlight-shown'
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {

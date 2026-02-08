@@ -5,6 +5,7 @@
  */
 
 import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from 'electron';
+import { exec } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { createServer } from 'http';
 import { dirname, join } from 'path';
@@ -15,6 +16,89 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 let mainWindow;
+
+// ==========================================
+// WINDOWS FOCUS HELPER
+// ==========================================
+
+/**
+ * Simulate Alt key press/release AND bring browser window to foreground.
+ * Windows prevents background apps from stealing focus, but simulating a keypress
+ * tricks the system into thinking there was user input, allowing focus to change.
+ */
+function focusBrowserWindow() {
+    if (process.platform !== 'win32') return Promise.resolve();
+
+    return new Promise((resolve) => {
+        // Use PowerShell with inline C# - escape for cmd properly
+        // The C# code is base64 encoded to avoid escaping issues
+        const csharpCode = `
+using System;
+using System.Runtime.InteropServices;
+using System.Diagnostics;
+
+public class FocusHelper {
+    [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    const int SW_RESTORE = 9;
+    const int SW_SHOW = 5;
+    const int SW_SHOWMAXIMIZED = 3;
+
+    public static void FocusBrowser() {
+        keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        string[] browsers = { "chrome", "msedge", "firefox" };
+        foreach (var name in browsers) {
+            var procs = Process.GetProcessesByName(name);
+            foreach (var p in procs) {
+                if (p.MainWindowHandle != IntPtr.Zero) {
+                    IntPtr hwnd = p.MainWindowHandle;
+                    uint fgThread;
+                    GetWindowThreadProcessId(GetForegroundWindow(), out fgThread);
+                    uint curThread = GetCurrentThreadId();
+                    AttachThreadInput(curThread, fgThread, true);
+
+                    // Check window state and restore appropriately
+                    if (IsIconic(hwnd)) {
+                        // Window is minimized - restore it
+                        ShowWindow(hwnd, SW_RESTORE);
+                    } else {
+                        // Window is not minimized - just bring to front without changing size
+                        ShowWindow(hwnd, SW_SHOW);
+                    }
+
+                    SetForegroundWindow(hwnd);
+                    AttachThreadInput(curThread, fgThread, false);
+                    return;
+                }
+            }
+        }
+    }
+}`;
+        // Base64 encode the C# code for safe passing
+        const b64Code = Buffer.from(csharpCode).toString('base64');
+
+        const psCommand = `$code=[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64Code}'));Add-Type -TypeDefinition $code;[FocusHelper]::FocusBrowser()`;
+
+        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, { windowsHide: true }, (error) => {
+            if (error) {
+                console.warn('[Electron] Focus browser failed:', error.message);
+            } else {
+                console.log('[Electron] Browser window focused');
+            }
+            resolve();
+        });
+    });
+}
 let spotlightWindow;
 let httpServer;
 let wss;
@@ -663,6 +747,8 @@ function createWindow() {
     });
 }
 
+let spotlightReady = false;
+
 function createSpotlightWindow() {
     // Get primary display for centering
     const primaryDisplay = screen.getPrimaryDisplay();
@@ -684,8 +770,14 @@ function createSpotlightWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             preload: join(__dirname, 'electron-preload.js'),
-            // webSecurity: false, // Consistent with main window
+            backgroundThrottling: false, // Keep renderer active even when hidden
         }
+    });
+
+    // Mark as ready when content is loaded
+    spotlightWindow.webContents.on('did-finish-load', () => {
+        spotlightReady = true;
+        console.log('[Electron] Spotlight window ready');
     });
 
     // Load the app with spotlight hash
@@ -694,31 +786,50 @@ function createSpotlightWindow() {
     } else {
         spotlightWindow.loadFile(join(__dirname, 'dist-electron', 'index.html'), { hash: '/spotlight' });
     }
-
-    // Hide instead of close on blur (optional, but good for spotlight feel)
-    // spotlightWindow.on('blur', () => {
-    //     spotlightWindow.hide();
-    // });
 }
 
 function toggleSpotlight() {
     if (!spotlightWindow || spotlightWindow.isDestroyed()) {
-        // If the window doesn't exist or is destroyed, we can't toggle it.
-        // This implies createSpotlightWindow() should be called at startup.
+        console.log('[Electron] Spotlight window missing, recreating...');
+        createSpotlightWindow();
+        // Show after creation with delay
+        setTimeout(() => {
+            if (spotlightWindow && !spotlightWindow.isDestroyed()) {
+                spotlightWindow.center();
+                spotlightWindow.show();
+                spotlightWindow.focus();
+                spotlightWindow.webContents.focus();
+            }
+        }, 100);
         return;
     }
-    // Force reload to ensure hash is applied if somehow lost, or just set hash
-    // But for transparency we need to match the 'isSpotlight' check in App.jsx
-    // which checks window.location.hash.
-    // If we just hide/show, the hash stays.
-    if (spotlightWindow.isVisible()) {
+
+    const isVisible = spotlightWindow.isVisible();
+    console.log('[Electron] Toggle spotlight, currently visible:', isVisible);
+
+    if (isVisible) {
         spotlightWindow.hide();
     } else {
-        // Re-center if needed (optional)
+        // Re-center and show
         spotlightWindow.center();
-        spotlightWindow.show();
-        spotlightWindow.focus();
-        // Send reset message to clear query?
+        spotlightWindow.showInactive(); // Show without stealing focus first
+        spotlightWindow.focus(); // Then focus
+
+        // On Windows, we may need to force the window to front
+        if (process.platform === 'win32') {
+            spotlightWindow.setAlwaysOnTop(true, 'screen-saver'); // Higher z-order
+            spotlightWindow.moveTop();
+        }
+
+        // Focus the webContents to ensure keyboard input works immediately
+        spotlightWindow.webContents.focus();
+
+        // Send message to renderer to reset and focus input
+        setTimeout(() => {
+            if (spotlightWindow && !spotlightWindow.isDestroyed()) {
+                spotlightWindow.webContents.send('spotlight-shown');
+            }
+        }, 10);
     }
 }
 
@@ -909,21 +1020,24 @@ ipcMain.handle('runtime:send-message', async (_event, message) => {
                 spotlightWindow.hide();
             }
 
-            // On Windows, minimize main window to allow browser to take foreground focus
-            // Windows prevents background apps from stealing focus, but minimizing works
-            if (process.platform === 'win32' && mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.minimize();
-            }
-
-            // Small delay to ensure Electron windows are out of the way
-            // before browser tries to focus
-            setTimeout(() => {
-                // Broadcast to all connected browser extensions to switch to this tab
+            // On Windows, we need to bypass the foreground focus restriction
+            // by simulating Alt key press and calling SetForegroundWindow on browser
+            if (process.platform === 'win32') {
+                // Focus the browser window directly using Windows API
+                focusBrowserWindow().then(() => {
+                    // Also broadcast to browser extension to activate the specific tab
+                    broadcastToClients('jump-to-tab', {
+                        tabId: message.tabId,
+                        windowId: message.windowId
+                    });
+                });
+            } else {
+                // Non-Windows: just broadcast immediately
                 broadcastToClients('jump-to-tab', {
                     tabId: message.tabId,
                     windowId: message.windowId
                 });
-            }, 50);
+            }
 
             return { success: true };
 
@@ -1041,6 +1155,29 @@ ipcMain.handle('get-processes', () => {
 // APP LIFECYCLE
 // ==========================================
 
+// Global shortcut configuration
+const SPOTLIGHT_SHORTCUT = 'Alt+K';
+
+function registerSpotlightShortcut() {
+    // Unregister first to avoid conflicts
+    if (globalShortcut.isRegistered(SPOTLIGHT_SHORTCUT)) {
+        globalShortcut.unregister(SPOTLIGHT_SHORTCUT);
+    }
+
+    const success = globalShortcut.register(SPOTLIGHT_SHORTCUT, () => {
+        console.log('[Electron] Global shortcut triggered:', SPOTLIGHT_SHORTCUT);
+        toggleSpotlight();
+    });
+
+    if (!success) {
+        console.error(`[Electron] Global shortcut registration failed for ${SPOTLIGHT_SHORTCUT}`);
+        return false;
+    }
+
+    console.log(`[Electron] Global shortcut registered: ${SPOTLIGHT_SHORTCUT}`);
+    return true;
+}
+
 app.whenReady().then(() => {
     // Load persisted data
     loadData();
@@ -1052,20 +1189,23 @@ app.whenReady().then(() => {
     createWindow();
     createSpotlightWindow();
 
-    // Register Global Shortcut
-    // Alt+Space is reserved by Windows. Alt+Shift+S is hard to press.
-    // Using Alt+K as a common "Command Palette" style shortcut.
-    const shortcut = 'Alt+K';
-    const ret = globalShortcut.register(shortcut, () => {
-        console.log('[Electron] Global shortcut triggered:', shortcut);
-        toggleSpotlight();
-    });
-
-    if (!ret) {
-        console.error(`[Electron] Global shortcut registration failed for ${shortcut}`);
-    } else {
-        console.log(`[Electron] Global shortcut registered: ${shortcut}`);
+    // Register Global Shortcut with retry
+    if (!registerSpotlightShortcut()) {
+        // Retry after a short delay if initial registration fails
+        setTimeout(() => {
+            console.log('[Electron] Retrying shortcut registration...');
+            registerSpotlightShortcut();
+        }, 1000);
     }
+
+    // Re-register shortcut periodically to ensure it stays active
+    // Windows can sometimes "steal" global shortcuts
+    setInterval(() => {
+        if (!globalShortcut.isRegistered(SPOTLIGHT_SHORTCUT)) {
+            console.log('[Electron] Shortcut was unregistered, re-registering...');
+            registerSpotlightShortcut();
+        }
+    }, 5000);
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -1081,6 +1221,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+    // Unregister all shortcuts
+    globalShortcut.unregisterAll();
+
     // Save data before quitting
     saveData();
 

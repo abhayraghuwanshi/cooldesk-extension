@@ -38,6 +38,21 @@ export function GlobalSpotlight() {
             inputRef.current.focus();
         }
         loadPinnedItems();
+
+        // Listen for spotlight-shown event from Electron (when Alt+K is pressed)
+        if (window.electronAPI?.subscribe) {
+            const unsubscribe = window.electronAPI.subscribe('spotlight-shown', () => {
+                // Reset state and focus input
+                setQuery('');
+                setResults([]);
+                setSelectedIndex(-1);
+                if (inputRef.current) {
+                    inputRef.current.focus();
+                    inputRef.current.select();
+                }
+            });
+            return () => unsubscribe();
+        }
     }, []);
 
     // Load Pinned Items
