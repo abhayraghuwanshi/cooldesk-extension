@@ -95,6 +95,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     focusWindow: (pid) => ipcRenderer.invoke('focus-window', pid),
     getProcesses: () => ipcRenderer.invoke('get-processes'),
 
+    // App discovery (cross-platform)
+    getRunningApps: () => ipcRenderer.invoke('get-running-apps'),
+    getInstalledApps: () => ipcRenderer.invoke('get-installed-apps'),
+    focusApp: (pid) => ipcRenderer.invoke('focus-app', pid),
+    launchApp: (path) => ipcRenderer.invoke('launch-app', path),
+
     // App info
     getAppPath: () => ipcRenderer.invoke('get-app-path'),
     getVersion: () => ipcRenderer.invoke('get-version'),

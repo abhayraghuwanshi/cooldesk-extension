@@ -132,6 +132,26 @@ export function GlobalSpotlight() {
                     searchResults = searchResults.filter(r => r.type !== 'command');
                 }
 
+                // Search OS apps (Electron only)
+                console.log('[GlobalSpotlight] Checking for electronAPI:', !!window.electronAPI, 'sendMessage:', !!window.electronAPI?.sendMessage);
+                if (window.electronAPI?.sendMessage && query.length >= 2) {
+                    try {
+                        console.log('[GlobalSpotlight] Calling SEARCH_APPS with query:', query);
+                        const appResponse = await window.electronAPI.sendMessage({
+                            type: 'SEARCH_APPS',
+                            query
+                        });
+                        console.log('[GlobalSpotlight] SEARCH_APPS response:', appResponse);
+                        if (appResponse?.results?.length > 0) {
+                            // Add app results at the beginning
+                            searchResults = [...appResponse.results, ...(searchResults || [])];
+                            console.log('[GlobalSpotlight] Added', appResponse.results.length, 'app results');
+                        }
+                    } catch (e) {
+                        console.warn('[GlobalSpotlight] App search failed:', e);
+                    }
+                }
+
                 // Enhance results with mock deep search data if enabled
                 if (deepSearch) {
                     searchResults.unshift({
@@ -221,6 +241,24 @@ export function GlobalSpotlight() {
             }
         }
 
+        // For apps, focus running app or launch installed app
+        if (item.type === 'app') {
+            console.log('[Spotlight] Handling app:', item);
+            try {
+                if (item.isRunning && item.pid && window.electronAPI?.focusApp) {
+                    // Focus running app window
+                    await window.electronAPI.focusApp(item.pid);
+                } else if (item.path && window.electronAPI?.launchApp) {
+                    // Launch installed app
+                    await window.electronAPI.launchApp(item.path);
+                }
+            } catch (e) {
+                console.warn('[Spotlight] App action failed:', e);
+            }
+            handleClose();
+            return;
+        }
+
         // Default: open URL
         if (item.url) {
             if (window.electronAPI?.openExternal) {
@@ -269,6 +307,7 @@ export function GlobalSpotlight() {
         if (item.type === 'workspace') return 'Space';
         if (item.type === 'history') return 'History';
         if (item.type === 'bookmark') return 'Bookmark';
+        if (item.type === 'app') return item.isRunning ? 'Running' : 'App';
         return item.category || 'Link';
     };
 
@@ -406,6 +445,7 @@ function getIcon(type) {
         case 'bookmark': return '⭐';
         case 'workspace': return '📁';
         case 'note': return '📝';
+        case 'app': return '💻';
         default: return '🔗';
     }
 }

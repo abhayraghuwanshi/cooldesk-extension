@@ -8,9 +8,14 @@ import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from 'elec
 import { exec } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { createServer } from 'http';
-import { dirname, join } from 'path';
+import { basename, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { promisify } from 'util';
 import { WebSocketServer } from 'ws';
+import psList from 'ps-list';
+import open from 'open';
+
+const execAsync = promisify(exec);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -99,6 +104,415 @@ public class FocusHelper {
         });
     });
 }
+
+// ==========================================
+// CROSS-PLATFORM APP DISCOVERY
+// ==========================================
+
+// Installed apps cache
+let installedAppsCache = null;
+let installedAppsCacheTime = 0;
+const INSTALLED_APPS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get running applications with visible windows (cross-platform)
+ */
+async function getRunningApps() {
+    const platform = process.platform;
+
+    try {
+        if (platform === 'win32') {
+            return await getRunningAppsWindows();
+        } else if (platform === 'darwin') {
+            return await getRunningAppsMac();
+        } else {
+            return await getRunningAppsLinux();
+        }
+    } catch (e) {
+        console.warn('[Electron] getRunningApps failed:', e.message);
+        return [];
+    }
+}
+
+/**
+ * Windows: Get running apps using PowerShell
+ */
+async function getRunningAppsWindows() {
+    // PowerShell script to get running apps with visible windows
+    const psScript = `Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Name, Id, Path, MainWindowTitle | ConvertTo-Json`;
+    // Encode as base64 to avoid escaping issues with $_
+    const b64Script = Buffer.from(psScript, 'utf16le').toString('base64');
+
+    try {
+        const { stdout } = await execAsync(`powershell -NoProfile -EncodedCommand ${b64Script}`, { windowsHide: true });
+
+        if (!stdout || stdout.trim() === '') return [];
+
+        const processes = JSON.parse(stdout);
+        const procArray = Array.isArray(processes) ? processes : [processes];
+
+        return procArray.map(p => ({
+            id: `app-${p.Id}`,
+            pid: p.Id,
+            title: p.MainWindowTitle || p.Name,
+            name: p.Name,
+            path: p.Path || '',
+            type: 'app',
+            isRunning: true
+        })).filter(p => p.name && p.title);
+    } catch (e) {
+        console.error('[Electron] getRunningAppsWindows error:', e.message);
+        return [];
+    }
+}
+
+/**
+ * macOS: Get running apps using AppleScript
+ */
+async function getRunningAppsMac() {
+    try {
+        const { stdout } = await execAsync(`osascript -e 'tell application "System Events" to get {name, unix id} of (processes where background only is false)'`);
+        // AppleScript returns: {name1, name2, ...}, {id1, id2, ...}
+        const parts = stdout.trim().split(', ');
+        const apps = [];
+
+        // Parse the output - it's comma separated
+        const names = [];
+        const pids = [];
+        let inNames = true;
+
+        for (const part of parts) {
+            const cleanPart = part.replace(/[{}]/g, '').trim();
+            if (cleanPart.match(/^\d+$/)) {
+                inNames = false;
+                pids.push(parseInt(cleanPart));
+            } else if (inNames && cleanPart) {
+                names.push(cleanPart);
+            }
+        }
+
+        for (let i = 0; i < names.length; i++) {
+            apps.push({
+                id: `app-${pids[i] || i}`,
+                pid: pids[i] || 0,
+                title: names[i],
+                name: names[i],
+                path: `/Applications/${names[i]}.app`,
+                type: 'app',
+                isRunning: true
+            });
+        }
+
+        return apps;
+    } catch (e) {
+        console.warn('[Electron] getRunningAppsMac failed:', e.message);
+        return [];
+    }
+}
+
+/**
+ * Linux: Get running apps using wmctrl or fallback to ps-list
+ */
+async function getRunningAppsLinux() {
+    try {
+        // Try wmctrl first (more reliable for windowed apps)
+        const { stdout } = await execAsync('wmctrl -l -p');
+        return stdout.split('\n').filter(Boolean).map(line => {
+            const parts = line.split(/\s+/);
+            const pid = parseInt(parts[2]) || 0;
+            const title = parts.slice(4).join(' ');
+            return {
+                id: `app-${pid}`,
+                pid,
+                title,
+                name: title.split(' - ')[0] || title,
+                path: '',
+                type: 'app',
+                isRunning: true
+            };
+        });
+    } catch {
+        // Fallback to ps-list
+        try {
+            const processes = await psList();
+            return processes
+                .filter(p => p.name && !p.name.startsWith('['))
+                .slice(0, 50)
+                .map(p => ({
+                    id: `app-${p.pid}`,
+                    pid: p.pid,
+                    name: p.name,
+                    title: p.name,
+                    path: '',
+                    type: 'app',
+                    isRunning: true
+                }));
+        } catch (e) {
+            console.warn('[Electron] getRunningAppsLinux fallback failed:', e.message);
+            return [];
+        }
+    }
+}
+
+/**
+ * Get installed applications (cached, cross-platform)
+ */
+async function getInstalledApps() {
+    // Return cached if fresh
+    if (installedAppsCache && Date.now() - installedAppsCacheTime < INSTALLED_APPS_CACHE_TTL) {
+        return installedAppsCache;
+    }
+
+    const platform = process.platform;
+    let apps = [];
+
+    try {
+        if (platform === 'win32') {
+            apps = await getInstalledAppsWindows();
+        } else if (platform === 'darwin') {
+            apps = await getInstalledAppsMac();
+        } else {
+            apps = await getInstalledAppsLinux();
+        }
+    } catch (e) {
+        console.warn('[Electron] getInstalledApps failed:', e.message);
+    }
+
+    installedAppsCache = apps;
+    installedAppsCacheTime = Date.now();
+    return apps;
+}
+
+/**
+ * Windows: Get installed apps from Start Menu shortcuts
+ */
+async function getInstalledAppsWindows() {
+    // PowerShell script to get installed apps from Start Menu
+    const psScript = `
+$apps = @()
+$paths = @(
+    [Environment]::GetFolderPath('CommonStartMenu') + '\\Programs',
+    [Environment]::GetFolderPath('StartMenu') + '\\Programs'
+)
+foreach ($startMenu in $paths) {
+    if (Test-Path $startMenu) {
+        Get-ChildItem $startMenu -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
+                $shell = New-Object -ComObject WScript.Shell
+                $shortcut = $shell.CreateShortcut($_.FullName)
+                if ($shortcut.TargetPath -and $shortcut.TargetPath -match '\\.exe$') {
+                    $apps += @{
+                        name = $_.BaseName
+                        path = $shortcut.TargetPath
+                    }
+                }
+            } catch {}
+        }
+    }
+}
+$apps | Sort-Object -Property name -Unique | ConvertTo-Json -Compress
+`;
+    // Encode as base64 to avoid escaping issues
+    const b64Script = Buffer.from(psScript, 'utf16le').toString('base64');
+
+    try {
+        const { stdout } = await execAsync(`powershell -NoProfile -EncodedCommand ${b64Script}`, {
+            windowsHide: true,
+            timeout: 30000
+        });
+
+        if (!stdout || stdout.trim() === '' || stdout.trim() === 'null') return [];
+
+        const apps = JSON.parse(stdout);
+        const appArray = Array.isArray(apps) ? apps : [apps];
+
+        return appArray
+            .filter(a => a && a.name)
+            .map(a => ({
+                id: `installed-${a.name}`,
+                name: a.name,
+                title: a.name,
+                path: a.path,
+                type: 'app',
+                isRunning: false
+            }));
+    } catch (e) {
+        console.warn('[Electron] getInstalledAppsWindows failed:', e.message);
+        return [];
+    }
+}
+
+/**
+ * macOS: Get installed apps from /Applications
+ */
+async function getInstalledAppsMac() {
+    try {
+        const { stdout } = await execAsync('ls /Applications | grep ".app$"');
+        return stdout.split('\n').filter(Boolean).map(name => {
+            const appName = name.replace('.app', '');
+            return {
+                id: `installed-${appName}`,
+                name: appName,
+                title: appName,
+                path: `/Applications/${name}`,
+                type: 'app',
+                isRunning: false
+            };
+        });
+    } catch (e) {
+        console.warn('[Electron] getInstalledAppsMac failed:', e.message);
+        return [];
+    }
+}
+
+/**
+ * Linux: Get installed apps from .desktop files
+ */
+async function getInstalledAppsLinux() {
+    const desktopPaths = [
+        '/usr/share/applications',
+        `${process.env.HOME}/.local/share/applications`
+    ];
+
+    const apps = [];
+    for (const dir of desktopPaths) {
+        try {
+            const { stdout } = await execAsync(`find "${dir}" -maxdepth 1 -name "*.desktop" 2>/dev/null | head -100`);
+            for (const file of stdout.split('\n').filter(Boolean)) {
+                try {
+                    const { stdout: content } = await execAsync(`grep -E "^(Name|Exec)=" "${file}" 2>/dev/null | head -2`);
+                    const nameMatch = content.match(/Name=(.+)/);
+                    const execMatch = content.match(/Exec=([^\s%]+)/);
+                    if (nameMatch) {
+                        apps.push({
+                            id: `installed-${basename(file)}`,
+                            name: nameMatch[1],
+                            title: nameMatch[1],
+                            path: execMatch?.[1] || '',
+                            type: 'app',
+                            isRunning: false
+                        });
+                    }
+                } catch { /* ignore individual file errors */ }
+            }
+        } catch { /* ignore directory errors */ }
+    }
+
+    return apps;
+}
+
+/**
+ * Focus an application window by PID (cross-platform)
+ */
+async function focusAppWindow(pid) {
+    const platform = process.platform;
+
+    try {
+        if (platform === 'win32') {
+            return await focusAppWindowWindows(pid);
+        } else if (platform === 'darwin') {
+            return await focusAppWindowMac(pid);
+        } else {
+            return await focusAppWindowLinux(pid);
+        }
+    } catch (e) {
+        console.warn('[Electron] focusAppWindow failed:', e.message);
+        return { success: false, error: e.message };
+    }
+}
+
+/**
+ * Windows: Focus window using PowerShell with SetForegroundWindow
+ */
+async function focusAppWindowWindows(pid) {
+    const csharpCode = `
+using System;
+using System.Runtime.InteropServices;
+using System.Diagnostics;
+
+public class AppFocus {
+    [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+
+    const int SW_RESTORE = 9;
+    const int SW_SHOW = 5;
+
+    public static void FocusByPid(int pid) {
+        keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        keybd_event(0x12, 0, 2, UIntPtr.Zero);
+        try {
+            Process p = Process.GetProcessById(pid);
+            if (p.MainWindowHandle != IntPtr.Zero) {
+                if (IsIconic(p.MainWindowHandle)) {
+                    ShowWindow(p.MainWindowHandle, SW_RESTORE);
+                } else {
+                    ShowWindow(p.MainWindowHandle, SW_SHOW);
+                }
+                SetForegroundWindow(p.MainWindowHandle);
+            }
+        } catch {}
+    }
+}`;
+    const b64Code = Buffer.from(csharpCode).toString('base64');
+    const psCommand = `$code=[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64Code}'));Add-Type -TypeDefinition $code;[AppFocus]::FocusByPid(${pid})`;
+
+    await execAsync(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, { windowsHide: true });
+    return { success: true };
+}
+
+/**
+ * macOS: Focus window using AppleScript
+ */
+async function focusAppWindowMac(pid) {
+    // First get the app name from PID, then activate it
+    const { stdout: appName } = await execAsync(`ps -p ${pid} -o comm= | xargs basename`);
+    const name = appName.trim();
+    if (name) {
+        await execAsync(`osascript -e 'tell application "${name}" to activate'`);
+    }
+    return { success: true };
+}
+
+/**
+ * Linux: Focus window using wmctrl or xdotool
+ */
+async function focusAppWindowLinux(pid) {
+    try {
+        // Try wmctrl first
+        await execAsync(`wmctrl -i -a $(wmctrl -l -p | grep " ${pid} " | head -1 | cut -d' ' -f1)`);
+        return { success: true };
+    } catch {
+        try {
+            // Fallback to xdotool
+            await execAsync(`xdotool search --pid ${pid} windowactivate`);
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+}
+
+/**
+ * Launch an application by path (cross-platform)
+ */
+async function launchApp(appPath) {
+    try {
+        await open(appPath);
+        return { success: true };
+    } catch (e) {
+        // Fallback to shell.openExternal
+        try {
+            await shell.openExternal(appPath);
+            return { success: true };
+        } catch (e2) {
+            console.warn('[Electron] launchApp failed:', e2.message);
+            return { success: false, error: e2.message };
+        }
+    }
+}
+
 let spotlightWindow;
 let httpServer;
 let wss;
@@ -1049,9 +1463,86 @@ ipcMain.handle('runtime:send-message', async (_event, message) => {
             spotlightWindow?.hide();
             return { ok: true };
 
+        case 'SEARCH_APPS':
+            // Search running and installed apps
+            console.log('[Electron] SEARCH_APPS called with query:', message.query);
+            const queryApps = (message.query || '').toLowerCase();
+            if (!queryApps || queryApps.length < 2) {
+                console.log('[Electron] SEARCH_APPS: query too short');
+                return { results: [] };
+            }
+
+            try {
+                console.log('[Electron] SEARCH_APPS: fetching apps...');
+                const [running, installed] = await Promise.all([
+                    getRunningApps(),
+                    getInstalledApps()
+                ]);
+                console.log('[Electron] SEARCH_APPS: found', running.length, 'running,', installed.length, 'installed');
+
+                // Dedupe: don't show installed if already running
+                const runningNames = new Set(running.map(a => a.name?.toLowerCase()));
+
+                const runningMatches = running
+                    .filter(a => a.name?.toLowerCase().includes(queryApps) ||
+                                 a.title?.toLowerCase().includes(queryApps))
+                    .slice(0, 5);
+
+                const installedMatches = installed
+                    .filter(a => a.name?.toLowerCase().includes(queryApps) &&
+                                 !runningNames.has(a.name?.toLowerCase()))
+                    .slice(0, 5);
+
+                console.log('[Electron] SEARCH_APPS: returning', runningMatches.length, 'running +', installedMatches.length, 'installed matches');
+                return { results: [...runningMatches, ...installedMatches] };
+            } catch (e) {
+                console.error('[Electron] SEARCH_APPS failed:', e.message, e.stack);
+                return { results: [] };
+            }
+
         default:
             // console.log('[Electron] Runtime message received:', message);
             return { success: false, error: 'Unknown message type' };
+    }
+});
+
+// ==========================================
+// APP DISCOVERY IPC HANDLERS
+// ==========================================
+
+ipcMain.handle('get-running-apps', async () => {
+    try {
+        return await getRunningApps();
+    } catch (e) {
+        console.warn('[Electron] get-running-apps failed:', e.message);
+        return [];
+    }
+});
+
+ipcMain.handle('get-installed-apps', async () => {
+    try {
+        return await getInstalledApps();
+    } catch (e) {
+        console.warn('[Electron] get-installed-apps failed:', e.message);
+        return [];
+    }
+});
+
+ipcMain.handle('focus-app', async (_event, pid) => {
+    try {
+        return await focusAppWindow(pid);
+    } catch (e) {
+        console.warn('[Electron] focus-app failed:', e.message);
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('launch-app', async (_event, appPath) => {
+    try {
+        return await launchApp(appPath);
+    } catch (e) {
+        console.warn('[Electron] launch-app failed:', e.message);
+        return { success: false, error: e.message };
     }
 });
 

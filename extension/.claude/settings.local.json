@@ -4,7 +4,8 @@
       "Bash(npm run build:*)",
       "Bash(npm run dev:*)",
       "Bash(dir /s /b \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\")",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(node --check:*)"
     ],
     "deny": [],
     "ask": []
