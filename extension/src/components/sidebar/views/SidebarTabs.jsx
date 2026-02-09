@@ -16,8 +16,9 @@ export function SidebarTabs() {
 
         // Listen for updates
         const handleUpdated = (tabId, changeInfo, tab) => {
+            if (!tab || !tabId) return; // Guard against undefined
             setTabs(prev => {
-                const idx = prev.findIndex(t => t.id === tabId);
+                const idx = prev.findIndex(t => t?.id === tabId);
                 if (idx === -1) return [...prev, tab];
                 const newTabs = [...prev];
                 newTabs[idx] = tab;
@@ -26,13 +27,15 @@ export function SidebarTabs() {
         };
 
         const handleRemoved = (tabId) => {
-            setTabs(prev => prev.filter(t => t.id !== tabId));
+            if (!tabId) return; // Guard against undefined
+            setTabs(prev => prev.filter(t => t?.id !== tabId));
         };
 
         const handleActivated = (activeInfo) => {
             // Force re-render to update active highlight
             chrome.tabs.get(activeInfo.tabId, (tab) => {
-                setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, active: true } : { ...t, active: false }));
+                if (!tab || !tab.id) return; // Guard against undefined tab
+                setTabs(prev => prev.map(t => t?.id === tab.id ? { ...t, active: true } : { ...t, active: false }));
             });
         };
 
@@ -62,7 +65,7 @@ export function SidebarTabs() {
                 Tabs ({tabs.length})
             </h2>
             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {tabs.map(tab => (
+                {tabs.filter(tab => tab && tab.id).map(tab => (
                     <div
                         key={tab.id}
                         className="glass-card"
@@ -84,7 +87,7 @@ export function SidebarTabs() {
                             flex: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
                             fontSize: 'var(--font-base)', color: 'var(--text)'
                         }}>
-                            {tab.title}
+                            {tab.title || 'Untitled'}
                         </span>
                         <button
                             onClick={(e) => closeTab(e, tab.id)}

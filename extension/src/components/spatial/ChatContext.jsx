@@ -1,6 +1,7 @@
 import { faAngleRight, faArrowRight, faGear, faPlus, faSync, faTimes, faToggleOn, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
+
 import scrapperConfig from '../../data/scrapper.json';
 import { getScrapedChatStats, listScrapedChats } from '../../db/index.js';
 import { saveScrapingConfig } from '../../db/unified-api.js';
@@ -34,7 +35,7 @@ const DEFAULT_PLATFORM_STYLE = scrapperConfig.defaultStyle;
 // Storage key for saved links
 const SAVED_LINKS_KEY = 'chatContext_savedLinks';
 
-export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
+const ChatContext = memo(function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
   const [chats, setChats] = useState([]);
   const [allScrapedChats, setAllScrapedChats] = useState([]); // Store all chats for filtering
   const [savedLinks, setSavedLinks] = useState([]);
@@ -1048,4 +1049,7 @@ export function ChatContext({ workspaceId, workspaceName, maxItems = 20 }) {
       `}</style>
     </div>
   );
-}
+});
+
+export { ChatContext };
+

@@ -1,10 +1,10 @@
 import { faBullseye, faCheck, faExclamationTriangle, faFire, faPause, faPen, faPlay, faWifi } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { p2pSyncService } from '../../services/p2p/syncService';
 
-export default function TeamContextPanel({ teamId, canWrite }) {
+const TeamContextPanel = React.memo(function TeamContextPanel({ teamId, canWrite }) {
     console.log('[TeamContext] Component rendered with teamId:', teamId);
 
     const [context, setContext] = useState({
@@ -462,4 +462,6 @@ export default function TeamContextPanel({ teamId, canWrite }) {
             `}</style>
         </div >
     );
-}
+});
+
+export default TeamContextPanel;

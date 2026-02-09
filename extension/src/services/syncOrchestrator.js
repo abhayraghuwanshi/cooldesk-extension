@@ -70,7 +70,7 @@ class SyncOrchestrator {
         this.initialized = false;
         this.syncInterval = null;
         this.tabDebounceTimer = null;
-        this.PUSH_DEBOUNCE_MS = 2000; // Minimum time between pushes of same type
+        this.PUSH_DEBOUNCE_MS = 5000; // Minimum time between pushes of same type (5s to prevent sync loops)
     }
 
     /**
@@ -239,12 +239,12 @@ class SyncOrchestrator {
             this.fullSync().catch(err => console.error('[SyncOrchestrator] Initial full sync failed:', err));
         }
 
-        // Periodic sync as fallback (every 30 seconds)
+        // Periodic sync as fallback (every 60 seconds - reduced from 30s for performance)
         this.syncInterval = setInterval(() => {
             if (isHostSyncEnabled() && !this.syncInProgress) {
                 this.periodicSync();
             }
-        }, 30000);
+        }, 60000);
 
         // Tab Event Listeners - only in extension context
         if (isExtension() && chrome.tabs) {
@@ -262,7 +262,7 @@ class SyncOrchestrator {
                 if (this.tabDebounceTimer) clearTimeout(this.tabDebounceTimer);
                 this.tabDebounceTimer = setTimeout(() => {
                     this.syncLocalTabs();
-                }, 1000); // 1s debounce
+                }, 2000); // 2s debounce (increased from 1s for performance)
             };
 
             tabEvents.forEach(evt => {
@@ -303,9 +303,24 @@ class SyncOrchestrator {
         const shouldSync = isElectronApp() || isHostSyncEnabled();
         if (!shouldSync || this.syncInProgress || this.isApplyingRemoteUpdate) return;
 
+        // Map DB event type to sync type for consistent debounce tracking
+        const syncTypeMap = {
+            'workspacesChanged': 'workspaces',
+            'pinsChanged': 'pins',
+            'settingsChanged': 'settings',
+            'dashboardChanged': 'dashboard',
+            'scrapedChatsChanged': 'scraped-chats',
+            'scrapedConfigsChanged': 'scraped-configs',
+            'notesChanged': 'notes',
+            'urlNotesChanged': 'url-notes',
+            'dailyMemoryChanged': 'daily-memory',
+            'uiStateChanged': 'ui-state'
+        };
+        const syncType = syncTypeMap[type] || type;
+
         // Debounce: skip if we pushed this type recently
         const now = Date.now();
-        const lastPush = this.lastPushTime[type] || 0;
+        const lastPush = this.lastPushTime[syncType] || 0;
         if (now - lastPush < this.PUSH_DEBOUNCE_MS) {
             // console.log(`[SyncOrchestrator] Skipping ${type} push (debounced)`);
             return;
@@ -826,6 +841,32 @@ class SyncOrchestrator {
     }
 
     /**
+     * Sync notes - fetches current notes and pushes to remote
+     */
+    async syncNotes() {
+        try {
+            const notes = await listNotes();
+            return this.pushChanges('notes', Array.isArray(notes) ? notes : []);
+        } catch (e) {
+            console.error('[SyncOrchestrator] Failed to sync notes:', e);
+            return { ok: false, error: e.message };
+        }
+    }
+
+    /**
+     * Sync URL notes - fetches current URL notes and pushes to remote
+     */
+    async syncUrlNotes() {
+        try {
+            const urlNotes = await listAllUrlNotes();
+            return this.pushChanges('url-notes', Array.isArray(urlNotes) ? urlNotes : []);
+        } catch (e) {
+            console.error('[SyncOrchestrator] Failed to sync URL notes:', e);
+            return { ok: false, error: e.message };
+        }
+    }
+
+    /**
      * Subscribe to sync events
      */
     on(event, callback) {
@@ -857,6 +898,25 @@ class SyncOrchestrator {
                 }
             }
         });
+
+        // Also dispatch DOM events for UI components listening on window
+        // Map sync events to the DOM events that UI components expect
+        const domEventMap = {
+            'notes-synced': 'notes-updated',
+            'url-notes-synced': 'notes-updated' // url-notes should also trigger notes-updated
+        };
+
+        const domEventName = domEventMap[event];
+        if (domEventName && typeof window !== 'undefined') {
+            try {
+                window.dispatchEvent(new CustomEvent(domEventName, {
+                    detail: { source: 'sync', data }
+                }));
+                console.log(`[SyncOrchestrator] Dispatched DOM event: ${domEventName}`);
+            } catch (e) {
+                // May fail in service worker context
+            }
+        }
     }
 
     /**

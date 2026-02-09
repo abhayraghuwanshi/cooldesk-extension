@@ -1455,6 +1455,7 @@ export default function App() {
       {showSettings && !isSpotlight && (
         <React.Suspense fallback={null}>
           <SettingsModal
+            show={showSettings}
             onClose={() => setShowSettings(false)}
             settings={settings}
             onSave={(newSettings) => {
@@ -1465,6 +1466,15 @@ export default function App() {
                 window.electronAPI.setSettings(newSettings);
               }
             }}
+            fontSize={fontSize}
+            onFontSizeChange={handleFontSizeChange}
+            onStartOnboarding={startOnboarding}
+            wallpaperEnabled={wallpaperEnabled}
+            wallpaperUrl={wallpaperUrl}
+            wallpaperOpacity={wallpaperOpacity}
+            onWallpaperEnabledChange={setWallpaperEnabled}
+            onWallpaperUrlChange={setWallpaperUrl}
+            onWallpaperOpacityChange={setWallpaperOpacity}
           />
         </React.Suspense>
       )}

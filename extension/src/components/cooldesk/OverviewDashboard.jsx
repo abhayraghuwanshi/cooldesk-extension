@@ -1,6 +1,6 @@
 import { faStickyNote } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, memo, Suspense, useEffect, useMemo, useState } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
@@ -50,7 +50,7 @@ const getAnalytics = async (ws) => {
     return { totalVisits, totalTime, lastActive };
 };
 
-export function OverviewDashboard({
+const OverviewDashboard = memo(function OverviewDashboard({
     savedWorkspaces = [],
     onWorkspaceClick,
     activeWorkspaceId,
@@ -272,4 +272,7 @@ export function OverviewDashboard({
             </div>
         </div>
     );
-}
+});
+
+export { OverviewDashboard };
+

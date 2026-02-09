@@ -1,6 +1,6 @@
 import { faMapPin, faPlus, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
 
 const PIN_STYLES = [
@@ -21,7 +21,7 @@ const PAPER_STYLES = [
     { bg: '#ffffff', shadow: 'rgba(0, 0, 0, 0.05)' },     // White
 ];
 
-export default function NoticeBoard({ teamId, canWrite }) {
+const NoticeBoard = React.memo(function NoticeBoard({ teamId, canWrite }) {
     console.log('[NoticeBoard] Component rendered with teamId:', teamId);
 
     const [notices, setNotices] = useState([]);
@@ -436,7 +436,9 @@ export default function NoticeBoard({ teamId, canWrite }) {
             </div>
         </div >
     );
-}
+});
+
+export default NoticeBoard;
 
 const style = document.createElement('style');
 style.textContent = `

@@ -1,6 +1,6 @@
 import { faBrain, faClock, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { TabCard, TabGroupCard } from './TabCard';
@@ -38,10 +38,13 @@ export function TabManagement() {
     });
   }, []);
 
-  // Fetch browser tabs
+  // Track if initial load completed
+  const initialLoadDone = useRef(false);
+
+  // Fetch browser tabs - REMOVED tabs.length dependency to prevent infinite re-renders
   const refreshTabs = useCallback(async () => {
-    // Only set loading on initial empty state to avoid flickering
-    if (tabs.length === 0) setTabsLoading(true);
+    // Only set loading on very first load
+    if (!initialLoadDone.current) setTabsLoading(true);
 
     try {
       if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
@@ -54,15 +57,16 @@ export function TabManagement() {
           sortedTabs = await scoreAndSortTabs(allTabs || []);
         } else {
           // Default sort: Active tabs first, then by windowId + index
-          sortedTabs = (allTabs || []).sort((a, b) => {
-            if (a.active && !b.active) return -1;
-            if (!a.active && b.active) return 1;
-            if (a.windowId !== b.windowId) return a.windowId - b.windowId;
-            return a.index - b.index;
+          sortedTabs = (allTabs || []).filter(t => t && t.id).sort((a, b) => {
+            if (a?.active && !b?.active) return -1;
+            if (!a?.active && b?.active) return 1;
+            if ((a?.windowId || 0) !== (b?.windowId || 0)) return (a?.windowId || 0) - (b?.windowId || 0);
+            return (a?.index || 0) - (b?.index || 0);
           });
         }
 
         setTabs(sortedTabs);
+        initialLoadDone.current = true;
 
         // Also fetch real-time activity data
         chrome.runtime.sendMessage({ type: 'GET_TAB_ACTIVITY' }, (response) => {
@@ -76,11 +80,11 @@ export function TabManagement() {
     } finally {
       setTabsLoading(false);
     }
-  }, [tabs.length, smartSortEnabled]);
+  }, [smartSortEnabled]); // Removed tabs.length - was causing infinite callback recreation
 
-  // Debounced refresh (300ms delay)
+  // Debounced refresh (500ms delay to reduce CPU churn)
   const debouncedRefresh = useMemo(
-    () => debounce(() => refreshTabs(), 300),
+    () => debounce(() => refreshTabs(), 500),
     [refreshTabs]
   );
 
@@ -170,8 +174,8 @@ export function TabManagement() {
     if (!tabActivity) return [];
 
     return tabs
-      .filter(tab => !tab.active && tabActivity[tab.id])
-      .sort((a, b) => (tabActivity[b.id] || 0) - (tabActivity[a.id] || 0))
+      .filter(tab => tab && !tab.active && tabActivity[tab.id])
+      .sort((a, b) => (tabActivity[b?.id] || 0) - (tabActivity[a?.id] || 0))
       .slice(0, 4);
   }, [tabs, tabActivity]);
 
@@ -179,7 +183,7 @@ export function TabManagement() {
   const lastActiveTabId = useMemo(() => {
     const sorted = Object.entries(tabActivity)
       .filter(([id, _]) => {
-        const tab = tabs.find(t => t.id === parseInt(id));
+        const tab = tabs.find(t => t?.id === parseInt(id));
         return tab && !tab.active;
       })
       .sort((a, b) => b[1] - a[1]);
@@ -512,6 +516,7 @@ export function TabManagement() {
                       isPinned={false}
                       isActive={tab.active}
                       isLastActive={tab.id === lastActiveTabId}
+                      lastAccessedAt={tabActivity[tab.id] || null}
                     />
                   ))}
                 </div>

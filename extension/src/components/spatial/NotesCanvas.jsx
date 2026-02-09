@@ -23,6 +23,7 @@ import {
 } from '../../db/index.js';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { teamManager } from '../../services/p2p/teamManager';
+import { syncOrchestrator } from '../../services/syncOrchestrator';
 import { getFaviconUrl } from '../../utils/helpers';
 import { ShareNoteModal } from '../popups/ShareNoteModal';
 import TiptapEditor from './editor/TiptapEditor';
@@ -87,7 +88,7 @@ const getNoteContentWithImage = (note) => {
   return content;
 };
 
-export function NotesCanvas({ workspaceId }) {
+const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
   // Try to load from cache synchronously to prevent checking "loading" state
   const cachedData = useMemo(() => {
     try {
@@ -414,7 +415,7 @@ export function NotesCanvas({ workspaceId }) {
     };
   }, [activeTeam, loadNotes]);
 
-  // Listen for global note updates (e.g. from Dashboard widget)
+  // Listen for global note updates (e.g. from Dashboard widget or sync)
   useEffect(() => {
     const handleNotesUpdated = (event) => {
       console.log('[NotesCanvas] 🔄 Received external update event:', event.detail);
@@ -425,6 +426,28 @@ export function NotesCanvas({ workspaceId }) {
     window.addEventListener('notes-updated', handleNotesUpdated);
     return () => {
       window.removeEventListener('notes-updated', handleNotesUpdated);
+    };
+  }, [loadNotes]);
+
+  // Subscribe to sync orchestrator for bidirectional sync
+  useEffect(() => {
+    const handleNotesSynced = (data) => {
+      console.log('[NotesCanvas] 🔄 Notes synced from remote:', data?.length || 'object');
+      loadNotes(false);
+    };
+
+    const handleUrlNotesSynced = (data) => {
+      console.log('[NotesCanvas] 🔄 URL Notes synced from remote:', data?.length || 'object');
+      loadNotes(false);
+    };
+
+    // Subscribe to sync events
+    const unsubNotes = syncOrchestrator.on('notes-synced', handleNotesSynced);
+    const unsubUrlNotes = syncOrchestrator.on('url-notes-synced', handleUrlNotesSynced);
+
+    return () => {
+      unsubNotes?.();
+      unsubUrlNotes?.();
     };
   }, [loadNotes]);
 
@@ -622,8 +645,11 @@ export function NotesCanvas({ workspaceId }) {
           updatedAt: now
         };
 
-        // Don't await - fire and forget for better INP
-        saveUrlNote(urlNote).catch(err => console.error('[NotesCanvas] Error saving URL note:', err));
+        // Save to DB and trigger sync
+        saveUrlNote(urlNote).then(() => {
+          // Trigger sync to push URL notes to remote
+          syncOrchestrator.syncUrlNotes().catch(() => { });
+        }).catch(err => console.error('[NotesCanvas] Error saving URL note:', err));
 
         // Update state optimistically
         setUrlNotes(prev => {
@@ -636,9 +662,8 @@ export function NotesCanvas({ workspaceId }) {
           return [urlNote, ...prev];
         });
 
-        if (!noteId && activeNote?.id !== urlNote.id) {
-          setActiveNote(urlNote);
-        }
+        // Always update activeNote to reflect new updatedAt timestamp
+        setActiveNote(urlNote);
       } else {
         // Use activeNote's createdAt if editing existing note
         const createdAt = noteId && activeNote?.id === noteId ? activeNote.createdAt : now;
@@ -655,8 +680,11 @@ export function NotesCanvas({ workspaceId }) {
           updatedAt: now
         };
 
-        // Don't await - fire and forget for better INP
-        dbUpsertNote(note).catch(err => console.error('[NotesCanvas] Error saving note:', err));
+        // Save to DB and trigger sync
+        dbUpsertNote(note).then(() => {
+          // Trigger sync to push notes to remote
+          syncOrchestrator.syncNotes().catch(() => { });
+        }).catch(err => console.error('[NotesCanvas] Error saving note:', err));
 
         // Update state optimistically
         setNotes(prev => {
@@ -669,9 +697,8 @@ export function NotesCanvas({ workspaceId }) {
           return [note, ...prev];
         });
 
-        if (!noteId && activeNote?.id !== note.id) {
-          setActiveNote(note);
-        }
+        // Always update activeNote to reflect new updatedAt timestamp
+        setActiveNote(note);
       }
 
       setAutoSaveStatus('saved');
@@ -1756,7 +1783,7 @@ export function NotesCanvas({ workspaceId }) {
       `}</style>
     </div >
   );
-}
+});
 
 // Responsive styles
 const style = document.createElement('style');
@@ -1803,3 +1830,7 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+
+
+export { NotesCanvas };
+

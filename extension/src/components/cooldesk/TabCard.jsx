@@ -1,9 +1,46 @@
 
-import { faChevronDown, faExternalLinkAlt, faGlobe, faMagic, faSpinner, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faClock, faExternalLinkAlt, faGlobe, faMagic, faSpinner, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useState } from 'react';
 import { getFaviconUrl } from '../../utils/helpers.js';
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
+
+/**
+ * Format a timestamp as relative time (e.g., "2m ago", "1h ago", "3d ago")
+ */
+function formatRelativeTime(timestamp) {
+  if (!timestamp) return null;
+
+  const now = Date.now();
+  const diff = now - timestamp;
+
+  // Less than a minute
+  if (diff < 60000) {
+    return 'just now';
+  }
+
+  // Less than an hour
+  if (diff < 3600000) {
+    const mins = Math.floor(diff / 60000);
+    return `${mins}m ago`;
+  }
+
+  // Less than a day
+  if (diff < 86400000) {
+    const hours = Math.floor(diff / 3600000);
+    return `${hours}h ago`;
+  }
+
+  // Less than a week
+  if (diff < 604800000) {
+    const days = Math.floor(diff / 86400000);
+    return `${days}d ago`;
+  }
+
+  // More than a week - show date
+  const date = new Date(timestamp);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 /**
  * Get page text content from a tab via content script
@@ -49,7 +86,7 @@ async function getTabPageText(tabId) {
  * Follows WorkspaceCard design pattern with tab-specific features
  * Memoized to prevent unnecessary re-renders
  */
-export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isPinned = false, isActive = false, isLastActive = false }) {
+export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isPinned = false, isActive = false, isLastActive = false, lastAccessedAt = null }) {
   const [summary, setSummary] = useState(null);
   const [summarizing, setSummarizing] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
@@ -60,6 +97,7 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
   const hostname = url ? new URL(url).hostname : 'Unknown';
   const colorClass = ICON_COLORS[Math.abs(hostname.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
   const faviconUrl = favIconUrl || getFaviconUrl(url, 16);
+  const relativeTime = formatRelativeTime(lastAccessedAt);
 
   const handleCardClick = () => {
     onClick?.(tab);
@@ -158,7 +196,15 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
           <div className="tab-title" title={title}>
             {title || 'Untitled Tab'}
           </div>
-          <div className="tab-hostname">{hostname}</div>
+          <div className="tab-hostname">
+            {hostname}
+            {relativeTime && (
+              <span className="tab-last-accessed" title="Last accessed">
+                <FontAwesomeIcon icon={faClock} style={{ fontSize: '9px', marginLeft: '8px', marginRight: '3px', opacity: 0.7 }} />
+                {relativeTime}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

@@ -159,10 +159,12 @@ export default function SidebarApp() {
 
                 {showSettings && (
                     <SettingsModal
-                        isOpen={showSettings}
+                        show={showSettings}
                         onClose={() => setShowSettings(false)}
                         settings={{}}
                         onSave={() => { }}
+                        fontSize="medium"
+                        onFontSizeChange={() => { }}
                     />
                 )}
             </ErrorBoundary>

@@ -3602,6 +3602,15 @@
   line-height: 1.2;
 }
 
+/* Last accessed time indicator */
+.tab-last-accessed {
+  color: #64748B;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.85;
+}
+
 /* Tab Group Subtitle (shows top tab title) */
 .tab-group-subtitle {
   font-size: var(--font-sm);

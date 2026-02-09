@@ -7,15 +7,58 @@ function isHttpUrl(u) {
   try { const x = new URL(u); return x.protocol === 'http:' || x.protocol === 'https:'; } catch { return false; }
 }
 
-// Open or focus URL in Chrome
-async function openOrFocusUrlInChrome(url) {
+// Normalize URL for comparison (remove trailing slashes, normalize protocol)
+function normalizeUrlForMatch(urlStr) {
   try {
-    if (!url) return;
-    const target = new URL(url).href;
+    const u = new URL(urlStr);
+    // Normalize: lowercase host, remove trailing slash from pathname
+    let normalized = `${u.protocol}//${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, '')}`;
+    // Include search params if present
+    if (u.search) normalized += u.search;
+    return normalized;
+  } catch { return urlStr; }
+}
+
+// Open or focus URL in Chrome - improved matching to find existing tabs
+async function openOrFocusUrlInChrome(url, tabId = null) {
+  try {
+    if (!url && !tabId) return;
+
     const all = await chrome.tabs.query({});
-    const match = all.find(t => {
-      try { return t.url && new URL(t.url).href === target; } catch { return false; }
-    }) || null;
+
+    // Priority 1: If tabId is provided, try to activate that tab directly
+    if (tabId) {
+      const tabById = all.find(t => t.id === tabId);
+      if (tabById) {
+        try { await chrome.tabs.update(tabById.id, { active: true }); } catch { }
+        if (typeof tabById.windowId === 'number') {
+          try { await chrome.windows.update(tabById.windowId, { focused: true }); } catch { }
+        }
+        return;
+      }
+    }
+
+    if (!url) return;
+
+    const targetNormalized = normalizeUrlForMatch(url);
+    const targetUrl = new URL(url);
+
+    // Priority 2: Exact URL match (normalized)
+    let match = all.find(t => {
+      try { return t.url && normalizeUrlForMatch(t.url) === targetNormalized; } catch { return false; }
+    });
+
+    // Priority 3: Match by origin + pathname (ignore query params)
+    if (!match) {
+      match = all.find(t => {
+        try {
+          const tabUrl = new URL(t.url);
+          return tabUrl.origin === targetUrl.origin &&
+            tabUrl.pathname.replace(/\/+$/, '') === targetUrl.pathname.replace(/\/+$/, '');
+        } catch { return false; }
+      });
+    }
+
     if (match) {
       // Activate the existing tab and focus its window so the user sees it
       try { await chrome.tabs.update(match.id, { active: true }); } catch { }
@@ -24,7 +67,8 @@ async function openOrFocusUrlInChrome(url) {
       }
       return;
     }
-    // Create a new active tab and focus the window
+
+    // No match found - create a new active tab and focus the window
     const created = await chrome.tabs.create({ url, active: true });
     if (created && typeof created.windowId === 'number') {
       try { await chrome.windows.update(created.windowId, { focused: true }); } catch { }
@@ -64,9 +108,9 @@ let hostWsReconnectTimer = null;
 let hostWsReconnectDelay = 1500; // starts at 1.5s, doubles up to max
 const HOST_WS_RECONNECT_MAX = 60000; // 60s
 
-// HTTP polling fallback
+// HTTP polling fallback (reduced frequency for better performance)
 let hostPollTimer = null;
-const HOST_POLL_INTERVAL_MS = 500;
+const HOST_POLL_INTERVAL_MS = 2000; // Increased from 500ms to reduce CPU usage
 // Cooldown to avoid hammering when backend is down
 let hostCooldownUntil = 0; // epoch ms
 
@@ -79,10 +123,10 @@ async function pollOnceForAction() {
     if (!res.ok) return;
     const data = await res.json().catch(() => ({}));
     const action = data?.action;
-    if (action && action.type === 'open' && action.url) {
+    if (action && action.type === 'open' && (action.url || action.tabId)) {
       // Show the app tray first, then navigate/open the target tab
       try { await openOrFocusApp(); } catch { }
-      await openOrFocusUrlInChrome(action.url);
+      await openOrFocusUrlInChrome(action.url, action.tabId);
     }
   } catch (e) {
     // If backend is unreachable, enter cooldown and stop polling temporarily
@@ -139,10 +183,11 @@ function startHostActionWS() {
           const t = a.type || null;
           if (t === 'open') {
             const url = (a.payload && a.payload.url) || a.url || null;
-            if (url) {
+            const tabId = (a.payload && a.payload.tabId) || a.tabId || null;
+            if (url || tabId) {
               // Show the app tray first, then navigate/open the target tab
               try { await openOrFocusApp(); } catch { }
-              await openOrFocusUrlInChrome(url);
+              await openOrFocusUrlInChrome(url, tabId);
             }
           }
         }

@@ -1805,7 +1805,7 @@ export const getScrapingConfig = withErrorHandling(async (domain) => {
  * Save scraping config
  * Also syncs to chrome.storage.local for content scripts
  */
-export const saveScrapingConfig = withErrorHandling(async (configData) => {
+export const saveScrapingConfig = withErrorHandling(async (configData, options = {}) => {
     // Validate
     const config = validateAndSanitize(configData, 'scrapedConfig')
 
@@ -1820,11 +1820,13 @@ export const saveScrapingConfig = withErrorHandling(async (configData) => {
             console.log(`[Unified API] Saved scraping config for: ${config.domain}`)
 
             // Notify listeners
-            try {
-                const bc = new BroadcastChannel('scraped_configs_db_changes')
-                bc.postMessage({ type: 'scrapedConfigsChanged' })
-                bc.close()
-            } catch { }
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('scraped_configs_db_changes')
+                    bc.postMessage({ type: 'scrapedConfigsChanged' })
+                    bc.close()
+                } catch { }
+            }
 
             // SYNC TO chrome.storage.local
             try {
@@ -1856,7 +1858,7 @@ export const saveScrapingConfig = withErrorHandling(async (configData) => {
 /**
  * Delete scraping config
  */
-export const deleteScrapingConfig = withErrorHandling(async (domain) => {
+export const deleteScrapingConfig = withErrorHandling(async (domain, options = {}) => {
     if (!domain) throw new Error('Domain is required')
 
     const db = await getUnifiedDB()
@@ -1870,11 +1872,13 @@ export const deleteScrapingConfig = withErrorHandling(async (domain) => {
             console.log(`[Unified API] Deleted scraping config for: ${domain}`)
 
             // Notify listeners
-            try {
-                const bc = new BroadcastChannel('scraped_configs_db_changes')
-                bc.postMessage({ type: 'scrapedConfigsChanged' })
-                bc.close()
-            } catch { }
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('scraped_configs_db_changes')
+                    bc.postMessage({ type: 'scrapedConfigsChanged' })
+                    bc.close()
+                } catch { }
+            }
 
             // SYNC TO chrome.storage.local
             try {
@@ -1925,7 +1929,7 @@ export const getDailyMemory = withErrorHandling(async (date) => {
 /**
  * Save daily memory
  */
-export const saveDailyMemory = withErrorHandling(async (memoryData) => {
+export const saveDailyMemory = withErrorHandling(async (memoryData, options = {}) => {
     const memory = validateAndSanitize(memoryData, 'dailyMemory')
 
     const db = await getUnifiedDB()
@@ -1936,11 +1940,13 @@ export const saveDailyMemory = withErrorHandling(async (memoryData) => {
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
             // Notify listeners
-            try {
-                const bc = new BroadcastChannel('ws_db_changes')
-                bc.postMessage({ type: 'dailyMemoryChanged', date: memory.date })
-                bc.close()
-            } catch { }
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('ws_db_changes')
+                    bc.postMessage({ type: 'dailyMemoryChanged', date: memory.date })
+                    bc.close()
+                } catch { }
+            }
             resolve(memory)
         }
         request.onerror = () => reject(request.error)

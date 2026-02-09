@@ -1,6 +1,6 @@
 import { faCheck, faLink, faPencilAlt, faPlus, faShare, faStickyNote, faTimes, faUserPlus, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { p2pSyncService } from '../../services/p2p/syncService';
 import { teamManager } from '../../services/p2p/teamManager';
@@ -16,7 +16,7 @@ import TeamContextPanel from './TeamContextPanel';
 
 import { userProfileService } from '../../services/p2p/userProfileService';
 
-export default function TeamView({ team: propTeam }) {
+const TeamView = React.memo(function TeamView({ team: propTeam }) {
     const [activeTeamId, setActiveTeamId] = useState(propTeam?.id || null);
     const [teams, setTeams] = useState([]);
     const [items, setItems] = useState([]);
@@ -1011,7 +1011,9 @@ export default function TeamView({ team: propTeam }) {
             </div>
         </div>
     );
-}
+});
+
+export default TeamView;
 
 const style = document.createElement('style');
 style.textContent = `
