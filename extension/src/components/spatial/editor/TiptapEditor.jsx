@@ -52,23 +52,31 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
         },
         handlePaste: (view, event, slice) => {
             const items = Array.from(event.clipboardData?.items || []);
+            console.log('[Tiptap] Paste event items:', items.length, items);
             const item = items.find(x => x.type.indexOf('image') === 0);
 
             if (item) {
+                console.log('[Tiptap] Image item found:', item.type);
                 event.preventDefault();
                 const file = item.getAsFile();
                 const reader = new FileReader();
 
                 reader.onload = (e) => {
+                    console.log('[Tiptap] Image read successfully, creating node');
                     const { schema } = view.state;
                     const node = schema.nodes.image.create({ src: e.target.result });
                     const transaction = view.state.tr.replaceSelectionWith(node);
                     view.dispatch(transaction);
                 };
 
+                reader.onerror = (e) => {
+                    console.error('[Tiptap] Failed to read image file:', e);
+                };
+
                 reader.readAsDataURL(file);
                 return true;
             }
+            console.log('[Tiptap] No image item found in paste');
             return false;
         },
     }), []);

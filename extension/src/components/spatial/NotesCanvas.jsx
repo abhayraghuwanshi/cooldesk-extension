@@ -74,6 +74,19 @@ const SidebarNoteItem = memo(({ note, isActive, onSelect, onDelete }) => (
 // Cache key for instant load
 const CACHE_KEY = 'cool_notes_cache_v1';
 
+// Helper to inject screenshot image if missing
+const getNoteContentWithImage = (note) => {
+  let content = note.text || note.content || note.description || '';
+  if (note.type === 'screenshot' && (note.screenshot || note.imageData)) {
+    const imgSrc = note.screenshot || `data:image/png;base64,${note.imageData}`;
+    // Check if content already has the image to avoid duplication
+    if (!content.includes(imgSrc)) {
+      content = `<img src="${imgSrc}" alt="Screenshot" style="max-width: 100%; border-radius: 8px; margin-bottom: 16px;" /><p>${content}</p>`;
+    }
+  }
+  return content;
+};
+
 export function NotesCanvas({ workspaceId }) {
   // Try to load from cache synchronously to prevent checking "loading" state
   const cachedData = useMemo(() => {
@@ -109,7 +122,7 @@ export function NotesCanvas({ workspaceId }) {
       if (found) {
         return {
           activeNote: found,
-          noteContent: found.text || '',
+          noteContent: getNoteContentWithImage(found),
           noteTitle: found.title || '',
           noteFolder: found.folder || '',
           noteUrl: found.url || '',
@@ -292,9 +305,12 @@ export function NotesCanvas({ workspaceId }) {
             // But here we are just syncing with DB.
             // If we already have an active note (optimistic), we might want to keep it unless the DB version is newer?
             // For now, simpler is better: update if found.
-            if (!activeNote || activeNote.id !== found.id) {
+            // Check if we need to update active note (if changed or stale cache)
+            if (!activeNote || activeNote.id !== found.id || (found.updatedAt && activeNote.updatedAt && found.updatedAt > activeNote.updatedAt)) {
+              console.log('[NotesCanvas] Updating active note from DB (newer version found)');
               setActiveNote(found);
-              setNoteContent(found.text || '');
+              // Use helper to ensure images are rendered for screenshot notes
+              setNoteContent(getNoteContentWithImage(found));
               setNoteTitle(found.title || '');
               setNoteFolder(found.folder || '');
               setNoteUrl(found.url || '');
@@ -593,6 +609,8 @@ export function NotesCanvas({ workspaceId }) {
         // Use activeNote's createdAt if editing existing note
         const createdAt = noteId && activeNote?.id === noteId ? activeNote.createdAt : now;
 
+        console.log('[NotesCanvas] Saving URL note, content length:', content.length);
+
         const urlNote = {
           id: noteId || `url_${now}_${Math.random().toString(36).slice(2, 8)}`,
           url: currentUrl || activeNote?.url || '',
@@ -624,6 +642,8 @@ export function NotesCanvas({ workspaceId }) {
       } else {
         // Use activeNote's createdAt if editing existing note
         const createdAt = noteId && activeNote?.id === noteId ? activeNote.createdAt : now;
+
+        console.log('[NotesCanvas] Saving regular note, content length:', content.length);
 
         const note = {
           id: noteId || `${now}_${Math.random().toString(36).slice(2, 8)}`,
@@ -894,7 +914,7 @@ export function NotesCanvas({ workspaceId }) {
 
   // Helper to auto-format plain text summaries into Rich Text
   const formatAutoSummary = useCallback((text) => {
-    if (!text || text.includes('<h2>') || text.includes('<strong>')) return text; // Already formatted
+    if (!text || text.includes('<h2>') || text.includes('<strong>') || text.includes('<img')) return text; // Already formatted
 
     // Detect if this is likely an auto-generated summary or structured text
     // We check for "AI Summary:", bullet points, OR markdown bolding which is common in AI outputs
@@ -958,8 +978,9 @@ export function NotesCanvas({ workspaceId }) {
   const selectNote = useCallback((note) => {
     setActiveNote(note);
 
-    // Auto-format if it's a raw AI summary
-    const formattedContent = formatAutoSummary(note.text || '');
+    // Auto-format if it's a raw AI summary, but first check for images
+    const rawContent = getNoteContentWithImage(note);
+    const formattedContent = formatAutoSummary(rawContent);
     setNoteContent(formattedContent);
 
     setNoteTitle(note.title || '');

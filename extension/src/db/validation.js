@@ -239,6 +239,14 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
         },
+        screenshot: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 10000000 // 10MB limit for base64
+        },
+        imageData: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 10000000 // 10MB limit
+        },
         tags: {
             [ValidationRules.TYPE]: 'array',
             [ValidationRules.ARRAY]: {
@@ -504,6 +512,10 @@ export const VALIDATION_SCHEMAS = {
         titleSelector: {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.MAX_LENGTH]: 2000
+        },
+        createdAt: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
         },
         updatedAt: {
             [ValidationRules.REQUIRED]: true,

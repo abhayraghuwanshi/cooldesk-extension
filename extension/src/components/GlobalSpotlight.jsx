@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
+import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFolder, faGamepad, faGlobe, faImage, faMusic, faTerminal, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faChrome, faEdge, faFirefox, faSpotify, faDiscord, faSlack, faGithub } from '@fortawesome/free-brands-svg-icons';
-import { faCode, faTerminal, faFolder, faFile, faGlobe, faDesktop, faGamepad, faMusic, faVideo, faImage, faEnvelope, faComments, faCog, faCalculator } from '@fortawesome/free-solid-svg-icons';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch } from '../services/searchService';
 import './GlobalSpotlight.css';
@@ -473,7 +473,7 @@ export function GlobalSpotlight() {
                     <input
                         ref={inputRef}
                         className="spotlight-input"
-                        placeholder="Search tabs, history, workspaces..."
+                        placeholder="Almighty Search..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
