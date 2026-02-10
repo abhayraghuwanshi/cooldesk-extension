@@ -34,14 +34,25 @@ function getWeekDates() {
 
 /**
  * Available templates
+ * 
+ * STYLING GUIDE:
+ * Templates use standard HTML. You can use:
+ * 1. Standard Tags: <h1>, <h2>, <p>, <ul>, <table>, etc.
+ * 2. Inline Styles: <div style="background: #f0f0f0; padding: 10px;">
+ * 3. Utility Classes (supported by editor CSS):
+ *    - Text: <strong>, <em>, <code>, <blockquote>
+ *    - Checking: <ul data-type="taskList"> for checklists
+ *    - Layout: <table> for grids
+ * 
+ * Note: Avoid complex scripts or external stylesheets as they won't render in the editor.
  */
 export const NOTE_TEMPLATES = {
   // Daily Todo Template
   dailyTodo: {
     id: 'dailyTodo',
-    name: '📋 Daily Todo',
+    name: 'Daily Todo',
     description: 'Plan your day with priorities and time blocks',
-    icon: '📋',
+    icon: 'faClipboardList',
     category: 'productivity',
     getTitle: () => `Daily Todo - ${new Date().toLocaleDateString()}`,
     getContent: () => `
@@ -141,9 +152,9 @@ export const NOTE_TEMPLATES = {
   // Feature Planning Template
   featurePlanning: {
     id: 'featurePlanning',
-    name: '🚀 Feature Planning',
+    name: 'Feature Planning',
     description: 'Plan a new feature with requirements and tasks',
-    icon: '🚀',
+    icon: 'faRocket',
     category: 'development',
     getTitle: () => 'Feature: [Feature Name]',
     getContent: () => `
@@ -301,9 +312,9 @@ export const NOTE_TEMPLATES = {
   // Sprint Planning Template
   sprintPlanning: {
     id: 'sprintPlanning',
-    name: '🏃 Sprint Planning',
+    name: 'Sprint Planning',
     description: 'Track sprint tasks with status columns',
-    icon: '🏃',
+    icon: 'faRunning',
     category: 'productivity',
     getTitle: () => {
       const week = getWeekDates();
@@ -511,9 +522,9 @@ export const NOTE_TEMPLATES = {
   // Meeting Notes Template
   meetingNotes: {
     id: 'meetingNotes',
-    name: '📝 Meeting Notes',
+    name: 'Meeting Notes',
     description: 'Capture meeting discussions and action items',
-    icon: '📝',
+    icon: 'faComments',
     category: 'productivity',
     getTitle: () => `Meeting - ${new Date().toLocaleDateString()}`,
     getContent: () => `
@@ -567,9 +578,9 @@ export const NOTE_TEMPLATES = {
   // Weekly Review Template
   weeklyReview: {
     id: 'weeklyReview',
-    name: '📅 Weekly Review',
+    name: 'Weekly Review',
     description: 'Reflect on the week and plan ahead',
-    icon: '📅',
+    icon: 'faCalendarCheck',
     category: 'productivity',
     getTitle: () => {
       const week = getWeekDates();
@@ -683,9 +694,9 @@ export const NOTE_TEMPLATES = {
   // Bug Report Template
   bugReport: {
     id: 'bugReport',
-    name: '🐛 Bug Report',
+    name: 'Bug Report',
     description: 'Document and track bugs',
-    icon: '🐛',
+    icon: 'faBug',
     category: 'development',
     getTitle: () => 'Bug: [Brief Description]',
     getContent: () => `
@@ -766,9 +777,9 @@ export const NOTE_TEMPLATES = {
   // Blank Note (default)
   blank: {
     id: 'blank',
-    name: '📄 Blank Note',
+    name: 'Blank Note',
     description: 'Start with a clean slate',
-    icon: '📄',
+    icon: 'faFile',
     category: 'basic',
     getTitle: () => 'Untitled',
     getContent: () => ''

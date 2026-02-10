@@ -1,12 +1,19 @@
 ﻿import {
+  faBug,
   faCalendarAlt,
+  faCalendarCheck,
   faChevronRight,
+  faClipboardList,
+  faComments,
+  faFile,
   faFolder,
   faHighlighter,
   faLink,
   faListUl,
   faMicrophone,
   faPlus,
+  faRocket,
+  faRunning,
   faStickyNote,
   faSync,
   faTrash
@@ -30,6 +37,17 @@ import { syncOrchestrator } from '../../services/syncOrchestrator';
 import { getFaviconUrl } from '../../utils/helpers';
 import { ShareNoteModal } from '../popups/ShareNoteModal';
 import TiptapEditor from './editor/TiptapEditor';
+
+// Icon mapping for templates
+const TEMPLATE_ICONS = {
+  faClipboardList,
+  faRocket,
+  faRunning,
+  faComments,
+  faCalendarCheck,
+  faBug,
+  faFile
+};
 
 // Memoized sidebar note item component for better performance
 const SidebarNoteItem = memo(({ note, isActive, onSelect, onDelete }) => (
@@ -1985,11 +2003,11 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
                         onClick={() => applyTemplate(template.id)}
                       >
                         <div className="template-card-icon">
-                          {template.icon}
+                          <FontAwesomeIcon icon={TEMPLATE_ICONS[template.icon] || faFile} />
                         </div>
                         <div className="template-card-content">
                           <span className="template-card-name">
-                            {template.name.replace(template.icon + ' ', '')}
+                            {template.name}
                           </span>
                           <span className="template-card-desc">
                             {template.description}
