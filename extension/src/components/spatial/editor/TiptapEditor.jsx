@@ -8,12 +8,17 @@ import {
     faMinus,
     faQuoteRight,
     faStrikethrough,
+    faTable,
     faUnderline
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
+import Table from '@tiptap/extension-table';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import TableRow from '@tiptap/extension-table-row';
 import TaskItem from '@tiptap/extension-task-item';
 import TaskList from '@tiptap/extension-task-list';
 import Underline from '@tiptap/extension-underline';
@@ -44,6 +49,15 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
         }),
         Underline,
         Image,
+        Table.configure({
+            resizable: true,
+            HTMLAttributes: {
+                class: 'tiptap-table',
+            },
+        }),
+        TableRow,
+        TableHeader,
+        TableCell,
     ], []);
 
     const editorProps = useMemo(() => ({
@@ -209,6 +223,12 @@ const TiptapEditor = forwardRef(({ content, onChange, isEditable = true }, ref) 
                         title="Add Image"
                     >
                         <FontAwesomeIcon icon={faImage} />
+                    </button>
+                    <button
+                        onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+                        title="Insert Table"
+                    >
+                        <FontAwesomeIcon icon={faTable} />
                     </button>
                 </FloatingMenu>
             )}

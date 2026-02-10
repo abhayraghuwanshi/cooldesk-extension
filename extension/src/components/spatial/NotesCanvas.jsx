@@ -1,4 +1,5 @@
 ﻿import {
+  faCalendarAlt,
   faChevronRight,
   faFolder,
   faHighlighter,
@@ -21,6 +22,7 @@ import {
   listAllUrlNotes,
   saveUrlNote
 } from '../../db/index.js';
+import { generateDailyStory } from '../../services/memory/dailyStoryService';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { teamManager } from '../../services/p2p/teamManager';
 import { syncOrchestrator } from '../../services/syncOrchestrator';
@@ -453,10 +455,11 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
 
   // Consolidated data loading logic moved up to avoid TDZ issues
 
-  // Derived folders list with URL Notes and Highlights special folders
+  // Derived folders list with URL Notes, Highlights, and Daily Stories special folders
   const folders = useMemo(() => [
     'All Notes',
-    ...new Set(notes.map(n => n.folder).filter(Boolean).filter(f => f.trim() !== '')),
+    'Daily Stories',
+    ...new Set(notes.map(n => n.folder).filter(Boolean).filter(f => f.trim() !== '' && f !== 'Daily Stories')),
     'Highlights',
     'URL Notes'
   ].sort((a, b) => {
@@ -485,7 +488,7 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
     // Get unique folders from regular notes, excluding empty/null
     const workspaceFolders = [...new Set(notes.map(n => n.folder || 'Uncategorized'))].sort();
     // Ensure Uncategorized is last
-    const sortedFolders = workspaceFolders.filter(f => f !== 'Uncategorized');
+    const sortedFolders = workspaceFolders.filter(f => f !== 'Uncategorized' && f !== 'Daily Stories');
     if (workspaceFolders.includes('Uncategorized')) sortedFolders.push('Uncategorized');
     return sortedFolders;
   }, [notes]);
@@ -560,6 +563,21 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
       setShowSidebar(false);
     }
   }, []);
+
+  // Daily Stories Logic
+  const getAvailableStoryDates = useCallback(() => {
+    const dates = [];
+    const today = new Date();
+    // Last 7 days
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+    return dates;
+  }, []);
+
+
 
   // Filtered notes - show specific lists based on active folder
   const filteredNotes = useMemo(() => {
@@ -1022,6 +1040,53 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
     }
   }, [formatAutoSummary]);
 
+  const handleDaySelect = useCallback(async (dateStr) => {
+    // Check if a note already exists for this day
+    const existingDateNote = notes.find(n =>
+      n.folder === 'Daily Stories' && n.title.includes(dateStr)
+    );
+
+    if (existingDateNote) {
+      selectNote(existingDateNote);
+      if (window.innerWidth < 800) setShowSidebar(false);
+      return;
+    }
+
+    // Generate new story with loading state
+    setLoading(true);
+    try {
+      const html = await generateDailyStory(dateStr);
+      if (!html) return;
+
+      const newNote = {
+        id: `story_${dateStr}_${Date.now()}`,
+        title: `Story - ${dateStr}`,
+        text: html,
+        folder: 'Daily Stories',
+        type: 'richtext',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      // Save immediately
+      await dbUpsertNote(newNote);
+
+      // Refresh local state
+      setNotes(prev => [newNote, ...prev]);
+      setActiveNote(newNote);
+      setNoteContent(html);
+      setNoteTitle(newNote.title);
+      setNoteFolder('Daily Stories');
+      setNoteUrl('');
+      setIsEditing(true);
+      if (window.innerWidth < 800) setShowSidebar(false);
+    } catch (error) {
+      console.error('[NotesCanvas] Failed to generate story:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [notes, selectNote]);
+
   // Create new note
   const createNewNote = useCallback(() => {
     // Cannot create new notes in URL Notes folder - they come from web pages
@@ -1186,6 +1251,65 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
                         />
                       ))
                     )}
+                  </div>
+                )}
+              </div>
+
+              {/* Special Folder: Daily Stories */}
+              <div className="folder-group">
+                <div
+                  className={`folder-header ${expandedFolders.has('Daily Stories') ? 'expanded' : ''}`}
+                  onClick={() => toggleFolder('Daily Stories')}
+                  style={{
+                    padding: '8px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    borderRadius: '8px',
+                    color: activeFolder === 'Daily Stories' ? 'var(--accent-blue)' : '#e2e8f0',
+                    fontWeight: 600,
+                    fontSize: 'var(--font-sm)',
+                    userSelect: 'none'
+                  }}
+                >
+                  <FontAwesomeIcon
+                    icon={faChevronRight}
+                    style={{
+                      fontSize: 'var(--font-xs)',
+                      transition: 'transform 0.2s',
+                      transform: expandedFolders.has('Daily Stories') ? 'rotate(90deg)' : 'rotate(0deg)',
+                      opacity: 0.7
+                    }}
+                  />
+                  <FontAwesomeIcon icon={faCalendarAlt} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
+                  <span style={{ flex: 1 }}>Daily Stories</span>
+                </div>
+                {expandedFolders.has('Daily Stories') && (
+                  <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {getAvailableStoryDates().map(dateStr => {
+                      // Check if a note already exists for this date to show checkmark or difference?
+                      // For now just list dates
+                      const hasNote = notes.some(n => n.folder === 'Daily Stories' && n.title.includes(dateStr));
+                      const displayDate = new Date(dateStr).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+                      const label = (new Date(dateStr).toDateString() === new Date().toDateString()) ? 'Today' :
+                        (new Date(dateStr).toDateString() === new Date(Date.now() - 86400000).toDateString()) ? 'Yesterday' : displayDate;
+
+                      return (
+                        <div
+                          key={dateStr}
+                          className={`notes-list-item ${activeNote?.title?.includes(dateStr) ? 'active' : ''}`}
+                          onClick={() => handleDaySelect(dateStr)}
+                          style={{ cursor: 'pointer', opacity: hasNote ? 1 : 0.7 }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <FontAwesomeIcon icon={faCalendarAlt} style={{ fontSize: '12px', opacity: 0.5 }} />
+                            <span>{label}</span>
+                            {!hasNote && <span style={{ fontSize: '9px', opacity: 0.5, border: '1px solid currentColor', borderRadius: '4px', padding: '0 2px' }}>GENERATE</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1546,6 +1670,68 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.05)',
                 overflow: 'hidden'
               }}>
+                {/* Regenerate Story Button (Only for Daily Stories) */}
+                {activeNote?.folder === 'Daily Stories' && (
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={async () => {
+                      if (confirm('Regenerate this daily story with AI insights? Any manual edits will be lost.')) {
+                        // Extract date from title "Story - YYYY-MM-DD"
+                        const dateMatch = activeNote.title.match(/Story - (.*)/);
+                        if (dateMatch) {
+                          const dateStr = dateMatch[1];
+                          setLoading(true);
+                          try {
+                            const newHtml = await generateDailyStory(dateStr);
+                            if (newHtml) {
+                              handleContentChange(newHtml);
+                              setNoteContent(newHtml);
+                              // Update the note in DB
+                              await dbUpsertNote({
+                                ...activeNote,
+                                text: newHtml,
+                                updatedAt: Date.now()
+                              });
+                            }
+                          } finally {
+                            setLoading(false);
+                          }
+                        }
+                      }
+                    }}
+                    title="Regenerate Story with AI"
+                    style={{
+                      position: 'absolute',
+                      top: '12px',
+                      right: '52px', // Left of mic button
+                      zIndex: 10,
+                      padding: '8px',
+                      borderRadius: '50%',
+                      background: 'var(--surface-3)',
+                      border: '1px solid var(--border-primary)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'var(--accent-blue)';
+                      e.currentTarget.style.borderColor = 'var(--accent-blue)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'var(--text-secondary)';
+                      e.currentTarget.style.borderColor = 'var(--border-primary)';
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faSync} />
+                  </button>
+                )}
+
                 {/* Voice Mic Button (Floating or Integrated) */}
                 <button
                   onMouseDown={(e) => e.preventDefault()}

@@ -305,6 +305,159 @@ ul[data-type="taskList"] > li > div p {
     margin: 1.5rem 0;
 }
 
+/* Table Styles */
+.ProseMirror table {
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    overflow: hidden;
+    table-layout: auto;
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid var(--border-primary);
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 14px;
+}
+
+.ProseMirror td,
+.ProseMirror th {
+    border: 1px solid var(--border-secondary);
+    box-sizing: border-box;
+    min-width: 80px;
+    padding: 12px 16px;
+    position: relative;
+    vertical-align: middle;
+    line-height: 1.5;
+}
+
+.ProseMirror td > *,
+.ProseMirror th > * {
+    margin-bottom: 0;
+}
+
+.ProseMirror th {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+    font-weight: 600;
+    text-align: left;
+    color: var(--text);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 14px 16px;
+}
+
+.ProseMirror td {
+    background-color: transparent;
+}
+
+/* Alternating row colors for better readability */
+.ProseMirror tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.ProseMirror tbody tr:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Selected cell */
+.ProseMirror .selectedCell:after {
+    background: rgba(59, 130, 246, 0.15);
+    content: "";
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: 2;
+}
+
+/* Column resize handle */
+.ProseMirror .column-resize-handle {
+    background-color: var(--accent-blue);
+    bottom: -2px;
+    pointer-events: none;
+    position: absolute;
+    right: -2px;
+    top: 0;
+    width: 4px;
+}
+
+/* Table wrapper for resize */
+.ProseMirror .tableWrapper {
+    margin: 1.5rem 0;
+    overflow-x: auto;
+    border-radius: 12px;
+}
+
+/* Resize cursor */
+.ProseMirror.resize-cursor {
+    cursor: ew-resize;
+    cursor: col-resize;
+}
+
+/* Daily Story specific styles */
+.ProseMirror .daily-story {
+    max-width: 100%;
+}
+
+.ProseMirror .daily-story h1 {
+    font-size: 1.8em;
+    margin-bottom: 0.3rem;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.ProseMirror .daily-story h2 {
+    font-size: 1.2em;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.ProseMirror .daily-story hr {
+    margin: 1.5rem 0;
+    border-top: 1px solid var(--border-secondary);
+}
+
+.ProseMirror .daily-story blockquote {
+    background: rgba(139, 92, 246, 0.08);
+    border-left: 4px solid var(--accent-primary, #8B5CF6);
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    border-radius: 0 8px 8px 0;
+    font-style: normal;
+    color: var(--text);
+    line-height: 1.7;
+}
+
+.ProseMirror .daily-story blockquote p {
+    margin: 0;
+}
+
+.ProseMirror .daily-story ul {
+    padding-left: 1.5rem;
+}
+
+.ProseMirror .daily-story li {
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}
+
+.ProseMirror .daily-story small {
+    color: var(--text-muted);
+}
+
+.ProseMirror .daily-story a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.ProseMirror .daily-story a:hover {
+    text-decoration: underline;
+}
+
 /* Floating & Bubble Menus */
 .tiptap-floating-menu,
 .tiptap-bubble-menu {
