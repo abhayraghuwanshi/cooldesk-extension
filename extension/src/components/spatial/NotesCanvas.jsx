@@ -23,6 +23,7 @@ import {
   saveUrlNote
 } from '../../db/index.js';
 import { generateDailyStory } from '../../services/memory/dailyStoryService';
+import { NOTE_TEMPLATES, getTemplatesByCategory } from '../../services/noteTemplates';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { teamManager } from '../../services/p2p/teamManager';
 import { syncOrchestrator } from '../../services/syncOrchestrator';
@@ -162,6 +163,8 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
   const [activeTeam, setActiveTeam] = useState(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [deleteConfirmNote, setDeleteConfirmNote] = useState(null);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [pendingTemplateFolder, setPendingTemplateFolder] = useState(null);
   const editorRef = useRef(null);
   const autoSaveTimeout = useRef(null);
   // noteContentRef moved here for access in handlers
@@ -1087,7 +1090,7 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
     }
   }, [notes, selectNote]);
 
-  // Create new note
+  // Create new note - show template picker
   const createNewNote = useCallback(() => {
     // Cannot create new notes in URL Notes folder - they come from web pages
     if (activeFolder === 'URL Notes') {
@@ -1095,19 +1098,30 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
       return;
     }
 
+    // Show template picker
+    setPendingTemplateFolder(activeFolder === 'All Notes' ? '' : activeFolder);
+    setShowTemplatePicker(true);
+  }, [activeFolder]);
+
+  // Apply selected template
+  const applyTemplate = useCallback((templateId) => {
+    const template = NOTE_TEMPLATES[templateId];
+    if (!template) return;
+
     setActiveNote(null);
-    setNoteContent('');
-    setNoteTitle('');
+    setNoteContent(template.getContent());
+    setNoteTitle(template.getTitle());
     setNoteUrl('');
-    // If we are in a specific folder, default to that folder
-    setNoteFolder(activeFolder === 'All Notes' ? '' : activeFolder);
+    setNoteFolder(pendingTemplateFolder || '');
     setAutoSaveStatus('idle');
     setIsEditing(true);
+    setShowTemplatePicker(false);
+    setPendingTemplateFolder(null);
+
     setTimeout(() => {
       editorRef.current?.focus();
-      if (editorRef.current) editorRef.current.innerHTML = '';
     }, 100);
-  }, [activeFolder]);
+  }, [pendingTemplateFolder]);
 
   const getWordCount = useCallback((html) => {
     if (!html) return 0;
@@ -1929,6 +1943,77 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
         </div>
       )}
 
+      {/* Template Picker Modal - Redesigned */}
+      {showTemplatePicker && (
+        <div
+          className="template-picker-overlay"
+          onClick={() => setShowTemplatePicker(false)}
+        >
+          <div
+            className="template-picker-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="template-picker-header">
+              <div>
+                <h2>Create New Note</h2>
+                <p>Choose a template to get started</p>
+              </div>
+              <button
+                className="template-picker-close"
+                onClick={() => setShowTemplatePicker(false)}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Template Grid */}
+            <div className="template-picker-content">
+              {Object.entries(getTemplatesByCategory()).map(([catId, category]) => (
+                <div key={catId} className="template-category">
+                  <div className="template-category-header">
+                    <span className="template-category-name">{category.name}</span>
+                    <span className="template-category-count">{category.templates.length}</span>
+                  </div>
+                  <div className="template-grid">
+                    {category.templates.map(template => (
+                      <button
+                        key={template.id}
+                        className="template-card"
+                        onClick={() => applyTemplate(template.id)}
+                      >
+                        <div className="template-card-icon">
+                          {template.icon}
+                        </div>
+                        <div className="template-card-content">
+                          <span className="template-card-name">
+                            {template.name.replace(template.icon + ' ', '')}
+                          </span>
+                          <span className="template-card-desc">
+                            {template.description}
+                          </span>
+                        </div>
+                        <div className="template-card-arrow">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M9 18l6-6-6-6" />
+                          </svg>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer hint */}
+            <div className="template-picker-footer">
+              <span>Press <kbd>Esc</kbd> to close</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .note-count {
@@ -1965,6 +2050,157 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
         
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: var(--text-secondary);
+        }
+
+        /* Template Picker Styles */
+        .template-picker-overlay {
+          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 10000; animation: fadeIn 0.2s ease-out;
+        }
+
+        .template-picker-modal {
+          background: #1e1e24; /* Fallback */
+          background: var(--surface-1, #1e1e24);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 16px;
+          width: 90%; max-width: 900px; height: 80vh; max-height: 800px;
+          display: flex; flex-direction: column;
+          box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+          animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          overflow: hidden;
+        }
+
+        .template-picker-header {
+          padding: 24px 32px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          display: flex; justify-content: space-between; align-items: flex-start;
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .template-picker-header h2 {
+          margin: 0 0 4px 0; font-size: 24px; font-weight: 600;
+          background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        .template-picker-header p {
+          margin: 0; color: #94a3b8; font-size: 14px;
+        }
+
+        .template-picker-close {
+          background: transparent; border: none; color: #94a3b8;
+          cursor: pointer; padding: 8px; border-radius: 8px;
+          transition: all 0.2s; display: flex;
+        }
+
+        .template-picker-close:hover {
+          background: rgba(255, 255, 255, 0.1); color: #fff;
+        }
+
+        .template-picker-content {
+          flex: 1; overflow-y: auto; padding: 32px;
+        }
+
+        .template-category { margin-bottom: 40px; }
+        
+        .template-category:last-child { margin-bottom: 0; }
+
+        .template-category-header {
+          display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+        }
+
+        .template-category-name {
+          font-size: 12px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: 0.08em; color: #64748b;
+        }
+
+        .template-category-count {
+          background: rgba(255, 255, 255, 0.05); padding: 2px 8px;
+          border-radius: 12px; font-size: 10px; color: #94a3b8;
+        }
+
+        .template-grid {
+          display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 16px;
+        }
+
+        .template-card {
+           background: rgba(255, 255, 255, 0.03);
+           border: 1px solid rgba(255, 255, 255, 0.05);
+           border-radius: 12px; padding: 20px;
+           text-align: left; cursor: pointer;
+           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+           display: flex; align-items: flex-start; gap: 16px;
+           position: relative; overflow: hidden;
+        }
+
+        .template-card:hover {
+          transform: translateY(-2px);
+          background: rgba(255, 255, 255, 0.06);
+          border-color: rgba(99, 102, 241, 0.4);
+          box-shadow: 0 12px 24px rgba(0,0,0,0.2);
+        }
+        
+        .template-card:active {
+           transform: translateY(0);
+        }
+
+        .template-card-icon {
+          font-size: 24px;
+          background: rgba(255,255,255,0.05);
+          width: 48px; height: 48px;
+          border-radius: 12px;
+          display: flex; align-items: center; justify-content: center;
+          flex-shrink: 0; transition: all 0.2s;
+        }
+        
+        .template-card:hover .template-card-icon {
+           background: rgba(99, 102, 241, 0.2);
+           color: #fff;
+        }
+
+        .template-card-content { flex: 1; min-width: 0; }
+
+        .template-card-name {
+          display: block; font-size: 15px; font-weight: 600;
+          color: #e2e8f0; margin-bottom: 6px;
+        }
+
+        .template-card-desc {
+          display: block; font-size: 13px; color: #94a3b8;
+          line-height: 1.5;
+        }
+
+        .template-card-arrow {
+          opacity: 0; transform: translateX(-10px);
+          transition: all 0.2s; color: #818cf8;
+          align-self: center;
+        }
+
+        .template-card:hover .template-card-arrow {
+          opacity: 1; transform: translateX(0);
+        }
+
+        .template-picker-footer {
+          padding: 16px 32px;
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          background: rgba(0, 0, 0, 0.2);
+          color: #64748b; font-size: 13px; text-align: right;
+        }
+
+        .template-picker-footer kbd {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 4px; padding: 2px 6px;
+          font-family: monospace; color: #cbd5e1;
+          margin: 0 4px;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { 
+           from { opacity: 0; transform: translateY(20px) scale(0.98); } 
+           to { opacity: 1; transform: translateY(0) scale(1); } 
         }
       `}</style>
     </div >
