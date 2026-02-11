@@ -27,78 +27,18 @@ let mainWindow;
 // ==========================================
 
 /**
- * Simulate Alt key press/release AND bring browser window to foreground.
- * Windows prevents background apps from stealing focus, but simulating a keypress
- * tricks the system into thinking there was user input, allowing focus to change.
+ * Focus browser window using compiled BrowserFocus.exe (FAST ~30-50ms)
+ * This is 6-10x faster than PowerShell Add-Type approach
  */
 function focusBrowserWindow() {
     if (process.platform !== 'win32') return Promise.resolve();
 
+    const exePath = join(__dirname, 'BrowserFocus.exe');
+
     return new Promise((resolve) => {
-        // Use PowerShell with inline C# - escape for cmd properly
-        // The C# code is base64 encoded to avoid escaping issues
-        const csharpCode = `
-using System;
-using System.Runtime.InteropServices;
-using System.Diagnostics;
-
-public class FocusHelper {
-    [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
-    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
-    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-    const int SW_RESTORE = 9;
-    const int SW_SHOW = 5;
-    const int SW_SHOWMAXIMIZED = 3;
-
-    public static void FocusBrowser() {
-        keybd_event(0x12, 0, 0, UIntPtr.Zero);
-        keybd_event(0x12, 0, 2, UIntPtr.Zero);
-        string[] browsers = { "chrome", "msedge", "firefox" };
-        foreach (var name in browsers) {
-            var procs = Process.GetProcessesByName(name);
-            foreach (var p in procs) {
-                if (p.MainWindowHandle != IntPtr.Zero) {
-                    IntPtr hwnd = p.MainWindowHandle;
-                    uint fgThread;
-                    GetWindowThreadProcessId(GetForegroundWindow(), out fgThread);
-                    uint curThread = GetCurrentThreadId();
-                    AttachThreadInput(curThread, fgThread, true);
-
-                    // Check window state and restore appropriately
-                    if (IsIconic(hwnd)) {
-                        // Window is minimized - restore it
-                        ShowWindow(hwnd, SW_RESTORE);
-                    } else {
-                        // Window is not minimized - just bring to front without changing size
-                        ShowWindow(hwnd, SW_SHOW);
-                    }
-
-                    SetForegroundWindow(hwnd);
-                    AttachThreadInput(curThread, fgThread, false);
-                    return;
-                }
-            }
-        }
-    }
-}`;
-        // Base64 encode the C# code for safe passing
-        const b64Code = Buffer.from(csharpCode).toString('base64');
-
-        const psCommand = `$code=[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64Code}'));Add-Type -TypeDefinition $code;[FocusHelper]::FocusBrowser()`;
-
-        exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, { windowsHide: true }, (error) => {
+        exec(`"${exePath}"`, { windowsHide: true, timeout: 1000 }, (error) => {
             if (error) {
                 console.warn('[Electron] Focus browser failed:', error.message);
-            } else {
-                console.log('[Electron] Browser window focused');
             }
             resolve();
         });
