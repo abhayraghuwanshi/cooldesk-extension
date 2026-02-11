@@ -70,6 +70,9 @@ class SyncOrchestrator {
         this.initialized = false;
         this.syncInterval = null;
         this.tabDebounceTimer = null;
+        this.tabEventListeners = []; // Store references for cleanup
+        this.wsEventUnsubscribers = []; // Store WebSocket unsubscribe functions
+        this.dbChannels = []; // Store BroadcastChannel references
         this.PUSH_DEBOUNCE_MS = 5000; // Minimum time between pushes of same type (5s to prevent sync loops)
     }
 
@@ -223,15 +226,20 @@ class SyncOrchestrator {
                 'sync-complete': (data) => this.notifyListeners('sync-complete', data)
             };
 
+            // Store unsubscribe functions for cleanup
             Object.entries(wsEvents).forEach(([event, handler]) => {
-                syncWebSocket.on(event, async (data) => {
+                const wrappedHandler = async (data) => {
                     this.isApplyingRemoteUpdate = true;
                     try {
                         await handler(data);
                     } finally {
                         this.isApplyingRemoteUpdate = false;
                     }
-                });
+                };
+                const unsubscribe = syncWebSocket.on(event, wrappedHandler);
+                if (typeof unsubscribe === 'function') {
+                    this.wsEventUnsubscribers.push(unsubscribe);
+                }
             });
 
             // Perform full sync to ensure local data is merged and pushed to host
@@ -265,8 +273,12 @@ class SyncOrchestrator {
                 }, 2000); // 2s debounce (increased from 1s for performance)
             };
 
+            // Store listener references for cleanup
             tabEvents.forEach(evt => {
-                if (evt && evt.addListener) evt.addListener(debouncedSyncTabs);
+                if (evt && evt.addListener) {
+                    evt.addListener(debouncedSyncTabs);
+                    this.tabEventListeners.push({ event: evt, handler: debouncedSyncTabs });
+                }
             });
         }
 
@@ -933,15 +945,66 @@ class SyncOrchestrator {
     }
 
     /**
-     * Cleanup
+     * Cleanup - IMPORTANT: Call this to prevent memory leaks
      */
     destroy() {
+        // Clear sync interval
         if (this.syncInterval) {
             clearInterval(this.syncInterval);
+            this.syncInterval = null;
         }
+
+        // Clear tab debounce timer
+        if (this.tabDebounceTimer) {
+            clearTimeout(this.tabDebounceTimer);
+            this.tabDebounceTimer = null;
+        }
+
+        // Remove Chrome tab event listeners
+        this.tabEventListeners.forEach(({ event, handler }) => {
+            try {
+                if (event && event.removeListener) {
+                    event.removeListener(handler);
+                }
+            } catch (e) {
+                console.warn('[SyncOrchestrator] Failed to remove tab listener:', e);
+            }
+        });
+        this.tabEventListeners = [];
+
+        // Unsubscribe WebSocket listeners
+        this.wsEventUnsubscribers.forEach(unsubscribe => {
+            try {
+                if (typeof unsubscribe === 'function') {
+                    unsubscribe();
+                }
+            } catch (e) {
+                console.warn('[SyncOrchestrator] Failed to unsubscribe WS listener:', e);
+            }
+        });
+        this.wsEventUnsubscribers = [];
+
+        // Close BroadcastChannels
+        if (this.dbChannels && Array.isArray(this.dbChannels)) {
+            this.dbChannels.forEach(bc => {
+                try {
+                    bc.close();
+                } catch (e) {
+                    console.warn('[SyncOrchestrator] Failed to close BroadcastChannel:', e);
+                }
+            });
+            this.dbChannels = [];
+        }
+
+        // Disconnect WebSocket
         syncWebSocket.disconnect();
+
+        // Clear listeners
         this.listeners.clear();
+        this.pendingChanges.clear();
+
         this.initialized = false;
+        console.log('[SyncOrchestrator] Destroyed and cleaned up');
     }
 }
 

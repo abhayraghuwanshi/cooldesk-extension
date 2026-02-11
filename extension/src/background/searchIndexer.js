@@ -15,6 +15,7 @@ const DEBOUNCE_MS = 2000;
 
 let debounceTimer = null;
 let isIndexing = false;
+let broadcastChannels = []; // Store for cleanup
 
 /**
  * Initialize the Search Indexer
@@ -49,11 +50,16 @@ export function initializeSearchIndexer() {
 
         // 4. Database Listeners (via BroadcastChannel)
         try {
+            // Close any existing channels first (prevents accumulation on re-init)
+            cleanupBroadcastChannels();
+
             const bc = new BroadcastChannel('ws_db_changes');
             bc.onmessage = () => triggerIndexRebuild();
+            broadcastChannels.push(bc);
 
             const bcSettings = new BroadcastChannel('settings_db_changes');
             bcSettings.onmessage = () => triggerIndexRebuild();
+            broadcastChannels.push(bcSettings);
         } catch (e) {
             console.warn('[SearchIndexer] BroadcastChannel not supported', e);
         }
@@ -398,4 +404,32 @@ function flattenBookmarks(nodes) {
         traverse(nodes);
     }
     return result;
+}
+
+/**
+ * Cleanup function to close BroadcastChannels and clear timers
+ * Call this when the indexer is no longer needed
+ */
+export function cleanupSearchIndexer() {
+    // Clear debounce timer
+    if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+    }
+
+    // Close BroadcastChannels
+    cleanupBroadcastChannels();
+
+    console.log('[SearchIndexer] Cleaned up');
+}
+
+function cleanupBroadcastChannels() {
+    broadcastChannels.forEach(bc => {
+        try {
+            bc.close();
+        } catch (e) {
+            // Ignore errors on close
+        }
+    });
+    broadcastChannels = [];
 }

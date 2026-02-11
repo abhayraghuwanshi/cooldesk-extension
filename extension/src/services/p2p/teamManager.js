@@ -103,7 +103,7 @@ class TeamManager {
 <li><strong>Create Workspaces</strong> - Group related tabs together (Work, Research, Personal)</li>
 <li><strong>Auto Tab Cleanup</strong> - Automatically close inactive tabs to reduce clutter</li>
 <li><strong>Recently Closed</strong> - Easily restore tabs you accidentally closed</li>
-<li><strong>Tab Limits</strong> - Set limits to prevent tab overload</li>
+<li><strong>Access Anywhere</strong> - Use <code>/w</code> in CoolSearch to switch workspaces instantly</li>
 </ul>
 <h2>Protected Tabs</h2>
 <p>The following tabs are never auto-closed:</p>
@@ -115,46 +115,48 @@ class TeamManager {
 </ul>`
                         },
                         {
-                            id: 'guide_highlights',
-                            title: 'Highlights & URL Notes',
-                            folder: 'Getting Started',
-                            type: 'richtext',
-                            text: `<p>Capture information from any webpage directly into CoolDesk!</p>
-<h2>Text Highlights</h2>
-<ul>
-<li><strong>Select any text</strong> on a webpage</li>
-<li><strong>Click the CoolDesk button</strong> that appears</li>
-<li>Your highlight is saved with the source URL</li>
-<li>Find all highlights in the <strong>Highlights</strong> folder</li>
-</ul>
-<h2>URL Notes</h2>
-<ul>
-<li><strong>Add notes</strong> specific to any webpage</li>
-<li>Notes are linked to the URL for easy reference</li>
-<li>Find all URL notes in the <strong>URL Notes</strong> folder</li>
-</ul>
-<p><em>Tip: Highlights and URL notes automatically include the source webpage link!</em></p>`
-                        },
-                        {
-                            id: 'guide_keyboard',
+                            id: 'guide_shortcuts',
                             title: 'Keyboard Shortcuts & Tips',
                             type: 'richtext',
                             folder: 'Getting Started',
                             text: `<p>Speed up your workflow with these shortcuts:</p>
+<h2>CoolSearch (Alt+K)</h2>
+<ul>
+<li><code>/n</code> - Create a new note instantly</li>
+<li><code>/w</code> - Switch workspaces</li>
+<li><code>/add</code> - Bookmark current tab</li>
+<li><code>/share</code> - Share current tab to team</li>
+</ul>
+<h2>Navigation</h2>
+<ul>
+<li><strong>Ctrl + 1-6</strong> - Switch between sidebar tabs (Home, Notes, Chat, etc.)</li>
+<li><strong>Ctrl + Arrow Keys</strong> - Navigate the spatial canvas</li>
+<li><strong>Two Finger Scroll</strong> - Pan around the spatial view</li>
+</ul>
 <h2>Note Editor</h2>
 <ul>
 <li><strong>Ctrl+B</strong> - Bold text</li>
 <li><strong>Ctrl+I</strong> - Italic text</li>
 <li><strong>Tab</strong> - Insert indent</li>
-</ul>
-<h2>Pro Tips</h2>
+</ul>`
+                        },
+                        {
+                            id: 'guide_community',
+                            title: 'Community & Sharing',
+                            folder: 'Getting Started',
+                            type: 'richtext',
+                            text: `<p>Connect with your team and the broader CoolDesk community!</p>
+<h2>Team Features</h2>
 <ul>
-<li>Use checkboxes for task lists</li>
-<li>Pin important notes to keep them at the top</li>
-<li>Use search to quickly find notes</li>
+<li><strong>Shared Notes</strong> - Collaborate on notes in real-time</li>
+<li><strong>Shared Links</strong> - Share important URLs with your team</li>
+<li><strong>Chat</strong> - Discuss ideas in the team chat</li>
 </ul>
-<h2>Themes</h2>
-<p>Customize CoolDesk with different themes! Go to settings to switch between light, dark, and accent color themes.</p>`
+<h2>Community</h2>
+<ul>
+<li><strong>Import Templates</strong> - Click the "Community" button to import templates from the web</li>
+<li><strong>Share Templates</strong> - Export your best notes as templates for others</li>
+</ul>`
                         }
                     ];
 

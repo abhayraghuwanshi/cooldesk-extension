@@ -331,12 +331,16 @@ class SyncWebSocket {
      * Add event listener
      * @param {string} event
      * @param {Function} callback
+     * @returns {Function} Unsubscribe function
      */
     on(event, callback) {
         if (!this.listeners.has(event)) {
             this.listeners.set(event, new Set());
         }
         this.listeners.get(event).add(callback);
+
+        // Return unsubscribe function for cleanup
+        return () => this.off(event, callback);
     }
 
     /**

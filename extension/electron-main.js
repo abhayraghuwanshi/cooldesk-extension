@@ -1164,10 +1164,6 @@ function createWindow() {
 let spotlightReady = false;
 
 function createSpotlightWindow() {
-    // Get primary display for centering
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width, height } = primaryDisplay.workAreaSize;
-
     spotlightWindow = new BrowserWindow({
         width: 800,
         height: 600,
@@ -1178,7 +1174,6 @@ function createSpotlightWindow() {
         resizable: false,
         movable: true,
         show: false, // Hidden by default
-        center: true,
         hasShadow: false, // We render our own shadow in CSS for better control
         webPreferences: {
             nodeIntegration: false,
@@ -1202,6 +1197,28 @@ function createSpotlightWindow() {
     }
 }
 
+/**
+ * Center spotlight window on the display where the cursor is located
+ */
+function centerSpotlightOnCursorDisplay() {
+    if (!spotlightWindow || spotlightWindow.isDestroyed()) return;
+
+    // Get cursor position
+    const cursorPoint = screen.getCursorScreenPoint();
+    // Get the display that contains the cursor
+    const currentDisplay = screen.getDisplayNearestPoint(cursorPoint);
+    const { x, y, width, height } = currentDisplay.workArea;
+
+    // Get spotlight window size
+    const [winWidth, winHeight] = spotlightWindow.getSize();
+
+    // Calculate centered position on the current display
+    const centerX = Math.round(x + (width - winWidth) / 2);
+    const centerY = Math.round(y + (height - winHeight) / 3); // Slightly above center (1/3 from top)
+
+    spotlightWindow.setPosition(centerX, centerY);
+}
+
 function toggleSpotlight() {
     if (!spotlightWindow || spotlightWindow.isDestroyed()) {
         console.log('[Electron] Spotlight window missing, recreating...');
@@ -1209,7 +1226,7 @@ function toggleSpotlight() {
         // Show after creation with delay
         setTimeout(() => {
             if (spotlightWindow && !spotlightWindow.isDestroyed()) {
-                spotlightWindow.center();
+                centerSpotlightOnCursorDisplay();
                 spotlightWindow.show();
                 spotlightWindow.focus();
                 spotlightWindow.webContents.focus();
@@ -1224,8 +1241,8 @@ function toggleSpotlight() {
     if (isVisible) {
         spotlightWindow.hide();
     } else {
-        // Re-center and show
-        spotlightWindow.center();
+        // Center on the display where cursor is and show
+        centerSpotlightOnCursorDisplay();
         spotlightWindow.showInactive(); // Show without stealing focus first
         spotlightWindow.focus(); // Then focus
 
@@ -1718,6 +1735,24 @@ app.on('before-quit', () => {
         httpServer.close();
     }
 });
+
+// ==========================================
+// SINGLE INSTANCE LOCK
+// ==========================================
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    console.log('[Electron] Another instance is running, quitting...');
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        // Focus main window if user tries to open another instance
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+    });
+}
 
 // Log startup
 console.log('[Electron] App starting...');
