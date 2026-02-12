@@ -45,7 +45,6 @@ library.add(
 // Lazy load non-critical components
 const SettingsModal = React.lazy(() => import('./components/popups/SettingsModal').then(module => ({ default: module.SettingsModal })));
 const OnboardingTour = React.lazy(() => import('./components/onboarding/OnboardingTour').then(module => ({ default: module.OnboardingTour })));
-const GlobalSpotlight = React.lazy(() => import('./components/GlobalSpotlight').then(module => ({ default: module.GlobalSpotlight })));
 
 
 // Simple error boundary to prevent entire app crash due to child errors
@@ -97,30 +96,7 @@ export default function App() {
   const [addingToWorkspace, setAddingToWorkspace] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Spotlight Routing
-  const isSpotlightHash = (hash) => hash === '#/spotlight' || hash === '#spotlight';
-  const [isSpotlight, setIsSpotlight] = useState(isSpotlightHash(window.location.hash));
-  useEffect(() => {
-    const checkHash = () => setIsSpotlight(isSpotlightHash(window.location.hash));
-    window.addEventListener('hashchange', checkHash);
-    return () => window.removeEventListener('hashchange', checkHash);
-  }, []);
 
-  // Set body transparency for Spotlight and remove wallpaper styles
-  useEffect(() => {
-    if (isSpotlight) {
-      document.body.classList.add('transparent-body');
-      document.body.classList.remove('wallpaper-enabled');
-    } else {
-      document.body.classList.remove('transparent-body');
-      // Re-add wallpaper-enabled if it was enabled
-      const wasEnabled = localStorage.getItem('wallpaperEnabled') !== 'false';
-      if (wasEnabled) {
-        document.body.classList.add('wallpaper-enabled');
-      }
-    }
-    return () => document.body.classList.remove('transparent-body');
-  }, [isSpotlight]);
 
   // Use Onboarding Hook
   const { shouldShowOnboarding, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
@@ -1302,25 +1278,13 @@ export default function App() {
 
 
   return (
-    <div className={isSpotlight ? 'spotlight-root' : `popup-wrap ${themeClass} ${wallpaperEnabled ? 'wallpaper-enabled' : ''}`} style={{
+    <div className={`popup-wrap ${themeClass} ${wallpaperEnabled ? 'wallpaper-enabled' : ''}`} style={{
       '--section-spacing': '24px',
       '--card-spacing': '16px',
-      position: 'relative',
-      background: isSpotlight ? 'transparent' : undefined,
-      minHeight: isSpotlight ? '100vh' : undefined
+      position: 'relative'
     }}>
-      {/* Spotlight Mode - Render ONLY Spotlight */}
-      {isSpotlight && (
-        <React.Suspense fallback={null}>
-          <GlobalSpotlight />
-        </React.Suspense>
-      )}
-
-      {/* Main CoolDesk UI - Only render if NOT in Spotlight mode */}
-      {!isSpotlight && (
-        <>
-          {/* Cooldesk UI */}
-          <CoolDeskContainer
+      {/* Cooldesk UI */}
+      <CoolDeskContainer
             savedWorkspaces={savedWorkspaces}
             onOpenWorkspace={(ws) => {
               setWorkspace(ws.name);
@@ -1448,11 +1412,9 @@ export default function App() {
             handleFontSizeChange={handleFontSizeChange}
             handleShareWorkspaceUrl={handleShareWorkspaceUrl}
           />
-        </>
-      )}
 
       {/* Settings Modal */}
-      {showSettings && !isSpotlight && (
+      {showSettings && (
         <React.Suspense fallback={null}>
           <SettingsModal
             show={showSettings}

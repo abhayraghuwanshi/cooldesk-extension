@@ -16,7 +16,16 @@ export default defineConfig(({ mode }) => {
     return {
       base: './',
       plugins: [react()],
-      build: { outDir: 'dist-electron', emptyOutDir: true },
+      build: {
+        outDir: 'dist-electron',
+        emptyOutDir: true,
+        rollupOptions: {
+          input: {
+            main: resolve(__dirname, 'index.html'),
+            spotlight: resolve(__dirname, 'spotlight.html'),
+          }
+        }
+      },
     }
   }
 

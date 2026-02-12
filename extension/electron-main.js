@@ -1069,6 +1069,10 @@ function createWindow() {
     // Handle window events
     mainWindow.on('closed', () => {
         mainWindow = null;
+        // Quit the app when main window is closed (except on macOS)
+        if (process.platform !== 'darwin') {
+            app.quit();
+        }
     });
 
     // Handle external links
@@ -1107,11 +1111,13 @@ function createSpotlightWindow() {
         console.log('[Electron] Spotlight window ready');
     });
 
-    // Load the app with spotlight hash
+    // Load the lightweight spotlight app
     if (process.env.NODE_ENV === 'development') {
-        spotlightWindow.loadURL('http://localhost:5173/#/spotlight');
+        // In development, Vite serves spotlight.html at /spotlight.html
+        spotlightWindow.loadURL('http://localhost:5173/spotlight.html');
     } else {
-        spotlightWindow.loadFile(join(__dirname, 'dist-electron', 'index.html'), { hash: '/spotlight' });
+        // In production, load the built spotlight.html
+        spotlightWindow.loadFile(join(__dirname, 'dist-electron', 'spotlight.html'));
     }
 }
 
