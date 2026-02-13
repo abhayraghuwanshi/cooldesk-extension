@@ -425,6 +425,69 @@ export function handleUrlNotesMessages(message, sender, sendResponse) {
     case 'getSelectedText':
       handleGetSelectedText(message, sender, sendResponse);
       return true;
+
+    case 'scrapedLinks':
+      handleScrapedLinks(message, sendResponse);
+      return true;
+
+    case 'addUrlToWorkspace':
+      handleAddUrlToWorkspace(message, sendResponse);
+      return true;
+  }
+}
+
+// Handle scraped links from context menu
+async function handleScrapedLinks(message, sendResponse) {
+  try {
+    const { pageUrl, pageTitle, links, scrapedAt } = message.data || {};
+    console.log('[Background] Scraped links received:', links?.length, 'from', pageUrl);
+
+    // Store scraped links in storage for later use
+    const scrapedData = {
+      pageUrl,
+      pageTitle,
+      links: links || [],
+      scrapedAt: scrapedAt || Date.now()
+    };
+
+    // Get existing scraped data
+    const stored = await chrome.storage.local.get('scrapedLinks');
+    const allScraped = stored.scrapedLinks || [];
+
+    // Add new scraped data (limit to last 50 pages)
+    allScraped.unshift(scrapedData);
+    if (allScraped.length > 50) allScraped.pop();
+
+    await chrome.storage.local.set({ scrapedLinks: allScraped });
+
+    sendResponse({ success: true, count: links?.length || 0 });
+  } catch (error) {
+    console.error('[Background] Failed to handle scraped links:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+// Handle add URL to workspace from context menu
+async function handleAddUrlToWorkspace(message, sendResponse) {
+  try {
+    const { url, title, favicon } = message.data || {};
+    console.log('[Background] Add to workspace request:', url);
+
+    // Store pending URL for workspace assignment
+    await chrome.storage.local.set({
+      pendingWorkspaceUrl: {
+        url,
+        title,
+        favicon,
+        addedAt: Date.now()
+      }
+    });
+
+    // For now, just acknowledge - user will assign workspace in CoolDesk UI
+    sendResponse({ success: true, message: 'Open CoolDesk to assign workspace' });
+  } catch (error) {
+    console.error('[Background] Failed to handle add to workspace:', error);
+    sendResponse({ success: false, error: error.message });
   }
 }
 

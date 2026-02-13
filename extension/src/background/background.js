@@ -1,41 +1,117 @@
 console.log('[Background] ====== SERVICE WORKER STARTING ======');
 
-// Initialize side panel options on install
+// Initialize context menus on install
 chrome.runtime.onInstalled.addListener(() => {
-  if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
-    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
-  }
-  if (chrome.sidePanel && chrome.sidePanel.setOptions) {
-    chrome.sidePanel.setOptions({ path: 'sidebar.html', enabled: true });
-  }
+  // Remove existing menus first to avoid duplicates
+  chrome.contextMenus.removeAll(() => {
+    // Highlight selection (only when text is selected)
+    chrome.contextMenus.create({
+      id: 'cooldesk-highlight',
+      title: '🖍️ Highlight Selection',
+      contexts: ['selection']
+    });
+
+    // Scrape links from page
+    chrome.contextMenus.create({
+      id: 'cooldesk-scrape-links',
+      title: '🔗 Scrape Links from Page',
+      contexts: ['page', 'link']
+    });
+
+    // Create sticky note (available everywhere)
+    chrome.contextMenus.create({
+      id: 'cooldesk-sticky-note',
+      title: '📝 Create Sticky Note',
+      contexts: ['page', 'selection']
+    });
+
+    // Add to workspace
+    chrome.contextMenus.create({
+      id: 'cooldesk-add-to-workspace',
+      title: '📂 Add Page to Workspace',
+      contexts: ['page']
+    });
+
+    console.log('[Background] Context menus created');
+  });
 });
 
-// Enforce sidebar.html on every tab activation to override any tab-specific settings
-if (chrome.tabs && chrome.tabs.onActivated) {
-  chrome.tabs.onActivated.addListener(async (activeInfo) => {
-    if (chrome.sidePanel && chrome.sidePanel.setOptions) {
-      try {
-        await chrome.sidePanel.setOptions({ path: 'sidebar.html', enabled: true }); // Global
-        // also try tab specific just in case? No, global should be enough if we don't set specific.
-        // But to be safe against previous specific settings:
-        await chrome.sidePanel.setOptions({ tabId: activeInfo.tabId, path: 'sidebar.html', enabled: true });
-      } catch (e) {
-        console.warn('[Background] Failed to enforce side panel path:', e);
-      }
-    }
-  });
-}
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  console.log('[Background] Context menu clicked:', info.menuItemId);
 
-// Enforce on window focus change as well
-if (chrome.windows && chrome.windows.onFocusChanged) {
-  chrome.windows.onFocusChanged.addListener(async (windowId) => {
-    if (windowId !== chrome.windows.WINDOW_ID_NONE && chrome.sidePanel && chrome.sidePanel.setOptions) {
-      try {
-        await chrome.sidePanel.setOptions({ path: 'sidebar.html', enabled: true });
-      } catch (e) { }
+  if (!tab?.id) {
+    console.warn('[Background] No tab available for context menu action');
+    return;
+  }
+
+  try {
+    switch (info.menuItemId) {
+      case 'cooldesk-highlight':
+        // Send message to content script to highlight selected text
+        await chrome.tabs.sendMessage(tab.id, {
+          type: 'COOLDESK_HIGHLIGHT',
+          selectionText: info.selectionText
+        });
+        break;
+
+      case 'cooldesk-scrape-links':
+        // Send message to content script to scrape links
+        await chrome.tabs.sendMessage(tab.id, {
+          type: 'COOLDESK_SCRAPE_LINKS',
+          pageUrl: info.pageUrl,
+          linkUrl: info.linkUrl
+        });
+        break;
+
+      case 'cooldesk-sticky-note':
+        // Send message to content script to create sticky note
+        await chrome.tabs.sendMessage(tab.id, {
+          type: 'COOLDESK_STICKY_NOTE',
+          selectionText: info.selectionText || '',
+          pageUrl: info.pageUrl
+        });
+        break;
+
+      case 'cooldesk-add-to-workspace':
+        // Send message to content script to show workspace picker
+        await chrome.tabs.sendMessage(tab.id, {
+          type: 'COOLDESK_ADD_TO_WORKSPACE',
+          pageUrl: info.pageUrl,
+          pageTitle: tab.title
+        });
+        break;
     }
-  });
-}
+  } catch (err) {
+    console.warn('[Background] Context menu action failed:', err);
+    // Try to inject content script and retry
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['src/content-scripts/interactionContent.js']
+      });
+      // Retry after injection
+      setTimeout(async () => {
+        try {
+          await chrome.tabs.sendMessage(tab.id, {
+            type: info.menuItemId === 'cooldesk-highlight' ? 'COOLDESK_HIGHLIGHT' :
+                  info.menuItemId === 'cooldesk-scrape-links' ? 'COOLDESK_SCRAPE_LINKS' :
+                  info.menuItemId === 'cooldesk-sticky-note' ? 'COOLDESK_STICKY_NOTE' :
+                  'COOLDESK_ADD_TO_WORKSPACE',
+            selectionText: info.selectionText,
+            pageUrl: info.pageUrl,
+            linkUrl: info.linkUrl,
+            pageTitle: tab.title
+          });
+        } catch (e) {
+          console.error('[Background] Context menu retry failed:', e);
+        }
+      }, 200);
+    } catch (injectErr) {
+      console.error('[Background] Failed to inject content script:', injectErr);
+    }
+  }
+});
 
 // Global Command Handlers (Keyboard Shortcuts)
 chrome.commands.onCommand.addListener(async (command) => {
@@ -71,19 +147,6 @@ chrome.commands.onCommand.addListener(async (command) => {
     }
   }
 
-  if (command === 'toggle_sidebar') {
-    try {
-      const win = await chrome.windows.getLastFocused();
-      if (win && chrome.sidePanel && chrome.sidePanel.open) {
-        console.log('[Background] Toggling sidebar for window:', win.id);
-        await chrome.sidePanel.open({ windowId: win.id });
-      } else {
-        console.warn('[Background] Side panel API or window not available');
-      }
-    } catch (e) {
-      console.warn('[Background] Error toggling side panel:', e);
-    }
-  }
 });
 
 // MV3 background service worker (type: module)

@@ -3,10 +3,7 @@
   "name": "New Tab by Cooldesk - Start Smarter",
   "version": "1.0.7",
   "action": {
-    "default_title": "Open CoolDesk Sidebar"
-  },
-  "side_panel": {
-    "default_path": "sidebar.html"
+    "default_title": "Open CoolDesk"
   },
   "options_page": "index.html",
   "chrome_url_overrides": {
@@ -27,10 +24,10 @@
     "idle",
     "activeTab",
     "sessions",
-    "sidePanel",
     "search",
     "alarms",
-    "commands"
+    "commands",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://*/*",
@@ -86,14 +83,6 @@
         "windows": "Alt+S"
       },
       "description": "Open CoolDesk Spotlight Search"
-    },
-    "toggle_sidebar": {
-      "suggested_key": {
-        "default": "Alt+B",
-        "mac": "Command+Shift+S",
-        "windows": "Alt+B"
-      },
-      "description": "Toggle CoolDesk Sidebar"
     }
   }
 }
