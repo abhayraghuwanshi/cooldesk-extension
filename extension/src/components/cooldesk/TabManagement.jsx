@@ -452,6 +452,7 @@ export function TabManagement() {
                       onPin={handleTabPin}
                       isPinned={true}
                       isActive={tab.active}
+                      lastAccessedAt={tabActivity[tab.id] || null}
                     />
                   ))}
                 </div>
@@ -551,6 +552,7 @@ export function TabManagement() {
                       isPinned={false}
                       isActive={tab.active}
                       isLastActive={false}
+                      lastAccessedAt={tabActivity[tab.id] || null}
                     />
                   ))}
                 </div>

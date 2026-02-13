@@ -1,6 +1,0 @@
-[Background Debug] ON_MESSAGE_START: GET_SCRAPED_CHATS
-background.js-DkQXkBv8.js:142 [Background Debug] Received message: {type: 'GET_SCRAPED_CHATS', action: undefined, query: undefined, sender: 126947131}
-background.js-DkQXkBv8.js:142 [Background Debug] Potential activity message: {type: 'GET_SCRAPED_CHATS', url: 'chrome://newtab/'}
-background.js-DkQXkBv8.js:1 [Activity Debug] Processing content script message: {type: 'GET_SCRAPED_CHATS', url: 'chrome://newtab/', tabId: 126947131, hasExtraData: false}
-background.js-DkQXkBv8.js:142 [Background Debug] Message handled by activity content script handler
-index.html:1 Unchecked runtime.lastError: The message port closed before a response was received.Understand this error

@@ -113,9 +113,10 @@ export function detectSessionBoundary(currentTime, lastActivityTime) {
 /**
  * Get all active sessions (sessions with recent activity)
  * @param {number} maxAgeMs - Maximum age in milliseconds (default: 30 minutes)
+ * @param {number} limit - Maximum number of activities to fetch (default: 200)
  * @returns {Promise<Array>} Array of active session IDs with their activities
  */
-export async function getActiveSessions(maxAgeMs = 30 * 60 * 1000) {
+export async function getActiveSessions(maxAgeMs = 30 * 60 * 1000, limit = 200) {
     const db = await getUnifiedDB();
     const transaction = db.transaction([DB_CONFIG.STORES.ACTIVITY_SERIES], 'readonly');
     const store = transaction.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES);
@@ -124,29 +125,40 @@ export async function getActiveSessions(maxAgeMs = 30 * 60 * 1000) {
     const cutoffTime = Date.now() - maxAgeMs;
 
     return new Promise((resolve, reject) => {
-        const request = index.getAll(IDBKeyRange.lowerBound(cutoffTime));
-        request.onsuccess = () => {
-            const activities = request.result || [];
+        const activities = [];
+        // Use cursor in reverse order (newest first) with limit for efficiency
+        const request = index.openCursor(IDBKeyRange.lowerBound(cutoffTime), 'prev');
 
-            // Group by sessionId
-            const sessionMap = new Map();
-            activities.forEach(activity => {
-                if (!sessionMap.has(activity.sessionId)) {
-                    sessionMap.set(activity.sessionId, []);
-                }
-                sessionMap.get(activity.sessionId).push(activity);
-            });
+        request.onsuccess = (event) => {
+            const cursor = event.target.result;
 
-            // Convert to array and sort each session's activities
-            const sessions = Array.from(sessionMap.entries()).map(([sessionId, acts]) => ({
-                sessionId,
-                activities: acts.sort((a, b) => a.timestamp - b.timestamp),
-                startTime: Math.min(...acts.map(a => a.timestamp)),
-                endTime: Math.max(...acts.map(a => a.timestamp)),
-                metadata: acts[0]?.sessionMetadata || {}
-            }));
+            if (cursor && activities.length < limit) {
+                activities.push(cursor.value);
+                cursor.continue();
+            } else {
+                // Group by sessionId
+                const sessionMap = new Map();
+                activities.forEach(activity => {
+                    if (!sessionMap.has(activity.sessionId)) {
+                        sessionMap.set(activity.sessionId, []);
+                    }
+                    sessionMap.get(activity.sessionId).push(activity);
+                });
 
-            resolve(sessions);
+                // Convert to array and sort each session's activities
+                const sessions = Array.from(sessionMap.entries()).map(([sessionId, acts]) => ({
+                    sessionId,
+                    activities: acts.sort((a, b) => a.timestamp - b.timestamp),
+                    startTime: Math.min(...acts.map(a => a.timestamp)),
+                    endTime: Math.max(...acts.map(a => a.timestamp)),
+                    metadata: acts[0]?.sessionMetadata || {}
+                }));
+
+                // Sort sessions by endTime descending (most recent first)
+                sessions.sort((a, b) => b.endTime - a.endTime);
+
+                resolve(sessions);
+            }
         };
         request.onerror = () => reject(request.error);
     });

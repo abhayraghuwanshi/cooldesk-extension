@@ -653,10 +653,16 @@ class SyncOrchestrator {
     /**
      * Merge strategy for conflicts
      * Default: Last-write-wins with timestamp comparison
+     * Workspaces: Merge by NAME (case-insensitive) to handle multi-browser sync
      */
     mergeData(local, remote, type) {
         if (!Array.isArray(local)) local = [];
         if (!Array.isArray(remote)) remote = [];
+
+        // Special handling for workspaces - merge by name, not ID
+        if (type === 'workspaces') {
+            return this.mergeWorkspacesByName(local, remote);
+        }
 
         const merged = new Map();
 
@@ -688,6 +694,86 @@ class SyncOrchestrator {
 
             if (!existing || remoteTime >= localTime) {
                 merged.set(itemId, item);
+            }
+        }
+
+        return Array.from(merged.values());
+    }
+
+    /**
+     * Merge workspaces by NAME (case-insensitive) instead of ID
+     * This handles multi-browser sync where Chrome and Edge create workspaces
+     * with different IDs but the same name (e.g., "Social", "Shopping")
+     */
+    mergeWorkspacesByName(local, remote) {
+        const merged = new Map(); // key: lowercase name
+
+        // Helper to normalize URL for deduplication
+        const normalizeUrl = (url) => {
+            if (!url) return null;
+            try {
+                const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+                // Normalize: lowercase hostname, remove www, remove trailing slash
+                return `${u.protocol}//${u.hostname.replace(/^www\./, '').toLowerCase()}${u.pathname.replace(/\/$/, '')}${u.search}`;
+            } catch {
+                return url.toLowerCase();
+            }
+        };
+
+        // Helper to deduplicate URLs within a workspace
+        const dedupeUrls = (urls) => {
+            if (!Array.isArray(urls)) return [];
+            const seen = new Map(); // normalizedUrl -> urlObject
+            for (const urlObj of urls) {
+                const normalized = normalizeUrl(urlObj?.url);
+                if (!normalized) continue;
+                const existing = seen.get(normalized);
+                // Keep the one with more data or newer timestamp
+                if (!existing) {
+                    seen.set(normalized, urlObj);
+                } else {
+                    const existingTime = existing.addedAt || existing.createdAt || 0;
+                    const newTime = urlObj.addedAt || urlObj.createdAt || 0;
+                    // Prefer the one with title, or newer
+                    if ((!existing.title && urlObj.title) || newTime > existingTime) {
+                        seen.set(normalized, urlObj);
+                    }
+                }
+            }
+            return Array.from(seen.values());
+        };
+
+        // Add all local workspaces
+        for (const ws of local) {
+            if (!ws?.name) continue;
+            const key = ws.name.toLowerCase().trim();
+            merged.set(key, { ...ws, urls: dedupeUrls(ws.urls) });
+        }
+
+        // Merge remote workspaces
+        for (const ws of remote) {
+            if (!ws?.name) continue;
+            const key = ws.name.toLowerCase().trim();
+            const existing = merged.get(key);
+
+            if (!existing) {
+                // New workspace
+                merged.set(key, { ...ws, urls: dedupeUrls(ws.urls) });
+            } else {
+                // Merge: combine URLs, keep newer metadata
+                const remoteTime = ws.updatedAt || ws.createdAt || 0;
+                const localTime = existing.updatedAt || existing.createdAt || 0;
+
+                // Combine URLs from both, then dedupe
+                const combinedUrls = [...(existing.urls || []), ...(ws.urls || [])];
+                const dedupedUrls = dedupeUrls(combinedUrls);
+
+                // Use metadata from the newer one, but keep the older ID for consistency
+                const mergedWs = remoteTime > localTime
+                    ? { ...ws, id: existing.id, urls: dedupedUrls }
+                    : { ...existing, urls: dedupedUrls, updatedAt: Math.max(remoteTime, localTime) };
+
+                merged.set(key, mergedWs);
             }
         }
 

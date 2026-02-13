@@ -312,12 +312,19 @@ export async function handleSetAutoCleanup(msg, sender, sendResponse) {
 }
 
 // Handle getTabActivity message
-export function handleGetTabActivity(msg, sender, sendResponse) {
+export async function handleGetTabActivity(msg, sender, sendResponse) {
   try {
+    // Use Chrome's native lastAccessed property instead of custom tracker
+    const tabs = await chrome.tabs.query({});
     const activityData = {};
-    for (const [tabId, timestamp] of tabActivityTracker.entries()) {
-      activityData[tabId] = timestamp;
+
+    for (const tab of tabs) {
+      if (tab.id && tab.lastAccessed) {
+        activityData[tab.id] = tab.lastAccessed;
+      }
     }
+
+    console.log('[TabCleanup] Returning activity data for', Object.keys(activityData).length, 'tabs');
     sendResponse({ ok: true, activityData });
   } catch (e) {
     console.error('[TabCleanup] Error getting tab activity:', e);

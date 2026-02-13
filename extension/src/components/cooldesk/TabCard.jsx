@@ -2,7 +2,7 @@
 import { faChevronDown, faClock, faExternalLinkAlt, faGlobe, faMagic, faSpinner, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useState } from 'react';
-import { getFaviconUrl } from '../../utils/helpers.js';
+import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
 /**
@@ -94,7 +94,7 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
   if (!tab) return null;
 
   const { url, title, favIconUrl } = tab;
-  const hostname = url ? new URL(url).hostname : 'Unknown';
+  const hostname = url ? safeGetHostname(url) : 'Unknown';
   const colorClass = ICON_COLORS[Math.abs(hostname.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
   const faviconUrl = favIconUrl || getFaviconUrl(url, 16);
   const relativeTime = formatRelativeTime(lastAccessedAt);

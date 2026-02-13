@@ -2,7 +2,7 @@ import { faExternalLinkAlt, faLink, faTimes } from '@fortawesome/free-solid-svg-
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getFaviconUrl } from '../../utils/helpers';
+import { getFaviconUrl, safeGetHostname } from '../../utils/helpers';
 
 export function GroupedLinksPopover({ group, onClose, triggerRect }) {
     const popoverRef = useRef(null);
@@ -223,7 +223,7 @@ export function GroupedLinksPopover({ group, onClose, triggerRect }) {
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis'
                                     }}>
-                                        {urlObj.title || new URL(urlObj.url).hostname}
+                                        {urlObj.title || safeGetHostname(urlObj.url)}
                                     </div>
                                     <div style={{
                                         fontSize: '13px',
@@ -232,7 +232,7 @@ export function GroupedLinksPopover({ group, onClose, triggerRect }) {
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis'
                                     }}>
-                                        {new URL(urlObj.url).hostname}
+                                        {safeGetHostname(urlObj.url)}
                                     </div>
                                 </div>
 

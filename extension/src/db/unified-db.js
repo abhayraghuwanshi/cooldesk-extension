@@ -6,7 +6,7 @@
 // Single database configuration
 export const DB_CONFIG = {
     NAME: 'cooldesk-unified-db',
-    VERSION: 7, // Added DASHBOARD store
+    VERSION: 8, // Added DAILY_ANALYTICS store
     STORES: {
         WORKSPACES: 'workspaces',
         WORKSPACE_URLS: 'workspace_urls',
@@ -15,7 +15,8 @@ export const DB_CONFIG = {
         URL_NOTES: 'url_notes',
         PINS: 'pins',
         TIME_TRACKING: 'time_tracking',
-        ACTIVITY_SERIES: 'activity_series',
+        ACTIVITY_SERIES: 'activity_series', // Raw activity (hot data, last 48h)
+        DAILY_ANALYTICS: 'daily_analytics', // Aggregated daily stats per URL
         UI_STATE: 'ui_state',
         SCRAPED_CONFIGS: 'scraped_configs', // New store for scraping rules
         DAILY_MEMORY: 'daily_memory', // Daily browsing summaries
@@ -107,6 +108,16 @@ export const SCHEMAS = {
             { name: 'by_timestamp', keyPath: 'timestamp', options: { unique: false } },
             { name: 'by_sessionId', keyPath: 'sessionId', options: { unique: false } },
             { name: 'by_url_timestamp', keyPath: ['url', 'timestamp'], options: { unique: false } }
+        ]
+    },
+
+    [DB_CONFIG.STORES.DAILY_ANALYTICS]: {
+        keyPath: 'id', // Format: url_YYYY-MM-DD
+        indexes: [
+            { name: 'by_url', keyPath: 'url', options: { unique: false } },
+            { name: 'by_date', keyPath: 'date', options: { unique: false } },
+            { name: 'by_domain', keyPath: 'domain', options: { unique: false } },
+            { name: 'by_totalTime', keyPath: 'totalTime', options: { unique: false } }
         ]
     },
 
@@ -364,6 +375,39 @@ export const MIGRATIONS = {
             metadataStore.put({
                 key: 'schema_version',
                 value: 7,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+
+    8: {
+        description: 'Add DAILY_ANALYTICS store for aggregated activity data',
+        up: (db, transaction) => {
+            console.log('[Migration v8] Adding DAILY_ANALYTICS store...')
+
+            if (!db.objectStoreNames.contains(DB_CONFIG.STORES.DAILY_ANALYTICS)) {
+                const schema = SCHEMAS[DB_CONFIG.STORES.DAILY_ANALYTICS]
+                console.log('[Migration v8] Creating daily_analytics store')
+                const store = db.createObjectStore(DB_CONFIG.STORES.DAILY_ANALYTICS, { keyPath: schema.keyPath })
+
+                schema.indexes.forEach(indexDef => {
+                    try {
+                        store.createIndex(indexDef.name, indexDef.keyPath, indexDef.options)
+                        console.log(`[Migration v8] Created index: ${indexDef.name}`)
+                    } catch (error) {
+                        console.warn(`[Migration v8] Failed to create index ${indexDef.name}:`, error)
+                    }
+                })
+
+                console.log('[Migration v8] DAILY_ANALYTICS store created successfully')
+            }
+
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 8,
                 type: 'system',
                 timestamp: Date.now(),
                 description: 'Database schema version'

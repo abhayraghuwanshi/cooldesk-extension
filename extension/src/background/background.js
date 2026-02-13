@@ -529,10 +529,11 @@ async function main() {
         const stats = await getTimeSeriesStorageStats();
         console.log('[Background] Time series storage:', stats);
 
-        // Auto-cleanup if data is getting large (>50MB or >30 days)
-        if (stats.estimatedSizeMB > 50 || stats.spanDays > 30) {
-          const deleted = await cleanupOldTimeSeriesData(30); // Keep 30 days
-          console.log(`[Background] Auto-cleanup: removed ${deleted} old events`);
+        // Auto-cleanup: aggregate data older than 2 days into DAILY_ANALYTICS
+        // This keeps ACTIVITY_SERIES lean (for ResumeWork widget) while preserving history
+        if (stats.estimatedSizeMB > 10 || stats.spanDays > 2) {
+          const deleted = await cleanupOldTimeSeriesData(2); // Aggregate & keep only 2 days raw
+          console.log(`[Background] Startup cleanup: aggregated & removed ${deleted} old events`);
         }
       } catch (e) {
         console.warn('[Background] Time series cleanup failed:', e);
@@ -698,6 +699,52 @@ async function main() {
           );
           sendResponse({ success: true, results });
         } catch (e) {
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true;
+    }
+
+    // Handle AI session summary request (for ResumeWorkWidget)
+    if (msg?.type === 'AI_SUMMARIZE_SESSION') {
+      (async () => {
+        try {
+          if (!NanoAIService.isAvailable()) {
+            sendResponse({ success: false, error: 'Nano AI not available' });
+            return;
+          }
+
+          const { urls = [], categories = [], urlCount = 0 } = msg.data || {};
+
+          // Build context for overall summary
+          const categoryText = categories.length > 0 ? categories.join(', ') : 'various';
+          const domains = urls.map(u => u.domain).filter(Boolean);
+          const domainList = domains.slice(0, 5).join(', ');
+          const moreText = domains.length > 5 ? ` and ${domains.length - 5} more` : '';
+
+          // Generate overall summary
+          const summaryPrompt = `In 10 words or less, describe what this person was doing: Browsing ${categoryText} sites: ${domainList}${moreText}. Be specific.`;
+          const summary = await NanoAIService.prompt(summaryPrompt, 15000);
+
+          // Generate per-URL descriptions (what were they working on)
+          const descriptions = [];
+          for (const urlInfo of urls.slice(0, 5)) { // Limit to first 5 for performance
+            try {
+              const descPrompt = `In 5 words or less, what task/topic for: "${urlInfo.title}" on ${urlInfo.domain}? Just the task, no fluff.`;
+              const desc = await NanoAIService.prompt(descPrompt, 10000);
+              descriptions.push(desc?.trim()?.replace(/^["']|["']$/g, '') || null);
+            } catch {
+              descriptions.push(null);
+            }
+          }
+
+          sendResponse({
+            success: true,
+            summary: summary?.trim() || null,
+            descriptions
+          });
+        } catch (e) {
+          console.debug('[Background] AI session summary failed:', e.message);
           sendResponse({ success: false, error: e.message });
         }
       })();
@@ -2418,10 +2465,10 @@ async function main() {
     if (alarm.name === 'dailyCleanup') {
       try {
         const stats = await getTimeSeriesStorageStats();
-        if (stats.estimatedSizeMB > 25) { // Cleanup if >25MB
-          const deleted = await cleanupOldTimeSeriesData(30);
-          console.log(`[Background] Daily cleanup: removed ${deleted} old events, size: ${stats.estimatedSizeMB}MB`);
-        }
+        // Always aggregate data older than 2 days into DAILY_ANALYTICS
+        // This keeps ACTIVITY_SERIES lean while preserving historical data
+        const deleted = await cleanupOldTimeSeriesData(2); // Aggregate & cleanup after 2 days
+        console.log(`[Background] Daily cleanup: aggregated & removed ${deleted} old events, size: ${stats.estimatedSizeMB}MB`);
       } catch (e) {
         console.warn('[Background] Daily cleanup failed:', e);
       }

@@ -14,6 +14,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
+import { safeGetHostname } from '../../utils/helpers';
 
 export function GlobalAddButton({
   workspaces = [],
@@ -137,7 +138,7 @@ export function GlobalAddButton({
     if (selectedWorkspace && urlInput.trim()) {
       onAddUrlToWorkspace?.(selectedWorkspace.id, {
         url: urlInput,
-        title: urlTitle || new URL(urlInput).hostname
+        title: urlTitle || safeGetHostname(urlInput)
       });
       handleClose();
     }
@@ -565,7 +566,7 @@ export function GlobalAddButton({
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis'
-                              }}>{new URL(tab.url).hostname}</div>
+                              }}>{safeGetHostname(tab.url)}</div>
                             </div>
                             <FontAwesomeIcon icon={faCheck} style={{ color: '#3b82f6', fontSize: '14px', opacity: 0 }} className="select-icon" />
                           </button>
@@ -807,7 +808,7 @@ export function GlobalAddButton({
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis'
-                              }}>{new URL(item.url).hostname}</div>
+                              }}>{safeGetHostname(item.url)}</div>
                             </div>
                             <FontAwesomeIcon icon={faCheck} style={{ color: '#3b82f6', fontSize: '14px', opacity: 0 }} className="select-icon" />
                           </button>
@@ -932,7 +933,7 @@ export function GlobalAddButton({
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis'
-                              }}>{new URL(item.url).hostname}</div>
+                              }}>{safeGetHostname(item.url)}</div>
                             </div>
                             <FontAwesomeIcon icon={faCheck} style={{ color: '#ec4899', fontSize: '14px', opacity: 0 }} className="select-icon" />
                           </button>

@@ -1,16 +1,73 @@
 /**
  * Resume Work Widget
  * Shows the last active browsing session with option to continue
+ * Now with category detection and optional AI summary
  */
 
 import { useEffect, useState } from 'react';
 import { getActiveSessions } from '../../services/memory/sessionBuilder.js';
+import appstoreData from '../../data/appstore.json';
+
+// Category config with emojis and colors
+const CATEGORY_CONFIG = {
+    finance: { emoji: '💰', label: 'Finance', color: '#10B981' },
+    health: { emoji: '🏥', label: 'Health', color: '#EC4899' },
+    education: { emoji: '📚', label: 'Education', color: '#8B5CF6' },
+    sports: { emoji: '⚽', label: 'Sports', color: '#F59E0B' },
+    social: { emoji: '💬', label: 'Social', color: '#3B82F6' },
+    travel: { emoji: '✈️', label: 'Travel', color: '#06B6D4' },
+    entertainment: { emoji: '🎬', label: 'Entertainment', color: '#EF4444' },
+    shopping: { emoji: '🛒', label: 'Shopping', color: '#F97316' },
+    food: { emoji: '🍕', label: 'Food', color: '#84CC16' },
+    utilities: { emoji: '🔧', label: 'Utilities', color: '#6B7280' },
+    creativity: { emoji: '🎨', label: 'Creativity', color: '#A855F7' },
+    information: { emoji: '📰', label: 'News', color: '#64748B' },
+    productivity: { emoji: '📋', label: 'Productivity', color: '#0EA5E9' },
+    ai: { emoji: '🤖', label: 'AI', color: '#8B5CF6' }
+};
+
+// Build a domain -> category lookup map
+const domainCategoryMap = new Map();
+Object.entries(appstoreData).forEach(([category, domains]) => {
+    domains.forEach(domain => {
+        // Handle domains with paths (e.g., "yahoo.com/finance")
+        const baseDomain = domain.split('/')[0];
+        domainCategoryMap.set(baseDomain, category);
+    });
+});
+
+// Get category for a URL
+function getCategoryForUrl(url) {
+    try {
+        const hostname = new URL(url).hostname.replace('www.', '');
+
+        // Direct match
+        if (domainCategoryMap.has(hostname)) {
+            return domainCategoryMap.get(hostname);
+        }
+
+        // Try parent domain (e.g., chat.openai.com -> openai.com)
+        const parts = hostname.split('.');
+        if (parts.length > 2) {
+            const parentDomain = parts.slice(-2).join('.');
+            if (domainCategoryMap.has(parentDomain)) {
+                return domainCategoryMap.get(parentDomain);
+            }
+        }
+
+        return null;
+    } catch {
+        return null;
+    }
+}
 
 export function ResumeWorkWidget() {
     const [lastSession, setLastSession] = useState(null);
     const [loading, setLoading] = useState(true);
     const [dismissed, setDismissed] = useState(false);
     const [expanded, setExpanded] = useState(false);
+    const [aiSummary, setAiSummary] = useState(null);
+    const [aiLoading, setAiLoading] = useState(false);
 
     useEffect(() => {
         loadLastSession();
@@ -22,8 +79,18 @@ export function ResumeWorkWidget() {
             const sessions = await getActiveSessions(6 * 60 * 60 * 1000);
 
             if (sessions.length > 0) {
-                // Get the most recent session
-                const session = sessions[0];
+                // Merge ALL recent sessions into one view (each URL gets its own sessionId)
+                // so we need to combine them to show all recent activity
+                const allActivities = sessions.flatMap(s => s.activities);
+                const latestEndTime = Math.max(...sessions.map(s => s.endTime));
+
+                // Create a combined session object
+                const session = {
+                    ...sessions[0],
+                    activities: allActivities,
+                    endTime: latestEndTime,
+                    metadata: sessions[0]?.metadata || {}
+                };
                 const activities = session.activities;
 
                 // 1. Filter Noise
@@ -85,8 +152,9 @@ export function ResumeWorkWidget() {
                     const hoursSince = Math.max(0.1, (now - stat.lastVisit) / 3600000);
                     const recencyScore = 10 / hoursSince; // Higher if recent
                     const durationScore = Math.min(stat.duration / 10000, 50); // Cap duration impact
+                    const category = getCategoryForUrl(stat.url);
 
-                    return { ...stat, score: recencyScore + durationScore };
+                    return { ...stat, score: recencyScore + durationScore, category };
                 }).sort((a, b) => b.score - a.score);
 
                 // 4. Stricter Deduplication
@@ -106,7 +174,20 @@ export function ResumeWorkWidget() {
                         const maxAllowed = stat.duration > 600000 ? 2 : 1;
 
                         if (currentCount < maxAllowed) {
-                            allUrls.push(stat.url);
+                            // Extract meaningful context from title
+                            let context = '';
+                            if (stat.title && stat.title !== domain) {
+                                // Clean up common suffixes and extract meaningful part
+                                context = stat.title
+                                    .replace(/\s*[-|·–—]\s*(ChatGPT|Claude|Gemini|Google|YouTube|GitHub|Reddit|Twitter|X|LinkedIn|Facebook|Amazon|eBay).*$/i, '')
+                                    .replace(/\s*[-|·–—]\s*[^-|·–—]+$/, '') // Remove site name suffix
+                                    .trim();
+                                // Truncate if too long
+                                if (context.length > 40) {
+                                    context = context.substring(0, 37) + '...';
+                                }
+                            }
+                            allUrls.push({ url: stat.url, category: stat.category, duration: stat.duration, title: stat.title, context });
                             domainCounts[domain] = currentCount + 1;
                         }
                     } catch (e) { }
@@ -118,6 +199,20 @@ export function ResumeWorkWidget() {
                     return;
                 }
 
+                // Detect categories from URLs
+                const categoryCounts = {};
+                allUrls.forEach(item => {
+                    if (item.category) {
+                        categoryCounts[item.category] = (categoryCounts[item.category] || 0) + 1;
+                    }
+                });
+
+                // Get top categories (max 3)
+                const topCategories = Object.entries(categoryCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
+                    .map(([cat]) => cat);
+
                 // Get note and highlight counts
                 const noteCount = session.metadata?.noteIds?.length || 0;
                 const highlightCount = session.metadata?.highlightIds?.length || 0;
@@ -125,10 +220,14 @@ export function ResumeWorkWidget() {
                 setLastSession({
                     ...session,
                     allUrls,
+                    topCategories,
                     noteCount,
                     highlightCount,
                     timeAgo: formatTimeAgo(session.endTime)
                 });
+
+                // Try to get AI summary if available
+                fetchAiSummary(allUrls, topCategories);
             } else {
                 setLastSession(null);
             }
@@ -136,6 +235,59 @@ export function ResumeWorkWidget() {
             console.error('[ResumeWorkWidget] Failed to load session:', error);
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function fetchAiSummary(urls, categories) {
+        try {
+            setAiLoading(true);
+
+            // First check if NanoAI is available
+            const statusResponse = await chrome.runtime.sendMessage({ type: 'NANO_AI_STATUS' });
+            if (!statusResponse?.success || statusResponse?.availability !== 'available') {
+                console.debug('[ResumeWorkWidget] NanoAI not available');
+                return;
+            }
+
+            // Build context for AI - include titles for better descriptions
+            const urlsWithTitles = urls.map(u => {
+                let domain = '';
+                try { domain = new URL(u.url).hostname.replace('www.', ''); } catch { }
+                return {
+                    url: u.url,
+                    domain,
+                    title: u.title || domain
+                };
+            });
+
+            const categoryLabels = categories.map(c => CATEGORY_CONFIG[c]?.label || c);
+
+            // Send to background for AI processing
+            const response = await chrome.runtime.sendMessage({
+                type: 'AI_SUMMARIZE_SESSION',
+                data: {
+                    urls: urlsWithTitles,
+                    categories: categoryLabels,
+                    urlCount: urls.length
+                }
+            });
+
+            if (response?.summary) {
+                setAiSummary(response.summary);
+            }
+
+            // Update URLs with AI-generated descriptions
+            if (response?.descriptions && lastSession) {
+                const updatedUrls = lastSession.allUrls.map((item, idx) => ({
+                    ...item,
+                    aiDescription: response.descriptions[idx] || null
+                }));
+                setLastSession(prev => ({ ...prev, allUrls: updatedUrls }));
+            }
+        } catch (error) {
+            console.debug('[ResumeWorkWidget] AI summary unavailable:', error.message);
+        } finally {
+            setAiLoading(false);
         }
     }
 
@@ -155,8 +307,8 @@ export function ResumeWorkWidget() {
         try {
             // Open top 3 URLs in new tabs
             const urlsToOpen = lastSession.allUrls.slice(0, 3);
-            for (const url of urlsToOpen) {
-                await chrome.tabs.create({ url, active: false });
+            for (const item of urlsToOpen) {
+                await chrome.tabs.create({ url: item.url, active: false });
             }
             setDismissed(true);
         } catch (error) {
@@ -200,22 +352,83 @@ export function ResumeWorkWidget() {
                 </button>
             </div>
 
+            {/* Category Tags */}
+            {lastSession.topCategories && lastSession.topCategories.length > 0 && (
+                <div className="category-tags">
+                    {lastSession.topCategories.map(cat => {
+                        const config = CATEGORY_CONFIG[cat];
+                        if (!config) return null;
+                        return (
+                            <span
+                                key={cat}
+                                className="category-tag"
+                                style={{
+                                    background: `${config.color}20`,
+                                    borderColor: `${config.color}40`,
+                                    color: config.color
+                                }}
+                            >
+                                {config.emoji} {config.label}
+                            </span>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* AI Summary (if available) */}
+            {aiSummary && (
+                <div className="ai-summary">
+                    <span className="ai-badge">✨ AI</span>
+                    <span className="summary-text">{aiSummary}</span>
+                </div>
+            )}
+            {aiLoading && (
+                <div className="ai-summary loading">
+                    <span className="ai-badge">✨</span>
+                    <span className="summary-text">Generating summary...</span>
+                </div>
+            )}
+
             <div className="widget-content">
                 <div className="session-urls">
-                    {visibleUrls.map((url, index) => {
+                    {visibleUrls.map((item, index) => {
                         let domain = '';
-                        try { domain = new URL(url).hostname; } catch (e) { }
+                        try { domain = new URL(item.url).hostname; } catch (e) { }
+                        const catConfig = item.category ? CATEGORY_CONFIG[item.category] : null;
+
+                        // Use AI description or fallback to extracted context from title
+                        const description = item.aiDescription || item.context || null;
+
                         return (
-                            <div key={index} className="url-item" onClick={() => chrome.tabs.create({ url, active: false })}>
+                            <div
+                                key={index}
+                                className={`url-item ${description ? 'has-description' : ''}`}
+                                onClick={() => chrome.tabs.create({ url: item.url, active: false })}
+                                style={catConfig ? { borderColor: `${catConfig.color}30` } : {}}
+                            >
                                 <img
                                     src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
                                     alt=""
                                     className="favicon"
                                     onError={(e) => e.target.style.display = 'none'}
                                 />
-                                <span className="url-text" title={url}>
-                                    {domain.replace(/^www\./, '')}
-                                </span>
+                                <div className="url-content">
+                                    <span className="url-text" title={item.url}>
+                                        {domain.replace(/^www\./, '')}
+                                    </span>
+                                    {description && (
+                                        <span className="url-description">{description}</span>
+                                    )}
+                                </div>
+                                {catConfig && (
+                                    <span
+                                        className="url-category"
+                                        title={catConfig.label}
+                                        style={{ color: catConfig.color }}
+                                    >
+                                        {catConfig.emoji}
+                                    </span>
+                                )}
                             </div>
                         );
                     })}
@@ -282,7 +495,7 @@ export function ResumeWorkWidget() {
                     display: flex;
                     justify-content: space-between;
                     align-items: flex-start;
-                    margin-bottom: 20px;
+                    margin-bottom: 12px;
                     position: relative;
                     z-index: 1;
                 }
@@ -338,6 +551,59 @@ export function ResumeWorkWidget() {
                     color: #fff;
                 }
 
+                .category-tags {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-bottom: 12px;
+                    position: relative;
+                    z-index: 1;
+                }
+
+                .category-tag {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    padding: 4px 10px;
+                    border-radius: 6px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    border: 1px solid;
+                }
+
+                .ai-summary {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 8px;
+                    padding: 10px 12px;
+                    background: rgba(139, 92, 246, 0.1);
+                    border: 1px solid rgba(139, 92, 246, 0.2);
+                    border-radius: 10px;
+                    margin-bottom: 12px;
+                    position: relative;
+                    z-index: 1;
+                }
+
+                .ai-summary.loading {
+                    opacity: 0.6;
+                }
+
+                .ai-badge {
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: #8B5CF6;
+                    background: rgba(139, 92, 246, 0.2);
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    flex-shrink: 0;
+                }
+
+                .summary-text {
+                    font-size: 13px;
+                    color: var(--text-secondary, rgba(255, 255, 255, 0.8));
+                    line-height: 1.4;
+                }
+
                 .widget-content {
                     margin-bottom: 20px;
                     position: relative;
@@ -365,18 +631,41 @@ export function ResumeWorkWidget() {
                     max-width: 200px;
                 }
 
+                .url-item.has-description {
+                    flex-direction: row;
+                    align-items: flex-start;
+                    max-width: 280px;
+                }
+
+                .url-content {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                    flex: 1;
+                    min-width: 0;
+                }
+
+                .url-description {
+                    font-size: 11px;
+                    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    line-height: 1.3;
+                }
+
                 .url-item:hover {
                     background: rgba(255, 255, 255, 0.05);
                     border-color: rgba(255, 255, 255, 0.1);
                     transform: translateY(-1px);
                     background: rgba(255, 255, 255, 0.1);
                 }
-                
+
                 .url-item.more {
                     background: rgba(255, 255, 255, 0.1);
                     border: 1px dashed rgba(255, 255, 255, 0.2);
                 }
-                
+
                 .url-item.more:hover {
                      background: rgba(255, 255, 255, 0.2);
                      border-color: rgba(255, 255, 255, 0.3);
@@ -392,6 +681,12 @@ export function ResumeWorkWidget() {
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
+                    flex: 1;
+                }
+
+                .url-category {
+                    font-size: 12px;
+                    flex-shrink: 0;
                 }
 
                 .more-badge {

@@ -39,7 +39,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
-import { getBaseDomainFromUrl, getFaviconUrl } from '../../utils/helpers.js';
+import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
 
@@ -125,7 +125,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   // Helper function to format domain name like mobile apps
   const formatDomainName = (url) => {
     try {
-      const hostname = new URL(url).hostname;
+      const hostname = safeGetHostname(url);
       // Remove www. prefix
       let domain = hostname.replace(/^www\./, '');
 
@@ -156,7 +156,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   // Generate letter avatar with consistent color based on domain
   const getLetterAvatar = (url) => {
     try {
-      const hostname = new URL(url).hostname.replace(/^www\./, '');
+      const hostname = safeGetHostname(url).replace(/^www\./, '');
       const firstLetter = hostname.charAt(0).toUpperCase();
 
       // Generate consistent color from hostname
@@ -362,7 +362,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   // e.g., console.firebase.google.com, docs.google.com -> "Google"
   const getGroupingInfo = (urlStr) => {
     try {
-      const url = new URL(urlStr);
+      // Ensure URL has protocol for parsing
+      const urlWithProtocol = urlStr.startsWith('http://') || urlStr.startsWith('https://')
+        ? urlStr
+        : `https://${urlStr}`;
+      const url = new URL(urlWithProtocol);
       const baseDomain = getBaseDomainFromUrl(urlStr);
       const pathParts = url.pathname.split('/').filter(Boolean);
 
@@ -873,7 +877,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                       {(() => {
                         // If title exists and is different from the hostname, use it
                         // Otherwise use formatted domain name
-                        const hostname = new URL(urlObj.url).hostname;
+                        const hostname = safeGetHostname(urlObj.url);
                         const title = urlObj.title;
 
                         // Check if title is just the domain/hostname (common case)

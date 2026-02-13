@@ -26,7 +26,7 @@ import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageS
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
-import { getFaviconUrl } from './utils/helpers';
+import { getFaviconUrl, safeGetHostname } from './utils/helpers';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
 
 library.add(
@@ -374,7 +374,7 @@ export default function App() {
           gridType: 'ItemGrid',
           urls: group.urls.map(url => ({
             url,
-            title: new URL(url).hostname,
+            title: safeGetHostname(url),
             addedAt: Date.now(),
             favicon: getFaviconUrl(url, 32)
           }))
@@ -493,7 +493,7 @@ export default function App() {
             for (const url of list) {
               try {
                 await addUrlToWorkspace(url, target.id, {
-                  title: new URL(url).hostname,
+                  title: safeGetHostname(url),
                   favicon: getFaviconUrl(url, 32),
                   addedAt: Date.now()
                 });

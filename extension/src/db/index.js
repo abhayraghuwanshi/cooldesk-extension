@@ -33,10 +33,14 @@ import { DB_CONFIG, getUnifiedDB as getIndexedDBInstance } from './unified-db.js
 export {
 
     // Workspace URL operations
-    addUrlToWorkspace, cleanupOldTimeSeriesData, closeDatabaseConnection, deleteNote, deletePing, deleteScrapedChat,
+    addUrlToWorkspace,
+    // Daily Analytics operations (new!)
+    aggregateAndCleanupActivity, cleanupOldTimeSeriesData, closeDatabaseConnection, deleteNote, deletePing, deleteScrapedChat,
     deleteScrapedChatsByPlatform,
     // Scraped Config operations
     deleteScrapingConfig, deleteUrlNote, deleteWorkspace, deleteWorkspaceById, getAllActivity,
+    getAnalyticsSummary,
+    getDailyAnalytics,
     // Daily Memory operations
     getDailyMemory,
     // Dashboard operations

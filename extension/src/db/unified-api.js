@@ -1099,35 +1099,20 @@ export const getAllActivity = withErrorHandling(async (options = {}) => {
 })
 
 /**
- * Clean up old time series data
+ * Clean up old time series data (DEPRECATED - use aggregateAndCleanupActivity instead)
+ * This function now calls aggregateAndCleanupActivity to preserve data
  */
 export const cleanupOldTimeSeriesData = withErrorHandling(async (retentionDays = 30) => {
-    const db = await getUnifiedDB()
-    const cutoffTime = Date.now() - (retentionDays * 24 * 60 * 60 * 1000)
+    // Convert days to ms (but use 48h minimum to keep recent data for ResumeWork widget)
+    const retentionMs = Math.max(48 * 60 * 60 * 1000, retentionDays * 24 * 60 * 60 * 1000)
 
-    const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readwrite')
-    const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
-    const index = store.index('by_timestamp')
-    const range = IDBKeyRange.upperBound(cutoffTime)
+    console.log(`[Cleanup] Aggregating and cleaning data older than ${retentionDays} days`)
 
-    return new Promise((resolve, reject) => {
-        let deletedCount = 0
-        const request = index.openCursor(range)
+    // Use the new aggregation function that preserves data
+    const result = await aggregateAndCleanupActivity(retentionMs)
 
-        request.onsuccess = (event) => {
-            const cursor = event.target.result
-            if (cursor) {
-                cursor.delete()
-                deletedCount++
-                cursor.continue()
-            } else {
-                console.log(`[Cleanup] Deleted ${deletedCount} old time series events`)
-                resolve(deletedCount)
-            }
-        }
-
-        request.onerror = () => reject(request.error)
-    })
+    console.log(`[Cleanup] Aggregated ${result.aggregated} records, deleted ${result.deleted} old events`)
+    return result.deleted
 }, {
     operation: 'cleanupOldTimeSeriesData',
     severity: ErrorSeverity.LOW
@@ -2038,4 +2023,278 @@ export const saveDashboard = withErrorHandling(async (dashboardData, options = {
 }, {
     operation: 'saveDashboard',
     severity: ErrorSeverity.MEDIUM
+})
+
+// ===== DAILY ANALYTICS OPERATIONS =====
+
+/**
+ * Aggregate activity data from ACTIVITY_SERIES into DAILY_ANALYTICS
+ * Call this before cleaning up old data to preserve historical stats
+ * @param {number} olderThanMs - Aggregate records older than this (default: 48 hours)
+ * @returns {Promise<{aggregated: number, deleted: number}>}
+ */
+export const aggregateAndCleanupActivity = withErrorHandling(async (olderThanMs = 48 * 60 * 60 * 1000) => {
+    const db = await getUnifiedDB()
+    const cutoffTime = Date.now() - olderThanMs
+
+    console.log('[Analytics] Starting aggregation for records older than', new Date(cutoffTime).toISOString())
+
+    // Step 1: Read all old activity records
+    const readTx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readonly')
+    const readStore = readTx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
+    const index = readStore.index('by_timestamp')
+
+    const oldRecords = await new Promise((resolve, reject) => {
+        const range = IDBKeyRange.upperBound(cutoffTime)
+        const request = index.getAll(range)
+        request.onsuccess = () => resolve(request.result || [])
+        request.onerror = () => reject(request.error)
+    })
+
+    if (oldRecords.length === 0) {
+        console.log('[Analytics] No old records to aggregate')
+        return { aggregated: 0, deleted: 0 }
+    }
+
+    console.log('[Analytics] Found', oldRecords.length, 'records to aggregate')
+
+    // Step 2: Aggregate by URL + date
+    const aggregationMap = new Map() // key: "url_YYYY-MM-DD"
+
+    for (const record of oldRecords) {
+        const url = record.url
+        if (!url) continue
+
+        const date = new Date(record.timestamp).toISOString().split('T')[0] // YYYY-MM-DD
+        const key = `${url}_${date}`
+
+        let domain = ''
+        try {
+            domain = new URL(url).hostname.replace('www.', '')
+        } catch { }
+
+        if (!aggregationMap.has(key)) {
+            aggregationMap.set(key, {
+                id: key,
+                url: url,
+                domain: domain,
+                date: date,
+                totalTime: 0,
+                visits: 0,
+                totalClicks: 0,
+                totalForms: 0,
+                maxScrollDepth: 0,
+                sessions: new Set(),
+                peakHours: new Map(), // hour -> time spent
+                firstSeen: record.timestamp,
+                lastSeen: record.timestamp
+            })
+        }
+
+        const agg = aggregationMap.get(key)
+
+        // Aggregate metrics
+        const timeSpent = record.metrics?.timeSpent || record.time || 0
+        agg.totalTime += timeSpent
+        agg.visits += 1
+        agg.totalClicks += record.metrics?.clicks || record.clicks || 0
+        agg.totalForms += record.metrics?.forms || record.forms || 0
+        agg.maxScrollDepth = Math.max(agg.maxScrollDepth, record.metrics?.scrollDepth || record.scroll || 0)
+
+        if (record.sessionId) {
+            agg.sessions.add(record.sessionId)
+        }
+
+        // Track peak hours
+        const hour = new Date(record.timestamp).getHours()
+        agg.peakHours.set(hour, (agg.peakHours.get(hour) || 0) + timeSpent)
+
+        // Update time bounds
+        if (record.timestamp < agg.firstSeen) agg.firstSeen = record.timestamp
+        if (record.timestamp > agg.lastSeen) agg.lastSeen = record.timestamp
+    }
+
+    // Step 3: Write aggregated data to DAILY_ANALYTICS
+    const writeTx = db.transaction(DB_CONFIG.STORES.DAILY_ANALYTICS, 'readwrite')
+    const writeStore = writeTx.objectStore(DB_CONFIG.STORES.DAILY_ANALYTICS)
+
+    let aggregatedCount = 0
+
+    for (const [key, agg] of aggregationMap) {
+        // Find peak hour
+        let peakHour = 0
+        let peakTime = 0
+        for (const [hour, time] of agg.peakHours) {
+            if (time > peakTime) {
+                peakTime = time
+                peakHour = hour
+            }
+        }
+
+        // Check if we already have data for this URL+date and merge
+        const existing = await new Promise((resolve) => {
+            const req = writeStore.get(key)
+            req.onsuccess = () => resolve(req.result)
+            req.onerror = () => resolve(null)
+        })
+
+        const finalRecord = {
+            id: key,
+            url: agg.url,
+            domain: agg.domain,
+            date: agg.date,
+            totalTime: (existing?.totalTime || 0) + agg.totalTime,
+            visits: (existing?.visits || 0) + agg.visits,
+            uniqueSessions: (existing?.uniqueSessions || 0) + agg.sessions.size,
+            totalClicks: (existing?.totalClicks || 0) + agg.totalClicks,
+            totalForms: (existing?.totalForms || 0) + agg.totalForms,
+            maxScrollDepth: Math.max(existing?.maxScrollDepth || 0, agg.maxScrollDepth),
+            peakHour: peakHour,
+            firstSeen: Math.min(existing?.firstSeen || agg.firstSeen, agg.firstSeen),
+            lastSeen: Math.max(existing?.lastSeen || agg.lastSeen, agg.lastSeen),
+            aggregatedAt: Date.now()
+        }
+
+        await new Promise((resolve, reject) => {
+            const req = writeStore.put(finalRecord)
+            req.onsuccess = () => {
+                aggregatedCount++
+                resolve()
+            }
+            req.onerror = () => reject(req.error)
+        })
+    }
+
+    await new Promise((resolve) => {
+        writeTx.oncomplete = resolve
+    })
+
+    console.log('[Analytics] Aggregated', aggregatedCount, 'URL-date combinations')
+
+    // Step 4: Delete old records from ACTIVITY_SERIES
+    const deleteTx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readwrite')
+    const deleteStore = deleteTx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
+    const deleteIndex = deleteStore.index('by_timestamp')
+
+    let deletedCount = 0
+
+    await new Promise((resolve, reject) => {
+        const range = IDBKeyRange.upperBound(cutoffTime)
+        const request = deleteIndex.openCursor(range)
+
+        request.onsuccess = (event) => {
+            const cursor = event.target.result
+            if (cursor) {
+                cursor.delete()
+                deletedCount++
+                cursor.continue()
+            } else {
+                resolve()
+            }
+        }
+        request.onerror = () => reject(request.error)
+    })
+
+    console.log('[Analytics] Deleted', deletedCount, 'old records from ACTIVITY_SERIES')
+
+    return { aggregated: aggregatedCount, deleted: deletedCount }
+}, {
+    operation: 'aggregateAndCleanupActivity',
+    severity: ErrorSeverity.LOW
+})
+
+/**
+ * Get daily analytics for a URL
+ * @param {string} url - The URL to get analytics for
+ * @param {number} days - Number of days to look back (default: 30)
+ */
+export const getDailyAnalytics = withErrorHandling(async (url, days = 30) => {
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.DAILY_ANALYTICS, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.DAILY_ANALYTICS)
+    const index = store.index('by_url')
+
+    const records = await new Promise((resolve, reject) => {
+        const request = index.getAll(url)
+        request.onsuccess = () => resolve(request.result || [])
+        request.onerror = () => reject(request.error)
+    })
+
+    // Filter to last N days
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+    const cutoffStr = cutoffDate.toISOString().split('T')[0]
+
+    const filtered = records.filter(r => r.date >= cutoffStr)
+    filtered.sort((a, b) => a.date.localeCompare(b.date))
+
+    return filtered
+}, {
+    operation: 'getDailyAnalytics',
+    severity: ErrorSeverity.LOW,
+    fallbackFunction: () => []
+})
+
+/**
+ * Get analytics summary across all URLs for a date range
+ * @param {number} days - Number of days to look back
+ */
+export const getAnalyticsSummary = withErrorHandling(async (days = 7) => {
+    const db = await getUnifiedDB()
+    const tx = db.transaction(DB_CONFIG.STORES.DAILY_ANALYTICS, 'readonly')
+    const store = tx.objectStore(DB_CONFIG.STORES.DAILY_ANALYTICS)
+    const index = store.index('by_date')
+
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - days)
+    const cutoffStr = cutoffDate.toISOString().split('T')[0]
+
+    const records = await new Promise((resolve, reject) => {
+        const range = IDBKeyRange.lowerBound(cutoffStr)
+        const request = index.getAll(range)
+        request.onsuccess = () => resolve(request.result || [])
+        request.onerror = () => reject(request.error)
+    })
+
+    // Aggregate by domain
+    const domainStats = new Map()
+    let totalTime = 0
+    let totalVisits = 0
+
+    for (const record of records) {
+        totalTime += record.totalTime || 0
+        totalVisits += record.visits || 0
+
+        if (!domainStats.has(record.domain)) {
+            domainStats.set(record.domain, {
+                domain: record.domain,
+                totalTime: 0,
+                visits: 0,
+                urls: new Set()
+            })
+        }
+
+        const ds = domainStats.get(record.domain)
+        ds.totalTime += record.totalTime || 0
+        ds.visits += record.visits || 0
+        ds.urls.add(record.url)
+    }
+
+    // Convert to sorted array
+    const topDomains = Array.from(domainStats.values())
+        .map(d => ({ ...d, uniqueUrls: d.urls.size }))
+        .sort((a, b) => b.totalTime - a.totalTime)
+        .slice(0, 20)
+
+    return {
+        totalTime,
+        totalVisits,
+        uniqueDomains: domainStats.size,
+        topDomains,
+        days
+    }
+}, {
+    operation: 'getAnalyticsSummary',
+    severity: ErrorSeverity.LOW,
+    fallbackFunction: () => ({ totalTime: 0, totalVisits: 0, uniqueDomains: 0, topDomains: [], days: 0 })
 })

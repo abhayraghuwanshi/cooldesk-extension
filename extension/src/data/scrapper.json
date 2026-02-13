@@ -2,7 +2,10 @@
   "platforms": [
     {
       "name": "ChatGPT",
-      "domains": ["chatgpt.com", "chat.openai.com"],
+      "domains": [
+        "chatgpt.com",
+        "chat.openai.com"
+      ],
       "type": "AI Chat",
       "color": "rgba(16, 163, 127, 0.15)",
       "borderColor": "rgba(16, 163, 127, 0.3)",
@@ -13,7 +16,11 @@
         "container": "#stage-slideover-sidebar",
         "links": "a.group[href]",
         "excludedDomains": [],
-        "excludedPatterns": ["/g/*/project", "/apps", "/gpts"],
+        "excludedPatterns": [
+          "/g/*/project",
+          "/apps",
+          "/gpts"
+        ],
         "includedPatterns": [],
         "scrapeLimit": 100,
         "titleSource": "auto"
@@ -21,7 +28,9 @@
     },
     {
       "name": "Claude",
-      "domains": ["claude.ai"],
+      "domains": [
+        "claude.ai"
+      ],
       "type": "AI Chat",
       "color": "rgba(139, 92, 246, 0.15)",
       "borderColor": "rgba(139, 92, 246, 0.3)",
@@ -40,7 +49,9 @@
     },
     {
       "name": "Gemini",
-      "domains": ["gemini.google.com"],
+      "domains": [
+        "gemini.google.com"
+      ],
       "type": "AI Chat",
       "color": "rgba(59, 130, 246, 0.15)",
       "borderColor": "rgba(59, 130, 246, 0.3)",
@@ -59,7 +70,9 @@
     },
     {
       "name": "Grok",
-      "domains": ["grok.com"],
+      "domains": [
+        "grok.com"
+      ],
       "type": "AI Chat",
       "color": "rgba(251, 146, 60, 0.15)",
       "borderColor": "rgba(251, 146, 60, 0.3)",
@@ -78,7 +91,9 @@
     },
     {
       "name": "Perplexity",
-      "domains": ["perplexity.ai"],
+      "domains": [
+        "perplexity.ai"
+      ],
       "type": "AI Search",
       "color": "rgba(16, 185, 129, 0.15)",
       "borderColor": "rgba(16, 185, 129, 0.3)",
@@ -97,7 +112,9 @@
     },
     {
       "name": "AI Studio",
-      "domains": ["aistudio.google.com"],
+      "domains": [
+        "aistudio.google.com"
+      ],
       "type": "AI Dev",
       "color": "rgba(66, 133, 244, 0.15)",
       "borderColor": "rgba(66, 133, 244, 0.3)",
@@ -108,7 +125,9 @@
         "container": "nav.ng-tns-c636821468-1",
         "links": "li a[href]",
         "excludedDomains": [],
-        "excludedPatterns": ["/apps"],
+        "excludedPatterns": [
+          "/apps"
+        ],
         "includedPatterns": [],
         "scrapeLimit": 50,
         "titleSource": "auto"
@@ -116,7 +135,9 @@
     },
     {
       "name": "Lovable",
-      "domains": ["lovable.dev"],
+      "domains": [
+        "lovable.dev"
+      ],
       "type": "AI Dev",
       "color": "rgba(167, 139, 250, 0.15)",
       "borderColor": "rgba(167, 139, 250, 0.3)",
@@ -127,7 +148,9 @@
         "container": ".relative > div",
         "links": "> a.items-center[href]",
         "excludedDomains": [],
-        "excludedPatterns": ["/*"],
+        "excludedPatterns": [
+          "/*"
+        ],
         "includedPatterns": [],
         "scrapeLimit": 50,
         "titleSource": "auto"
@@ -135,7 +158,9 @@
     },
     {
       "name": "GitHub",
-      "domains": ["github.com"],
+      "domains": [
+        "github.com"
+      ],
       "type": "Development",
       "color": "rgba(100, 116, 139, 0.15)",
       "borderColor": "rgba(100, 116, 139, 0.3)",
@@ -145,16 +170,63 @@
       "config": {
         "container": "ul",
         "links": "li a[href]",
-        "excludedDomains": ["docs.github.com", "x.com", "leetcode.com", "linkedin.com"],
-        "excludedPatterns": ["/security", "/*/forks", "/topics/*", "/*/stargazers"],
-        "includedPatterns": [],
-        "scrapeLimit": 50,
+        "excludedDomains": [
+          "docs.github.com",
+          "x.com",
+          "leetcode.com",
+          "linkedin.com",
+          "status.github.com"
+        ],
+        "excludedPatterns": [
+          "/security",
+          "/*/forks",
+          "/topics/*",
+          "/*/stargazers",
+          "/explore",
+          "/trending",
+          "/notifications",
+          "/settings/*",
+          "/account/*",
+          "/marketplace/*",
+          "/sponsors/*",
+          "/orgs/*/people",
+          "/orgs/*/teams",
+          "/*/network",
+          "/*/graphs",
+          "/pulls",
+          "/issues",
+          "/search",
+          "/features",
+          "/site/*",
+          "/contact",
+          "/about",
+          "/pricing",
+          "/enterprise",
+          "/collections/*",
+          "/events",
+          "/codespaces",
+          "/organizations/*"
+        ],
+        "includedPatterns": [
+          "/*/*",
+          "/*/*/issues/*",
+          "/*/*/pull/*",
+          "/*/*/tree/*",
+          "/*/*/blob/*",
+          "/*/*/commits/*",
+          "/*/*/releases/*",
+          "/*/*/actions/*",
+          "/*/*/wiki/*"
+        ],
+        "scrapeLimit": 30,
         "titleSource": "auto"
       }
     },
     {
       "name": "Vercel",
-      "domains": ["vercel.com"],
+      "domains": [
+        "vercel.com"
+      ],
       "type": "Development",
       "color": "rgba(100, 116, 139, 0.15)",
       "borderColor": "rgba(100, 116, 139, 0.3)",
@@ -164,8 +236,13 @@
       "config": {
         "container": "div.gap-4.\\@smd-page\\:flex-row",
         "links": "li a[href]",
-        "excludedDomains": ["github.com"],
-        "excludedPatterns": ["/*/*/*/*", "/*/*/*"],
+        "excludedDomains": [
+          "github.com"
+        ],
+        "excludedPatterns": [
+          "/*/*/*/*",
+          "/*/*/*"
+        ],
         "includedPatterns": [],
         "scrapeLimit": 50,
         "titleSource": "auto"
@@ -173,7 +250,9 @@
     },
     {
       "name": "Figma",
-      "domains": ["figma.com"],
+      "domains": [
+        "figma.com"
+      ],
       "type": "Design",
       "color": "rgba(242, 78, 30, 0.15)",
       "borderColor": "rgba(242, 78, 30, 0.3)",
@@ -192,7 +271,9 @@
     },
     {
       "name": "Hacker News",
-      "domains": ["news.ycombinator.com"],
+      "domains": [
+        "news.ycombinator.com"
+      ],
       "type": "Social",
       "color": "rgba(251, 146, 60, 0.15)",
       "borderColor": "rgba(251, 146, 60, 0.3)",
@@ -211,7 +292,9 @@
     },
     {
       "name": "Stack Overflow",
-      "domains": ["stackoverflow.com"],
+      "domains": [
+        "stackoverflow.com"
+      ],
       "type": "Development",
       "color": "rgba(244, 128, 36, 0.15)",
       "borderColor": "rgba(244, 128, 36, 0.3)",
@@ -230,7 +313,10 @@
     },
     {
       "name": "Notion",
-      "domains": ["notion.so", "www.notion.so"],
+      "domains": [
+        "notion.so",
+        "www.notion.so"
+      ],
       "type": "Productivity",
       "color": "rgba(100, 116, 139, 0.15)",
       "borderColor": "rgba(100, 116, 139, 0.3)",

@@ -45,6 +45,26 @@ export const getDomainFromUrl = (url) => {
   try { return new URL(url).hostname; } catch { return 'unknown'; }
 };
 
+/**
+ * Safely get hostname from a URL, handling URLs without protocol
+ * @param {string} url - URL string (with or without protocol)
+ * @returns {string} hostname or the original string if parsing fails
+ */
+export const safeGetHostname = (url) => {
+  if (!url || typeof url !== 'string') return 'unknown';
+  try {
+    // If URL doesn't have a protocol, add https://
+    const urlWithProtocol = url.startsWith('http://') || url.startsWith('https://')
+      ? url
+      : `https://${url}`;
+    return new URL(urlWithProtocol).hostname;
+  } catch {
+    // If still fails, try to extract domain-like part
+    const match = url.match(/^(?:https?:\/\/)?([^\/\s]+)/i);
+    return match ? match[1] : url;
+  }
+};
+
 export const getBaseDomainFromUrl = (url) => {
   try {
     const hostname = new URL(url).hostname;
