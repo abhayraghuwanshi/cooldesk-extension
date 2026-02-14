@@ -2,13 +2,12 @@ import {
   faBook,
   faBriefcase,
   faComment,
-  faEdit,
-  faFileAlt,
   faHome,
   faLayerGroup,
   faPlus,
   faRobot
 } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import Fuse from 'fuse.js';
 import React, { useEffect, useRef, useState } from 'react';
@@ -42,6 +41,10 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [autocompleteHint, setAutocompleteHint] = useState(''); // Ghost text for autocomplete
   const [isAISearch, setIsAISearch] = useState(false); // NL search indicator
+
+  // AI Chat Panel state
+  const [aiChatMessages, setAiChatMessages] = useState([]); // [{role: 'user'|'assistant', content: string}]
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   // Performance Optimizations
   const workspacesCache = useRef(null);
@@ -315,19 +318,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   }, [loadWorkspaceData]);
 
   // Search suggestions with debounce and caching
-  useEffect(() => {
-    // Handle special cases handled synchronously or separately
-    if (activePill) {
-      // ... existing activePill logic ...
-      // For brevity in this diff, assume existing logic needs to remain 
-      // but we want to return early if we are not doing a standard search.
-      // The original code has complex logic here. We need to be careful not to delete it.
-      // Since this block is replacing the ENTIRE useEffect, I must re-include the logic but optimized.
-      // Actually, to make this diff safer, I will only replace the SEARCH part.
-    }
 
-    // ... logic continuation handled below by copying ...
-  });
 
 
   // Re-implementing the main search effect efficiently
@@ -384,32 +375,47 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           { command: '/share community', title: 'Share to Community', description: 'Publish your workspace for others', icon: '🌍', category: 'Action' },
           { command: '/share team', title: 'Share with Team', description: 'Collaborate with your coworkers', icon: '👥', category: 'Action' }
         ];
-      } else if (activePill.prefix === '/notes') {
-        pillSuggestions = [
-          { command: '/notes view', title: 'View All Notes', description: 'Open the full notes manager', icon: faBook, category: 'Nav' },
-          { command: '/notes last', title: 'Open Last Note', description: 'Instantly resume your latest thought', icon: faEdit, category: 'Nav' },
-          { command: '/notes create', title: 'Create New Note', description: 'Start a new empty note', icon: faPlus, category: 'Action' }
-        ];
-      } else if (activePill.prefix === '/notes create') {
-        // Dynamic Create Note Mode
+      } else if (activePill.prefix === '/ai') {
+        // Dynamic AI Prompt Mode
         if (query && query.trim().length > 0) {
           pillSuggestions = [{
-            command: `__create_note__:${query}`,
-            title: `Create Note: "${query}"`,
-            description: 'Press Enter to save this note',
-            icon: faPlus,
-            category: 'Create',
+            command: `__ai_prompt__:${query}`,
+            title: `Ask AI: "${query}"`,
+            description: 'Press Enter to get AI response',
+            icon: faRobot,
+            category: 'AI',
             type: 'dynamic-action'
           }];
         } else {
-          // Empty state / Hint
-          pillSuggestions = [{
-            command: '',
-            title: 'Type to create note...',
-            description: 'Your note will be saved instantly',
-            icon: faEdit,
-            category: 'Info'
-          }];
+          // Empty state / Hint with examples
+          // Only show examples if no chat is active
+          if (aiChatMessages.length > 0 || isAiLoading) {
+            pillSuggestions = [];
+          } else {
+            pillSuggestions = [
+              {
+                command: '',
+                title: 'Type your prompt...',
+                description: 'Ask the local AI anything',
+                icon: faRobot,
+                category: 'Info'
+              },
+              {
+                command: '__ai_prompt__:What is 2+2?',
+                title: 'Example: What is 2+2?',
+                description: 'Simple math question',
+                icon: '🔢',
+                category: 'Examples'
+              },
+              {
+                command: '__ai_prompt__:Explain quantum computing in one sentence',
+                title: 'Example: Explain quantum computing',
+                description: 'Get a brief explanation',
+                icon: '🧠',
+                category: 'Examples'
+              }
+            ];
+          }
         }
       }
 
@@ -442,9 +448,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           { command: '/workspaces', title: 'Workspaces', description: 'Manage Workspaces', icon: faBriefcase, category: 'Nav' },
           { command: '/overview', title: 'Dashboard', description: 'Go to Dashboard', icon: faHome, category: 'Nav' },
 
-          // Simple AI Actions
-          { command: '/summarise', title: 'Summarise', description: 'Summarise current page', icon: faFileAlt, category: 'AI' },
-          { command: '/rewrite', title: 'Rewrite', description: 'Rewrite selected text', icon: faEdit, category: 'AI' }
+          // AI Commands
+          { command: '/ai', title: 'Test Local AI', description: 'Test local LLM with custom prompt', icon: faRobot, category: 'AI' },
         ];
 
         if (query === '') {
@@ -456,15 +461,24 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               query.split('').every((char, i) => searchStr.indexOf(char, i) !== -1);
           });
 
+          // Sort: 1. Exact/Start Match, 2. Category Order
           matches.sort((a, b) => {
             const aCmd = a.command.toLowerCase();
             const bCmd = b.command.toLowerCase();
+
             // Exact match priority
             if (aCmd === '/' + query) return -1;
             if (bCmd === '/' + query) return 1;
             // Starts with priority
             if (aCmd.startsWith('/' + query) && !bCmd.startsWith('/' + query)) return -1;
             if (!aCmd.startsWith('/' + query) && bCmd.startsWith('/' + query)) return 1;
+
+            // Category Order
+            const catOrder = { 'NAV': 1, 'ACTION': 2, 'AI': 3 };
+            const aCat = catOrder[a.category?.toUpperCase()] || 99;
+            const bCat = catOrder[b.category?.toUpperCase()] || 99;
+            if (aCat !== bCat) return aCat - bCat;
+
             return 0;
           });
           setCommandSuggestions(matches);
@@ -633,7 +647,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     }, 250);
 
     return () => clearTimeout(timeoutId);
-  }, [searchValue, activePill, setCommandSuggestions, setSearchSuggestions]);
+  }, [searchValue, activePill, setCommandSuggestions, setSearchSuggestions, aiChatMessages, isAiLoading]);
 
   useEffect(() => {
     // Global shortcuts
@@ -994,7 +1008,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         '/chat': 'CHAT',
         '/tabs': 'TABS',
         '/create': 'CREATE',
-        '/notes create': 'CREATE'
+        '/notes create': 'CREATE',
+        '/ai': 'AI'
       };
 
       if (supportedPills[trimmed]) {
@@ -1059,12 +1074,14 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         const supportedPrefixes = {
           '/add': 'ADD',
           '/share': 'SHARE',
-          '/notes': 'NOTES'
+          '/notes': 'NOTES',
+          '/ai': 'AI'
         };
 
         if (supportedPrefixes[first.command] && !activePill) {
           setActivePill({ label: supportedPrefixes[first.command], prefix: first.command });
           setSearchValue('');
+          setAutocompleteHint('');
           return;
         }
 
@@ -1091,153 +1108,57 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       const supportedPrefixes = {
         '/add': 'ADD',
         '/share': 'SHARE',
-        '/notes': 'NOTES'
+        '/notes': 'NOTES',
+        '/ai': 'AI'
       };
       const trimmed = searchValue.trim().toLowerCase();
       if (supportedPrefixes[trimmed] && !activePill) {
         e.preventDefault();
         setActivePill({ label: supportedPrefixes[trimmed], prefix: trimmed });
         setSearchValue('');
+        setAutocompleteHint('');
         return;
       }
 
       // 3. Regular command execution
       if (searchValue.startsWith('/') || activePill) {
         e.preventDefault();
+
+        // Don't execute if AI pill is active but no prompt entered
+        if (activePill?.prefix === '/ai' && !searchValue.trim()) {
+          return; // Just stay in the pill, waiting for input
+        }
+
         handleSubmit(e);
         return;
       }
     }
 
     // Navigation through suggestions
+    // Navigation through suggestions
+    // Navigation through suggestions
+    // Navigation through suggestions
     if (activeSuggestions.length > 0) {
-      if (e.key === 'ArrowRight') {
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedSuggestionIndex(prev =>
-          prev < activeSuggestions.length - 1 ? prev + 1 : 0
-        );
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        setSelectedSuggestionIndex(prev =>
-          prev > 0 ? prev - 1 : activeSuggestions.length - 1
-        );
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        // Column-Aware Down Navigation
         setSelectedSuggestionIndex(prev => {
-          // Safe handling for initial selection
-          if (prev < 0 || !activeSuggestions[prev]) return 0;
-
-          // 1. Identify current group and intra-group index/column
-          const currentItem = activeSuggestions[prev];
-          const getCat = (s) => {
-            if (!s) return 'SUGGESTIONS';
-            if (s.category) return s.category.toUpperCase();
-            if (s.type === 'workspace-url') return 'WORKSPACES';
-            if (s.type === 'history') return 'HISTORY';
-            if (s.type === 'bookmark') return 'BOOKMARKS';
-            return 'SUGGESTIONS';
-          };
-          const currentCat = getCat(currentItem);
-
-          // Find start/end of current group
-          let groupStart = prev;
-          while (groupStart > 0 && getCat(activeSuggestions[groupStart - 1]) === currentCat) groupStart--;
-
-          const indexInGroup = prev - groupStart;
-          const col = indexInGroup % 2; // 0 (Left) or 1 (Right)
-
-          // 2. Try to find next item in same column within same group
-          if (prev + 2 < activeSuggestions.length && getCat(activeSuggestions[prev + 2]) === currentCat) {
-            return prev + 2;
-          }
-
-          // 3. Try to jump to next group
-          // Find start of next group
-          let nextGroupStart = prev + 1;
-          while (nextGroupStart < activeSuggestions.length && getCat(activeSuggestions[nextGroupStart]) === currentCat) nextGroupStart++;
-
-          if (nextGroupStart < activeSuggestions.length) {
-            // Target same column in next group
-            const target = nextGroupStart + col;
-            if (target < activeSuggestions.length && getCat(activeSuggestions[target]) === getCat(activeSuggestions[nextGroupStart])) {
-              return target;
-            }
-            // Fallback: If Col 1 doesn't exist, use Col 0 (nextGroupStart)
-            return nextGroupStart;
-          }
-
-          // 4. End of list? Loop to top
-          return 0;
+          // Linear Down Navigation
+          if (prev < 0 || prev >= activeSuggestions.length - 1) return 0;
+          return prev + 1;
         });
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        // Column-Aware Up Navigation
         setSelectedSuggestionIndex(prev => {
-          // Safe handling
-          if (prev < 0 || !activeSuggestions[prev]) return activeSuggestions.length - 1;
-
-          const currentItem = activeSuggestions[prev];
-          const getCat = (s) => {
-            if (!s) return 'SUGGESTIONS';
-            if (s.category) return s.category.toUpperCase();
-            if (s.type === 'workspace-url') return 'WORKSPACES';
-            if (s.type === 'history') return 'HISTORY';
-            if (s.type === 'bookmark') return 'BOOKMARKS';
-            return 'SUGGESTIONS';
-          };
-          const currentCat = getCat(currentItem);
-
-          let groupStart = prev;
-          while (groupStart > 0 && getCat(activeSuggestions[groupStart - 1]) === currentCat) groupStart--;
-          const indexInGroup = prev - groupStart;
-          const col = indexInGroup % 2;
-
-          // 1. Try to find prev item in same column within same group
-          if (prev - 2 >= groupStart) {
-            return prev - 2;
-          }
-
-          // 2. Jump to previous group
-          let prevGroupEnd = groupStart - 1;
-          if (prevGroupEnd >= 0) {
-            const prevGroupCat = getCat(activeSuggestions[prevGroupEnd]);
-
-            // Find start of prev group
-            let prevGroupStart = prevGroupEnd;
-            while (prevGroupStart > 0 && getCat(activeSuggestions[prevGroupStart - 1]) === prevGroupCat) prevGroupStart--;
-
-            // We want to land on the BOTTOM-MOST item of the SAME column.
-            // Last index in group is 'prevGroupEnd'.
-            // Check its column.
-            const lastIndexInGroup = prevGroupEnd - prevGroupStart;
-            const lastCol = lastIndexInGroup % 2;
-
-            if (lastCol === col) return prevGroupEnd;
-
-            // If last item is Col 0 (Even) but we want Col 1 (Odd), verify if prev item exists
-            if (lastCol === 0 && col === 1) {
-              // Does prevGroupEnd have a neighbor? No, if it's Col 0 and last, it has no right neighbor.
-              // So we must land on Col 0 (fallback).
-              return prevGroupEnd;
-            }
-
-            // If last item is Col 1 (Odd) but we want Col 0 (Even):
-            // Then prevGroupEnd-1 is the Bottom-Right? No, Right is higher index.
-            // 0 1
-            // 2 3
-            // If prevGroupEnd is 3 (Col 1). We want Col 0.
-            // Bottom-Left is 2 (prevGroupEnd - 1).
-            if (lastCol === 1 && col === 0) {
-              if (prevGroupEnd - 1 >= prevGroupStart) return prevGroupEnd - 1;
-            }
-
-            return prevGroupEnd;
-          }
-
-          // 3. Top of list? Loop to bottom
-          return activeSuggestions.length - 1;
+          // Linear Up Navigation
+          if (prev <= 0) return activeSuggestions.length - 1;
+          return prev - 1;
         });
+      } else if (e.key === 'ArrowRight') {
+        // Optional: Can mimic Down or just move cursor. Let's make it mimic Down for grid flow?
+        // Or just let it handle text. User preferred simple up/down.
+        // Let's stick to Up/Down for navigation as requested.
+      } else if (e.key === 'ArrowLeft') {
+        // Same here.
       } else if (e.key === 'Escape') {
         setCommandSuggestions([]);
         setSearchSuggestions([]);
@@ -1301,6 +1222,131 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             handleClose();
             setSearchValue('');
             setActivePill(null);
+          }
+          return;
+        }
+
+        // Handle AI Command (/ai <prompt>)
+        if (query.startsWith('/ai')) {
+          const prompt = query.slice(3).trim();
+
+          // Check if running in Electron with LLM support
+          const isElectron = typeof window !== 'undefined' && window.electronAPI?.llm;
+
+          if (!isElectron) {
+            setCommandFeedback({
+              type: 'error',
+              message: 'Local AI is only available in the desktop app'
+            });
+            return;
+          }
+
+          if (!prompt) {
+            setCommandFeedback({
+              type: 'info',
+              message: 'Usage: /ai <your prompt here>\nExample: /ai What is 2+2?'
+            });
+            return;
+          }
+
+          try {
+            // Add user message to chat
+            setAiChatMessages(prev => [...prev, { role: 'user', content: prompt }]);
+            setIsAiLoading(true);
+
+            // Clear suggestions to show chat panel
+            setCommandSuggestions([]);
+            setSearchSuggestions([]);
+
+            // Check if model is loaded, if not, load it automatically
+            const status = await window.electronAPI.llm.getStatus();
+
+            if (!status.modelLoaded) {
+              // Show loading message
+              setAiChatMessages(prev => [
+                ...prev,
+                { role: 'system', content: '🔄 Model not loaded. Loading TinyLlama model...' }
+              ]);
+
+              // Get available models
+              const modelsResult = await window.electronAPI.llm.getModels();
+              console.log('[AI Chat] Models result:', modelsResult);
+
+              // Models is an object: {filename: {status, displayName, ...}}
+              // Get just the filenames (keys)
+              const modelFilenames = Object.keys(modelsResult || {});
+
+              console.log('[AI Chat] Model filenames:', modelFilenames);
+
+              // Find best available model: Phi-3 > Llama 3.2 > TinyLlama > any other
+              const modelToLoad = modelFilenames.find(name => name.toLowerCase().includes('phi-3'))
+                || modelFilenames.find(name => name.toLowerCase().includes('llama-3.2'))
+                || modelFilenames.find(name => name.toLowerCase().includes('tinyllama'))
+                || modelFilenames[0];
+
+              console.log('[AI Chat] Model to load:', modelToLoad);
+
+              if (!modelToLoad) {
+                setIsAiLoading(false);
+                setAiChatMessages(prev => [
+                  ...prev,
+                  { role: 'error', content: 'No AI models available. Please download a model from Settings → Local AI.' }
+                ]);
+                return;
+              }
+
+              // Load the model (pass filename directly, same as Settings does)
+              const loadResult = await window.electronAPI.llm.loadModel(modelToLoad);
+
+              if (!loadResult?.ok) {
+                setIsAiLoading(false);
+                setAiChatMessages(prev => [
+                  ...prev,
+                  { role: 'error', content: `Failed to load model: ${loadResult?.error || 'Unknown error'}` }
+                ]);
+                return;
+              }
+
+              // Update message to show model loaded
+              setAiChatMessages(prev => {
+                const newMessages = [...prev];
+                const lastIdx = newMessages.length - 1;
+                if (newMessages[lastIdx]?.role === 'system') {
+                  newMessages[lastIdx] = { role: 'system', content: `✅ ${modelToLoad} loaded successfully!` };
+                }
+                return newMessages;
+              });
+            }
+
+            const result = await window.electronAPI.llm.chat(prompt);
+
+            console.log('[AI Chat] Raw result:', result); // Debug log
+
+            // Check if the request failed
+            if (!result?.ok) {
+              setIsAiLoading(false);
+              setAiChatMessages(prev => [
+                ...prev,
+                { role: 'error', content: result?.error || 'Failed to get response from AI model' }
+              ]);
+              return;
+            }
+
+            // Extract the actual response text from the result object
+            const responseText = result.response || 'No response received';
+
+            // Add AI response to chat
+            setAiChatMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
+            setIsAiLoading(false);
+
+            // Clear input but keep pill active for follow-up questions
+            setSearchValue('');
+          } catch (error) {
+            setIsAiLoading(false);
+            setAiChatMessages(prev => [
+              ...prev,
+              { role: 'error', content: error.message || 'Failed to get response. Is a model loaded?' }
+            ]);
           }
           return;
         }
@@ -1385,13 +1431,22 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         '/share': 'SHARE',
         '/notes': 'NOTES',
         '/notes create': 'CREATE',
-        '/create': 'CREATE'
+        '/create': 'CREATE',
+        '/ai': 'AI'
       };
 
       // Handle Dynamic Note Creation
       if (cmd.startsWith('__create_note__:')) {
         const noteContent = cmd.replace('__create_note__:', '');
         const executeCmd = `/add note ${noteContent}`;
+        handleSubmit({ preventDefault: () => { } }, executeCmd);
+        return;
+      }
+
+      // Handle Dynamic AI Prompt
+      if (cmd.startsWith('__ai_prompt__:')) {
+        const prompt = cmd.replace('__ai_prompt__:', '');
+        const executeCmd = `/ai ${prompt}`;
         handleSubmit({ preventDefault: () => { } }, executeCmd);
         return;
       }
@@ -1424,6 +1479,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         if (supportedPrefixes[cmd]) {
           setActivePill({ label: supportedPrefixes[cmd], prefix: cmd });
           setSearchValue('');
+          setAutocompleteHint('');
         }
         return;
       }
@@ -1709,6 +1765,290 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       position: 'relative',
       zIndex: 10002 // Ensure container is above other elements
     }}>
+      {/* AI Chat - Modern Premium Design */}
+      {activePill?.prefix === '/ai' && aiChatMessages.length > 0 && (
+        <div style={{
+          marginBottom: '12px',
+          maxHeight: '450px',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%)',
+          backdropFilter: 'blur(40px)',
+          WebkitBackdropFilter: 'blur(40px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '20px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none'
+        }}>
+          {/* Chat Header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '16px 20px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+            background: 'rgba(255, 255, 255, 0.02)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 50%, #3B82F6 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(139, 92, 246, 0.4)',
+                fontSize: '16px'
+              }}>
+                <FontAwesomeIcon icon={faRobot} style={{ color: '#fff' }} />
+              </div>
+              <div>
+                <div style={{
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: '#F8FAFC',
+                  letterSpacing: '-0.01em'
+                }}>
+                  CoolDesk AI
+                </div>
+                <div style={{
+                  fontSize: '11px',
+                  color: isAiLoading ? '#22C55E' : 'rgba(255, 255, 255, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  {isAiLoading ? (
+                    <>
+                      <span style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: '#22C55E',
+                        animation: 'pulse 1s ease-in-out infinite'
+                      }}></span>
+                      Thinking...
+                    </>
+                  ) : (
+                    <>Local AI Active</>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setAiChatMessages([]);
+                setActivePill(null);
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                color: 'rgba(255, 255, 255, 0.6)',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                e.currentTarget.style.color = '#F87171';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)';
+              }}
+            >
+              Clear
+            </button>
+          </div>
+
+          {/* Messages Container */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '20px',
+            gap: '20px'
+          }}>
+            {aiChatMessages.map((msg, idx) => (
+              <div
+                key={idx}
+                style={{
+                  display: 'flex',
+                  gap: '14px',
+                  animation: 'fadeInUp 0.3s ease-out',
+                  animationFillMode: 'both',
+                  animationDelay: `${idx * 0.05}s`
+                }}
+              >
+                {/* Avatar */}
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: msg.role === 'user' ? '10px' : '12px',
+                  background: msg.role === 'user'
+                    ? 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)'
+                    : msg.role === 'assistant'
+                      ? 'linear-gradient(135deg, #3B82F6 0%, #6366F1 100%)'
+                      : msg.role === 'error'
+                        ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)'
+                        : 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: msg.role === 'user'
+                    ? '0 4px 12px rgba(167, 139, 250, 0.3)'
+                    : msg.role === 'assistant'
+                      ? '0 4px 12px rgba(59, 130, 246, 0.3)'
+                      : '0 4px 12px rgba(239, 68, 68, 0.3)',
+                  fontSize: '14px',
+                  color: '#fff'
+                }}>
+                  {msg.role === 'user' ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                  ) : msg.role === 'assistant' ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"></path>
+                      <path d="M7.5 13a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"></path>
+                      <path d="M16.5 13a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"></path>
+                    </svg>
+                  ) : (
+                    <span style={{ fontSize: '12px' }}>!</span>
+                  )}
+                </div>
+
+                {/* Message Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* Sender Name */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '6px'
+                  }}>
+                    <span style={{
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: msg.role === 'user' ? '#C4B5FD' : msg.role === 'assistant' ? '#93C5FD' : '#FCA5A5',
+                      letterSpacing: '-0.01em'
+                    }}>
+                      {msg.role === 'user' ? 'You' : msg.role === 'assistant' ? 'AI' : 'Error'}
+                    </span>
+                    <span style={{
+                      fontSize: '11px',
+                      color: 'rgba(255, 255, 255, 0.3)'
+                    }}>
+                      just now
+                    </span>
+                  </div>
+
+                  {/* Message Bubble */}
+                  <div style={{
+                    fontSize: '14px',
+                    lineHeight: '1.7',
+                    color: msg.role === 'error' ? '#FCA5A5' : '#E2E8F0',
+                    padding: '14px 16px',
+                    background: msg.role === 'user'
+                      ? 'rgba(139, 92, 246, 0.1)'
+                      : msg.role === 'assistant'
+                        ? 'rgba(30, 41, 59, 0.8)'
+                        : 'rgba(239, 68, 68, 0.1)',
+                    border: `1px solid ${msg.role === 'user'
+                      ? 'rgba(139, 92, 246, 0.2)'
+                      : msg.role === 'assistant'
+                        ? 'rgba(255, 255, 255, 0.06)'
+                        : 'rgba(239, 68, 68, 0.2)'}`,
+                    borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    boxShadow: msg.role === 'assistant' ? '0 2px 8px rgba(0, 0, 0, 0.15)' : 'none'
+                  }}>
+                    {msg.content}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Typing Indicator */}
+            {isAiLoading && (
+              <div style={{
+                display: 'flex',
+                gap: '14px',
+                animation: 'fadeInUp 0.3s ease-out'
+              }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #3B82F6 0%, #6366F1 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"></path>
+                  </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#93C5FD',
+                    marginBottom: '6px'
+                  }}>AI</div>
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '14px 18px',
+                    background: 'rgba(30, 41, 59, 0.8)',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    borderRadius: '16px 16px 16px 4px'
+                  }}>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {[0, 1, 2].map(i => (
+                        <div
+                          key={i}
+                          style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)',
+                            animation: `bounce 1.4s ease-in-out ${i * 0.16}s infinite`
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Subtle gradient fade at bottom */}
+          <div style={{
+            height: '1px',
+            background: 'linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.3), rgba(59, 130, 246, 0.3), transparent)'
+          }} />
+        </div>
+      )}
+
       <form
         onSubmit={handleSubmit}
         className={`cooldesk-search-box command-${commandMode} ${isListening ? 'listening' : ''}`}

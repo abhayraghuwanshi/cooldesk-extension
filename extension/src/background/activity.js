@@ -371,8 +371,12 @@ async function flushTimeSeriesEvents() {
 }
 
 // Accumulate time for a URL
-async function accumulateTime(url, now = Date.now()) {
-    if (!url || !currentActive.since) return;
+async function accumulateTime(url, now = Date.now(), forcedDelta = null) {
+    if (!url) return;
+
+    // If not forcing delta, we typically need active URL and start time.
+    // However, if we are here, we might be tracking background audio.
+    // The delta calculation below handles the logic.
 
     // Enhanced URL validation
     if (!isValidTrackingUrl(url)) {
@@ -383,7 +387,19 @@ async function accumulateTime(url, now = Date.now()) {
     const cleaned = cleanUrl(url);
     if (!cleaned) return;
 
-    const delta = Math.max(0, now - currentActive.since);
+    let delta = 0;
+    if (typeof forcedDelta === 'number') {
+        delta = forcedDelta;
+    } else if (currentActive.since && currentActive.url) {
+        // Only calculate interactive delta if this is the active URL
+        // OR if we are just updating the active URL's time
+        // But for safety, let's only rely on currentActive.since if we are indeed processing the active URL
+        // effectively, if forcedDelta is null, we assume we are called from the main loop or event handler for the active tab
+        delta = Math.max(0, now - currentActive.since);
+    } else {
+        // No forced delta and no active session to calculate from -> nothing to track
+        return;
+    }
 
     // Debug logging for tracking
     if (delta > 1000) {
@@ -927,11 +943,11 @@ export async function handleActivityMessage(msg, sender) {
                 // If Playing audio in background, we need to accumulate time explicitly
                 // because accumulateTime() normally only runs for currentActive.url unless triggered here
                 if (sessionEvent.hasAudio && currentActive.url !== sender.tab.url) {
-                    // Force accumulation for this background tab
+                    // Force accumulation for this background tab with a fixed delta (heartbeat interval)
                     // timeWeight will be determined by activity logic (0.5 for background)
                     const fakeNow = Date.now();
-                    // Delta is roughly the heartbeat interval (5000ms) or calc from last seen
-                    accumulateTime(sender.tab.url, fakeNow, true); // Add force flag if needed, or just call it
+                    const heartbeatInterval = 5000; // Standard heartbeat
+                    accumulateTime(sender.tab.url, fakeNow, heartbeatInterval);
                 }
                 break;
             case 'navigation':

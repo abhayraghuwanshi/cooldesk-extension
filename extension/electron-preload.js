@@ -25,7 +25,12 @@ const VALID_CHANNELS = [
     'sync-conflict',
     'sync-error',
     'sync-complete',
-    'spotlight-shown'
+    'spotlight-shown',
+    // LLM channels
+    'llm-progress',
+    'llm-token',
+    'llm-complete',
+    'llm-error'
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -104,6 +109,59 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // App info
     getAppPath: () => ipcRenderer.invoke('get-app-path'),
     getVersion: () => ipcRenderer.invoke('get-version'),
+
+    // ==========================================
+    // LOCAL LLM API
+    // ==========================================
+
+    llm: {
+        // Status & Models
+        getStatus: () => ipcRenderer.invoke('llm:get-status'),
+        getModels: () => ipcRenderer.invoke('llm:get-models'),
+
+        // Model Management
+        downloadModel: (modelName) => ipcRenderer.invoke('llm:download-model', modelName),
+        loadModel: (modelName) => ipcRenderer.invoke('llm:load-model', modelName),
+        unloadModel: () => ipcRenderer.invoke('llm:unload-model'),
+
+        // Inference
+        chat: (prompt, options) => ipcRenderer.invoke('llm:chat', prompt, options),
+        chatStream: (prompt, options) => ipcRenderer.invoke('llm:chat-stream', prompt, options),
+        summarize: (text, maxLength) => ipcRenderer.invoke('llm:summarize', text, maxLength),
+        categorize: (title, url, categories) => ipcRenderer.invoke('llm:categorize', title, url, categories),
+        answer: (question, content) => ipcRenderer.invoke('llm:answer', question, content),
+        parseCommand: (command, context) => ipcRenderer.invoke('llm:parse-command', command, context),
+        getEmbedding: (text) => ipcRenderer.invoke('llm:get-embedding', text),
+
+        // Co-working Agent capabilities
+        batchCategorize: (items, categories) => ipcRenderer.invoke('llm:batch-categorize', items, categories),
+        smartSearch: (query, items, limit) => ipcRenderer.invoke('llm:smart-search', query, items, limit),
+        suggestWorkspaces: (urls) => ipcRenderer.invoke('llm:suggest-workspaces', urls),
+        generateBriefing: (context) => ipcRenderer.invoke('llm:generate-briefing', context),
+        agentRequest: (userInput, context) => ipcRenderer.invoke('llm:agent-request', userInput, context),
+
+        // Event listeners for streaming
+        onProgress: (callback) => {
+            const handler = (_event, data) => callback(data);
+            ipcRenderer.on('llm-progress', handler);
+            return () => ipcRenderer.removeListener('llm-progress', handler);
+        },
+        onToken: (callback) => {
+            const handler = (_event, data) => callback(data);
+            ipcRenderer.on('llm-token', handler);
+            return () => ipcRenderer.removeListener('llm-token', handler);
+        },
+        onComplete: (callback) => {
+            const handler = (_event, data) => callback(data);
+            ipcRenderer.on('llm-complete', handler);
+            return () => ipcRenderer.removeListener('llm-complete', handler);
+        },
+        onError: (callback) => {
+            const handler = (_event, data) => callback(data);
+            ipcRenderer.on('llm-error', handler);
+            return () => ipcRenderer.removeListener('llm-error', handler);
+        }
+    },
 
     // ==========================================
     // EVENTS PATTERN - Main pushes to Renderer

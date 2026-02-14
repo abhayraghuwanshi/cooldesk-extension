@@ -15,6 +15,9 @@ import { fileURLToPath } from 'url';
 import { promisify } from 'util';
 import { WebSocketServer } from 'ws';
 
+// Local LLM imports (lazy loaded)
+let localLLM = null;
+
 const execAsync = promisify(exec);
 
 const __filename = fileURLToPath(import.meta.url);
@@ -998,6 +1001,190 @@ function handleWebSocketMessage(ws, data) {
             broadcastToClients('ui-state-updated', syncData.uiState);
             break;
 
+        // ==========================================
+        // LLM WebSocket Handlers (for browser extension)
+        // ==========================================
+        case 'llm-get-status':
+            getLocalLLM().then(llm => {
+                ws.send(JSON.stringify({ type: 'llm-status', payload: llm.getStatus() }));
+            }).catch(err => {
+                ws.send(JSON.stringify({ type: 'llm-status', payload: { error: err.message } }));
+            });
+            break;
+
+        case 'llm-get-models':
+            getLocalLLM().then(llm => {
+                ws.send(JSON.stringify({ type: 'llm-models', payload: llm.getAvailableModels() }));
+            }).catch(err => {
+                ws.send(JSON.stringify({ type: 'llm-models', payload: { error: err.message } }));
+            });
+            break;
+
+        case 'llm-load-model':
+            getLocalLLM().then(async llm => {
+                try {
+                    await llm.loadModel(payload.modelName);
+                    ws.send(JSON.stringify({ type: 'llm-model-loaded', payload: { ok: true } }));
+                } catch (err) {
+                    ws.send(JSON.stringify({ type: 'llm-model-loaded', payload: { ok: false, error: err.message } }));
+                }
+            });
+            break;
+
+        case 'llm-chat':
+            getLocalLLM().then(async llm => {
+                try {
+                    const response = await llm.chat(payload.prompt, payload.options || {});
+                    ws.send(JSON.stringify({
+                        type: 'llm-chat-response',
+                        payload: { ok: true, response, requestId: payload.requestId }
+                    }));
+                } catch (err) {
+                    ws.send(JSON.stringify({
+                        type: 'llm-chat-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                }
+            });
+            break;
+
+        case 'llm-summarize':
+            getLocalLLM().then(async llm => {
+                try {
+                    const summary = await llm.summarize(payload.text, payload.maxLength || 3);
+                    ws.send(JSON.stringify({
+                        type: 'llm-summarize-response',
+                        payload: { ok: true, summary, requestId: payload.requestId }
+                    }));
+                } catch (err) {
+                    ws.send(JSON.stringify({
+                        type: 'llm-summarize-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                }
+            });
+            break;
+
+        case 'llm-categorize':
+            getLocalLLM().then(async llm => {
+                try {
+                    const category = await llm.categorize(payload.title, payload.url, payload.categories);
+                    ws.send(JSON.stringify({
+                        type: 'llm-categorize-response',
+                        payload: { ok: true, category, requestId: payload.requestId }
+                    }));
+                } catch (err) {
+                    ws.send(JSON.stringify({
+                        type: 'llm-categorize-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                }
+            });
+            break;
+
+        case 'llm-parse-command':
+            getLocalLLM().then(async llm => {
+                try {
+                    const parsed = await llm.parseCommand(payload.command, payload.context || {});
+                    ws.send(JSON.stringify({
+                        type: 'llm-command-response',
+                        payload: { ok: true, parsed, requestId: payload.requestId }
+                    }));
+                } catch (err) {
+                    ws.send(JSON.stringify({
+                        type: 'llm-command-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                }
+            });
+            break;
+
+        // Co-working Agent WebSocket handlers
+        case 'llm-batch-categorize':
+            getLocalLLM().then(async llm => {
+                try {
+                    const results = await llm.batchCategorize(payload.items, payload.categories);
+                    ws.send(JSON.stringify({
+                        type: 'llm-batch-categorize-response',
+                        payload: { ok: true, results, requestId: payload.requestId }
+                    }));
+                } catch (err) {
+                    ws.send(JSON.stringify({
+                        type: 'llm-batch-categorize-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                }
+            });
+            break;
+
+        case 'llm-smart-search':
+            getLocalLLM().then(async llm => {
+                try {
+                    const results = await llm.smartSearch(payload.query, payload.items, payload.limit || 10);
+                    ws.send(JSON.stringify({
+                        type: 'llm-smart-search-response',
+                        payload: { ok: true, results, requestId: payload.requestId }
+                    }));
+                } catch (err) {
+                    ws.send(JSON.stringify({
+                        type: 'llm-smart-search-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                }
+            });
+            break;
+
+        case 'llm-suggest-workspaces':
+            getLocalLLM().then(async llm => {
+                try {
+                    const suggestions = await llm.suggestWorkspaces(payload.urls);
+                    ws.send(JSON.stringify({
+                        type: 'llm-suggest-workspaces-response',
+                        payload: { ok: true, suggestions, requestId: payload.requestId }
+                    }));
+                } catch (err) {
+                    ws.send(JSON.stringify({
+                        type: 'llm-suggest-workspaces-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                }
+            });
+            break;
+
+        case 'llm-generate-briefing':
+            getLocalLLM().then(async llm => {
+                try {
+                    const briefing = await llm.generateBriefing(payload.context || {});
+                    ws.send(JSON.stringify({
+                        type: 'llm-generate-briefing-response',
+                        payload: { ok: true, briefing, requestId: payload.requestId }
+                    }));
+                } catch (err) {
+                    ws.send(JSON.stringify({
+                        type: 'llm-generate-briefing-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                }
+            });
+            break;
+
+        case 'llm-agent-request':
+            getLocalLLM().then(async llm => {
+                try {
+                    const result = await llm.handleAgentRequest(payload.userInput, payload.context || {});
+                    ws.send(JSON.stringify({
+                        type: 'llm-agent-request-response',
+                        payload: { ok: true, result, requestId: payload.requestId }
+                    }));
+                } catch (err) {
+                    ws.send(JSON.stringify({
+                        type: 'llm-agent-request-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                }
+            });
+            break;
+
         default:
             console.log('[Electron] Unknown WebSocket message type:', type);
     }
@@ -1617,6 +1804,260 @@ ipcMain.handle('sync:set-tabs', (_event, data) => {
     // saveData(); // Optional
     broadcastToClients('tabs-updated', syncData.tabs);
     return { ok: true };
+});
+
+// ==========================================
+// LOCAL LLM IPC HANDLERS
+// ==========================================
+
+/**
+ * Lazy load the local LLM module
+ */
+async function getLocalLLM() {
+    if (!localLLM) {
+        try {
+            localLLM = await import('./src/ai/localLLM.js');
+            await localLLM.initializeLLM();
+            console.log('[Electron] LocalLLM module loaded');
+        } catch (error) {
+            console.error('[Electron] Failed to load LocalLLM:', error);
+            throw error;
+        }
+    }
+    return localLLM;
+}
+
+// Get LLM status
+ipcMain.handle('llm:get-status', async () => {
+    try {
+        const llm = await getLocalLLM();
+        return llm.getStatus();
+    } catch (error) {
+        return {
+            initialized: false,
+            modelLoaded: false,
+            error: error.message
+        };
+    }
+});
+
+// Get available models
+ipcMain.handle('llm:get-models', async () => {
+    try {
+        const llm = await getLocalLLM();
+        return llm.getAvailableModels();
+    } catch (error) {
+        return { error: error.message };
+    }
+});
+
+// Download a model
+ipcMain.handle('llm:download-model', async (_event, modelName) => {
+    try {
+        const llm = await getLocalLLM();
+        const modelPath = await llm.downloadModel(modelName, (progress) => {
+            // Send progress to renderer
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('llm-progress', {
+                    type: 'download',
+                    progress,
+                    modelName
+                });
+            }
+            broadcastToClients('llm-progress', { type: 'download', progress, modelName });
+        });
+        return { ok: true, path: modelPath };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Load a model
+ipcMain.handle('llm:load-model', async (_event, modelName) => {
+    try {
+        const llm = await getLocalLLM();
+
+        // Set up progress listener
+        const removeListener = llm.onProgress((type, progress, name, error) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('llm-progress', { type, progress, modelName: name, error });
+            }
+            broadcastToClients('llm-progress', { type, progress, modelName: name, error });
+        });
+
+        const result = await llm.loadModel(modelName);
+        removeListener();
+
+        return { ok: result };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Unload model
+ipcMain.handle('llm:unload-model', async () => {
+    try {
+        const llm = await getLocalLLM();
+        await llm.unloadModel();
+        return { ok: true };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Chat (non-streaming)
+ipcMain.handle('llm:chat', async (_event, prompt, options = {}) => {
+    try {
+        const llm = await getLocalLLM();
+        const response = await llm.chat(prompt, options);
+        return { ok: true, response };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Chat streaming - sends tokens via IPC events
+ipcMain.handle('llm:chat-stream', async (_event, prompt, options = {}) => {
+    try {
+        const llm = await getLocalLLM();
+        const requestId = Date.now().toString();
+
+        // Start streaming in background
+        llm.chatStream(prompt, (token) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('llm-token', { requestId, token });
+            }
+            broadcastToClients('llm-token', { requestId, token });
+        }, options).then((fullResponse) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('llm-complete', { requestId, response: fullResponse });
+            }
+            broadcastToClients('llm-complete', { requestId, response: fullResponse });
+        }).catch((error) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('llm-error', { requestId, error: error.message });
+            }
+            broadcastToClients('llm-error', { requestId, error: error.message });
+        });
+
+        return { ok: true, requestId };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Summarize text
+ipcMain.handle('llm:summarize', async (_event, text, maxLength = 3) => {
+    try {
+        const llm = await getLocalLLM();
+        const summary = await llm.summarize(text, maxLength);
+        return { ok: true, summary };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Categorize URL
+ipcMain.handle('llm:categorize', async (_event, title, url, categories) => {
+    try {
+        const llm = await getLocalLLM();
+        const category = await llm.categorize(title, url, categories);
+        return { ok: true, category };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Answer question about content
+ipcMain.handle('llm:answer', async (_event, question, content) => {
+    try {
+        const llm = await getLocalLLM();
+        const answer = await llm.answerQuestion(question, content);
+        return { ok: true, answer };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Parse natural language command
+ipcMain.handle('llm:parse-command', async (_event, command, context = {}) => {
+    try {
+        const llm = await getLocalLLM();
+        const parsed = await llm.parseCommand(command, context);
+        return { ok: true, parsed };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Get embeddings
+ipcMain.handle('llm:get-embedding', async (_event, text) => {
+    try {
+        const llm = await getLocalLLM();
+        const embedding = await llm.getEmbedding(text);
+        return { ok: true, embedding };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// ==========================================
+// CO-WORKING AGENT IPC HANDLERS
+// ==========================================
+
+// Batch categorize URLs
+ipcMain.handle('llm:batch-categorize', async (_event, items, categories) => {
+    try {
+        const llm = await getLocalLLM();
+        const results = await llm.batchCategorize(items, categories);
+        return { ok: true, results };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Smart search
+ipcMain.handle('llm:smart-search', async (_event, query, items, limit = 10) => {
+    try {
+        const llm = await getLocalLLM();
+        const results = await llm.smartSearch(query, items, limit);
+        return { ok: true, results };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Suggest workspaces
+ipcMain.handle('llm:suggest-workspaces', async (_event, urls) => {
+    try {
+        const llm = await getLocalLLM();
+        const suggestions = await llm.suggestWorkspaces(urls);
+        return { ok: true, suggestions };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Generate briefing
+ipcMain.handle('llm:generate-briefing', async (_event, context) => {
+    try {
+        const llm = await getLocalLLM();
+        const briefing = await llm.generateBriefing(context);
+        return { ok: true, briefing };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+});
+
+// Agent request handler
+ipcMain.handle('llm:agent-request', async (_event, userInput, context) => {
+    try {
+        const llm = await getLocalLLM();
+        const result = await llm.handleAgentRequest(userInput, context);
+        return { ok: true, result };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
 });
 
 ipcMain.handle('sync:trigger-full', () => {

@@ -5,7 +5,9 @@
       "Bash(npm run dev:*)",
       "Bash(dir /s /b \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\")",
       "Bash(findstr:*)",
-      "Bash(node --check:*)"
+      "Bash(node --check:*)",
+      "Bash(du -sh \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\src\"*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

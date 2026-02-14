@@ -1,6 +1,6 @@
-import { COMMANDS, CommandParser, WEBSITE_SHORTCUTS } from './commandParser.js';
+import { getUIState, listWorkspaces, saveUIState, saveWorkspace } from '../db/index.js';
 import { fuzzySearch } from '../utils/searchUtils.js';
-import { listWorkspaces, saveWorkspace, getUIState, saveUIState } from '../db/index.js';
+import { COMMANDS, CommandParser, WEBSITE_SHORTCUTS } from './commandParser.js';
 
 /**
  * CommandExecutor - Executes parsed commands

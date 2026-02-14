@@ -7,9 +7,10 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import scrapperConfig from '../../data/scrapper.json';
 import { listScrapedChats } from '../../db/index.js';
 import '../../styles/cooldesk.css';
-import { getFaviconUrl } from '../../utils/helpers.js';
+import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 
 // Debounce utility
 function debounce(func, wait) {
@@ -24,13 +25,42 @@ function debounce(func, wait) {
     };
 }
 
-// Platform config for chats (reused)
-const PLATFORM_CONFIG = {
-    'ChatGPT': { emoji: '💬', color: '#10A37F' },
-    'Claude': { emoji: '🤖', color: '#8B5CF6' },
-    'Gemini': { emoji: '💎', color: '#3B82F6' },
-    'Grok': { emoji: '🚀', color: '#F97316' },
-    'Perplexity': { emoji: '🔍', color: '#14B8A6' },
+// Platform config derived from scrapper.json
+const PLATFORM_CONFIG = scrapperConfig.platforms.reduce((acc, platform) => {
+    acc[platform.name] = {
+        name: platform.name,
+        color: platform.color,
+        icon: null, // Will use favicon
+        domains: platform.domains,
+        type: platform.type
+    };
+    return acc;
+}, {});
+
+// Helper to get platform info for a chat
+const getPlatformInfo = (chat) => {
+    // 1. Try to match by explicit platform name
+    if (chat.platform && PLATFORM_CONFIG[chat.platform]) {
+        return PLATFORM_CONFIG[chat.platform];
+    }
+
+    // 2. Try to match by domain
+    const domain = safeGetHostname(chat.url);
+    const knownPlatform = Object.values(PLATFORM_CONFIG).find(p =>
+        p.domains.some(d => domain.includes(d))
+    );
+
+    if (knownPlatform) {
+        return knownPlatform;
+    }
+
+    // 3. Fallback to generic domain info
+    return {
+        name: domain,
+        color: '#64748B', // Default slate color
+        isGeneric: true,
+        domain: domain
+    };
 };
 
 export function ActivityFeed() {
@@ -43,6 +73,7 @@ export function ActivityFeed() {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [region, setRegion] = useState('');
     const [expandedDomains, setExpandedDomains] = useState(new Set());
+    const [chatsShowingAll, setChatsShowingAll] = useState(new Set());
     const [isPending, startTransition] = useTransition();
     const favContainerRef = useRef(null);
 
@@ -139,16 +170,21 @@ export function ActivityFeed() {
 
         // 1. Fetch Chats
         try {
-            const chatRes = await listScrapedChats({ sortBy: 'scrapedAt', sortOrder: 'desc' });
-            const chats = (chatRes.data || chatRes || []).slice(0, 30).map(chat => ({
-                id: chat.id,
-                title: chat.title || 'Untitled Chat',
-                url: chat.url,
-                timestamp: new Date(chat.scrapedAt || chat.lastVisitTime).getTime(),
-                type: 'chat',
-                platform: chat.platform,
-                subtitle: chat.platform
-            }));
+            // Increase limit to ensure we get all chats for "Show all" functionality
+            const chatRes = await listScrapedChats({ limit: 1000, sortBy: 'scrapedAt', sortOrder: 'desc' });
+            const chats = (chatRes.data || chatRes || []).map(chat => {
+                const platformInfo = getPlatformInfo(chat);
+                return {
+                    id: chat.chatId || chat.id,
+                    title: chat.title || 'Untitled Chat',
+                    url: chat.url,
+                    timestamp: new Date(chat.scrapedAt || chat.lastVisitTime).getTime(),
+                    type: 'chat',
+                    platform: platformInfo.name,
+                    platformInfo: platformInfo,
+                    subtitle: platformInfo.name
+                };
+            });
             items.push(...chats);
         } catch (e) {
             console.error('Failed to load chats', e);
@@ -207,7 +243,7 @@ export function ActivityFeed() {
         */
 
         // Sort combined feed by timestamp (newest first)
-        return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20);
+        return items.sort((a, b) => b.timestamp - a.timestamp);
     }, []);
 
     // Debounced update handler (500ms delay)
@@ -366,14 +402,21 @@ export function ActivityFeed() {
 
         // Convert to array of chat groups
         const groupedChats = Object.entries(chatsByPlatform)
-            .map(([platform, platformChats]) => ({
-                type: 'chat-group',
-                platform,
-                chats: platformChats,
-                latestTimestamp: platformChats[0].timestamp,
-                count: platformChats.length,
-                config: PLATFORM_CONFIG[platform] || { emoji: '💬', color: '#64748B' }
-            }))
+            .map(([platform, platformChats]) => {
+                const info = platformChats[0].platformInfo || {};
+                return {
+                    type: 'chat-group',
+                    platform,
+                    chats: platformChats,
+                    latestTimestamp: platformChats[0].timestamp,
+                    count: platformChats.length,
+                    config: {
+                        color: info.color || '#64748B',
+                        emoji: null, // Use favicon instead
+                        name: platform
+                    }
+                };
+            })
             .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
 
         // Group tabs by domain
@@ -804,13 +847,20 @@ export function ActivityFeed() {
                                 // Handle chat groups (multiple chats from same platform)
                                 if (item.type === 'chat-group') {
                                     const isExpanded = expandedDomains.has(`chat-${item.platform}`);
+                                    const showAll = chatsShowingAll.has(item.platform);
                                     const topChat = item.chats[0];
                                     const { emoji, color } = item.config;
+                                    const favicon = getFaviconUrl(topChat.url, 32);
+
+                                    // Determine which chats to show in the expanded list (skipping the top/first one which is in header)
+                                    const displayedChats = showAll ? item.chats.slice(1) : item.chats.slice(1, 4);
+                                    const remainingCount = item.chats.length - 1 - displayedChats.length;
 
                                     return (
                                         <div key={`chat-group-${item.platform}`} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.05)' }}>
                                             {/* Group Header */}
                                             <div
+                                                onClick={() => toggleDomainExpand(`chat-${item.platform}`)}
                                                 style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -825,7 +875,6 @@ export function ActivityFeed() {
                                             >
                                                 {/* Platform Icon */}
                                                 <div
-                                                    onClick={() => handleItemClick(topChat.url)}
                                                     style={{
                                                         width: '36px',
                                                         height: '36px',
@@ -836,10 +885,20 @@ export function ActivityFeed() {
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
                                                         fontSize: '18px',
-                                                        flexShrink: 0
+                                                        flexShrink: 0,
+                                                        overflow: 'hidden'
                                                     }}
                                                 >
-                                                    {emoji}
+                                                    {favicon ? (
+                                                        <img
+                                                            src={favicon}
+                                                            alt={item.platform}
+                                                            style={{ width: '20px', height: '20px', objectFit: 'contain' }}
+                                                            onError={e => { e.target.style.display = 'none'; }}
+                                                        />
+                                                    ) : (
+                                                        <span style={{ fontSize: '18px' }}>💬</span>
+                                                    )}
                                                 </div>
 
                                                 {/* Info */}
@@ -910,7 +969,7 @@ export function ActivityFeed() {
                                                     background: 'rgba(0, 0, 0, 0.15)',
                                                     borderTop: '1px solid rgba(148, 163, 184, 0.05)'
                                                 }}>
-                                                    {item.chats.slice(1).map((chat, chatIdx) => (
+                                                    {displayedChats.map((chat, chatIdx) => (
                                                         <div
                                                             key={chat.id}
                                                             onClick={() => handleItemClick(chat.url)}
@@ -921,12 +980,17 @@ export function ActivityFeed() {
                                                                 padding: '10px 16px 10px 48px',
                                                                 cursor: 'pointer',
                                                                 transition: 'background 0.2s',
-                                                                borderBottom: chatIdx < item.chats.length - 2 ? '1px solid rgba(148, 163, 184, 0.03)' : 'none'
+                                                                borderBottom: chatIdx < displayedChats.length - 1 ? '1px solid rgba(148, 163, 184, 0.03)' : 'none'
                                                             }}
                                                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
                                                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                                         >
-                                                            <span style={{ fontSize: '14px' }}>{emoji}</span>
+                                                            <img
+                                                                src={getFaviconUrl(chat.url, 16)}
+                                                                alt=""
+                                                                style={{ width: '16px', height: '16px', objectFit: 'contain', marginRight: '8px' }}
+                                                                onError={e => { e.target.style.display = 'none'; }}
+                                                            />
                                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                                 <div style={{
                                                                     fontSize: 'var(--font-sm)',
@@ -943,6 +1007,66 @@ export function ActivityFeed() {
                                                             </span>
                                                         </div>
                                                     ))}
+
+                                                    {/* Show More Button */}
+                                                    {!showAll && remainingCount > 0 && (
+                                                        <div
+                                                            style={{
+                                                                padding: '8px 16px 8px 48px',
+                                                                fontSize: 'var(--font-xs)',
+                                                                color: '#60A5FA',
+                                                                cursor: 'pointer',
+                                                                background: 'rgba(59, 130, 246, 0.05)',
+                                                                borderTop: '1px solid rgba(148, 163, 184, 0.05)',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '6px'
+                                                            }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setChatsShowingAll(prev => {
+                                                                    const next = new Set(prev);
+                                                                    next.add(item.platform);
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.05)'}
+                                                        >
+                                                            <span>Show {remainingCount} more chats</span>
+                                                            <FontAwesomeIcon icon={faChevronDown} style={{ fontSize: '10px' }} />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Show Less Button */}
+                                                    {showAll && item.chats.length > 4 && (
+                                                        <div
+                                                            style={{
+                                                                padding: '8px 16px 8px 48px',
+                                                                fontSize: 'var(--font-xs)',
+                                                                color: '#64748B',
+                                                                cursor: 'pointer',
+                                                                background: 'rgba(148, 163, 184, 0.05)',
+                                                                borderTop: '1px solid rgba(148, 163, 184, 0.05)',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '6px'
+                                                            }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setChatsShowingAll(prev => {
+                                                                    const next = new Set(prev);
+                                                                    next.delete(item.platform);
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(148, 163, 184, 0.1)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(148, 163, 184, 0.05)'}
+                                                        >
+                                                            <span>Show less</span>
+                                                            <FontAwesomeIcon icon={faChevronDown} transform="rotate-180" style={{ fontSize: '10px' }} />
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -1114,7 +1238,7 @@ export function ActivityFeed() {
                                 const isChat = item.type === 'chat';
                                 const isCalendar = item.type === 'calendar';
                                 const icon = isChat
-                                    ? PLATFORM_CONFIG[item.platform]?.emoji || '💬'
+                                    ? '💬' // Fallback if image fails
                                     : isCalendar ? '📅' : null;
 
                                 return (

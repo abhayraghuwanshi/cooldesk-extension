@@ -1,4 +1,4 @@
-import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faDatabase, faMicrochip, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveWorkspace } from '../../db';
@@ -8,6 +8,7 @@ import { sendMessage, storageGet, storageSet } from '../../services/extensionApi
 import { loadSyncConfig } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
 import ExportData from '../settings/ExportData';
+import LocalAITab from '../settings/LocalAITab';
 import SetupTab from '../settings/SetupTab';
 import TeamsTab from '../settings/TeamsTab';
 import ThemesTab from '../settings/ThemesTab';
@@ -55,10 +56,15 @@ export function SettingsModal({
   const [lastBackupTime, setLastBackupTime] = useState(null);
   const [backupInProgress, setBackupInProgress] = useState(false);
 
+  // Check if running in Electron desktop app
+  const isElectron = typeof window !== 'undefined' && window.electronAPI?.llm;
+
   // --- Constants & Config ---
   const TABS = [
     { id: 'general', label: 'General', icon: faCog, component: null },
-    { id: 'ai-models', label: 'AI Models', icon: faRocket, component: SetupTab },
+    // Local AI tab - only show in Electron desktop app
+    ...(isElectron ? [{ id: 'local-ai', label: 'Local AI', icon: faMicrochip, component: LocalAITab }] : []),
+    { id: 'ai-models', label: 'Cloud AI', icon: faRocket, component: SetupTab },
     { id: 'teams', label: 'Teams (P2P)', icon: faUsers, component: TeamsTab },
     { id: 'themes', label: 'Aesthetics', icon: faPalette, component: ThemesTab },
     { id: 'data', label: 'Data & Sync', icon: faDatabase, component: ExportData },
@@ -934,12 +940,26 @@ export function SettingsModal({
               </div>
             )}
 
+            {activeTabId === 'local-ai' && isElectron && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                <section>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>On-Device AI Models</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>
+                      Download and run AI models locally on your device. 100% private, works offline.
+                    </p>
+                  </div>
+                  <LocalAITab />
+                </section>
+              </div>
+            )}
+
             {activeTabId === 'ai-models' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                 <section>
                   <div style={{ marginBottom: 20 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Core Configuration</h3>
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Configure AI models and core behavior.</p>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Cloud AI Configuration</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Configure cloud-based AI services (Gemini API).</p>
                   </div>
                   <SetupTab
                     localSettings={localSettings}

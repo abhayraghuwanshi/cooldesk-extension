@@ -535,14 +535,14 @@ export function GlobalSpotlight() {
                     </div>
                 </div>
 
-                {/* AI Actions */}
-                <div className="spotlight-ai-actions">
+                {/* AI Actions - REMOVED per user request */}
+                {/* <div className="spotlight-ai-actions">
                     <button className="spotlight-ai-btn" onClick={handleSummarise}>
                         <div className="btn-shine"></div>
                         <span style={{ fontSize: 16 }}>✨</span>
                         <span>Summarise Page</span>
                     </button>
-                </div>
+                </div> */}
 
                 {/* Results */}
                 {results.length > 0 && (

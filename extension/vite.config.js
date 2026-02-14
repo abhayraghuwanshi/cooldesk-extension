@@ -16,6 +16,13 @@ export default defineConfig(({ mode }) => {
     return {
       base: './',
       plugins: [react()],
+      server: {
+        port: 5173,
+        strictPort: true,
+        hmr: {
+          port: 5173,
+        },
+      },
       build: {
         outDir: 'dist-electron',
         emptyOutDir: true,
