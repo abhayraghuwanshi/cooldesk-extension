@@ -3,7 +3,7 @@ import { listWorkspaces } from '../db/unified-api';
 /**
  * High-Speed Search Service
  * Implements Federated Search pattern:
- * 1. Local Index (Instant, from chrome.storage.local)
+ * 1. Local Index (Instant, from chrome.storage.local or in-memory cache)
  * 2. Background Fallback (Slow, IPC)
  * 3. Desktop Integration (Future)
  */
@@ -11,6 +11,173 @@ import { listWorkspaces } from '../db/unified-api';
 const DB_NAME = 'cooldesk-unified-db';
 const DB_VERSION = 2;
 const SEARCH_INDEX_KEY = 'search_index';
+
+// ==========================================
+// ELECTRON IN-MEMORY CACHE
+// Avoids repeated IPC calls - data loaded once, searched locally
+// ==========================================
+let electronDataCache = {
+  tabs: [],
+  workspaces: [],
+  runningApps: [],
+  installedApps: [],
+  lastRefresh: 0
+};
+const CACHE_TTL = 30000; // 30 seconds - refresh if older
+
+// Check if running in Electron
+function isElectron() {
+  return typeof window !== 'undefined' && window.electronAPI;
+}
+
+/**
+ * Load all searchable data into memory cache (Electron only)
+ * Called once when spotlight opens, not on every keystroke
+ */
+export async function refreshElectronCache() {
+  if (!isElectron()) return;
+
+  const now = Date.now();
+  // Skip if cache is fresh
+  if (now - electronDataCache.lastRefresh < CACHE_TTL) {
+    console.log('[SearchService] Cache still fresh, skipping refresh');
+    return;
+  }
+
+  console.log('[SearchService] Refreshing Electron cache...');
+  const startTime = performance.now();
+
+  try {
+    // Fetch all data in parallel using the correct preload API methods
+    const [tabsResult, workspacesResult, runningAppsResult, installedAppsResult] = await Promise.all([
+      // Tabs: use getTabs() method
+      window.electronAPI.getTabs?.().catch(() => []),
+      // Workspaces: use sendMessage for search
+      window.electronAPI.sendMessage?.({ type: 'SEARCH_WORKSPACES', query: '', maxResults: 100 })
+        .then(r => r?.results || []).catch(() => []),
+      // Running apps: use getRunningApps() method
+      window.electronAPI.getRunningApps?.().catch(() => []),
+      // Installed apps: use getInstalledApps() method
+      window.electronAPI.getInstalledApps?.().catch(() => [])
+    ]);
+
+    electronDataCache.tabs = Array.isArray(tabsResult) ? tabsResult : [];
+    electronDataCache.workspaces = Array.isArray(workspacesResult) ? workspacesResult : [];
+    electronDataCache.runningApps = Array.isArray(runningAppsResult) ? runningAppsResult : [];
+    electronDataCache.installedApps = Array.isArray(installedAppsResult) ? installedAppsResult : [];
+    electronDataCache.lastRefresh = now;
+
+    console.log(`[SearchService] Cache refreshed in ${(performance.now() - startTime).toFixed(1)}ms: ${electronDataCache.tabs.length} tabs, ${electronDataCache.workspaces.length} workspaces, ${electronDataCache.runningApps.length} running apps, ${electronDataCache.installedApps.length} installed apps`);
+  } catch (e) {
+    console.warn('[SearchService] Cache refresh failed:', e);
+  }
+}
+
+/**
+ * Fast local search using in-memory cache (Electron)
+ * No IPC calls - pure JS filtering
+ */
+function searchElectronCache(query) {
+  if (!query || !query.trim()) return [];
+
+  const results = [];
+  const q = query.toLowerCase();
+
+  // Track running app names to mark them in installed apps list
+  const runningAppNames = new Set(
+    electronDataCache.runningApps.map(a => (a.name || '').toLowerCase())
+  );
+
+  // Track added apps to avoid duplicates
+  const addedApps = new Set();
+
+  // Search ALL installed apps first (shows all apps, marks running ones)
+  for (const app of electronDataCache.installedApps) {
+    const appNameLower = (app.name || '').toLowerCase();
+    const nameMatch = appNameLower.includes(q);
+
+    if (nameMatch) {
+      const isRunning = runningAppNames.has(appNameLower);
+      // Find running app info if available (for PID)
+      const runningInfo = isRunning
+        ? electronDataCache.runningApps.find(a => (a.name || '').toLowerCase() === appNameLower)
+        : null;
+
+      results.push({
+        id: `app-${app.name}`,
+        title: app.name,
+        name: app.name,
+        path: app.path,
+        pid: runningInfo?.pid,
+        description: isRunning ? (runningInfo?.title || 'Running') : 'Application',
+        type: 'app',
+        isRunning: isRunning,
+        score: isRunning ? 95 : 75 // Running apps score higher
+      });
+      addedApps.add(appNameLower);
+    }
+  }
+
+  // Add running apps that aren't in installed list (system processes, etc.)
+  for (const app of electronDataCache.runningApps) {
+    const appNameLower = (app.name || '').toLowerCase();
+    if (addedApps.has(appNameLower)) continue; // Already added
+
+    const nameMatch = appNameLower.includes(q);
+    const titleMatch = (app.title || '').toLowerCase().includes(q);
+
+    if (nameMatch || titleMatch) {
+      results.push({
+        id: `app-running-${app.pid || app.name}`,
+        title: app.name,
+        name: app.name,
+        path: app.path,
+        pid: app.pid,
+        description: app.title || 'Running Process',
+        type: 'app',
+        isRunning: true,
+        score: nameMatch ? 90 : 80
+      });
+    }
+  }
+
+  // Search tabs
+  for (const tab of electronDataCache.tabs) {
+    const titleMatch = (tab.title || '').toLowerCase().includes(q);
+    const urlMatch = (tab.url || '').toLowerCase().includes(q);
+    if (titleMatch || urlMatch) {
+      results.push({
+        id: tab.id || tab.tabId,
+        title: tab.title,
+        url: tab.url,
+        description: 'Active Tab',
+        type: 'tab',
+        favicon: tab.favIconUrl || tab.favicon,
+        tabId: tab.id || tab.tabId,
+        score: titleMatch ? 80 : 60
+      });
+    }
+  }
+
+  // Search workspaces
+  for (const ws of electronDataCache.workspaces) {
+    const nameMatch = (ws.title || ws.name || '').toLowerCase().includes(q);
+    const descMatch = (ws.description || '').toLowerCase().includes(q);
+    if (nameMatch || descMatch) {
+      results.push({
+        id: ws.id,
+        title: ws.title || ws.name,
+        url: ws.url,
+        description: ws.description || 'Workspace',
+        type: ws.type || 'workspace',
+        favicon: ws.favicon,
+        score: nameMatch ? 70 : 50
+      });
+    }
+  }
+
+  return results.sort((a, b) => b.score - a.score);
+}
 
 // --- HELPER: Is Content Script? ---
 function isContentScript() {
@@ -130,30 +297,38 @@ async function searchDesktop(query) {
 export async function quickSearch(query, maxResults = 15) {
   if (!query || !query.trim()) return [];
 
-  console.log('[SearchService] quickSearch: ' + query);
+  // ELECTRON: Use fast in-memory cache (no IPC per search)
+  if (isElectron()) {
+    const cacheResults = searchElectronCache(query);
+    if (cacheResults.length > 0 || electronDataCache.lastRefresh > 0) {
+      // Cache exists (even if empty results), use it
+      const deduped = deduplicateByUrl(cacheResults);
+      return deduped.slice(0, maxResults);
+    }
+    // Cache not initialized - fall through to IPC fallback (first search only)
+    console.log('[SearchService] Electron cache empty, using IPC fallback...');
+  }
 
-  // 1. Try Local Index FIRST
-  // This is the "High Speed Center" strategy
+  // CHROME EXTENSION: Try Local Index FIRST
   const localResults = await searchLocalIndex(query);
 
   if (localResults !== null) {
     // Index Exists. Even if 0 results, we trust it.
-    // Filter out workspace folders - only keep actual links/URLs (keep workspace-url)
     const filteredResults = localResults.filter(r => r.type !== 'workspace');
-    // Deduplicate by URL - keep highest scored item for each URL
     const dedupedResults = deduplicateByUrl(filteredResults);
-    // Debug: log types found
     const typeCount = {};
     localResults.forEach(r => { typeCount[r.type] = (typeCount[r.type] || 0) + 1; });
     console.log(`[SearchService] Fast local hit: ${dedupedResults.length} results (from ${localResults.length}), types:`, typeCount);
     return dedupedResults.slice(0, maxResults);
   }
 
-  // 2. Index Missing -> Rebuild Trigger + Fallback
+  // Index Missing -> Rebuild Trigger + Fallback
   console.log('[SearchService] Local index missing, triggering rebuild & fallback...');
 
-  // Trigger rebuild in background (fire and forget)
-  chrome.runtime.sendMessage({ type: 'REBUILD_INDEX' }).catch(() => { });
+  // Trigger rebuild in background (fire and forget) - Chrome only
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    chrome.runtime.sendMessage({ type: 'REBUILD_INDEX' }).catch(() => { });
+  }
 
   // Use Fallback while index builds
   try {
@@ -218,6 +393,15 @@ export async function searchWorkspaces(query) {
 // --- FALLBACKS (Old Logic) ---
 async function searchWorkspacesFallback(query) {
   // 1. Try Electron IPC (Desktop App)
+  if (window.electronAPI && window.electronAPI.sendMessage) {
+    try {
+      const response = await window.electronAPI.sendMessage({ type: 'SEARCH_WORKSPACES', query, maxResults: 20 });
+      if (response && response.results) return response.results;
+    } catch (e) {
+      console.warn('IPC Search Workspaces failed', e);
+    }
+  }
+
   if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
     try {
       return await new Promise((resolve) => {

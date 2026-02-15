@@ -9,7 +9,7 @@
   "main": "electron-main.js",
   "scripts": {
     "dev": "vite",
-    "dev:electron": "concurrently \"vite --mode electron\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev:electron": "concurrently \"vite --mode electron\" \"wait-on http://localhost:5173 && npx cross-env NODE_ENV=development electron .\"",
     "build": "vite build",
     "build:electron": "vite build --mode electron",
     "electron": "electron .",
@@ -24,7 +24,6 @@
     "@fortawesome/free-brands-svg-icons": "^7.1.0",
     "@fortawesome/free-solid-svg-icons": "^7.0.0",
     "@fortawesome/react-fontawesome": "^0.2.3",
-    "node-llama-cpp": "^3.0.0",
     "@tiptap/extension-bubble-menu": "2.26.0",
     "@tiptap/extension-floating-menu": "2.26.0",
     "@tiptap/extension-image": "^2.26.0",
@@ -43,7 +42,9 @@
     "buffer": "^6.0.3",
     "crypto-js": "^4.2.0",
     "elliptic": "^6.6.1",
+    "flexsearch": "^0.8.212",
     "fuse.js": "^7.1.0",
+    "node-llama-cpp": "^3.0.0",
     "open": "^11.0.0",
     "process": "^0.11.10",
     "ps-list": "^9.0.0",
@@ -89,7 +90,8 @@
         "to": "node_modules/node-llama-cpp"
       },
       "BrowserFocus.exe",
-      "AppFocus.exe"
+      "AppFocus.exe",
+      "AppScanner.exe"
     ],
     "asarUnpack": [
       "node_modules/node-llama-cpp/**/*"

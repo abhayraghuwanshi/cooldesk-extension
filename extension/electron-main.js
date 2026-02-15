@@ -6,7 +6,7 @@
 
 import { exec } from 'child_process';
 import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from 'electron';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { createServer } from 'http';
 import open from 'open';
 import { basename, dirname, join } from 'path';
@@ -352,12 +352,15 @@ async function getRunningAppsLinux() {
  */
 async function getInstalledApps() {
     // Return cached if fresh
-    if (installedAppsCache && Date.now() - installedAppsCacheTime < INSTALLED_APPS_CACHE_TTL) {
+    if (installedAppsCache && installedAppsCache.length > 0 && Date.now() - installedAppsCacheTime < INSTALLED_APPS_CACHE_TTL) {
+        console.log(`[Electron] getInstalledApps: returning ${installedAppsCache.length} cached apps`);
         return installedAppsCache;
     }
 
     const platform = process.platform;
     let apps = [];
+
+    console.log(`[Electron] getInstalledApps: fetching for platform ${platform}...`);
 
     try {
         if (platform === 'win32') {
@@ -367,6 +370,7 @@ async function getInstalledApps() {
         } else {
             apps = await getInstalledAppsLinux();
         }
+        console.log(`[Electron] getInstalledApps: found ${apps.length} apps`);
     } catch (e) {
         console.warn('[Electron] getInstalledApps failed:', e.message);
     }
@@ -377,62 +381,97 @@ async function getInstalledApps() {
 }
 
 /**
- * Windows: Get installed apps from Start Menu shortcuts
+ * Windows: Get installed apps from common locations
+ * Uses AppScanner.exe for fast native scanning (~50ms vs 2-3s PowerShell)
  */
 async function getInstalledAppsWindows() {
-    // PowerShell script to get installed apps from Start Menu
-    const psScript = `
-$apps = @()
-$paths = @(
-    [Environment]::GetFolderPath('CommonStartMenu') + '\\Programs',
-    [Environment]::GetFolderPath('StartMenu') + '\\Programs'
-)
-foreach ($startMenu in $paths) {
-    if (Test-Path $startMenu) {
-        Get-ChildItem $startMenu -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
-            try {
-                $shell = New-Object -ComObject WScript.Shell
-                $shortcut = $shell.CreateShortcut($_.FullName)
-                if ($shortcut.TargetPath -and $shortcut.TargetPath -match '\\.exe$') {
-                    $apps += @{
-                        name = $_.BaseName
-                        path = $shortcut.TargetPath
-                    }
+    // Return cached if fresh
+    const now = Date.now();
+    if (installedAppsCache && (now - installedAppsCacheTime) < INSTALLED_APPS_CACHE_TTL) {
+        console.log('[Electron] getInstalledAppsWindows: returning cached', installedAppsCache.length, 'apps');
+        return installedAppsCache;
+    }
+
+    console.log('[Electron] getInstalledAppsWindows: scanning...');
+    const startTime = performance.now();
+
+    // Try AppScanner.exe first (fastest, ~50ms)
+    let exePath;
+    if (app.isPackaged) {
+        exePath = join(process.resourcesPath, 'AppScanner.exe');
+    } else {
+        exePath = join(__dirname, 'AppScanner.exe');
+    }
+
+    if (existsSync(exePath)) {
+        try {
+            const { stdout } = await execAsync(`"${exePath}"`, {
+                windowsHide: true,
+                timeout: 10000,
+                maxBuffer: 10 * 1024 * 1024
+            });
+
+            if (stdout && stdout.trim()) {
+                const apps = JSON.parse(stdout);
+                if (Array.isArray(apps) && apps.length > 0) {
+                    installedAppsCache = apps;
+                    installedAppsCacheTime = now;
+                    console.log(`[Electron] AppScanner.exe found ${apps.length} apps in ${(performance.now() - startTime).toFixed(0)}ms`);
+                    return apps;
                 }
-            } catch {}
+            }
+        } catch (e) {
+            console.warn('[Electron] AppScanner.exe failed:', e.message);
         }
     }
-}
-$apps | Sort-Object -Property name -Unique | ConvertTo-Json -Compress
-`;
-    // Encode as base64 to avoid escaping issues
-    const b64Script = Buffer.from(psScript, 'utf16le').toString('base64');
 
-    try {
-        const { stdout } = await execAsync(`powershell -NoProfile -EncodedCommand ${b64Script}`, {
-            windowsHide: true,
-            timeout: 30000
-        });
+    // Fallback: inline directory scanning (if exe not available)
+    console.log('[Electron] Falling back to directory scanning...');
+    const apps = new Map();
 
-        if (!stdout || stdout.trim() === '' || stdout.trim() === 'null') return [];
+    const programDirs = [
+        process.env.ProgramFiles,
+        process.env['ProgramFiles(x86)'],
+        join(process.env.LOCALAPPDATA || '', 'Programs')
+    ].filter(Boolean);
 
-        const apps = JSON.parse(stdout);
-        const appArray = Array.isArray(apps) ? apps : [apps];
+    for (const dir of programDirs) {
+        try {
+            if (!existsSync(dir)) continue;
+            for (const entry of readdirSync(dir)) {
+                try {
+                    const fullPath = join(dir, entry);
+                    if (!statSync(fullPath).isDirectory()) continue;
 
-        return appArray
-            .filter(a => a && a.name)
-            .map(a => ({
-                id: `installed-${a.name}`,
-                name: a.name,
-                title: a.name,
-                path: a.path,
-                type: 'app',
-                isRunning: false
-            }));
-    } catch (e) {
-        console.warn('[Electron] getInstalledAppsWindows failed:', e.message);
-        return [];
+                    const exeFiles = readdirSync(fullPath)
+                        .filter(f => f.endsWith('.exe') && !/unins|update|crash|helper|setup/i.test(f));
+
+                    if (exeFiles.length > 0) {
+                        const mainExe = exeFiles.find(e =>
+                            e.toLowerCase().replace('.exe', '') === entry.toLowerCase()
+                        ) || exeFiles[0];
+
+                        if (!apps.has(entry.toLowerCase())) {
+                            apps.set(entry.toLowerCase(), {
+                                id: `installed-${entry}`,
+                                name: entry,
+                                title: entry,
+                                path: join(fullPath, mainExe),
+                                type: 'app',
+                                isRunning: false
+                            });
+                        }
+                    }
+                } catch { /* skip */ }
+            }
+        } catch { /* skip */ }
     }
+
+    const result = Array.from(apps.values()).sort((a, b) => a.name.localeCompare(b.name));
+    installedAppsCache = result;
+    installedAppsCacheTime = now;
+    console.log(`[Electron] getInstalledAppsWindows: found ${result.length} apps in ${(performance.now() - startTime).toFixed(0)}ms`);
+    return result;
 }
 
 /**
@@ -1671,6 +1710,14 @@ function centerSpotlightOnCursorDisplay() {
     spotlightWindow.setPosition(centerX, centerY);
 }
 
+// Dev helper: Reload spotlight window (Ctrl+Shift+R when spotlight is focused)
+function reloadSpotlight() {
+    if (spotlightWindow && !spotlightWindow.isDestroyed()) {
+        console.log('[Electron] Reloading spotlight window...');
+        spotlightWindow.webContents.reload();
+    }
+}
+
 function toggleSpotlight() {
     if (!spotlightWindow || spotlightWindow.isDestroyed()) {
         console.log('[Electron] Spotlight window missing, recreating...');
@@ -2387,6 +2434,7 @@ ipcMain.handle('get-processes', () => {
 
 // Global shortcut configuration
 const SPOTLIGHT_SHORTCUT = 'Alt+K';
+const SPOTLIGHT_RELOAD_SHORTCUT = 'Alt+Shift+R'; // Dev: reload spotlight
 
 function registerSpotlightShortcut() {
     // Unregister first to avoid conflicts
@@ -2402,6 +2450,18 @@ function registerSpotlightShortcut() {
     if (!success) {
         console.error(`[Electron] Global shortcut registration failed for ${SPOTLIGHT_SHORTCUT}`);
         return false;
+    }
+
+    // Dev mode: register reload shortcut for spotlight
+    if (process.env.NODE_ENV === 'development') {
+        if (globalShortcut.isRegistered(SPOTLIGHT_RELOAD_SHORTCUT)) {
+            globalShortcut.unregister(SPOTLIGHT_RELOAD_SHORTCUT);
+        }
+        globalShortcut.register(SPOTLIGHT_RELOAD_SHORTCUT, () => {
+            console.log('[Electron] Dev reload shortcut triggered');
+            reloadSpotlight();
+        });
+        console.log(`[Electron] Dev reload shortcut registered: ${SPOTLIGHT_RELOAD_SHORTCUT}`);
     }
 
     console.log(`[Electron] Global shortcut registered: ${SPOTLIGHT_SHORTCUT}`);

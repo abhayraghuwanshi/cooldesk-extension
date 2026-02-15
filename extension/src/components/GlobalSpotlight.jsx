@@ -3,8 +3,40 @@ import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile,
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
-import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch } from '../services/searchService';
+import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
 import './GlobalSpotlight.css';
+
+// ==========================================
+// PERFORMANCE OPTIMIZATIONS
+// - LRU Cache for instant repeated queries
+// - Request ID tracking to prevent stale results
+// - Reduced debounce (50ms vs 150ms)
+// ==========================================
+
+class LRUCache {
+    constructor(maxSize = 100) {
+        this.maxSize = maxSize;
+        this.cache = new Map();
+    }
+    get(key) {
+        if (!this.cache.has(key)) return null;
+        const value = this.cache.get(key);
+        this.cache.delete(key);
+        this.cache.set(key, value);
+        return value;
+    }
+    set(key, value) {
+        if (this.cache.has(key)) this.cache.delete(key);
+        else if (this.cache.size >= this.maxSize) {
+            this.cache.delete(this.cache.keys().next().value);
+        }
+        this.cache.set(key, value);
+    }
+    clear() { this.cache.clear(); }
+}
+
+// Global cache persists across re-renders
+const searchCache = new LRUCache(100);
 
 // Map app names to FontAwesome icons
 const APP_ICONS = {
@@ -74,15 +106,18 @@ function useOnClickOutside(ref, handler) {
 export function GlobalSpotlight() {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
-    const [selectedIndex, setSelectedIndex] = useState(-1); // Start with nothing selected
-    const [selectedPinIndex, setSelectedPinIndex] = useState(-1); // For pin navigation
+    const [selectedIndex, setSelectedIndex] = useState(-1);
+    const [selectedPinIndex, setSelectedPinIndex] = useState(-1);
     const [pinnedItems, setPinnedItems] = useState([]);
     const [loading, setLoading] = useState(false);
     const [deepSearch, setDeepSearch] = useState(false);
     const inputRef = useRef(null);
     const containerRef = useRef(null);
 
-    const [contextItems, setContextItems] = useState([]); // AI recommended items
+    const [contextItems, setContextItems] = useState([]);
+
+    // Track search request ID to handle race conditions
+    const searchIdRef = useRef(0);
 
     // Focus input on mount and load items
     useEffect(() => {
@@ -92,6 +127,11 @@ export function GlobalSpotlight() {
         loadPinnedItems();
         loadContextItems();
 
+        // Pre-load search cache for Electron (fast subsequent searches)
+        if (window.electronAPI) {
+            refreshElectronCache();
+        }
+
         // Listen for spotlight-shown event from Electron (when Alt+K is pressed)
         if (window.electronAPI?.subscribe) {
             const unsubscribe = window.electronAPI.subscribe('spotlight-shown', () => {
@@ -100,7 +140,11 @@ export function GlobalSpotlight() {
                 setResults([]);
                 setSelectedIndex(-1);
                 setSelectedPinIndex(-1);
-                loadContextItems(); // Refresh context on show
+
+                // Refresh search cache (non-blocking)
+                refreshElectronCache();
+                loadContextItems();
+
                 if (inputRef.current) {
                     inputRef.current.focus();
                     inputRef.current.select();
@@ -127,7 +171,6 @@ export function GlobalSpotlight() {
             }
 
             // 2. Get Active/Recent Tabs from Electron (if possible) specific to current workflow
-            // For now, we'll try to get tabs if available
             if (window.electronAPI?.sendMessage) {
                 try {
                     const tabsResp = await window.electronAPI.sendMessage({ type: 'SEARCH_TABS', query: '' });
@@ -221,79 +264,91 @@ export function GlobalSpotlight() {
         savePinnedItems(newPins);
     };
 
-    // Handle Search
+    // ==========================================
+    // OPTIMIZED SEARCH with caching & race handling
+    // ==========================================
     useEffect(() => {
-        const performSearch = async () => {
-            if (!query.trim()) {
-                setResults([]);
-                setSelectedIndex(-1);
-                // Don't reset pin selection when clearing query
-                return;
-            }
-            // Reset pin selection when searching
-            setSelectedPinIndex(-1);
-            setLoading(true);
+        const trimmedQuery = query.trim();
+
+        if (!trimmedQuery) {
+            setResults([]);
+            setSelectedIndex(-1);
+            return;
+        }
+
+        // Reset pin selection when searching
+        setSelectedPinIndex(-1);
+
+        // Check cache first for instant results
+        const cacheKey = trimmedQuery.toLowerCase();
+        const cached = searchCache.get(cacheKey);
+        if (cached) {
+            setResults(cached);
+            setSelectedIndex(-1);
+            // Still fetch fresh results in background for longer queries
+            if (trimmedQuery.length < 3) return;
+        }
+
+        // Increment search ID to track this request
+        const currentSearchId = ++searchIdRef.current;
+
+        // Short debounce - 50ms for fast typing, 0ms if we have cache
+        const debounceMs = cached ? 100 : 50;
+
+        const timeoutId = setTimeout(async () => {
+            // Check if this search is still relevant
+            if (searchIdRef.current !== currentSearchId) return;
+
+            // Only show loading if no cached results
+            if (!cached) setLoading(true);
+
             try {
-                // Mock Deep Search Delay
+                // Determine search type and run search
+                // In Electron: quickSearch uses in-memory cache (includes apps, tabs, workspaces)
+                // In Chrome: quickSearch uses local index or IPC fallback
+                const isNaturalLanguage = isNaturalLanguageQuery(trimmedQuery);
+                let searchResults = isNaturalLanguage
+                    ? await naturalLanguageSearch(trimmedQuery, 15)
+                    : await quickSearch(trimmedQuery, 15);
+
+                // Check if still relevant (user may have typed more)
+                if (searchIdRef.current !== currentSearchId) return;
+
+                // Filter out commands
+                searchResults = (searchResults || []).filter(r => r.type !== 'command');
+
+                // Deep search enhancement
                 if (deepSearch) {
-                    await new Promise(r => setTimeout(r, 1500));
-                }
-                let searchResults;
-                const isNaturalLanguage = isNaturalLanguageQuery(query);
+                    await new Promise(r => setTimeout(r, 800));
+                    if (searchIdRef.current !== currentSearchId) return;
 
-                console.log('[GlobalSpotlight] Searching:', { query, isNaturalLanguage });
-
-                if (isNaturalLanguage) {
-                    searchResults = await naturalLanguageSearch(query, 12);
-                } else {
-                    searchResults = await quickSearch(query, 12);
-                }
-
-                // Filter out command type results (as per footerBar.js logic)
-                if (searchResults) {
-                    searchResults = searchResults.filter(r => r.type !== 'command');
-                }
-
-                // Search OS apps (Electron only)
-                if (window.electronAPI?.sendMessage && query.length >= 2) {
-                    try {
-                        const appResponse = await window.electronAPI.sendMessage({
-                            type: 'SEARCH_APPS',
-                            query
-                        });
-                        if (appResponse?.results?.length > 0) {
-                            // Add app results at the beginning
-                            searchResults = [...appResponse.results, ...(searchResults || [])];
-                        }
-                    } catch (e) {
-                        console.warn('[GlobalSpotlight] App search failed:', e);
-                    }
-                }
-
-                // Enhance results with mock deep search data if enabled
-                if (deepSearch) {
                     searchResults.unshift({
                         id: 'deep-search-result',
-                        title: `Deep Analysis: ${query}`,
+                        title: `Deep Analysis: ${trimmedQuery}`,
                         description: 'Generated comprehensive insight from 12 sources...',
                         type: 'ai',
                         icon: '✨'
                     });
                 }
 
-                setResults(searchResults || []);
-                // Reset selection when results change
-                setSelectedIndex(-1);
-            } catch (err) {
-                console.error('Search failed:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
+                // Cache results
+                searchCache.set(cacheKey, searchResults);
 
-        const timeoutId = setTimeout(performSearch, 150);
+                // Update UI
+                setResults(searchResults);
+                setSelectedIndex(-1);
+
+            } catch (err) {
+                console.error('[Spotlight] Search failed:', err);
+            } finally {
+                if (searchIdRef.current === currentSearchId) {
+                    setLoading(false);
+                }
+            }
+        }, debounceMs);
+
         return () => clearTimeout(timeoutId);
-    }, [query]);
+    }, [query, deepSearch]);
 
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
@@ -621,15 +676,6 @@ export function GlobalSpotlight() {
                         )}
                     </div>
                 </div>
-
-                {/* AI Actions - REMOVED per user request */}
-                {/* <div className="spotlight-ai-actions">
-                    <button className="spotlight-ai-btn" onClick={handleSummarise}>
-                        <div className="btn-shine"></div>
-                        <span style={{ fontSize: 16 }}>✨</span>
-                        <span>Summarise Page</span>
-                    </button>
-                </div> */}
 
                 {/* Results */}
                 {results.length > 0 && (

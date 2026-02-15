@@ -21,6 +21,10 @@ export default defineConfig(({ mode }) => {
         strictPort: true,
         hmr: {
           port: 5173,
+          clientPort: 5173,
+        },
+        watch: {
+          usePolling: true,
         },
       },
       build: {
@@ -44,7 +48,7 @@ export default defineConfig(({ mode }) => {
         manifest,
         // Configure CSP for Firebase and localhost sync
         contentSecurityPolicy: {
-          'extension_pages': "script-src 'self' 'wasm-unsafe-eval' http://localhost:* http://127.0.0.1:*; object-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com https://*.google.com https://identitytoolkit.googleapis.com http://localhost:* http://127.0.0.1:* wss://localhost:* ws://localhost:* ws://127.0.0.1:*"
+          'extension_pages': "script-src 'self' 'wasm-unsafe-eval' http://localhost:5173; object-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com https://*.google.com https://identitytoolkit.googleapis.com http://localhost:* http://127.0.0.1:* wss://localhost:* ws://localhost:* ws://127.0.0.1:*"
         }
       }),
       react(),
@@ -54,6 +58,7 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       hmr: {
         port: 5173,
+        clientPort: 5173,
       },
     },
     build: {
