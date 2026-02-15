@@ -95,8 +95,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         try {
           await chrome.tabs.sendMessage(tab.id, {
             type: info.menuItemId === 'cooldesk-highlight' ? 'COOLDESK_HIGHLIGHT' :
-                  info.menuItemId === 'cooldesk-scrape-links' ? 'COOLDESK_SCRAPE_LINKS' :
-                  info.menuItemId === 'cooldesk-sticky-note' ? 'COOLDESK_STICKY_NOTE' :
+              info.menuItemId === 'cooldesk-scrape-links' ? 'COOLDESK_SCRAPE_LINKS' :
+                info.menuItemId === 'cooldesk-sticky-note' ? 'COOLDESK_STICKY_NOTE' :
                   'COOLDESK_ADD_TO_WORKSPACE',
             selectionText: info.selectionText,
             pageUrl: info.pageUrl,
@@ -457,6 +457,7 @@ async function main() {
 
   // Initialize Sync Orchestrator
   try {
+    console.log('[Background] Attempting to initialize Sync Orchestrator...');
     syncOrchestrator.init();
   } catch (e) {
     console.error('[Background] Error initializing Sync Orchestrator:', e);

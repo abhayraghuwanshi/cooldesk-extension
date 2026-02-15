@@ -302,10 +302,38 @@ async function searchWorkspacesFallback(query) {
   }
 }
 
-function searchTabsFallback(query) {
+async function searchTabsFallback(query) {
+  // Electron Mode
+  if (window.electronAPI && window.electronAPI.invoke) {
+    try {
+      const tabs = await window.electronAPI.invoke('sync:get-tabs');
+      if (!Array.isArray(tabs)) return [];
+
+      return tabs.filter(t => {
+        const q = query.toLowerCase();
+        return (t.title && t.title.toLowerCase().includes(q)) ||
+          (t.url && t.url.toLowerCase().includes(q));
+      }).map(t => ({
+        id: t.id,
+        title: t.title,
+        url: t.url,
+        description: 'Active Tab',
+        type: 'tab',
+        icon: t.favIconUrl || '🔵',
+        favicon: t.favIconUrl,
+        score: Math.max(fuzzyScore(t.title, query), fuzzyScore(t.url, query))
+      }));
+    } catch (e) {
+      console.warn('[SearchService] Electron tab search failed', e);
+      return [];
+    }
+  }
+
+  // Extension Mode
   if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
     return new Promise((resolve) => {
       let responded = false;
+      // Use a wrapping promise to handle the message passing
       chrome.runtime.sendMessage({ type: 'SEARCH_TABS', query }, (response) => {
         if (responded) return;
         responded = true;

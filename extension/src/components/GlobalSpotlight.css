@@ -99,6 +99,81 @@
   font-weight: 300;
 }
 
+/* Context / AI Section */
+.spotlight-context {
+  padding: 0 12px 12px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 8px;
+}
+
+.context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  /* 2 items per row for more detail */
+  gap: 8px;
+}
+
+.context-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  /* Slightly distinct from pins */
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  text-align: left;
+  height: auto;
+  /* Allow auto height for details */
+  min-height: 48px;
+}
+
+.context-item:hover,
+.context-item.pin-selected {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.context-item .pin-icon {
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 0;
+  margin-right: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.context-item-details {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+}
+
+.context-item .pin-label {
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-item-desc {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Pinned Section */
 .spotlight-pins {
   padding: 14px 20px 8px;

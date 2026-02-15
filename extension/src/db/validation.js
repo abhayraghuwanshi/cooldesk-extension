@@ -396,6 +396,9 @@ export const VALIDATION_SCHEMAS = {
         },
         data: {
             [ValidationRules.TYPE]: 'object'
+        },
+        usedFallback: {
+            [ValidationRules.TYPE]: 'boolean'
         }
     },
 

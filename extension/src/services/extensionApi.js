@@ -103,10 +103,11 @@ export async function enqueueOpenInChrome(url) {
 }
 
 // --- Host Tabs helpers ---
-export async function setHostTabs(tabs) {
+export async function setHostTabs(data) {
   if (!isHostSyncEnabled()) return { ok: false, error: 'Host sync disabled' };
   try {
-    const payload = Array.isArray(tabs) ? tabs : (tabs?.tabs || []);
+    // data can be [tabs] or { deviceId, tabs }
+    const payload = Array.isArray(data) ? data : data;
     const res = await fetch(`${getHostUrl()}/tabs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

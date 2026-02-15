@@ -47,28 +47,38 @@ export function TabManagement() {
     if (!initialLoadDone.current) setTabsLoading(true);
 
     try {
-      if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
-        const allTabs = await chrome.tabs.query({});
+      let allTabs = [];
 
-        // Sort based on user preference
-        let sortedTabs;
-        if (smartSortEnabled) {
-          // Smart sort: Usage-based scoring
-          sortedTabs = await scoreAndSortTabs(allTabs || []);
-        } else {
-          // Default sort: Active tabs first, then by windowId + index
-          sortedTabs = (allTabs || []).filter(t => t && t.id).sort((a, b) => {
-            if (a?.active && !b?.active) return -1;
-            if (!a?.active && b?.active) return 1;
-            if ((a?.windowId || 0) !== (b?.windowId || 0)) return (a?.windowId || 0) - (b?.windowId || 0);
-            return (a?.index || 0) - (b?.index || 0);
-          });
-        }
+      // 1. Electron App Mode: Fetch from Main Process (Synced Tabs)
+      if (window.electronAPI && window.electronAPI.getTabs) {
+        allTabs = await window.electronAPI.getTabs();
+        console.log('[TabManagement] Fetched tabs from Electron. Count:', allTabs?.length, 'Head:', allTabs?.slice(0, 2));
+      }
+      // 2. Extension Mode: Fetch from Chrome API
+      else if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
+        allTabs = await chrome.tabs.query({});
+      }
 
-        setTabs(sortedTabs);
-        initialLoadDone.current = true;
+      // Sort based on user preference
+      let sortedTabs;
+      if (smartSortEnabled) {
+        // Smart sort: Usage-based scoring
+        sortedTabs = await scoreAndSortTabs(allTabs || []);
+      } else {
+        // Default sort: Active tabs first, then by windowId + index
+        sortedTabs = (allTabs || []).filter(t => t && t.id).sort((a, b) => {
+          if (a?.active && !b?.active) return -1;
+          if (!a?.active && b?.active) return 1;
+          if ((a?.windowId || 0) !== (b?.windowId || 0)) return (a?.windowId || 0) - (b?.windowId || 0);
+          return (a?.index || 0) - (b?.index || 0);
+        });
+      }
 
-        // Also fetch real-time activity data
+      setTabs(sortedTabs);
+      initialLoadDone.current = true;
+
+      // Also fetch real-time activity data
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ type: 'GET_TAB_ACTIVITY' }, (response) => {
           if (response?.ok) {
             setTabActivity(response.activityData || {});
@@ -92,31 +102,52 @@ export function TabManagement() {
   useEffect(() => {
     refreshTabs();
 
-    // Add listeners for real-time updates
-    const events = [
-      chrome?.tabs?.onCreated,
-      chrome?.tabs?.onUpdated,
-      chrome?.tabs?.onRemoved,
-      chrome?.tabs?.onActivated,
-      chrome?.tabs?.onMoved,
-      chrome?.tabs?.onDetached,
-      chrome?.tabs?.onAttached
-    ];
+    // Extension Mode: Chrome Event Listeners
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+      const events = [
+        chrome.tabs.onCreated,
+        chrome.tabs.onUpdated,
+        chrome.tabs.onRemoved,
+        chrome.tabs.onActivated,
+        chrome.tabs.onMoved,
+        chrome.tabs.onDetached,
+        chrome.tabs.onAttached
+      ];
 
-    // Use debounced refresh for all events
-    events.forEach(event => {
-      if (event?.addListener) {
-        event.addListener(debouncedRefresh);
-      }
-    });
-
-    return () => {
       events.forEach(event => {
-        if (event?.removeListener) {
-          event.removeListener(debouncedRefresh);
+        if (event?.addListener) {
+          event.addListener(debouncedRefresh);
         }
       });
-    };
+
+      return () => {
+        events.forEach(event => {
+          if (event?.removeListener) {
+            event.removeListener(debouncedRefresh);
+          }
+        });
+      };
+    }
+
+    // Electron Mode: IPC Event Listener
+    if (window.electronAPI && window.electronAPI.subscribe) {
+      // Listen for 'tabs-updated' from main process
+      // Preload 'subscribe' strips the event object and passes data directly
+      const removeListener = window.electronAPI.subscribe('tabs-updated', (updatedTabs) => {
+        console.log('[TabManagement] Received tabs-updated event', updatedTabs);
+        if (Array.isArray(updatedTabs)) {
+          // We can set directly or trigger a refresh (refresh might be safer for sorting)
+          // But since refreshTabs calls invoke('sync:get-tabs'), it's fine.
+          // However, to avoid double fetching, we can just set state if we sort it here.
+          // For consistency, let's just trigger debouncedRefresh which fetches fresh sorted data.
+          debouncedRefresh();
+        }
+      });
+
+      return () => {
+        if (removeListener) removeListener();
+      };
+    }
   }, [refreshTabs, debouncedRefresh]);
 
 

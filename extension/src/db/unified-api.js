@@ -1585,9 +1585,9 @@ function generateId() {
 
 export async function getTimeSeriesDataRange(startTime, endTime) {
     const db = await getUnifiedDB();
-    const transaction = db.transaction(['activity_timeseries'], 'readonly'); // Ensure store name matches your schema
-    const store = transaction.objectStore('activity_timeseries');
-    const index = store.index('timestamp'); // Ensure you have an index on 'timestamp'
+    const transaction = db.transaction([DB_CONFIG.STORES.ACTIVITY_SERIES], 'readonly');
+    const store = transaction.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES);
+    const index = store.index('by_timestamp');
     const range = IDBKeyRange.bound(startTime, endTime);
 
     return new Promise((resolve, reject) => {

@@ -56,7 +56,7 @@ import {
     setHostUrls,
     setHostWorkspaces
 } from './extensionApi';
-import { isHostSyncEnabled, loadSyncConfig } from './syncConfig';
+import { getDeviceId, isHostSyncEnabled, loadSyncConfig } from './syncConfig';
 import { syncWebSocket } from './syncWebSocket';
 
 class SyncOrchestrator {
@@ -202,6 +202,7 @@ class SyncOrchestrator {
      * Extension: Use HTTP/WebSocket for sync
      */
     async initExtensionSync() {
+        console.log('[SyncOrchestrator] Setting up Extension WebSocket sync (initExtensionSync called)');
         console.log('[SyncOrchestrator] Setting up Extension WebSocket sync');
 
         // Connect to WebSocket
@@ -247,6 +248,12 @@ class SyncOrchestrator {
             // Perform full sync to ensure local data is merged and pushed to host
             console.log('[SyncOrchestrator] Connection established, starting full sync...');
             this.fullSync().catch(err => console.error('[SyncOrchestrator] Initial full sync failed:', err));
+
+            // Also trigger immediate tab sync since we're now connected
+            if (isExtension()) {
+                console.log('[SyncOrchestrator] Triggering initial tab sync after WS connection...');
+                setTimeout(() => this.syncLocalTabs(), 500); // Small delay to let fullSync complete first
+            }
         }
 
         // Periodic sync as fallback (every 60 seconds - reduced from 30s for performance)
@@ -396,6 +403,7 @@ class SyncOrchestrator {
      * Sync local tabs to remote
      */
     async syncLocalTabs() {
+        console.log('[SyncOrchestrator] syncLocalTabs called. HostSyncEnabled:', isHostSyncEnabled(), 'isExtension:', isExtension());
         if (!isHostSyncEnabled()) return;
         // Only sync tabs from extension context, not Electron
         if (!isExtension()) return;
@@ -599,6 +607,14 @@ class SyncOrchestrator {
      * Push local changes to remote
      */
     async pushChanges(type, data) {
+        // Special case for tabs: we want to segment them by device
+        let payload = data;
+        if (type === 'tabs') {
+            const deviceId = await getDeviceId();
+            console.log('[SyncOrchestrator] Pushing tabs for device:', deviceId, 'Count:', data?.length);
+            payload = { deviceId, tabs: data };
+        }
+
         // Map type to API methods
         const apiMap = {
             'workspaces': { ipc: 'setWorkspaces', ws: 'pushWorkspaces', http: setHostWorkspaces },
@@ -623,14 +639,19 @@ class SyncOrchestrator {
 
         if (isElectronApp() && window.electronAPI) {
             if (window.electronAPI[config.ipc]) {
-                return window.electronAPI[config.ipc](data);
+                return window.electronAPI[config.ipc](payload);
             }
         } else if (isExtension() && isHostSyncEnabled()) {
+            // Try WebSocket first, fall back to HTTP
             if (syncWebSocket.isConnected() && syncWebSocket[config.ws]) {
-                return syncWebSocket[config.ws](data) ? { ok: true } : { ok: false, error: 'WS send failed' };
+                const sent = syncWebSocket[config.ws](payload);
+                console.log(`[SyncOrchestrator] Pushed ${type} via WebSocket:`, sent);
+                return sent ? { ok: true } : { ok: false, error: 'WS send failed' };
             }
+            // Fall back to HTTP if WebSocket not connected
             if (config.http) {
-                return config.http(data);
+                console.log(`[SyncOrchestrator] Pushing ${type} via HTTP (WS not connected)`);
+                return config.http(payload);
             }
         }
 

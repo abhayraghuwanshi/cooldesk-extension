@@ -82,12 +82,15 @@ export function GlobalSpotlight() {
     const inputRef = useRef(null);
     const containerRef = useRef(null);
 
-    // Focus input on mount and load pins
+    const [contextItems, setContextItems] = useState([]); // AI recommended items
+
+    // Focus input on mount and load items
     useEffect(() => {
         if (inputRef.current) {
             inputRef.current.focus();
         }
         loadPinnedItems();
+        loadContextItems();
 
         // Listen for spotlight-shown event from Electron (when Alt+K is pressed)
         if (window.electronAPI?.subscribe) {
@@ -97,6 +100,7 @@ export function GlobalSpotlight() {
                 setResults([]);
                 setSelectedIndex(-1);
                 setSelectedPinIndex(-1);
+                loadContextItems(); // Refresh context on show
                 if (inputRef.current) {
                     inputRef.current.focus();
                     inputRef.current.select();
@@ -105,6 +109,56 @@ export function GlobalSpotlight() {
             return () => unsubscribe();
         }
     }, []);
+
+    // Load AI Context Items (Workflow Recommendation)
+    const loadContextItems = async () => {
+        try {
+            const items = [];
+
+            // 1. Get Running Apps (limit to 3 relevant ones)
+            if (window.electronAPI?.getRunningApps) {
+                const apps = await window.electronAPI.getRunningApps();
+                // Filter for "dev" or "productivity" apps usually
+                const relevantApps = apps
+                    .filter(a => !['explorer', 'searchhost', 'taskmgr'].includes(a.name.toLowerCase()))
+                    .slice(0, 3)
+                    .map(a => ({ ...a, type: 'app', description: 'Active App' }));
+                items.push(...relevantApps);
+            }
+
+            // 2. Get Active/Recent Tabs from Electron (if possible) specific to current workflow
+            // For now, we'll try to get tabs if available
+            if (window.electronAPI?.sendMessage) {
+                try {
+                    const tabsResp = await window.electronAPI.sendMessage({ type: 'SEARCH_TABS', query: '' });
+                    if (tabsResp?.results) {
+                        // Heuristic: Pick 2-3 tabs that look like "work" (docs, git, local)
+                        const workTabs = tabsResp.results
+                            .filter(t =>
+                                t.url.includes('github') ||
+                                t.url.includes('docs') ||
+                                t.url.includes('localhost') ||
+                                t.url.includes('figma') ||
+                                t.url.includes('jira')
+                            )
+                            .slice(0, 3)
+                            .map(t => ({ ...t, type: 'tab', description: 'Recommended Tab' }));
+
+                        if (workTabs.length > 0) {
+                            items.push(...workTabs);
+                        } else {
+                            // Fallback to just recent tabs
+                            items.push(...tabsResp.results.slice(0, 3).map(t => ({ ...t, type: 'tab', description: 'Recent Tab' })));
+                        }
+                    }
+                } catch (e) { console.warn('Failed to fetch tabs for context', e); }
+            }
+
+            setContextItems(items.slice(0, 6)); // Cap at 6 items
+        } catch (e) {
+            console.warn('Failed to load context items', e);
+        }
+    };
 
     // Load Pinned Items
     const loadPinnedItems = async () => {
@@ -497,6 +551,39 @@ export function GlobalSpotlight() {
                         ×
                     </button>
                 </div>
+
+                {/* Context Section (AI Recommended) */}
+                {!query.trim() && contextItems.length > 0 && (
+                    <div className="spotlight-context">
+                        <div className="spotlight-pins-header">
+                            <span className="spotlight-pins-title">✨ AI Suggested Workflow</span>
+                        </div>
+                        <div className="spotlight-pins-grid context-grid">
+                            {contextItems.map((item, i) => (
+                                <div
+                                    key={`ctx-${i}`}
+                                    className={`pin-item context-item ${item.type === 'app' ? 'pin-app' : ''} ${i + pinnedItems.length === selectedPinIndex ? 'pin-selected' : ''}`}
+                                    onClick={() => handleSelect(item)}
+                                    onMouseEnter={() => setSelectedPinIndex(i + pinnedItems.length)}
+                                >
+                                    <div className="pin-icon">
+                                        {item.type === 'app' ? (
+                                            <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
+                                        ) : item.favicon ? (
+                                            <img src={item.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '🔗' }} alt="" />
+                                        ) : (
+                                            <FontAwesomeIcon icon={item.type === 'workspace' ? faFolder : faGlobe} />
+                                        )}
+                                    </div>
+                                    <div className="context-item-details">
+                                        <span className="pin-label">{item.title || item.name}</span>
+                                        <span className="context-item-desc">{item.description || item.category || 'Suggested'}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Pinned Section - Always visible if empty or matches logic */}
                 <div className="spotlight-pins">

@@ -281,10 +281,13 @@ class SyncWebSocket {
 
     /**
      * Push tabs
+     * @param {object|Array} tabsPayload - Either { deviceId, tabs: [...] } or legacy array
      */
-    pushTabs(tabs) {
-        console.log(`[SyncWS] Pushing ${tabs?.length} tabs`);
-        return this.send('push-tabs', tabs);
+    pushTabs(tabsPayload) {
+        const count = Array.isArray(tabsPayload) ? tabsPayload.length : tabsPayload?.tabs?.length;
+        const deviceId = Array.isArray(tabsPayload) ? 'unknown' : tabsPayload?.deviceId;
+        console.log(`[SyncWS] Pushing ${count} tabs from device: ${deviceId}`);
+        return this.send('push-tabs', tabsPayload);
     }
 
     /**

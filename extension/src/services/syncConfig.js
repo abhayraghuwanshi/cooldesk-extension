@@ -151,3 +151,68 @@ export async function toggleHostSync(enabled = true) {
 
 // Initialize config on import
 loadSyncConfig();
+
+/**
+ * Detect browser type from user agent
+ */
+function detectBrowser() {
+  if (typeof navigator === 'undefined') return 'unknown';
+  const ua = navigator.userAgent.toLowerCase();
+
+  // Order matters - Edge includes "chrome" in UA, so check Edge first
+  if (ua.includes('edg/')) return 'edge';
+  if (ua.includes('opr/') || ua.includes('opera')) return 'opera';
+  if (ua.includes('brave')) return 'brave';
+  if (ua.includes('vivaldi')) return 'vivaldi';
+  if (ua.includes('firefox')) return 'firefox';
+  if (ua.includes('safari') && !ua.includes('chrome')) return 'safari';
+  if (ua.includes('chrome')) return 'chrome';
+  return 'browser';
+}
+
+/**
+ * Get or generate a unique device ID for this extension instance
+ * Format: {browser}-{randomId} e.g., "chrome-abc123def456" or "edge-xyz789"
+ */
+let _deviceId = null;
+export async function getDeviceId() {
+  if (_deviceId) return _deviceId;
+
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      const stored = await chrome.storage.local.get(['deviceId']);
+      if (stored.deviceId) {
+        // Migrate old "ext-*" format to new browser-prefixed format
+        if (stored.deviceId.startsWith('ext-')) {
+          const browser = detectBrowser();
+          const oldRandom = stored.deviceId.substring(4); // Remove 'ext-' prefix
+          _deviceId = `${browser}-${oldRandom}`;
+          await chrome.storage.local.set({ deviceId: _deviceId });
+          console.log('[SyncConfig] Migrated deviceId from', stored.deviceId, 'to', _deviceId);
+        } else {
+          _deviceId = stored.deviceId;
+        }
+      } else {
+        // Generate new ID with browser prefix for better identification
+        const browser = detectBrowser();
+        _deviceId = `${browser}-${Math.random().toString(36).substring(2, 15)}`;
+        await chrome.storage.local.set({ deviceId: _deviceId });
+        console.log('[SyncConfig] Generated new deviceId:', _deviceId);
+      }
+    } else {
+      // Fallback for non-extension env (e.g. electron renderer test)
+      if (!_deviceId) {
+        const browser = detectBrowser();
+        _deviceId = `${browser}-dev-${Math.random().toString(36).substring(2, 15)}`;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to get device ID:', e);
+    // Fallback ephemeral ID
+    if (!_deviceId) {
+      const browser = detectBrowser();
+      _deviceId = `${browser}-temp-${Math.random().toString(36).substring(2, 15)}`;
+    }
+  }
+  return _deviceId;
+}

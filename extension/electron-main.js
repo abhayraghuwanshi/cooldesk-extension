@@ -620,9 +620,35 @@ let syncData = {
     dailyMemory: [],    // Added
     uiState: {},
     dashboard: {},
-    tabs: [],
+    // Tabs stored per device: Map<deviceId, Tab[]>
+    // Note: This Map is NOT persisted to disk (tabs are transient)
+    // It's reconstructed from connected browser extensions on startup
+    deviceTabsMap: new Map(),
+    tabs: [], // Aggregated view of all device tabs
     lastUpdated: {}
 };
+
+/**
+ * Recompute aggregated tabs from deviceTabsMap
+ */
+function recomputeAggregatedTabs() {
+    // Safety check: ensure deviceTabsMap is a proper Map
+    if (!(syncData.deviceTabsMap instanceof Map)) {
+        console.warn('[Electron] deviceTabsMap was not a Map, reinitializing...');
+        syncData.deviceTabsMap = new Map();
+    }
+
+    const allTabs = [];
+    for (const [deviceId, devTabs] of syncData.deviceTabsMap.entries()) {
+        // Add deviceId to each tab for tracking
+        const tabsWithDevice = devTabs.map(t => ({ ...t, _deviceId: deviceId }));
+        allTabs.push(...tabsWithDevice);
+    }
+    syncData.tabs = allTabs;
+    syncData.lastUpdated.tabs = Date.now();
+    console.log(`[Electron] Recomputed tabs: ${allTabs.length} total from ${syncData.deviceTabsMap.size} devices`);
+    return allTabs;
+}
 
 // Load persisted data on startup
 function loadData() {
@@ -631,8 +657,14 @@ function loadData() {
             const content = readFileSync(DATA_FILE, 'utf-8');
             const loaded = JSON.parse(content);
             // Merge with default structure to ensure all keys exist
+            // BUT preserve deviceTabsMap as a Map (it's not persisted)
+            const preservedMap = syncData.deviceTabsMap;
             syncData = { ...syncData, ...loaded };
-            console.log('[Electron] Loaded sync data from disk');
+            // Restore the Map - it gets destroyed by JSON parse/spread
+            syncData.deviceTabsMap = preservedMap;
+            // Also ensure tabs array is fresh (will be populated by connected browsers)
+            syncData.tabs = [];
+            console.log('[Electron] Loaded sync data from disk (deviceTabsMap preserved as Map)');
         }
     } catch (error) {
         console.warn('[Electron] Failed to load sync data:', error);
@@ -713,11 +745,12 @@ function startHttpServer() {
     wss = new WebSocketServer({ server: httpServer });
 
     wss.on('connection', (ws) => {
-        console.log('[Electron] WebSocket client connected');
+        console.log('[Electron] WebSocket client connected. Total clients:', wss.clients.size);
 
         ws.on('message', (message) => {
             try {
                 const data = JSON.parse(message.toString());
+                console.log('[Electron WS] Received message type:', data.type);
                 handleWebSocketMessage(ws, data);
             } catch (error) {
                 console.warn('[Electron] Invalid WebSocket message:', error);
@@ -832,6 +865,24 @@ function handleGetRequest(path, url, res) {
         case '/health':
             res.writeHead(200);
             res.end(JSON.stringify({ ok: true, timestamp: Date.now() }));
+            break;
+
+        case '/debug/tabs':
+            // Debug endpoint to see tab sync status per device
+            const devicesInfo = {};
+            for (const [deviceId, tabs] of syncData.deviceTabsMap.entries()) {
+                devicesInfo[deviceId] = {
+                    count: tabs.length,
+                    sample: tabs.slice(0, 2).map(t => ({ id: t.id, title: t.title?.substring(0, 50) }))
+                };
+            }
+            res.writeHead(200);
+            res.end(JSON.stringify({
+                totalTabs: syncData.tabs.length,
+                devicesConnected: syncData.deviceTabsMap.size,
+                devices: devicesInfo,
+                lastUpdated: syncData.lastUpdated.tabs
+            }, null, 2));
             break;
 
         default:
@@ -964,9 +1015,28 @@ function handlePostRequest(path, data, res) {
             break;
 
         case '/tabs':
-            syncData.tabs = Array.isArray(data) ? data : [];
-            syncData.lastUpdated.tabs = Date.now();
-            saveData();
+            // data can be [tabs] or { deviceId, tabs }
+            let httpTabs = [];
+            let httpDeviceId = 'http-unknown';
+
+            if (Array.isArray(data)) {
+                httpTabs = data;
+            } else if (data && Array.isArray(data.tabs)) {
+                httpTabs = data.tabs;
+                httpDeviceId = data.deviceId || 'http-unknown';
+            }
+
+            console.log(`[Electron HTTP] Received tabs from device: ${httpDeviceId}, count: ${httpTabs.length}`);
+
+            // Store tabs for this device
+            syncData.deviceTabsMap.set(httpDeviceId, httpTabs);
+
+            // Recompute aggregated tabs
+            recomputeAggregatedTabs();
+
+            // We don't save tabs to disk to avoid stale sessions on restart
+            // saveData();
+
             notifyRenderer('tabs-updated', syncData.tabs);
             broadcastToClients('tabs-updated', syncData.tabs);
             res.writeHead(204);
@@ -1084,10 +1154,34 @@ function handleWebSocketMessage(ws, data) {
             break;
 
         case 'push-tabs':
-            console.log(`[Electron] Received push-tabs with ${Array.isArray(payload) ? payload.length : 'invalid'} tabs`);
-            syncData.tabs = Array.isArray(payload) ? payload : [];
-            syncData.lastUpdated.tabs = Date.now();
-            saveData(); // Optional for volatile data
+            // payload can be [tabs] or { deviceId, tabs }
+            let wsTabs = [];
+            let wsDeviceId = 'ws-unknown';
+
+            if (Array.isArray(payload)) {
+                wsTabs = payload;
+            } else if (payload && Array.isArray(payload.tabs)) {
+                wsTabs = payload.tabs;
+                wsDeviceId = payload.deviceId || 'ws-unknown';
+            }
+
+            console.log(`[Electron WS] Received push-tabs from ${wsDeviceId} with ${wsTabs.length} tabs`);
+
+            // Safety: ensure deviceTabsMap is a Map
+            if (!(syncData.deviceTabsMap instanceof Map)) {
+                console.warn('[Electron WS] deviceTabsMap was corrupted, reinitializing...');
+                syncData.deviceTabsMap = new Map();
+            }
+
+            // Store tabs for this device
+            syncData.deviceTabsMap.set(wsDeviceId, wsTabs);
+
+            // Recompute aggregated tabs
+            recomputeAggregatedTabs();
+
+            // We don't save tabs to disk to avoid stale sessions on restart
+            // saveData();
+
             notifyRenderer('tabs-updated', syncData.tabs);
             broadcastToClients('tabs-updated', syncData.tabs);
             break;
@@ -1495,6 +1589,11 @@ function createWindow() {
     // Handle window events
     mainWindow.on('closed', () => {
         mainWindow = null;
+        // Close spotlight window if it exists
+        if (spotlightWindow && !spotlightWindow.isDestroyed()) {
+            spotlightWindow.destroy();
+            spotlightWindow = null;
+        }
         // Quit the app when main window is closed (except on macOS)
         if (process.platform !== 'darwin') {
             app.quit();
@@ -1948,9 +2047,30 @@ ipcMain.handle('sync:set-dashboard', (_event, data) => {
 
 ipcMain.handle('sync:get-tabs', () => syncData.tabs);
 ipcMain.handle('sync:set-tabs', (_event, data) => {
-    syncData.tabs = Array.isArray(data) ? data : [];
-    syncData.lastUpdated.tabs = Date.now();
-    // saveData(); // Optional
+    // data should be { deviceId: '...', tabs: [...] } or just [...] (legacy)
+    let ipcTabs = [];
+    let ipcDeviceId = 'ipc-unknown';
+
+    if (Array.isArray(data)) {
+        ipcTabs = data;
+        console.log('[Electron IPC] Received legacy tab array. Count:', ipcTabs.length);
+    } else if (data && Array.isArray(data.tabs)) {
+        ipcTabs = data.tabs;
+        ipcDeviceId = data.deviceId || 'ipc-unknown';
+        console.log('[Electron IPC] Received tabs from device:', ipcDeviceId, 'Count:', ipcTabs.length);
+    }
+
+    // Store tabs for this device
+    syncData.deviceTabsMap.set(ipcDeviceId, ipcTabs);
+
+    // Recompute aggregated tabs
+    recomputeAggregatedTabs();
+
+    // We don't save tabs to disk to avoid stale sessions on restart
+    // saveData();
+
+    // Notify renderer and other clients
+    notifyRenderer('tabs-updated', syncData.tabs);
     broadcastToClients('tabs-updated', syncData.tabs);
     return { ok: true };
 });
@@ -2332,6 +2452,17 @@ app.on('before-quit', () => {
 
     // Save data before quitting
     saveData();
+
+    // Close spotlight window
+    if (spotlightWindow && !spotlightWindow.isDestroyed()) {
+        spotlightWindow.destroy();
+        spotlightWindow = null;
+    }
+
+    // Close WebSocket server
+    if (wss) {
+        wss.close();
+    }
 
     // Close HTTP server
     if (httpServer) {
