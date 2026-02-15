@@ -36,17 +36,36 @@ let mainWindow;
 function focusBrowserWindow() {
     if (process.platform !== 'win32') return Promise.resolve();
 
-    const exePath = join(__dirname, 'BrowserFocus.exe');
+    let exePath;
+    if (app.isPackaged) {
+        exePath = join(process.resourcesPath, 'BrowserFocus.exe');
+    } else {
+        exePath = join(__dirname, 'BrowserFocus.exe');
+    }
+
+    // console.log('[Electron] Attempting to focus browser using:', exePath);
 
     return new Promise((resolve) => {
-        exec(`"${exePath}"`, { windowsHide: true, timeout: 1000 }, (error) => {
+        // Check existence first
+        if (!existsSync(exePath)) {
+            console.warn('[Electron] BrowserFocus.exe not found at:', exePath);
+            resolve();
+            return;
+        }
+
+        exec(`"${exePath}"`, { windowsHide: true, timeout: 2000 }, (error, stdout, stderr) => {
             if (error) {
                 console.warn('[Electron] Focus browser failed:', error.message);
+                if (stderr) console.warn('[Electron] Stderr:', stderr);
+            } else {
+                // console.log('[Electron] Focus browser success');
             }
             resolve();
         });
     });
 }
+// ...
+
 
 // ==========================================
 // CROSS-PLATFORM APP DISCOVERY
@@ -108,6 +127,137 @@ async function getRunningAppsWindows() {
         return [];
     }
 }
+
+/**
+ * Get the currently active window (cross-platform)
+ */
+async function getActiveWindow() {
+    const platform = process.platform;
+    try {
+        if (platform === 'win32') {
+            return await getActiveWindowWindows();
+        } else if (platform === 'darwin') {
+            // macOS implementation can be added later
+            return null;
+        } else {
+            // Linux implementation can be added later
+            return null;
+        }
+    } catch (e) {
+        console.warn('[Electron] getActiveWindow failed:', e.message);
+        return null;
+    }
+}
+
+/**
+ * Windows: Get active window using PowerShell
+ */
+async function getActiveWindowWindows() {
+    const psScript = `
+        $code = @'
+        [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] public static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
+        '@
+        $Win32 = Add-Type -MemberDefinition $code -Name "Win32" -Namespace Win32 -PassThru
+        $hwnd = $Win32::GetForegroundWindow()
+        $pidVar = 0
+        $Win32::GetWindowThreadProcessId($hwnd, [ref]$pidVar)
+        $process = Get-Process -Id $pidVar
+        $obj = @{
+            name = $process.Name
+            title = $process.MainWindowTitle
+            pid = $process.Id
+            path = $process.Path
+        }
+        $obj | ConvertTo-Json
+    `;
+
+    const b64Script = Buffer.from(psScript, 'utf16le').toString('base64');
+
+    try {
+        const { stdout } = await execAsync(`powershell -NoProfile -EncodedCommand ${b64Script}`, { windowsHide: true });
+        if (!stdout || stdout.trim() === '') return null;
+        return JSON.parse(stdout);
+    } catch (e) {
+        return null;
+    }
+}
+
+// Track last active app to calculate duration
+let lastActiveApp = null;
+let lastActiveTime = Date.now();
+const TRACKING_INTERVAL_MS = 5000;
+
+/**
+ * Start tracking desktop application usage
+ */
+function startAppActivityTracking() {
+    console.log('[Electron] Starting desktop activity tracking...');
+
+    setInterval(async () => {
+        const now = Date.now();
+        const activeWindow = await getActiveWindow();
+
+        if (activeWindow) {
+            const { name, title, path } = activeWindow;
+
+            // Filter out our own app and obvious system/browser noise if needed
+            // But user specifically wants to track apps, so we keep most.
+            // Maybe filter "Electron" if it's us? 
+            // For now, let's track everything that looks like an app.
+
+            // If the active app has changed, or if it's the same app but we need to accumulate time?
+            // Actually, best approach for a 5s interval:
+            // Just look at WHAT IS ACTIVE NOW and add 5s to it. Simple integration.
+
+            // However, we want to respect "idle" time. 
+            // For MVP, let's assume if it's the foreground window, it's active.
+
+            // Add activity event to syncData
+            // We use the 'activity' array in syncData which syncs to extension
+
+            const appActivity = {
+                id: `activity-${now}`,
+                url: path || name, // Use path or name as the "URL" identifier for apps
+                title: title || name,
+                time: TRACKING_INTERVAL_MS, // 5 seconds
+                timestamp: now,
+                type: 'app',
+                favicon: '', // We could try to get icon later
+                appName: name
+            };
+
+            // Avoid double counting if the active app IS the browser (Chrome/Edge)
+            // The extension is already tracking browser tabs.
+            // Common browser process names: chrome, msedge, firefox, brave
+            const browserNames = ['chrome', 'msedge', 'firefox', 'brave', 'opera'];
+            if (browserNames.includes(name.toLowerCase())) {
+                // Skip, extension handles this
+                return;
+            }
+
+            // Push to syncData
+            syncData.activity.push(appActivity);
+
+            // Keep array size manageable
+            if (syncData.activity.length > 1000) {
+                syncData.activity = syncData.activity.slice(-1000);
+            }
+
+            syncData.lastUpdated.activity = now;
+
+            // Persist
+            saveData();
+
+            // Notify renderers
+            notifyRenderer('activity-updated', [appActivity]);
+            broadcastToClients('activity-updated', [appActivity]);
+
+            // console.log(`[Electron] Tracked app: ${name} (${TRACKING_INTERVAL_MS}ms)`);
+        }
+    }, TRACKING_INTERVAL_MS);
+}
+
 
 /**
  * macOS: Get running apps using AppleScript
@@ -369,7 +519,12 @@ async function focusAppWindow(pid) {
  * This is 6-10x faster than PowerShell Add-Type approach
  */
 async function focusAppWindowWindows(pid) {
-    const exePath = join(__dirname, 'AppFocus.exe');
+    let exePath;
+    if (app.isPackaged) {
+        exePath = join(process.resourcesPath, 'AppFocus.exe');
+    } else {
+        exePath = join(__dirname, 'AppFocus.exe');
+    }
 
     try {
         await execAsync(`"${exePath}" ${pid}`, {
@@ -1648,22 +1803,16 @@ ipcMain.handle('runtime:send-message', async (_event, message) => {
                 spotlightWindow.hide();
             }
 
-            // On Windows, we need to bypass the foreground focus restriction
-            // by simulating Alt key press and calling SetForegroundWindow on browser
+            // Always broadcast to extensions first - they can handle window focus too
+            broadcastToClients('jump-to-tab', {
+                tabId: message.tabId,
+                windowId: message.windowId
+            });
+
+            // On Windows, also try to force focus from Electron side as backup
             if (process.platform === 'win32') {
-                // Focus the browser window directly using Windows API
-                focusBrowserWindow().then(() => {
-                    // Also broadcast to browser extension to activate the specific tab
-                    broadcastToClients('jump-to-tab', {
-                        tabId: message.tabId,
-                        windowId: message.windowId
-                    });
-                });
-            } else {
-                // Non-Windows: just broadcast immediately
-                broadcastToClients('jump-to-tab', {
-                    tabId: message.tabId,
-                    windowId: message.windowId
+                focusBrowserWindow().catch(err => {
+                    console.warn('[Electron] focusBrowserWindow failed:', err);
                 });
             }
 
@@ -2135,6 +2284,9 @@ function registerSpotlightShortcut() {
 app.whenReady().then(() => {
     // Load persisted data
     loadData();
+
+    // Start desktop activity tracking
+    startAppActivityTracking();
 
     // Start HTTP server for extension sync
     startHttpServer();

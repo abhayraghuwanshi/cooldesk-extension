@@ -3,6 +3,8 @@
   "productName": "CoolDesk",
   "private": true,
   "version": "1.0.0",
+  "description": "CoolDesk Desktop App",
+  "author": "CoolDesk Team",
   "type": "module",
   "main": "electron-main.js",
   "scripts": {
@@ -85,7 +87,9 @@
       {
         "from": "node_modules/node-llama-cpp",
         "to": "node_modules/node-llama-cpp"
-      }
+      },
+      "BrowserFocus.exe",
+      "AppFocus.exe"
     ],
     "asarUnpack": [
       "node_modules/node-llama-cpp/**/*"

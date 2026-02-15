@@ -984,7 +984,7 @@ export const saveUIState = withErrorHandling(async (uiStateData, options = {}) =
     operation: 'saveUIState',
     severity: ErrorSeverity.MEDIUM
 })
-export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData) => {
+export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData, options = {}) => {
     console.log('[DB Debug] putActivityTimeSeriesEvent called with:', {
         id: eventData.id,
         url: eventData.url,
@@ -1018,6 +1018,18 @@ export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData) =>
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
             console.log('[DB Debug] Successfully stored activity event:', event.id)
+
+            // Notify listeners
+            if (!options.skipNotify) {
+                try {
+                    const bc = new BroadcastChannel('activity_db_changes')
+                    bc.postMessage({ type: 'activityChanged', data: event })
+                    bc.close()
+                } catch (e) {
+                    console.error('[DB Debug] Failed to broadcast activity change:', e)
+                }
+            }
+
             resolve(event)
         }
         request.onerror = () => {

@@ -222,8 +222,10 @@ class SyncOrchestrator {
                 'daily-memory': (data) => this.handleRemoteDailyMemoryUpdate(data),
                 'ui-state': (data) => this.handleRemoteUiStateUpdate(data),
                 'dashboard': (data) => this.handleRemoteDashboardUpdate(data),
+                'activity': (data) => this.handleRemoteActivityUpdate(data),
                 'sync-state': (data) => this.handleSyncState(data),
-                'sync-complete': (data) => this.notifyListeners('sync-complete', data)
+                'sync-complete': (data) => this.notifyListeners('sync-complete', data),
+                'jump-to-tab': (data) => this.handleRemoteJumpToTab(data)
             };
 
             // Store unsubscribe functions for cleanup
@@ -573,6 +575,25 @@ class SyncOrchestrator {
         }
     }
 
+    async handleRemoteActivityUpdate(remoteActivity) {
+        if (!remoteActivity) return;
+        const activities = Array.isArray(remoteActivity) ? remoteActivity : [remoteActivity];
+
+        try {
+            for (const activity of activities) {
+                // Ensure unique ID if missing
+                if (!activity.id) activity.id = `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+                await putActivityTimeSeriesEvent(activity);
+            }
+
+            this.lastSyncTime.activity = Date.now();
+            this.notifyListeners('activity-synced', activities);
+        } catch (error) {
+            console.error('[SyncOrchestrator] Error handling activity update:', error);
+        }
+    }
+
 
     /**
      * Push local changes to remote
@@ -778,6 +799,36 @@ class SyncOrchestrator {
         }
 
         return Array.from(merged.values());
+    }
+
+    /**
+     * Handle jump-to-tab command from remote (Electron)
+     */
+    async handleRemoteJumpToTab(data) {
+        if (!data || !data.tabId) return;
+
+        console.log('[SyncOrchestrator] Handling remote jump-to-tab:', data);
+
+        // Only run in extension context
+        if (!isExtension() || !chrome.tabs) return;
+
+        try {
+            // activate tab
+            await chrome.tabs.update(data.tabId, { active: true });
+
+            // focus window
+            if (data.windowId) {
+                await chrome.windows.update(data.windowId, { focused: true });
+            } else {
+                // If no windowId provided, try to find the tab's window
+                const tab = await chrome.tabs.get(data.tabId);
+                if (tab && tab.windowId) {
+                    await chrome.windows.update(tab.windowId, { focused: true });
+                }
+            }
+        } catch (error) {
+            console.error('[SyncOrchestrator] Failed to jump to tab:', error);
+        }
     }
 
     /**

@@ -1,5 +1,5 @@
 
-import { faChevronDown, faClock, faExternalLinkAlt, faGlobe, faMagic, faSpinner, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faClock, faExternalLinkAlt, faGlobe, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useState } from 'react';
 import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
@@ -226,14 +226,14 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
 
       {/* Action buttons */}
       <div className="tab-actions">
-        <button
+        {/* <button
           className="tab-action-btn summarize-btn"
           onClick={handleSummarize}
           title={summary ? (showSummary ? 'Hide summary' : 'Show summary') : 'Summarize with AI'}
           disabled={summarizing}
         >
           <FontAwesomeIcon icon={summarizing ? faSpinner : faMagic} spin={summarizing} />
-        </button>
+        </button> */}
         <button
           className="tab-action-btn pin-btn"
           onClick={handlePin}

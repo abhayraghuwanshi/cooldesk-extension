@@ -123,6 +123,18 @@ export function TabManagement() {
   // Handle tab actions
   const handleTabClick = useCallback(async (tab) => {
     try {
+      // Check if running in Electron
+      if (window.electronAPI && window.electronAPI.sendMessage) {
+        console.log('[TabManagement] Sending JUMP_TO_TAB to Electron:', tab.id);
+        await window.electronAPI.sendMessage({
+          type: 'JUMP_TO_TAB',
+          tabId: tab.id,
+          windowId: tab.windowId
+        });
+        return;
+      }
+
+      // Fallback for Extension functionality
       // Switch to the existing tab instead of opening a new one
       if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
         await chrome.tabs.update(tab.id, { active: true });

@@ -8,7 +8,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import scrapperConfig from '../../data/scrapper.json';
-import { listScrapedChats } from '../../db/index.js';
+import { getTimeSeriesDataRange, listScrapedChats } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 
@@ -237,14 +237,52 @@ export function ActivityFeed() {
                 }));
                 items.push(...calendarItems);
             }
-        } catch (e) {
             console.error('Failed to load calendar items', e);
         }
         */
 
+        // 4. Fetch App Activity
+        try {
+            const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+            const activities = await getTimeSeriesDataRange(oneDayAgo, Date.now());
+            const appItems = activities
+                .filter(a => a.type === 'app')
+                .map(a => ({
+                    id: a.id,
+                    title: a.title || a.appName || 'Unknown App',
+                    url: a.url || '#',
+                    timestamp: a.timestamp,
+                    type: 'app',
+                    appName: a.appName || 'Application',
+                    duration: a.time,
+                    subtitle: a.appName // Show app name as subtitle
+                }));
+            items.push(...appItems);
+        } catch (e) {
+            console.error('Failed to load app activity', e);
+        }
+
         // Sort combined feed by timestamp (newest first)
         return items.sort((a, b) => b.timestamp - a.timestamp);
     }, []);
+
+    // Effect: Listen for activity DB changes
+    useEffect(() => {
+        const bc = new BroadcastChannel('activity_db_changes');
+        bc.onmessage = (event) => {
+            if (event.data && event.data.type === 'activityChanged') {
+                // Refresh feed
+                loadFeed().then(items => {
+                    setFeedItems(items);
+                    setIsLoading(false);
+                });
+            }
+        };
+
+        return () => {
+            bc.close();
+        };
+    }, [loadFeed]);
 
     // Debounced update handler (500ms delay)
     const debouncedUpdate = useMemo(
@@ -377,13 +415,18 @@ export function ActivityFeed() {
 
     // Group tabs by domain and chats by platform for cleaner view
     const groupedFeedItems = useMemo(() => {
-        const filtered = feedItems.filter(item =>
-            activeTab === 'all' || item.type === (activeTab === 'chats' ? 'chat' : 'tab')
-        );
+        const filtered = feedItems.filter(item => {
+            if (activeTab === 'all') return true;
+            if (activeTab === 'chats') return item.type === 'chat';
+            if (activeTab === 'tabs') return item.type === 'tab';
+            if (activeTab === 'apps') return item.type === 'app';
+            return false;
+        });
 
-        // Separate chats and tabs
+        // Separate items by type
         const chats = filtered.filter(item => item.type === 'chat');
         const tabs = filtered.filter(item => item.type === 'tab');
+        const apps = filtered.filter(item => item.type === 'app');
 
         // Group chats by platform
         const chatsByPlatform = {};
@@ -449,6 +492,31 @@ export function ActivityFeed() {
             }))
             .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
 
+        // Group apps by App Name
+        const appsByName = {};
+        apps.forEach(app => {
+            const name = app.appName || 'Other';
+            if (!appsByName[name]) {
+                appsByName[name] = [];
+            }
+            appsByName[name].push(app);
+        });
+
+        Object.values(appsByName).forEach(appGroup => {
+            appGroup.sort((a, b) => b.timestamp - a.timestamp);
+        });
+
+        const groupedApps = Object.entries(appsByName)
+            .map(([name, appList]) => ({
+                type: 'app-group',
+                appName: name,
+                apps: appList,
+                latestTimestamp: appList[0].timestamp,
+                count: appList.length,
+                totalDuration: appList.reduce((acc, curr) => acc + (curr.duration || 0), 0)
+            }))
+            .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+
         // Merge chat groups and tab groups
         const result = [];
 
@@ -470,12 +538,24 @@ export function ActivityFeed() {
             }
         });
 
+        // Add app groups
+        groupedApps.forEach(group => {
+            if (group.count === 1) {
+                result.push({ ...group.apps[0], isGrouped: false });
+            } else {
+                result.push(group);
+            }
+        });
+
         // Sort final result by timestamp
         return result.sort((a, b) => {
             const tsA = a.type === 'tab-group' ? a.latestTimestamp :
-                a.type === 'chat-group' ? a.latestTimestamp : a.timestamp;
+                a.type === 'chat-group' ? a.latestTimestamp :
+                    a.type === 'app-group' ? a.latestTimestamp : a.timestamp;
+
             const tsB = b.type === 'tab-group' ? b.latestTimestamp :
-                b.type === 'chat-group' ? b.latestTimestamp : b.timestamp;
+                b.type === 'chat-group' ? b.latestTimestamp :
+                    b.type === 'app-group' ? b.latestTimestamp : b.timestamp;
             return tsB - tsA;
         });
     }, [feedItems, activeTab]);
@@ -638,7 +718,7 @@ export function ActivityFeed() {
                         gap: '4px',
                         position: 'relative'
                     }}>
-                        {['all', 'chats', 'tabs'].map(tab => (
+                        {['all', 'chats', 'tabs', 'apps'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -1234,12 +1314,161 @@ export function ActivityFeed() {
                                     );
                                 }
 
-                                // Handle single items (chats, single tabs, calendar)
+                                // Handle app groups
+                                if (item.type === 'app-group') {
+                                    const isExpanded = expandedDomains.has(item.appName);
+                                    const topApp = item.apps[0];
+
+                                    return (
+                                        <div key={`group-${item.appName}`} style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.05)' }}>
+                                            {/* Group Header */}
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    padding: '12px 16px',
+                                                    cursor: 'pointer',
+                                                    transition: 'background 0.2s',
+                                                    position: 'relative'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >
+                                                {/* Icon */}
+                                                <div
+                                                    onClick={() => { }}
+                                                    style={{
+                                                        width: '36px',
+                                                        height: '36px',
+                                                        borderRadius: '10px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        fontSize: '18px',
+                                                        flexShrink: 0,
+                                                        background: 'rgba(236, 72, 153, 0.15)', // Pinkish for apps
+                                                        border: '1px solid rgba(236, 72, 153, 0.25)',
+                                                        color: '#EC4899',
+                                                        overflow: 'hidden'
+                                                    }}
+                                                >
+                                                    🖥️
+                                                </div>
+
+                                                {/* Info */}
+                                                <div
+                                                    onClick={() => { }}
+                                                    style={{ flex: 1, minWidth: 0 }}
+                                                >
+                                                    <div style={{
+                                                        fontSize: 'var(--font-base)',
+                                                        color: 'var(--text-primary, #F1F5F9)',
+                                                        fontWeight: 500,
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        marginBottom: '2px'
+                                                    }}>
+                                                        {item.appName}
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: 'var(--font-xs)',
+                                                        color: 'var(--text-secondary, #64748B)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px'
+                                                    }}>
+                                                        <span>Desktop App</span>
+                                                        <span style={{ width: '2px', height: '2px', background: 'currentColor', borderRadius: '50%', opacity: 0.5 }}></span>
+                                                        <span>{formatTime(item.latestTimestamp)}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Count Badge + Expand Button */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleDomainExpand(item.appName);
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        padding: '4px 10px',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid rgba(236, 72, 153, 0.3)',
+                                                        background: isExpanded ? 'rgba(236, 72, 153, 0.15)' : 'rgba(236, 72, 153, 0.08)',
+                                                        color: '#EC4899',
+                                                        fontSize: 'var(--font-xs)',
+                                                        fontWeight: 600,
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                >
+                                                    <span>{Math.round(item.totalDuration / 1000)}s total</span>
+                                                    <FontAwesomeIcon
+                                                        icon={faChevronDown}
+                                                        style={{
+                                                            fontSize: '10px',
+                                                            transition: 'transform 0.2s',
+                                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                                                        }}
+                                                    />
+                                                </button>
+                                            </div>
+
+                                            {/* Expanded Apps */}
+                                            {isExpanded && (
+                                                <div style={{
+                                                    background: 'rgba(0, 0, 0, 0.15)',
+                                                    borderTop: '1px solid rgba(148, 163, 184, 0.05)'
+                                                }}>
+                                                    {item.apps.map((app, appIdx) => (
+                                                        <div
+                                                            key={app.id}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '12px',
+                                                                padding: '10px 16px 10px 48px',
+                                                                cursor: 'default',
+                                                                transition: 'background 0.2s',
+                                                                borderBottom: appIdx < item.apps.length - 1 ? '1px solid rgba(148, 163, 184, 0.03)' : 'none'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                        >
+                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                <div style={{
+                                                                    fontSize: 'var(--font-sm)',
+                                                                    color: 'var(--text-primary, #E2E8F0)',
+                                                                    whiteSpace: 'nowrap',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis'
+                                                                }}>
+                                                                    {app.title}
+                                                                </div>
+                                                            </div>
+                                                            <span style={{ fontSize: 'var(--font-xs)', color: '#64748B' }}>
+                                                                {formatTime(app.timestamp)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                }
+
+                                // Handle single items (chats, single tabs, calendar, single apps)
                                 const isChat = item.type === 'chat';
                                 const isCalendar = item.type === 'calendar';
+                                const isApp = item.type === 'app';
                                 const icon = isChat
-                                    ? '💬' // Fallback if image fails
-                                    : isCalendar ? '📅' : null;
+                                    ? '💬'
+                                    : isCalendar ? '📅'
+                                        : isApp ? '🖥️' : null;
 
                                 return (
                                     <div key={item.id}
@@ -1263,18 +1492,25 @@ export function ActivityFeed() {
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             fontSize: '18px',
                                             flexShrink: 0,
-                                            color: isChat ? 'var(--accent-purple, #8b5cf6)' : isCalendar ? '#10B981' : 'var(--accent-blue, #60a5fa)',
+                                            color: isChat ? 'var(--accent-purple, #8b5cf6)'
+                                                : isCalendar ? '#10B981'
+                                                    : isApp ? '#EC4899'
+                                                        : 'var(--accent-blue, #60a5fa)',
                                             overflow: 'hidden'
                                         }}>
-                                            <img
-                                                src={item.favIconUrl || getFaviconUrl(item.url, 32)}
-                                                alt=""
-                                                style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
-                                                onError={e => {
-                                                    e.target.style.display = 'none';
-                                                    if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
-                                                }}
-                                            />
+                                            {isApp ? (
+                                                <div style={{ fontSize: '20px' }}>🖥️</div>
+                                            ) : (
+                                                <img
+                                                    src={item.favIconUrl || getFaviconUrl(item.url, 32)}
+                                                    alt=""
+                                                    style={{ width: 'var(--font-5xl)', height: 'var(--font-5xl)', objectFit: 'contain' }}
+                                                    onError={e => {
+                                                        e.target.style.display = 'none';
+                                                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                                                    }}
+                                                />
+                                            )}
                                             <div style={{ display: 'none' }}>
                                                 {icon ? icon : <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '16px' }} />}
                                             </div>
@@ -1333,6 +1569,19 @@ export function ActivityFeed() {
                                                     textTransform: 'uppercase'
                                                 }}>
                                                     Event
+                                                </div>
+                                            ) : isApp ? (
+                                                <div style={{
+                                                    fontSize: 'var(--font-xs)',
+                                                    fontWeight: 600,
+                                                    color: '#EC4899',
+                                                    background: 'rgba(236, 72, 153, 0.1)',
+                                                    border: '1px solid rgba(236, 72, 153, 0.2)',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '4px',
+                                                    textTransform: 'uppercase'
+                                                }}>
+                                                    App
                                                 </div>
                                             ) : (
                                                 <div style={{
