@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
@@ -52,6 +54,7 @@ public class AppScanner {
         public string name;
         public string path;
         public string source;
+        public string iconBase64;
     }
 
     static void Main(string[] args) {
@@ -78,6 +81,9 @@ public class AppScanner {
                 Console.Write("\"path\":\"" + EscapeJson(app.path) + "\",");
                 Console.Write("\"type\":\"app\",");
                 Console.Write("\"source\":\"" + app.source + "\",");
+                if (!string.IsNullOrEmpty(app.iconBase64)) {
+                    Console.Write("\"icon\":\"data:image/png;base64," + app.iconBase64 + "\",");
+                }
                 Console.Write("\"isRunning\":false");
                 Console.Write("}");
             }
@@ -110,7 +116,12 @@ public class AppScanner {
 
                     string key = name.ToLower();
                     if (!apps.ContainsKey(key)) {
-                        apps[key] = new AppInfo { name = name, path = target, source = "startmenu" };
+                        apps[key] = new AppInfo { 
+                            name = name, 
+                            path = target, 
+                            source = "startmenu",
+                            iconBase64 = ExtractIconAsBase64(target)
+                        };
                     }
                 } catch { }
             }
@@ -153,7 +164,12 @@ public class AppScanner {
                         if (mainExe != null) {
                             string key = folderName.ToLower();
                             if (!apps.ContainsKey(key)) {
-                                apps[key] = new AppInfo { name = folderName, path = mainExe, source = "programfiles" };
+                                apps[key] = new AppInfo { 
+                                    name = folderName, 
+                                    path = mainExe, 
+                                    source = "programfiles",
+                                    iconBase64 = ExtractIconAsBase64(mainExe)
+                                };
                             }
                         }
                     } catch { }
@@ -192,7 +208,12 @@ public class AppScanner {
                                     string[] exeFiles = Directory.GetFiles(installLocation, "*.exe", SearchOption.TopDirectoryOnly);
                                     foreach (string exe in exeFiles) {
                                         if (!ShouldSkip(Path.GetFileNameWithoutExtension(exe))) {
-                                            apps[keyLower] = new AppInfo { name = name, path = exe, source = "registry" };
+                                            apps[keyLower] = new AppInfo { 
+                                                name = name, 
+                                                path = exe, 
+                                                source = "registry",
+                                                iconBase64 = ExtractIconAsBase64(exe)
+                                            };
                                             break;
                                         }
                                     }
@@ -226,7 +247,12 @@ public class AppScanner {
                                     string[] exeFiles = Directory.GetFiles(installLocation, "*.exe", SearchOption.TopDirectoryOnly);
                                     foreach (string exe in exeFiles) {
                                         if (!ShouldSkip(Path.GetFileNameWithoutExtension(exe))) {
-                                            apps[keyLower] = new AppInfo { name = name, path = exe, source = "registry" };
+                                            apps[keyLower] = new AppInfo { 
+                                                name = name, 
+                                                path = exe, 
+                                                source = "registry",
+                                                iconBase64 = ExtractIconAsBase64(exe)
+                                            };
                                             break;
                                         }
                                     }
@@ -259,7 +285,87 @@ public class AppScanner {
         }
     }
 
+    static string ExtractIconAsBase64(string exePath) {
+        try {
+            if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath)) return null;
+            
+            Icon icon = null;
+            
+            // Method 1: Use SHGetFileInfo (most reliable for all file types)
+            try {
+                SHFILEINFO shinfo = new SHFILEINFO();
+                IntPtr hSuccess = SHGetFileInfo(exePath, 0, ref shinfo, (uint)Marshal.SizeOf(shinfo), 
+                    SHGFI_ICON | SHGFI_LARGEICON);
+                
+                if (hSuccess != IntPtr.Zero && shinfo.hIcon != IntPtr.Zero) {
+                    icon = Icon.FromHandle(shinfo.hIcon);
+                }
+            } catch { }
+            
+            // Method 2: Try Icon.ExtractAssociatedIcon as fallback
+            if (icon == null) {
+                try {
+                    icon = Icon.ExtractAssociatedIcon(exePath);
+                } catch { }
+            }
+            
+            // Method 3: If .lnk file, try to get icon from the target
+            if (icon == null && exePath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)) {
+                try {
+                    string target = GetShortcutTarget(exePath);
+                    if (!string.IsNullOrEmpty(target) && File.Exists(target)) {
+                        SHFILEINFO shinfo = new SHFILEINFO();
+                        IntPtr hSuccess = SHGetFileInfo(target, 0, ref shinfo, (uint)Marshal.SizeOf(shinfo), 
+                            SHGFI_ICON | SHGFI_LARGEICON);
+                        
+                        if (hSuccess != IntPtr.Zero && shinfo.hIcon != IntPtr.Zero) {
+                            icon = Icon.FromHandle(shinfo.hIcon);
+                        }
+                    }
+                } catch { }
+            }
+            
+            // Convert icon to base64 if we got one
+            if (icon != null) {
+                try {
+                    using (Bitmap bitmap = icon.ToBitmap()) {
+                        using (MemoryStream ms = new MemoryStream()) {
+                            bitmap.Save(ms, ImageFormat.Png);
+                            byte[] imageBytes = ms.ToArray();
+                            return Convert.ToBase64String(imageBytes);
+                        }
+                    }
+                } finally {
+                    icon.Dispose();
+                }
+            }
+            
+            return null;
+        } catch {
+            return null;
+        }
+    }
+    
+    // P/Invoke for SHGetFileInfo (more robust than ExtractAssociatedIcon)
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
+    
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    struct SHFILEINFO {
+        public IntPtr hIcon;
+        public int iIcon;
+        public uint dwAttributes;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string szDisplayName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)]
+        public string szTypeName;
+    }
+    
+    const uint SHGFI_ICON = 0x100;
+    const uint SHGFI_LARGEICON = 0x0;
+
     static string EscapeJson(string s) {
+
         if (string.IsNullOrEmpty(s)) return "";
         return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
     }

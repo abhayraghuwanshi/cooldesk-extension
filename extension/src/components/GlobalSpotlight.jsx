@@ -245,7 +245,8 @@ export function GlobalSpotlight() {
             const newPin = {
                 title: item.title || item.name,
                 url: item.url || null,
-                favicon: item.favicon || item.icon,
+                favicon: item.favicon,
+                icon: item.icon, // Save icon separately for apps
                 type: item.type,
                 // App-specific fields
                 name: item.name,
@@ -352,79 +353,97 @@ export function GlobalSpotlight() {
 
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
-        // When we have search results, navigate them
-        if (results.length > 0) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setSelectedPinIndex(-1); // Clear pin selection
-                setSelectedIndex((prev) => (prev + 1) % results.length);
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setSelectedPinIndex(-1);
-                setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                if (selectedIndex >= 0 && results[selectedIndex]) {
-                    handleSelect(results[selectedIndex]);
-                } else if (query.startsWith('http')) {
-                    handleSelect({ url: query, type: 'url' });
-                } else {
-                    handleSelect(results[0]);
-                }
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                handleClose();
-            } else if (e.key === 'p' && (e.metaKey || e.ctrlKey) && selectedIndex >= 0) {
-                e.preventDefault();
-                togglePin(results[selectedIndex]);
-            }
-            return;
+        // Build complete navigable list: pins + context items + search results
+        const totalPins = pinnedItems.length;
+        const totalContext = contextItems.length;
+        const totalResults = results.length;
+        const totalItems = totalPins + totalContext + totalResults;
+
+        // Current selected index in flat list
+        let currentIndex = -1;
+        if (selectedPinIndex >= 0) {
+            currentIndex = selectedPinIndex;
+        } else if (selectedIndex >= 0) {
+            currentIndex = totalPins + totalContext + selectedIndex;
         }
 
-        // When no results, navigate pins (if we have any and no query)
-        if (pinnedItems.length > 0 && !query.trim()) {
-            if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                setSelectedPinIndex((prev) => (prev + 1) % pinnedItems.length);
-            } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                setSelectedPinIndex((prev) => (prev - 1 + pinnedItems.length) % pinnedItems.length);
-            } else if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                // Move to next row (4 items per row assumed)
-                setSelectedPinIndex((prev) => {
-                    const next = prev + 4;
-                    return next < pinnedItems.length ? next : prev;
-                });
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                // Move to previous row
-                setSelectedPinIndex((prev) => {
-                    const next = prev - 4;
-                    return next >= 0 ? next : prev;
-                });
-            } else if (e.key === 'Enter' && selectedPinIndex >= 0) {
-                e.preventDefault();
-                handleSelect(pinnedItems[selectedPinIndex]);
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                handleClose();
-            } else if (e.key === 'Delete' || e.key === 'Backspace') {
-                // Remove selected pin
-                if (selectedPinIndex >= 0) {
-                    e.preventDefault();
-                    removePin(selectedPinIndex);
-                    setSelectedPinIndex((prev) => Math.min(prev, pinnedItems.length - 2));
+        // Navigation handlers
+        if (e.key === 'ArrowDown' && totalItems > 0) {
+            e.preventDefault();
+            const nextIndex = currentIndex + 1;
+            if (nextIndex < totalItems) {
+                if (nextIndex < totalPins) {
+                    setSelectedPinIndex(nextIndex);
+                    setSelectedIndex(-1);
+                } else if (nextIndex < totalPins + totalContext) {
+                    setSelectedPinIndex(nextIndex); // Context items share pin index
+                    setSelectedIndex(-1);
+                } else {
+                    setSelectedPinIndex(-1);
+                    setSelectedIndex(nextIndex - totalPins - totalContext);
                 }
             }
-            return;
+        } else if (e.key === 'ArrowUp' && totalItems > 0) {
+            e.preventDefault();
+            const nextIndex = currentIndex - 1;
+            if (nextIndex >= 0) {
+                if (nextIndex < totalPins) {
+                    setSelectedPinIndex(nextIndex);
+                    setSelectedIndex(-1);
+                } else if (nextIndex < totalPins + totalContext) {
+                    setSelectedPinIndex(nextIndex);
+                    setSelectedIndex(-1);
+                } else {
+                    setSelectedPinIndex(-1);
+                    setSelectedIndex(nextIndex - totalPins - totalContext);
+                }
+            } else if (nextIndex === -1 && currentIndex === 0) {
+                // At first item, wrap to last
+                if (totalResults > 0) {
+                    setSelectedPinIndex(-1);
+                    setSelectedIndex(totalResults - 1);
+                } else if (totalContext > 0) {
+                    setSelectedPinIndex(totalPins + totalContext - 1);
+                    setSelectedIndex(-1);
+                } else if (totalPins > 0) {
+                    setSelectedPinIndex(totalPins - 1);
+                    setSelectedIndex(-1);
+                }
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (currentIndex >= 0) {
+                if (currentIndex < totalPins) {
+                    handleSelect(pinnedItems[currentIndex]);
+                } else if (currentIndex < totalPins + totalContext) {
+                    handleSelect(contextItems[currentIndex - totalPins]);
+                } else {
+                    handleSelect(results[currentIndex - totalPins - totalContext]);
+                }
+            } else if (query.startsWith('http')) {
+                handleSelect({ url: query, type: 'url' });
+            } else if (results.length > 0) {
+                handleSelect(results[0]);
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            handleClose();
+        } else if (e.key === 'p' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            if (currentIndex >= totalPins + totalContext && selectedIndex >= 0) {
+                togglePin(results[selectedIndex]);
+            }
+        } else if ((e.key === 'Delete' || e.key === 'Backspace') && currentIndex < totalPins && currentIndex >= 0) {
+            e.preventDefault();
+            removePin(currentIndex);
+            setSelectedPinIndex(Math.min(currentIndex, pinnedItems.length - 2));
         }
 
         // Fallback handlers
         if (e.key === 'Escape') {
             e.preventDefault();
             handleClose();
-        } else if (e.key === 'Enter' && query.trim()) {
+        } else if (e.key === 'Enter' && query.trim() && currentIndex < 0) {
             e.preventDefault();
             // Search Google
             if (window.electronAPI?.openExternal) {
@@ -623,7 +642,11 @@ export function GlobalSpotlight() {
                                 >
                                     <div className="pin-icon">
                                         {item.type === 'app' ? (
-                                            <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
+                                            item.icon ? (
+                                                <img src={item.icon} className="app-icon-img" alt="" onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>'; }} />
+                                            ) : (
+                                                <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
+                                            )
                                         ) : item.favicon ? (
                                             <img src={item.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '🔗' }} alt="" />
                                         ) : (
@@ -658,7 +681,11 @@ export function GlobalSpotlight() {
                             >
                                 <div className="pin-icon">
                                     {pin.type === 'app' ? (
-                                        <FontAwesomeIcon icon={getAppIcon(pin.name)} className="app-icon" />
+                                        pin.icon ? (
+                                            <img src={pin.icon} className="app-icon-img" alt="" onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>'; }} />
+                                        ) : (
+                                            <FontAwesomeIcon icon={getAppIcon(pin.name)} className="app-icon" />
+                                        )
                                     ) : pin.favicon ? (
                                         <img src={pin.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '🔗' }} alt="" />
                                     ) : (
@@ -689,7 +716,11 @@ export function GlobalSpotlight() {
                             >
                                 <div className="result-icon">
                                     {item.type === 'app' ? (
-                                        <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
+                                        item.icon ? (
+                                            <img src={item.icon} className="app-icon-img" alt="" onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>'; }} />
+                                        ) : (
+                                            <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
+                                        )
                                     ) : item.favicon ? (
                                         <img src={item.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = getIcon(item.type) }} alt="" />
                                     ) : (
@@ -742,6 +773,7 @@ export function GlobalSpotlight() {
             </div>
             <style>{`
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .app-icon-img { width: 100%; height: 100%; object-fit: contain; }
       `}</style>
         </div>
     );

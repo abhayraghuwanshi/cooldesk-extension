@@ -113,7 +113,7 @@ async function getRunningAppsWindows() {
         const processes = JSON.parse(stdout);
         const procArray = Array.isArray(processes) ? processes : [processes];
 
-        return procArray.map(p => ({
+        const apps = procArray.map(p => ({
             id: `app-${p.Id}`,
             pid: p.Id,
             title: p.MainWindowTitle || p.Name,
@@ -122,6 +122,26 @@ async function getRunningAppsWindows() {
             type: 'app',
             isRunning: true
         })).filter(p => p.name && p.title);
+
+        // Fetch icons for running apps (in parallel batches)
+        const BATCH_SIZE = 10;
+        for (let i = 0; i < apps.length; i += BATCH_SIZE) {
+            const batch = apps.slice(i, i + BATCH_SIZE);
+            await Promise.all(batch.map(async (appItem) => {
+                try {
+                    if (appItem.path && existsSync(appItem.path)) {
+                        const icon = await app.getFileIcon(appItem.path);
+                        if (!icon.isEmpty()) {
+                            appItem.icon = icon.toDataURL();
+                        }
+                    }
+                } catch (e) {
+                    // Ignore icon fetch errors
+                }
+            }));
+        }
+
+        return apps;
     } catch (e) {
         console.error('[Electron] getRunningAppsWindows error:', e.message);
         return [];

@@ -112,6 +112,7 @@ function searchElectronCache(query) {
         description: isRunning ? (runningInfo?.title || 'Running') : 'Application',
         type: 'app',
         isRunning: isRunning,
+        icon: app.icon, // Pass through the icon from AppScanner
         score: isRunning ? 95 : 75 // Running apps score higher
       });
       addedApps.add(appNameLower);
@@ -136,6 +137,7 @@ function searchElectronCache(query) {
         description: app.title || 'Running Process',
         type: 'app',
         isRunning: true,
+        icon: app.icon, // Pass through the icon from getRunningApps
         score: nameMatch ? 90 : 80
       });
     }
