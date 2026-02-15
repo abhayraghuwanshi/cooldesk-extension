@@ -245,15 +245,15 @@ class SyncOrchestrator {
                 }
             });
 
-            // Perform full sync to ensure local data is merged and pushed to host
+            // FIRST: Push tabs immediately - this is what users see first in the app
+            if (isExtension()) {
+                console.log('[SyncOrchestrator] Pushing tabs FIRST (highest priority)...');
+                this.syncLocalTabs(); // Tabs first!
+            }
+
+            // THEN: Full sync for other data (workspaces, notes, etc.) - runs in background
             console.log('[SyncOrchestrator] Connection established, starting full sync...');
             this.fullSync().catch(err => console.error('[SyncOrchestrator] Initial full sync failed:', err));
-
-            // Also trigger immediate tab sync since we're now connected
-            if (isExtension()) {
-                console.log('[SyncOrchestrator] Triggering initial tab sync after WS connection...');
-                setTimeout(() => this.syncLocalTabs(), 500); // Small delay to let fullSync complete first
-            }
         }
 
         // Periodic sync as fallback (every 60 seconds - reduced from 30s for performance)
@@ -279,7 +279,7 @@ class SyncOrchestrator {
                 if (this.tabDebounceTimer) clearTimeout(this.tabDebounceTimer);
                 this.tabDebounceTimer = setTimeout(() => {
                     this.syncLocalTabs();
-                }, 2000); // 2s debounce (increased from 1s for performance)
+                }, 1000); // 1s debounce for responsive updates
             };
 
             // Store listener references for cleanup

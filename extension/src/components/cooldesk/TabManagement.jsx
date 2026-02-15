@@ -41,114 +41,116 @@ export function TabManagement() {
   // Track if initial load completed
   const initialLoadDone = useRef(false);
 
-  // Fetch browser tabs - REMOVED tabs.length dependency to prevent infinite re-renders
+  // Fetch browser tabs
   const refreshTabs = useCallback(async () => {
-    // Only set loading on very first load
-    if (!initialLoadDone.current) setTabsLoading(true);
-
     try {
       let allTabs = [];
 
-      // 1. Electron App Mode: Fetch from Main Process (Synced Tabs)
-      if (window.electronAPI && window.electronAPI.getTabs) {
+      // 1. Electron App Mode: Fetch from Main Process
+      if (window.electronAPI?.getTabs) {
         allTabs = await window.electronAPI.getTabs();
-        console.log('[TabManagement] Fetched tabs from Electron. Count:', allTabs?.length, 'Head:', allTabs?.slice(0, 2));
       }
       // 2. Extension Mode: Fetch from Chrome API
-      else if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
+      else if (chrome?.tabs?.query) {
         allTabs = await chrome.tabs.query({});
       }
 
-      // Sort based on user preference
-      let sortedTabs;
-      if (smartSortEnabled) {
-        // Smart sort: Usage-based scoring
-        sortedTabs = await scoreAndSortTabs(allTabs || []);
-      } else {
-        // Default sort: Active tabs first, then by windowId + index
-        sortedTabs = (allTabs || []).filter(t => t && t.id).sort((a, b) => {
-          if (a?.active && !b?.active) return -1;
-          if (!a?.active && b?.active) return 1;
-          if ((a?.windowId || 0) !== (b?.windowId || 0)) return (a?.windowId || 0) - (b?.windowId || 0);
-          return (a?.index || 0) - (b?.index || 0);
-        });
-      }
-
-      setTabs(sortedTabs);
+      // Always update loading state
+      setTabsLoading(false);
       initialLoadDone.current = true;
 
-      // Also fetch real-time activity data
-      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ type: 'GET_TAB_ACTIVITY' }, (response) => {
-          if (response?.ok) {
-            setTabActivity(response.activityData || {});
-          }
-        });
+      if (!allTabs?.length) {
+        setTabs([]);
+        return;
+      }
+
+      // Show tabs IMMEDIATELY
+      setTabs(allTabs);
+
+      // Then sort in background if smart sort enabled
+      if (smartSortEnabled) {
+        const sorted = await scoreAndSortTabs(allTabs);
+        setTabs(sorted);
       }
     } catch (error) {
       console.error('[TabManagement] Failed to fetch tabs:', error);
-    } finally {
       setTabsLoading(false);
     }
-  }, [smartSortEnabled]); // Removed tabs.length - was causing infinite callback recreation
+  }, [smartSortEnabled]);
 
-  // Debounced refresh (500ms delay to reduce CPU churn)
+  // Debounced refresh (300ms delay to reduce CPU churn while staying responsive)
   const debouncedRefresh = useMemo(
-    () => debounce(() => refreshTabs(), 500),
+    () => debounce(() => refreshTabs(), 300),
     [refreshTabs]
   );
 
-  // Load tabs on mount and keep updated
+  // Initial load and subscription setup - runs once on mount
   useEffect(() => {
-    refreshTabs();
+    let removeListener = null;
 
-    // Extension Mode: Chrome Event Listeners
-    if (typeof chrome !== 'undefined' && chrome.tabs) {
-      const events = [
-        chrome.tabs.onCreated,
-        chrome.tabs.onUpdated,
-        chrome.tabs.onRemoved,
-        chrome.tabs.onActivated,
-        chrome.tabs.onMoved,
-        chrome.tabs.onDetached,
-        chrome.tabs.onAttached
-      ];
-
-      events.forEach(event => {
-        if (event?.addListener) {
-          event.addListener(debouncedRefresh);
-        }
-      });
-
-      return () => {
-        events.forEach(event => {
-          if (event?.removeListener) {
-            event.removeListener(debouncedRefresh);
-          }
-        });
-      };
-    }
-
-    // Electron Mode: IPC Event Listener
-    if (window.electronAPI && window.electronAPI.subscribe) {
-      // Listen for 'tabs-updated' from main process
-      // Preload 'subscribe' strips the event object and passes data directly
-      const removeListener = window.electronAPI.subscribe('tabs-updated', (updatedTabs) => {
-        console.log('[TabManagement] Received tabs-updated event', updatedTabs);
+    // Electron Mode: Subscribe to IPC updates
+    if (window.electronAPI?.subscribe) {
+      removeListener = window.electronAPI.subscribe('tabs-updated', (updatedTabs) => {
+        console.log('[TabManagement] tabs-updated:', updatedTabs?.length);
         if (Array.isArray(updatedTabs)) {
-          // We can set directly or trigger a refresh (refresh might be safer for sorting)
-          // But since refreshTabs calls invoke('sync:get-tabs'), it's fine.
-          // However, to avoid double fetching, we can just set state if we sort it here.
-          // For consistency, let's just trigger debouncedRefresh which fetches fresh sorted data.
-          debouncedRefresh();
+          setTabs(updatedTabs);
+          setTabsLoading(false);
         }
       });
-
-      return () => {
-        if (removeListener) removeListener();
-      };
     }
-  }, [refreshTabs, debouncedRefresh]);
+
+    // Fetch initial tabs (works for both Electron and Extension mode)
+    const fetchInitial = async () => {
+      let allTabs = [];
+
+      if (window.electronAPI?.getTabs) {
+        allTabs = await window.electronAPI.getTabs();
+      } else if (chrome?.tabs?.query) {
+        allTabs = await chrome.tabs.query({});
+      }
+
+      setTabsLoading(false);
+      if (allTabs?.length) {
+        setTabs(allTabs);
+      }
+    };
+
+    fetchInitial();
+
+    return () => {
+      if (removeListener) removeListener();
+    };
+  }, []); // Empty deps - only run on mount
+
+  // Extension Mode (real browser extension, not Electron)
+  useEffect(() => {
+    const isRealExtension = typeof chrome !== 'undefined' && chrome.tabs && !window.electronAPI;
+    if (!isRealExtension) return;
+
+    const events = [
+      chrome.tabs.onCreated,
+      chrome.tabs.onUpdated,
+      chrome.tabs.onRemoved,
+      chrome.tabs.onActivated,
+      chrome.tabs.onMoved,
+      chrome.tabs.onDetached,
+      chrome.tabs.onAttached
+    ];
+
+    events.forEach(event => {
+      if (event?.addListener) {
+        event.addListener(debouncedRefresh);
+      }
+    });
+
+    return () => {
+      events.forEach(event => {
+        if (event?.removeListener) {
+          event.removeListener(debouncedRefresh);
+        }
+      });
+    };
+  }, [debouncedRefresh]);
 
 
   // Handle tab actions

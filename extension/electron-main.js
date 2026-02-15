@@ -683,7 +683,10 @@ function saveData() {
 // Notify renderer of external updates
 function notifyRenderer(channel, data) {
     if (mainWindow && !mainWindow.isDestroyed()) {
+        console.log(`[Electron] Notifying renderer: ${channel}, data length:`, Array.isArray(data) ? data.length : 'object');
         mainWindow.webContents.send(channel, data);
+    } else {
+        console.warn(`[Electron] Cannot notify renderer (${channel}): mainWindow is ${mainWindow ? 'destroyed' : 'null'}`);
     }
 }
 
@@ -2045,7 +2048,11 @@ ipcMain.handle('sync:set-dashboard', (_event, data) => {
     return { ok: true };
 });
 
-ipcMain.handle('sync:get-tabs', () => syncData.tabs);
+ipcMain.handle('sync:get-tabs', () => {
+    // Return tabs immediately - the tabs-updated event will notify when new tabs arrive
+    console.log('[Electron IPC] get-tabs: Returning', syncData.tabs?.length || 0, 'tabs');
+    return syncData.tabs;
+});
 ipcMain.handle('sync:set-tabs', (_event, data) => {
     // data should be { deviceId: '...', tabs: [...] } or just [...] (legacy)
     let ipcTabs = [];

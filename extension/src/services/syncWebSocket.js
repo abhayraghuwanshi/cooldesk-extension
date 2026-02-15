@@ -10,7 +10,7 @@ class SyncWebSocket {
         this.ws = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 1000;
+        this.reconnectDelay = 500; // Faster initial reconnect (was 1000ms)
         this.listeners = new Map();
         this.connectionPromise = null;
         this.isConnecting = false;

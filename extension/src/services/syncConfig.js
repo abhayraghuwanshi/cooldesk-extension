@@ -84,8 +84,8 @@ export async function checkHostAvailable() {
     clearTimeout(timeout);
     hostAvailable = res.ok;
 
-    // Clear cache after 30 seconds
-    setTimeout(() => { hostAvailable = null; }, 30000);
+    // Clear cache after 15 seconds for faster reconnection
+    setTimeout(() => { hostAvailable = null; }, 15000);
 
     return hostAvailable;
   } catch {
