@@ -5,7 +5,7 @@
  */
 
 import { exec } from 'child_process';
-import { app, BrowserWindow, globalShortcut, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, screen, shell } from 'electron';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { createServer } from 'http';
 import open from 'open';
@@ -71,10 +71,93 @@ function focusBrowserWindow() {
 // CROSS-PLATFORM APP DISCOVERY
 // ==========================================
 
-// Installed apps cache
+// Installed apps cache (in-memory + persistent disk cache)
 let installedAppsCache = null;
 let installedAppsCacheTime = 0;
-const INSTALLED_APPS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const INSTALLED_APPS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours - apps rarely change
+const INSTALLED_APPS_CACHE_FILE = join(app.getPath('userData'), 'installed-apps-cache.json');
+const INSTALLED_APPS_CACHE_VERSION = 2; // Increment when filter logic changes to invalidate old caches
+
+/**
+ * Load installed apps from disk cache
+ */
+function loadInstalledAppsFromDisk() {
+    try {
+        if (existsSync(INSTALLED_APPS_CACHE_FILE)) {
+            const data = JSON.parse(readFileSync(INSTALLED_APPS_CACHE_FILE, 'utf8'));
+            // Check version to invalidate old caches when filter changes
+            if (data.version !== INSTALLED_APPS_CACHE_VERSION) {
+                console.log(`[Electron] Disk cache version mismatch (${data.version} vs ${INSTALLED_APPS_CACHE_VERSION}), will rescan`);
+                return false;
+            }
+            if (data.apps && data.timestamp && (Date.now() - data.timestamp) < INSTALLED_APPS_CACHE_TTL) {
+                console.log(`[Electron] Loaded ${data.apps.length} installed apps from disk cache (v${data.version})`);
+                installedAppsCache = data.apps;
+                installedAppsCacheTime = data.timestamp;
+                return true;
+            }
+        }
+    } catch (e) {
+        console.warn('[Electron] Failed to load installed apps from disk cache:', e.message);
+    }
+    return false;
+}
+
+/**
+ * Save installed apps to disk cache
+ */
+function saveInstalledAppsToDisk(apps) {
+    try {
+        const data = {
+            apps,
+            timestamp: Date.now(),
+            platform: process.platform,
+            version: INSTALLED_APPS_CACHE_VERSION
+        };
+        writeFileSync(INSTALLED_APPS_CACHE_FILE, JSON.stringify(data), 'utf8');
+        console.log(`[Electron] Saved ${apps.length} installed apps to disk cache (v${INSTALLED_APPS_CACHE_VERSION})`);
+    } catch (e) {
+        console.warn('[Electron] Failed to save installed apps to disk cache:', e.message);
+    }
+}
+
+// Try to load from disk cache on startup
+loadInstalledAppsFromDisk();
+
+// ==========================================
+// CHANGE DETECTION FOR SYNC
+// ==========================================
+
+// Hash tracking to avoid broadcasting unchanged data
+const lastBroadcastHash = {};
+
+/**
+ * Simple hash function for change detection
+ */
+function simpleHash(data) {
+    const str = JSON.stringify(data);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString(16);
+}
+
+/**
+ * Check if data has changed since last broadcast
+ * Returns true if changed, false if same
+ */
+function hasDataChanged(type, data) {
+    const currentHash = simpleHash(data);
+    const lastHash = lastBroadcastHash[type];
+    if (currentHash === lastHash) {
+        return false;
+    }
+    lastBroadcastHash[type] = currentHash;
+    return true;
+}
 
 /**
  * Get running applications with visible windows (cross-platform)
@@ -206,13 +289,18 @@ async function getActiveWindowWindows() {
 // Track last active app to calculate duration
 let lastActiveApp = null;
 let lastActiveTime = Date.now();
+let lastNotifiedApp = null; // Track last notified app to avoid spam
 const TRACKING_INTERVAL_MS = 5000;
+const ACTIVITY_BATCH_INTERVAL_MS = 30000; // Only notify renderers every 30s
 
 /**
  * Start tracking desktop application usage
  */
 function startAppActivityTracking() {
     console.log('[Electron] Starting desktop activity tracking...');
+
+    let pendingActivities = [];
+    let lastBatchTime = Date.now();
 
     setInterval(async () => {
         const now = Date.now();
@@ -221,42 +309,25 @@ function startAppActivityTracking() {
         if (activeWindow) {
             const { name, title, path } = activeWindow;
 
-            // Filter out our own app and obvious system/browser noise if needed
-            // But user specifically wants to track apps, so we keep most.
-            // Maybe filter "Electron" if it's us? 
-            // For now, let's track everything that looks like an app.
-
-            // If the active app has changed, or if it's the same app but we need to accumulate time?
-            // Actually, best approach for a 5s interval:
-            // Just look at WHAT IS ACTIVE NOW and add 5s to it. Simple integration.
-
-            // However, we want to respect "idle" time. 
-            // For MVP, let's assume if it's the foreground window, it's active.
-
-            // Add activity event to syncData
-            // We use the 'activity' array in syncData which syncs to extension
-
-            const appActivity = {
-                id: `activity-${now}`,
-                url: path || name, // Use path or name as the "URL" identifier for apps
-                title: title || name,
-                time: TRACKING_INTERVAL_MS, // 5 seconds
-                timestamp: now,
-                type: 'app',
-                favicon: '', // We could try to get icon later
-                appName: name
-            };
-
             // Avoid double counting if the active app IS the browser (Chrome/Edge)
             // The extension is already tracking browser tabs.
-            // Common browser process names: chrome, msedge, firefox, brave
             const browserNames = ['chrome', 'msedge', 'firefox', 'brave', 'opera'];
             if (browserNames.includes(name.toLowerCase())) {
-                // Skip, extension handles this
                 return;
             }
 
-            // Push to syncData
+            const appActivity = {
+                id: `activity-${now}`,
+                url: path || name,
+                title: title || name,
+                time: TRACKING_INTERVAL_MS,
+                timestamp: now,
+                type: 'app',
+                favicon: '',
+                appName: name
+            };
+
+            // Push to syncData (always track internally)
             syncData.activity.push(appActivity);
 
             // Keep array size manageable
@@ -266,14 +337,27 @@ function startAppActivityTracking() {
 
             syncData.lastUpdated.activity = now;
 
-            // Persist
-            saveData();
+            // Batch activities for notification
+            pendingActivities.push(appActivity);
 
-            // Notify renderers
-            notifyRenderer('activity-updated', [appActivity]);
-            broadcastToClients('activity-updated', [appActivity]);
+            // Only notify renderers in batches OR when app changes
+            const appChanged = lastNotifiedApp !== name;
+            const batchReady = (now - lastBatchTime) >= ACTIVITY_BATCH_INTERVAL_MS;
 
-            // console.log(`[Electron] Tracked app: ${name} (${TRACKING_INTERVAL_MS}ms)`);
+            if (appChanged || batchReady) {
+                if (pendingActivities.length > 0) {
+                    // Persist once per batch
+                    saveData();
+
+                    // Notify renderers with batched activities
+                    notifyRenderer('activity-updated', pendingActivities);
+                    broadcastToClients('activity-updated', pendingActivities);
+
+                    pendingActivities = [];
+                    lastBatchTime = now;
+                    lastNotifiedApp = name;
+                }
+            }
         }
     }, TRACKING_INTERVAL_MS);
 }
@@ -371,7 +455,7 @@ async function getRunningAppsLinux() {
  * Get installed applications (cached, cross-platform)
  */
 async function getInstalledApps() {
-    // Return cached if fresh
+    // Return cached if fresh (memory cache checked first, then disk was loaded on startup)
     if (installedAppsCache && installedAppsCache.length > 0 && Date.now() - installedAppsCacheTime < INSTALLED_APPS_CACHE_TTL) {
         console.log(`[Electron] getInstalledApps: returning ${installedAppsCache.length} cached apps`);
         return installedAppsCache;
@@ -380,7 +464,7 @@ async function getInstalledApps() {
     const platform = process.platform;
     let apps = [];
 
-    console.log(`[Electron] getInstalledApps: fetching for platform ${platform}...`);
+    console.log(`[Electron] getInstalledApps: fetching for platform ${platform}... (this may take a few seconds on first run)`);
 
     try {
         if (platform === 'win32') {
@@ -391,6 +475,9 @@ async function getInstalledApps() {
             apps = await getInstalledAppsLinux();
         }
         console.log(`[Electron] getInstalledApps: found ${apps.length} apps`);
+
+        // Save to disk cache for next startup
+        saveInstalledAppsToDisk(apps);
     } catch (e) {
         console.warn('[Electron] getInstalledApps failed:', e.message);
     }
@@ -398,6 +485,164 @@ async function getInstalledApps() {
     installedAppsCache = apps;
     installedAppsCacheTime = Date.now();
     return apps;
+}
+
+/**
+ * Filter out system/utility apps that users don't typically launch
+ */
+function filterUserApps(apps) {
+    // Patterns for apps to exclude (case-insensitive)
+    const excludePatterns = [
+        // System/Windows components
+        /^microsoft\s*(edge\s*)?update/i,
+        /^windows\s*(app|sdk|kit|installer|defender)/i,
+        /^microsoft\s*(visual\s*c\+\+|\.net|asp\.net|web)/i,
+        /^\.net\s*(runtime|desktop|host|framework)/i,
+        /^vc_?redist/i,
+        /^msvc/i,
+        /^vcredist/i,
+
+        // Runtimes and frameworks
+        /^java\s*(tm|se|runtime|development|update)/i,
+        /^oracle\s*java/i,
+        /^node\.?js/i,
+        /^python\s*\d/i,
+        /^php\s*\d/i,
+        /^ruby\s*\d/i,
+        /^go\s*programming/i,
+        /^rust\s*(programming)?/i,
+
+        // Package managers and dev tools (unless main app)
+        /^npm/i,
+        /^chocolatey/i,
+        /^winget/i,
+        /^scoop/i,
+        /^pip\s/i,
+
+        // Drivers and hardware
+        /driver/i,
+        /^nvidia\s*(graphics|physx|geforce\s*experience)/i,
+        /^amd\s*(radeon|software|chipset)/i,
+        /^intel\s*(graphics|management|rapid|wireless)/i,
+        /^realtek/i,
+        /^synaptics/i,
+        /^logitech\s*(unifying|options|gaming)/i,
+
+        // Updaters, helpers, services
+        /update(r|service)?$/i,
+        /helper$/i,
+        /^helper\s/i,
+        /service$/i,
+        /^service\s/i,
+        /uninstall/i,
+        /^setup\s/i,
+        /installer$/i,
+        /redistributable/i,
+        /runtime$/i,
+        /^repair\s/i,
+        /^remove\s/i,
+
+        // Microsoft Office components (not main apps)
+        /^microsoft\s*(office\s*)?(click-to-run|onenote\s*for)/i,
+        /^office\s*\d+\s*(click|upload|telemetry)/i,
+
+        // Common bloatware/utilities
+        /^bonjour/i,
+        /^apple\s*(mobile\s*device|software\s*update|application)/i,
+        /^adobe\s*(creative\s*cloud|genuine|arm|flash)/i,
+        /^autodesk\s*(genuine|desktop)/i,
+
+        // Browser components (not main browsers)
+        /^google\s*update/i,
+        /^chrome\s*components/i,
+        /^firefox\s*maintenance/i,
+
+        // Repair tools and diagnostics
+        /diagnostic/i,
+        /troubleshoot/i,
+        /^repair\s/i,
+
+        // Very short or cryptic names (likely internal tools)
+        /^[a-z]{1,3}$/i,
+        /^[0-9]+$/,
+
+        // SDK and development tools users don't launch directly
+        /\bsdk\b/i,
+        /\bapi\b/i,
+        /^tools\s*for/i,
+        /\bcomponent\b/i,
+    ];
+
+    // Names to always include (popular apps that might match exclude patterns)
+    const alwaysInclude = [
+        /^visual\s*studio\s*(code|community|professional|enterprise)?$/i,
+        /^vs\s*code$/i,
+        /^android\s*studio$/i,
+        /^intellij/i,
+        /^pycharm/i,
+        /^webstorm/i,
+        /^rider$/i,
+        /^datagrip/i,
+        /^node\.js\s*command/i,  // Node.js command prompt is useful
+        /^git\s*(bash|gui|cmd)/i,
+        /^github\s*desktop/i,
+        /^docker\s*desktop/i,
+        /^postman/i,
+        /^insomnia/i,
+        /^figma/i,
+        /^adobe\s*(photoshop|illustrator|premiere|after\s*effects|xd|acrobat|lightroom)/i,
+        /^microsoft\s*(word|excel|powerpoint|outlook|teams|onenote|access|publisher|visio)$/i,
+        /^office\s*(word|excel|powerpoint)/i,
+        /^google\s*(chrome|drive|earth)$/i,
+        /^mozilla\s*firefox$/i,
+        /^brave\s*browser/i,
+        /^opera\s*(browser|gx)?$/i,
+        /^microsoft\s*edge$/i,
+        /^discord$/i,
+        /^slack$/i,
+        /^zoom$/i,
+        /^spotify$/i,
+        /^steam$/i,
+        /^epic\s*games/i,
+        /^origin$/i,
+        /^battle\.net/i,
+        /^vlc/i,
+        /^obs\s*studio/i,
+        /^audacity/i,
+        /^gimp/i,
+        /^blender/i,
+        /^unity\s*(hub|editor)?$/i,
+        /^unreal\s*(engine|editor)/i,
+        /^notion$/i,
+        /^obsidian$/i,
+        /^todoist/i,
+        /^1password/i,
+        /^bitwarden/i,
+        /^lastpass/i,
+        /^keepass/i,
+    ];
+
+    const beforeCount = apps.length;
+    const filtered = apps.filter(app => {
+        const name = app.name || app.title || '';
+        if (!name || name.length < 2) return false;
+
+        // Check if always include first
+        if (alwaysInclude.some(pattern => pattern.test(name))) {
+            return true;
+        }
+
+        // Check if should exclude
+        if (excludePatterns.some(pattern => pattern.test(name))) {
+            return false;
+        }
+
+        // Include by default
+        return true;
+    });
+
+    console.log(`[Electron] filterUserApps: ${beforeCount} -> ${filtered.length} apps (removed ${beforeCount - filtered.length} system/utility apps)`);
+    return filtered;
 }
 
 /**
@@ -432,11 +677,12 @@ async function getInstalledAppsWindows() {
             });
 
             if (stdout && stdout.trim()) {
-                const apps = JSON.parse(stdout);
-                if (Array.isArray(apps) && apps.length > 0) {
+                const rawApps = JSON.parse(stdout);
+                if (Array.isArray(rawApps) && rawApps.length > 0) {
+                    const apps = filterUserApps(rawApps);
                     installedAppsCache = apps;
                     installedAppsCacheTime = now;
-                    console.log(`[Electron] AppScanner.exe found ${apps.length} apps in ${(performance.now() - startTime).toFixed(0)}ms`);
+                    console.log(`[Electron] AppScanner.exe found ${rawApps.length} raw apps, filtered to ${apps.length} user apps in ${(performance.now() - startTime).toFixed(0)}ms`);
                     return apps;
                 }
             }
@@ -487,10 +733,11 @@ async function getInstalledAppsWindows() {
         } catch { /* skip */ }
     }
 
-    const result = Array.from(apps.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const rawResult = Array.from(apps.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const result = filterUserApps(rawResult);
     installedAppsCache = result;
     installedAppsCacheTime = now;
-    console.log(`[Electron] getInstalledAppsWindows: found ${result.length} apps in ${(performance.now() - startTime).toFixed(0)}ms`);
+    console.log(`[Electron] getInstalledAppsWindows: found ${rawResult.length} raw apps, filtered to ${result.length} user apps in ${(performance.now() - startTime).toFixed(0)}ms`);
     return result;
 }
 
@@ -1187,32 +1434,41 @@ function handleWebSocketMessage(ws, data) {
             // Use name-based merge for workspaces to handle multi-browser sync
             syncData.workspaces = mergeWorkspacesByName(syncData.workspaces, payload);
             syncData.lastUpdated.workspaces = Date.now();
-            saveData();
-            notifyRenderer('workspaces-updated', syncData.workspaces);
-            broadcastToClients('workspaces-updated', syncData.workspaces);
+            // Only broadcast if data actually changed
+            if (hasDataChanged('workspaces', syncData.workspaces)) {
+                saveData();
+                notifyRenderer('workspaces-updated', syncData.workspaces);
+                broadcastToClients('workspaces-updated', syncData.workspaces);
+            }
             break;
 
         case 'push-urls':
             syncData.urls = payload;
             syncData.lastUpdated.urls = Date.now();
-            saveData();
-            notifyRenderer('urls-updated', syncData.urls);
-            broadcastToClients('urls-updated', syncData.urls);
+            if (hasDataChanged('urls', syncData.urls)) {
+                saveData();
+                notifyRenderer('urls-updated', syncData.urls);
+                broadcastToClients('urls-updated', syncData.urls);
+            }
             break;
 
         case 'push-settings':
             syncData.settings = { ...syncData.settings, ...payload };
             syncData.lastUpdated.settings = Date.now();
-            saveData();
-            notifyRenderer('settings-updated', syncData.settings);
-            broadcastToClients('settings-updated', syncData.settings);
+            if (hasDataChanged('settings', syncData.settings)) {
+                saveData();
+                notifyRenderer('settings-updated', syncData.settings);
+                broadcastToClients('settings-updated', syncData.settings);
+            }
             break;
 
         case 'push-dashboard':
             syncData.dashboard = payload;
-            saveData();
-            notifyRenderer('dashboard-updated', syncData.dashboard);
-            broadcastToClients('dashboard-updated', syncData.dashboard);
+            if (hasDataChanged('dashboard', syncData.dashboard)) {
+                saveData();
+                notifyRenderer('dashboard-updated', syncData.dashboard);
+                broadcastToClients('dashboard-updated', syncData.dashboard);
+            }
             break;
 
         case 'push-tabs':
@@ -1244,8 +1500,11 @@ function handleWebSocketMessage(ws, data) {
             // We don't save tabs to disk to avoid stale sessions on restart
             // saveData();
 
-            notifyRenderer('tabs-updated', syncData.tabs);
-            broadcastToClients('tabs-updated', syncData.tabs);
+            // Only broadcast if tabs actually changed
+            if (hasDataChanged('tabs', syncData.tabs)) {
+                notifyRenderer('tabs-updated', syncData.tabs);
+                broadcastToClients('tabs-updated', syncData.tabs);
+            }
             break;
 
         case 'push-activity':
@@ -1260,56 +1519,70 @@ function handleWebSocketMessage(ws, data) {
         case 'push-notes':
             syncData.notes = payload;
             syncData.lastUpdated.notes = Date.now();
-            saveData();
-            notifyRenderer('notes-updated', syncData.notes);
-            broadcastToClients('notes-updated', syncData.notes);
+            if (hasDataChanged('notes', syncData.notes)) {
+                saveData();
+                notifyRenderer('notes-updated', syncData.notes);
+                broadcastToClients('notes-updated', syncData.notes);
+            }
             break;
 
         case 'push-url-notes':
             syncData.urlNotes = payload;
             syncData.lastUpdated.urlNotes = Date.now();
-            saveData();
-            notifyRenderer('url-notes-updated', syncData.urlNotes);
-            broadcastToClients('url-notes-updated', syncData.urlNotes);
+            if (hasDataChanged('urlNotes', syncData.urlNotes)) {
+                saveData();
+                notifyRenderer('url-notes-updated', syncData.urlNotes);
+                broadcastToClients('url-notes-updated', syncData.urlNotes);
+            }
             break;
 
         case 'push-pins':
             syncData.pins = payload;
             syncData.lastUpdated.pins = Date.now();
-            saveData();
-            notifyRenderer('pins-updated', syncData.pins);
-            broadcastToClients('pins-updated', syncData.pins);
+            if (hasDataChanged('pins', syncData.pins)) {
+                saveData();
+                notifyRenderer('pins-updated', syncData.pins);
+                broadcastToClients('pins-updated', syncData.pins);
+            }
             break;
 
         case 'push-scraped-chats':
             syncData.scrapedChats = payload;
             syncData.lastUpdated.scrapedChats = Date.now();
-            saveData();
-            notifyRenderer('scraped-chats-updated', syncData.scrapedChats);
-            broadcastToClients('scraped-chats-updated', syncData.scrapedChats);
+            if (hasDataChanged('scrapedChats', syncData.scrapedChats)) {
+                saveData();
+                notifyRenderer('scraped-chats-updated', syncData.scrapedChats);
+                broadcastToClients('scraped-chats-updated', syncData.scrapedChats);
+            }
             break;
 
         case 'push-scraped-configs':
             syncData.scrapedConfigs = payload;
             syncData.lastUpdated.scrapedConfigs = Date.now();
-            saveData();
-            notifyRenderer('scraped-configs-updated', syncData.scrapedConfigs);
-            broadcastToClients('scraped-configs-updated', syncData.scrapedConfigs);
+            if (hasDataChanged('scrapedConfigs', syncData.scrapedConfigs)) {
+                saveData();
+                notifyRenderer('scraped-configs-updated', syncData.scrapedConfigs);
+                broadcastToClients('scraped-configs-updated', syncData.scrapedConfigs);
+            }
             break;
 
         case 'push-daily-memory':
             syncData.dailyMemory = payload;
             syncData.lastUpdated.dailyMemory = Date.now();
-            saveData();
-            notifyRenderer('daily-memory-updated', syncData.dailyMemory);
-            broadcastToClients('daily-memory-updated', syncData.dailyMemory);
+            if (hasDataChanged('dailyMemory', syncData.dailyMemory)) {
+                saveData();
+                notifyRenderer('daily-memory-updated', syncData.dailyMemory);
+                broadcastToClients('daily-memory-updated', syncData.dailyMemory);
+            }
             break;
 
         case 'push-ui-state':
             syncData.uiState = { ...syncData.uiState, ...payload };
-            saveData();
-            notifyRenderer('ui-state-updated', syncData.uiState);
-            broadcastToClients('ui-state-updated', syncData.uiState);
+            if (hasDataChanged('uiState', syncData.uiState)) {
+                saveData();
+                notifyRenderer('ui-state-updated', syncData.uiState);
+                broadcastToClients('ui-state-updated', syncData.uiState);
+            }
             break;
 
         // ==========================================
@@ -2055,6 +2328,20 @@ ipcMain.handle('get-installed-apps', async () => {
     }
 });
 
+// Force refresh installed apps cache (useful after installing new apps)
+ipcMain.handle('refresh-installed-apps', async () => {
+    try {
+        console.log('[Electron] Force refreshing installed apps cache...');
+        installedAppsCache = null;
+        installedAppsCacheTime = 0;
+        const apps = await getInstalledApps();
+        return { success: true, count: apps.length };
+    } catch (e) {
+        console.warn('[Electron] refresh-installed-apps failed:', e.message);
+        return { success: false, error: e.message };
+    }
+});
+
 ipcMain.handle('focus-app', async (_event, pid) => {
     try {
         return await focusAppWindow(pid);
@@ -2489,11 +2776,20 @@ function registerSpotlightShortcut() {
 }
 
 app.whenReady().then(() => {
+    // Disable default menu to save resources (we don't use it)
+    Menu.setApplicationMenu(null);
+
     // Load persisted data
     loadData();
 
     // Start desktop activity tracking
     startAppActivityTracking();
+
+    // Pre-warm installed apps cache in background (don't block startup)
+    setTimeout(() => {
+        console.log('[Electron] Pre-warming installed apps cache...');
+        getInstalledApps().catch(e => console.warn('[Electron] Pre-warm failed:', e));
+    }, 3000); // Delay 3s after app is ready
 
     // Start HTTP server for extension sync
     startHttpServer();

@@ -10,6 +10,54 @@ const listeners = {
     storage: []
 };
 
+// ==========================================
+// TAB CACHING - Prevents repeated IPC calls
+// ==========================================
+let tabCache = {
+    tabs: [],
+    lastFetch: 0,
+    pendingPromise: null
+};
+const TAB_CACHE_TTL = 2000; // 2 seconds cache
+
+async function getCachedTabs() {
+    const now = Date.now();
+
+    // Return cached if fresh
+    if (now - tabCache.lastFetch < TAB_CACHE_TTL && tabCache.tabs.length > 0) {
+        return tabCache.tabs;
+    }
+
+    // If there's already a pending fetch, wait for it
+    if (tabCache.pendingPromise) {
+        return tabCache.pendingPromise;
+    }
+
+    // Fetch fresh data
+    if (typeof window !== 'undefined' && window.electronAPI?.getTabs) {
+        tabCache.pendingPromise = window.electronAPI.getTabs()
+            .then(tabs => {
+                tabCache.tabs = tabs || [];
+                tabCache.lastFetch = Date.now();
+                tabCache.pendingPromise = null;
+                return tabCache.tabs;
+            })
+            .catch(err => {
+                console.warn('[Chrome Polyfill] Tab fetch failed:', err);
+                tabCache.pendingPromise = null;
+                return tabCache.tabs; // Return stale cache on error
+            });
+        return tabCache.pendingPromise;
+    }
+
+    return [];
+}
+
+// Invalidate cache when tabs update
+function invalidateTabCache() {
+    tabCache.lastFetch = 0;
+}
+
 // Notify storage change listeners
 function notifyStorageChange(changes, areaName) {
     for (const listener of listeners.storage) {
@@ -143,32 +191,23 @@ function notifyTabListeners() {
 // Subscribe to global sync updates to trigger listeners
 if (typeof window !== 'undefined' && window.electronAPI?.subscribe) {
     window.electronAPI.subscribe('tabs-updated', () => {
-        console.log('[Chrome Polyfill] Tabs updated, notifying listeners');
+        console.log('[Chrome Polyfill] Tabs updated, invalidating cache');
+        invalidateTabCache(); // Invalidate cache so next query fetches fresh data
         notifyTabListeners();
     });
 }
 
-// Tabs API - Support both callback and promise patterns
+// Tabs API - Support both callback and promise patterns (with caching)
 const createTabsAPI = () => ({
     query: (queryInfo, callback) => {
-        // ... (existing query implementation)
-        // In Electron, we can use IPC to get actual window info if available
-        const result = [];
-
-        if (typeof window !== 'undefined' && window.electronAPI?.getTabs) {
-            const promise = window.electronAPI.getTabs();
-            if (typeof callback === 'function') {
-                promise.then(tabs => callback(tabs || []));
-                return;
-            }
-            return promise;
-        }
+        // Use cached tabs to prevent excessive IPC calls
+        const promise = getCachedTabs();
 
         if (typeof callback === 'function') {
-            setTimeout(() => callback(result), 0);
+            promise.then(tabs => callback(tabs || []));
             return;
         }
-        return Promise.resolve(result);
+        return promise;
     },
 
     update: (tabId, updateProps, callback) => {

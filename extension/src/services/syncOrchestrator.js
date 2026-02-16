@@ -59,6 +59,18 @@ import {
 import { getDeviceId, isHostSyncEnabled, loadSyncConfig } from './syncConfig';
 import { syncWebSocket } from './syncWebSocket';
 
+// Simple hash function for change detection
+function simpleHash(data) {
+    const str = JSON.stringify(data);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString(16);
+}
+
 class SyncOrchestrator {
     constructor() {
         this.pendingChanges = new Map();
@@ -66,6 +78,7 @@ class SyncOrchestrator {
         this.isApplyingRemoteUpdate = false;
         this.lastSyncTime = {};
         this.lastPushTime = {}; // Track when we last pushed each data type
+        this.lastPushHash = {}; // Track hash of last pushed data to skip unchanged
         this.listeners = new Set();
         this.initialized = false;
         this.syncInterval = null;
@@ -74,6 +87,22 @@ class SyncOrchestrator {
         this.wsEventUnsubscribers = []; // Store WebSocket unsubscribe functions
         this.dbChannels = []; // Store BroadcastChannel references
         this.PUSH_DEBOUNCE_MS = 5000; // Minimum time between pushes of same type (5s to prevent sync loops)
+    }
+
+    /**
+     * Check if data has changed since last push
+     * @returns {boolean} true if data changed, false if identical
+     */
+    hasDataChanged(type, data) {
+        const currentHash = simpleHash(data);
+        const lastHash = this.lastPushHash[type];
+
+        if (currentHash === lastHash) {
+            return false; // No change
+        }
+
+        this.lastPushHash[type] = currentHash;
+        return true; // Changed
     }
 
     /**
@@ -605,8 +634,15 @@ class SyncOrchestrator {
 
     /**
      * Push local changes to remote
+     * @param {boolean} options.force - Force push even if data unchanged
      */
-    async pushChanges(type, data) {
+    async pushChanges(type, data, options = {}) {
+        // Skip push if data hasn't changed (unless forced)
+        if (!options.force && !this.hasDataChanged(type, data)) {
+            // console.log(`[SyncOrchestrator] Skipping ${type} push (unchanged)`);
+            return { ok: true, skipped: true };
+        }
+
         // Special case for tabs: we want to segment them by device
         let payload = data;
         if (type === 'tabs') {

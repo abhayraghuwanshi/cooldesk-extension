@@ -48,26 +48,44 @@ export async function refreshElectronCache() {
   const startTime = performance.now();
 
   try {
-    // Fetch all data in parallel using the correct preload API methods
-    const [tabsResult, workspacesResult, runningAppsResult, installedAppsResult] = await Promise.all([
+    // Helper to add timeout to promises
+    const withTimeout = (promise, ms, fallback = []) =>
+      Promise.race([
+        promise,
+        new Promise(resolve => setTimeout(() => resolve(fallback), ms))
+      ]);
+
+    // Fetch FAST data in parallel (tabs, workspaces, running apps) - these are quick
+    const [tabsResult, workspacesResult, runningAppsResult] = await Promise.all([
       // Tabs: use getTabs() method
-      window.electronAPI.getTabs?.().catch(() => []),
+      withTimeout(window.electronAPI.getTabs?.().catch(() => []), 2000),
       // Workspaces: use sendMessage for search
-      window.electronAPI.sendMessage?.({ type: 'SEARCH_WORKSPACES', query: '', maxResults: 100 })
-        .then(r => r?.results || []).catch(() => []),
+      withTimeout(
+        window.electronAPI.sendMessage?.({ type: 'SEARCH_WORKSPACES', query: '', maxResults: 100 })
+          .then(r => r?.results || []).catch(() => []),
+        2000
+      ),
       // Running apps: use getRunningApps() method
-      window.electronAPI.getRunningApps?.().catch(() => []),
-      // Installed apps: use getInstalledApps() method
-      window.electronAPI.getInstalledApps?.().catch(() => [])
+      withTimeout(window.electronAPI.getRunningApps?.().catch(() => []), 2000)
     ]);
 
     electronDataCache.tabs = Array.isArray(tabsResult) ? tabsResult : [];
     electronDataCache.workspaces = Array.isArray(workspacesResult) ? workspacesResult : [];
     electronDataCache.runningApps = Array.isArray(runningAppsResult) ? runningAppsResult : [];
-    electronDataCache.installedApps = Array.isArray(installedAppsResult) ? installedAppsResult : [];
     electronDataCache.lastRefresh = now;
 
-    console.log(`[SearchService] Cache refreshed in ${(performance.now() - startTime).toFixed(1)}ms: ${electronDataCache.tabs.length} tabs, ${electronDataCache.workspaces.length} workspaces, ${electronDataCache.runningApps.length} running apps, ${electronDataCache.installedApps.length} installed apps`);
+    console.log(`[SearchService] Fast cache refreshed in ${(performance.now() - startTime).toFixed(1)}ms: ${electronDataCache.tabs.length} tabs, ${electronDataCache.workspaces.length} workspaces, ${electronDataCache.runningApps.length} running apps`);
+
+    // Load installed apps in BACKGROUND (non-blocking) - can be slow on first run
+    // Only fetch if cache is empty (first load)
+    if (electronDataCache.installedApps.length === 0) {
+      window.electronAPI.getInstalledApps?.()
+        .then(apps => {
+          electronDataCache.installedApps = Array.isArray(apps) ? apps : [];
+          console.log(`[SearchService] Background: loaded ${electronDataCache.installedApps.length} installed apps`);
+        })
+        .catch(e => console.warn('[SearchService] Background installed apps load failed:', e));
+    }
   } catch (e) {
     console.warn('[SearchService] Cache refresh failed:', e);
   }

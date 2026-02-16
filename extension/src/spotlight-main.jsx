@@ -49,7 +49,5 @@ function SpotlightApp() {
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-    <React.StrictMode>
-        <SpotlightApp />
-    </React.StrictMode>
+    <SpotlightApp />
 );

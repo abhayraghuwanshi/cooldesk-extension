@@ -1,7 +1,7 @@
 import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
 import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFolder, faGamepad, faGlobe, faImage, faMusic, faTerminal, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
 import './GlobalSpotlight.css';
@@ -154,35 +154,36 @@ export function GlobalSpotlight() {
         }
     }, []);
 
-    // Load AI Context Items (Workflow Recommendation)
-    const loadContextItems = async () => {
+    // Load AI Context Items (Workflow Recommendation) - Uses cached data from refreshElectronCache
+    // This avoids redundant IPC calls by reusing the cache populated by refreshElectronCache
+    const loadContextItems = useCallback(async () => {
         try {
             const items = [];
 
-            // 1. Get Running Apps (limit to 3 relevant ones)
+            // 1. Get Running Apps (limit to 3 relevant ones) - use cached if available
             if (window.electronAPI?.getRunningApps) {
                 const apps = await window.electronAPI.getRunningApps();
                 // Filter for "dev" or "productivity" apps usually
                 const relevantApps = apps
-                    .filter(a => !['explorer', 'searchhost', 'taskmgr'].includes(a.name.toLowerCase()))
+                    .filter(a => !['explorer', 'searchhost', 'taskmgr'].includes((a.name || '').toLowerCase()))
                     .slice(0, 3)
                     .map(a => ({ ...a, type: 'app', description: 'Active App' }));
                 items.push(...relevantApps);
             }
 
-            // 2. Get Active/Recent Tabs from Electron (if possible) specific to current workflow
-            if (window.electronAPI?.sendMessage) {
+            // 2. Get Active/Recent Tabs - use chrome.tabs.query which now has caching
+            if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
                 try {
-                    const tabsResp = await window.electronAPI.sendMessage({ type: 'SEARCH_TABS', query: '' });
-                    if (tabsResp?.results) {
+                    const tabs = await chrome.tabs.query({});
+                    if (tabs && tabs.length > 0) {
                         // Heuristic: Pick 2-3 tabs that look like "work" (docs, git, local)
-                        const workTabs = tabsResp.results
+                        const workTabs = tabs
                             .filter(t =>
-                                t.url.includes('github') ||
-                                t.url.includes('docs') ||
-                                t.url.includes('localhost') ||
-                                t.url.includes('figma') ||
-                                t.url.includes('jira')
+                                t.url?.includes('github') ||
+                                t.url?.includes('docs') ||
+                                t.url?.includes('localhost') ||
+                                t.url?.includes('figma') ||
+                                t.url?.includes('jira')
                             )
                             .slice(0, 3)
                             .map(t => ({ ...t, type: 'tab', description: 'Recommended Tab' }));
@@ -191,7 +192,7 @@ export function GlobalSpotlight() {
                             items.push(...workTabs);
                         } else {
                             // Fallback to just recent tabs
-                            items.push(...tabsResp.results.slice(0, 3).map(t => ({ ...t, type: 'tab', description: 'Recent Tab' })));
+                            items.push(...tabs.slice(0, 3).map(t => ({ ...t, type: 'tab', description: 'Recent Tab' })));
                         }
                     }
                 } catch (e) { console.warn('Failed to fetch tabs for context', e); }
@@ -201,7 +202,7 @@ export function GlobalSpotlight() {
         } catch (e) {
             console.warn('Failed to load context items', e);
         }
-    };
+    }, []);
 
     // Load Pinned Items
     const loadPinnedItems = async () => {
@@ -554,14 +555,6 @@ export function GlobalSpotlight() {
         handleClose();
     };
 
-    const handleSummarise = () => {
-        // In global scope, we can't easily summarise "active page" unless we talk to main
-        // Placeholder interaction
-        console.log('Summarise requested');
-        // Could send IPC to main to ask "active browser window" to summarize
-        handleClose();
-    };
-
     const handleClose = useCallback(() => {
         setQuery('');
         setResults([]);
@@ -634,30 +627,16 @@ export function GlobalSpotlight() {
                         </div>
                         <div className="spotlight-pins-grid context-grid">
                             {contextItems.map((item, i) => (
-                                <div
+                                <ContextItem
                                     key={`ctx-${i}`}
-                                    className={`pin-item context-item ${item.type === 'app' ? 'pin-app' : ''} ${i + pinnedItems.length === selectedPinIndex ? 'pin-selected' : ''}`}
-                                    onClick={() => handleSelect(item)}
-                                    onMouseEnter={() => setSelectedPinIndex(i + pinnedItems.length)}
-                                >
-                                    <div className="pin-icon">
-                                        {item.type === 'app' ? (
-                                            item.icon ? (
-                                                <img src={item.icon} className="app-icon-img" alt="" onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>'; }} />
-                                            ) : (
-                                                <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
-                                            )
-                                        ) : item.favicon ? (
-                                            <img src={item.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '🔗' }} alt="" />
-                                        ) : (
-                                            <FontAwesomeIcon icon={item.type === 'workspace' ? faFolder : faGlobe} />
-                                        )}
-                                    </div>
-                                    <div className="context-item-details">
-                                        <span className="pin-label">{item.title || item.name}</span>
-                                        <span className="context-item-desc">{item.description || item.category || 'Suggested'}</span>
-                                    </div>
-                                </div>
+                                    item={item}
+                                    index={i}
+                                    pinnedLength={pinnedItems.length}
+                                    isSelected={i + pinnedItems.length === selectedPinIndex}
+                                    onSelect={handleSelect}
+                                    onHover={setSelectedPinIndex}
+                                    getAppIcon={getAppIcon}
+                                />
                             ))}
                         </div>
                     </div>
@@ -673,28 +652,16 @@ export function GlobalSpotlight() {
                     </div>
                     <div className="spotlight-pins-grid">
                         {pinnedItems.map((pin, i) => (
-                            <div
+                            <PinItem
                                 key={i}
-                                className={`pin-item ${pin.type === 'app' ? 'pin-app' : ''} ${i === selectedPinIndex ? 'pin-selected' : ''}`}
-                                onClick={() => handleSelect(pin)}
-                                onMouseEnter={() => setSelectedPinIndex(i)}
-                            >
-                                <div className="pin-icon">
-                                    {pin.type === 'app' ? (
-                                        pin.icon ? (
-                                            <img src={pin.icon} className="app-icon-img" alt="" onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>'; }} />
-                                        ) : (
-                                            <FontAwesomeIcon icon={getAppIcon(pin.name)} className="app-icon" />
-                                        )
-                                    ) : pin.favicon ? (
-                                        <img src={pin.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '🔗' }} alt="" />
-                                    ) : (
-                                        <FontAwesomeIcon icon={faGlobe} />
-                                    )}
-                                </div>
-                                <span className="pin-label">{pin.title || pin.name || 'Link'}</span>
-                                <span className="pin-remove" onClick={(e) => removePin(i, e)}>×</span>
-                            </div>
+                                pin={pin}
+                                index={i}
+                                isSelected={i === selectedPinIndex}
+                                onSelect={handleSelect}
+                                onHover={setSelectedPinIndex}
+                                onRemove={removePin}
+                                getAppIcon={getAppIcon}
+                            />
                         ))}
                         {pinnedItems.length < 8 && (
                             <div style={{ opacity: 0.3, fontSize: 11, padding: '6px', fontStyle: 'italic' }}>
@@ -704,62 +671,28 @@ export function GlobalSpotlight() {
                     </div>
                 </div>
 
-                {/* Results */}
+                {/* Results - Limited to 10 visible for performance */}
                 {results.length > 0 && (
                     <div className="spotlight-results">
-                        {results.map((item, index) => (
-                            <div
+                        {results.slice(0, 10).map((item, index) => (
+                            <ResultItem
                                 key={item.id || index}
-                                className={`result-item ${index === selectedIndex ? 'selected' : ''} ${item.type === 'app' ? 'result-app' : ''}`}
-                                onClick={() => handleSelect(item)}
-                                onMouseEnter={() => setSelectedIndex(index)}
-                            >
-                                <div className="result-icon">
-                                    {item.type === 'app' ? (
-                                        item.icon ? (
-                                            <img src={item.icon} className="app-icon-img" alt="" onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>'; }} />
-                                        ) : (
-                                            <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
-                                        )
-                                    ) : item.favicon ? (
-                                        <img src={item.favicon} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = getIcon(item.type) }} alt="" />
-                                    ) : (
-                                        <span>{getIcon(item.type)}</span>
-                                    )}
-                                </div>
-                                <div className="result-content">
-                                    <span className="result-title">{item.title || item.name}</span>
-                                    <span className="result-desc">
-                                        {item.type === 'app'
-                                            ? (item.isRunning ? `Running • ${item.title}` : item.path?.split('\\').pop() || 'Application')
-                                            : (item.description || formatUrl(item.url))}
-                                    </span>
-                                </div>
-
-                                {/* Badge OR Hint */}
-                                {index === selectedIndex ? (
-                                    <div className="result-hint">
-                                        <span>{item.type === 'app' ? (item.isRunning ? 'Focus' : 'Launch') : 'Open'}</span>
-                                        <span className="shortcut-key">↵</span>
-                                    </div>
-                                ) : (
-                                    <span className={`result-badge ${item.type === 'app' && item.isRunning ? 'badge-running' : ''}`}>
-                                        {getBadgeLabel(item)}
-                                    </span>
-                                )}
-
-                                {/* Pin button - works for both URLs and apps */}
-                                {(item.url || item.type === 'app') && (
-                                    <span
-                                        className="pin-btn"
-                                        title="Pin this"
-                                        onClick={(e) => togglePin(item, e)}
-                                    >
-                                        📌
-                                    </span>
-                                )}
-                            </div>
+                                item={item}
+                                index={index}
+                                isSelected={index === selectedIndex}
+                                onSelect={handleSelect}
+                                onHover={setSelectedIndex}
+                                onTogglePin={togglePin}
+                                formatUrl={formatUrl}
+                                getBadgeLabel={getBadgeLabel}
+                                getAppIcon={getAppIcon}
+                            />
                         ))}
+                        {results.length > 10 && (
+                            <div style={{ padding: '8px 14px', color: 'rgba(255,255,255,0.4)', fontSize: '12px', textAlign: 'center' }}>
+                                +{results.length - 10} more results (refine your search)
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -790,3 +723,148 @@ function getIcon(type) {
         default: return '🔗';
     }
 }
+
+// Memoized Pin Item to prevent unnecessary re-renders
+const PinItem = memo(function PinItem({ pin, index, isSelected, onSelect, onHover, onRemove, getAppIcon }) {
+    const handleClick = useCallback(() => onSelect(pin), [pin, onSelect]);
+    const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
+    const handleRemove = useCallback((e) => onRemove(index, e), [index, onRemove]);
+    const handleIconError = useCallback((e) => {
+        e.target.style.display = 'none';
+        e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>';
+    }, []);
+    const handleFaviconError = useCallback((e) => {
+        e.target.style.display = 'none';
+        e.target.parentNode.innerHTML = '🔗';
+    }, []);
+
+    return (
+        <div
+            className={`pin-item ${pin.type === 'app' ? 'pin-app' : ''} ${isSelected ? 'pin-selected' : ''}`}
+            onClick={handleClick}
+            onMouseEnter={handleMouseEnter}
+        >
+            <div className="pin-icon">
+                {pin.type === 'app' ? (
+                    pin.icon ? (
+                        <img src={pin.icon} className="app-icon-img" alt="" onError={handleIconError} />
+                    ) : (
+                        <FontAwesomeIcon icon={getAppIcon(pin.name)} className="app-icon" />
+                    )
+                ) : pin.favicon ? (
+                    <img src={pin.favicon} onError={handleFaviconError} alt="" />
+                ) : (
+                    <FontAwesomeIcon icon={faGlobe} />
+                )}
+            </div>
+            <span className="pin-label">{pin.title || pin.name || 'Link'}</span>
+            <span className="pin-remove" onClick={handleRemove}>×</span>
+        </div>
+    );
+});
+
+// Memoized Context Item to prevent unnecessary re-renders
+const ContextItem = memo(function ContextItem({ item, index, pinnedLength, isSelected, onSelect, onHover, getAppIcon }) {
+    const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
+    const handleMouseEnter = useCallback(() => onHover(index + pinnedLength), [index, pinnedLength, onHover]);
+    const handleIconError = useCallback((e) => {
+        e.target.style.display = 'none';
+        e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>';
+    }, []);
+    const handleFaviconError = useCallback((e) => {
+        e.target.style.display = 'none';
+        e.target.parentNode.innerHTML = '🔗';
+    }, []);
+
+    return (
+        <div
+            className={`pin-item context-item ${item.type === 'app' ? 'pin-app' : ''} ${isSelected ? 'pin-selected' : ''}`}
+            onClick={handleClick}
+            onMouseEnter={handleMouseEnter}
+        >
+            <div className="pin-icon">
+                {item.type === 'app' ? (
+                    item.icon ? (
+                        <img src={item.icon} className="app-icon-img" alt="" onError={handleIconError} />
+                    ) : (
+                        <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
+                    )
+                ) : item.favicon ? (
+                    <img src={item.favicon} onError={handleFaviconError} alt="" />
+                ) : (
+                    <FontAwesomeIcon icon={item.type === 'workspace' ? faFolder : faGlobe} />
+                )}
+            </div>
+            <div className="context-item-details">
+                <span className="pin-label">{item.title || item.name}</span>
+                <span className="context-item-desc">{item.description || item.category || 'Suggested'}</span>
+            </div>
+        </div>
+    );
+});
+
+// Memoized Result Item to prevent unnecessary re-renders
+const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect, onHover, onTogglePin, formatUrl, getBadgeLabel, getAppIcon }) {
+    const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
+    const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
+    const handlePinClick = useCallback((e) => onTogglePin(item, e), [item, onTogglePin]);
+    const handleIconError = useCallback((e) => {
+        e.target.style.display = 'none';
+        e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>';
+    }, []);
+    const handleFaviconError = useCallback((e) => {
+        e.target.style.display = 'none';
+        e.target.parentNode.innerHTML = getIcon(item.type);
+    }, [item.type]);
+
+    return (
+        <div
+            className={`result-item ${isSelected ? 'selected' : ''} ${item.type === 'app' ? 'result-app' : ''}`}
+            onClick={handleClick}
+            onMouseEnter={handleMouseEnter}
+        >
+            <div className="result-icon">
+                {item.type === 'app' ? (
+                    item.icon ? (
+                        <img src={item.icon} className="app-icon-img" alt="" onError={handleIconError} />
+                    ) : (
+                        <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
+                    )
+                ) : item.favicon ? (
+                    <img src={item.favicon} onError={handleFaviconError} alt="" />
+                ) : (
+                    <span>{getIcon(item.type)}</span>
+                )}
+            </div>
+            <div className="result-content">
+                <span className="result-title">{item.title || item.name}</span>
+                <span className="result-desc">
+                    {item.type === 'app'
+                        ? (item.isRunning ? `Running • ${item.title}` : item.path?.split('\\').pop() || 'Application')
+                        : (item.description || formatUrl(item.url))}
+                </span>
+            </div>
+
+            {isSelected ? (
+                <div className="result-hint">
+                    <span>{item.type === 'app' ? (item.isRunning ? 'Focus' : 'Launch') : 'Open'}</span>
+                    <span className="shortcut-key">↵</span>
+                </div>
+            ) : (
+                <span className={`result-badge ${item.type === 'app' && item.isRunning ? 'badge-running' : ''}`}>
+                    {getBadgeLabel(item)}
+                </span>
+            )}
+
+            {(item.url || item.type === 'app') && (
+                <span
+                    className="pin-btn"
+                    title="Pin this"
+                    onClick={handlePinClick}
+                >
+                    📌
+                </span>
+            )}
+        </div>
+    );
+});

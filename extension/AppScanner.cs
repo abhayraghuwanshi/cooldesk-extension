@@ -110,6 +110,7 @@ public class AppScanner {
                     if (string.IsNullOrEmpty(target)) continue;
                     if (!target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
                     if (!File.Exists(target)) continue;
+                    if (ShouldSkipPath(target)) continue;  // Filter by path
 
                     string name = Path.GetFileNameWithoutExtension(lnkFile);
                     if (ShouldSkip(name)) continue;
@@ -151,6 +152,7 @@ public class AppScanner {
 
                         // Prefer exe matching folder name
                         foreach (string exe in exeFiles) {
+                            if (ShouldSkipPath(exe)) continue;  // Filter by path
                             string exeName = Path.GetFileNameWithoutExtension(exe);
                             if (ShouldSkip(exeName)) continue;
 
@@ -207,6 +209,7 @@ public class AppScanner {
                                 try {
                                     string[] exeFiles = Directory.GetFiles(installLocation, "*.exe", SearchOption.TopDirectoryOnly);
                                     foreach (string exe in exeFiles) {
+                                        if (ShouldSkipPath(exe)) continue;  // Filter by path
                                         if (!ShouldSkip(Path.GetFileNameWithoutExtension(exe))) {
                                             apps[keyLower] = new AppInfo { 
                                                 name = name, 
@@ -246,6 +249,7 @@ public class AppScanner {
                                 try {
                                     string[] exeFiles = Directory.GetFiles(installLocation, "*.exe", SearchOption.TopDirectoryOnly);
                                     foreach (string exe in exeFiles) {
+                                        if (ShouldSkipPath(exe)) continue;  // Filter by path
                                         if (!ShouldSkip(Path.GetFileNameWithoutExtension(exe))) {
                                             apps[keyLower] = new AppInfo { 
                                                 name = name, 
@@ -268,9 +272,29 @@ public class AppScanner {
     static bool ShouldSkip(string name) {
         if (string.IsNullOrEmpty(name)) return true;
         string lower = name.ToLower();
-        return lower.Contains("uninstall") || lower.Contains("setup") ||
-               lower.Contains("update") || lower.Contains("helper") ||
-               lower.Contains("crash") || lower.Contains("install");
+        
+        // Only filter obvious system utilities - be very conservative
+        // Most filtering will happen based on Start Menu presence
+        return lower.Contains("uninstall") || 
+               lower.Contains("setup") ||
+               lower.Contains("installer") ||
+               (lower.Contains("update") && !lower.Contains("updater")) || // Skip "update" but not apps like "Updater"
+               lower.Contains("helper") ||
+               lower.Contains("crash");
+    }
+    
+    static bool ShouldSkipPath(string path) {
+        if (string.IsNullOrEmpty(path)) return false;
+        
+        string lowerPath = path.ToLower();
+        
+        // Filter out Windows system directories
+        return lowerPath.StartsWith("c:\\windows\\system32") ||
+               lowerPath.StartsWith("c:\\windows\\syswow64") ||
+               lowerPath.StartsWith("c:\\windows\\inf") ||
+               lowerPath.StartsWith("c:\\windows\\resources") ||
+               lowerPath.StartsWith("c:\\windows\\debug");
+               // Note: Don't filter all of C:\Windows since some apps install there
     }
 
     static string GetShortcutTarget(string lnkPath) {
