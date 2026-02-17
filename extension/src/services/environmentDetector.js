@@ -10,8 +10,11 @@
 export function isElectronApp() {
     if (typeof window === 'undefined') return false;
 
-    // Check for electronAPI exposed by preload script
+    // Check for electronAPI exposed by preload script or Tauri Shim
     if (window.electronAPI !== undefined) return true;
+
+    // Check for Tauri (treat as Electron for app logic compatibility)
+    if (window.__TAURI__ !== undefined || window.__TAURI_INTERNALS__ !== undefined) return true;
 
     // Check user agent for Electron
     if (navigator.userAgent.includes('Electron')) return true;

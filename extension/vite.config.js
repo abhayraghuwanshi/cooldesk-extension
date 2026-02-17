@@ -41,8 +41,44 @@ export default defineConfig(({ mode }) => {
   }
 
   // Chrome extension build (default)
+  const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
+
+  if (isTauri) {
+    return {
+      base: './', // Tauri loads from local file system or custom protocol
+      clearScreen: false,
+      server: {
+        port: 5173,
+        strictPort: true,
+        host: true,
+        hmr: {
+          port: 5173,
+          clientPort: 5173,
+        },
+        watch: {
+          ignored: ["**/src-tauri/**"],
+        },
+      },
+      envPrefix: ["VITE_", "TAURI_"],
+      build: {
+        target: process.env.TAURI_ENV_PLATFORM == "windows" ? "chrome105" : "safari13",
+        minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
+        sourcemap: !!process.env.TAURI_ENV_DEBUG,
+        outDir: 'dist-tauri', // Separate output for Tauri
+        rollupOptions: {
+          input: {
+            main: resolve(__dirname, 'index.html'),
+            spotlight: resolve(__dirname, 'spotlight.html'),
+          }
+        }
+      },
+      plugins: [react()],
+    }
+  }
+
   return {
     base: './',
+
     plugins: [
       crx({
         manifest,

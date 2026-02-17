@@ -13,7 +13,7 @@ public class AppFocus {
 
     static void Main(string[] args) {
         if (args.Length == 0) {
-            Console.Error.WriteLine("Usage: AppFocus.exe <pid>");
+            Console.Error.WriteLine("Usage: AppFocus.exe <pid> [process_name]");
             Environment.Exit(1);
         }
 
@@ -22,11 +22,42 @@ public class AppFocus {
             Console.Error.WriteLine("Invalid PID");
             Environment.Exit(1);
         }
+
+        string processName = args.Length > 1 ? args[1] : null;
+        if (processName != null && processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) {
+            processName = processName.Substring(0, processName.Length - 4);
+        }
         
         // Simulate Alt key press/release to allow SetForegroundWindow to work
         keybd_event(0x12, 0, 0, UIntPtr.Zero);
         keybd_event(0x12, 0, 2, UIntPtr.Zero);
         
+        try {
+            // Try by PID first
+            if (TryFocusPid(pid)) {
+                Environment.Exit(0);
+            }
+
+            // Fallback: Try by name if provided
+            if (!string.IsNullOrEmpty(processName)) {
+                Process[] processes = Process.GetProcessesByName(processName);
+                foreach (Process p in processes) {
+                    if (TryFocusPid(p.Id)) {
+                        Environment.Exit(0);
+                    }
+                }
+            }
+
+            Console.Error.WriteLine("No window found for PID " + pid + (processName != null ? " or process " + processName : ""));
+            Environment.Exit(1);
+
+        } catch (Exception ex) {
+            Console.Error.WriteLine("Error: " + ex.Message);
+            Environment.Exit(1);
+        }
+    }
+
+    static bool TryFocusPid(int pid) {
         try {
             Process p = Process.GetProcessById(pid);
             if (p.MainWindowHandle != IntPtr.Zero) {
@@ -36,14 +67,9 @@ public class AppFocus {
                     ShowWindow(p.MainWindowHandle, SW_SHOW);
                 }
                 SetForegroundWindow(p.MainWindowHandle);
-                Environment.Exit(0);
-            } else {
-                Console.Error.WriteLine("No main window found");
-                Environment.Exit(1);
+                return true;
             }
-        } catch (Exception ex) {
-            Console.Error.WriteLine("Error: " + ex.Message);
-            Environment.Exit(1);
-        }
+        } catch { }
+        return false;
     }
 }

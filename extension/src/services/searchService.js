@@ -21,9 +21,63 @@ let electronDataCache = {
   workspaces: [],
   runningApps: [],
   installedApps: [],
-  lastRefresh: 0
+  history: [],
+  bookmarks: [],
+  lastRefresh: {
+    tabs: 0,
+    runningApps: 0,
+    workspaces: 0,
+    installedApps: 0,
+    history: 0,
+    bookmarks: 0
+  }
 };
-const CACHE_TTL = 30000; // 30 seconds - refresh if older
+
+// Different TTLs for different data types
+const CACHE_TTL = {
+  tabs: 5000,              // 5 seconds - dynamic, changes frequently
+  runningApps: 5000,       // 5 seconds - dynamic, changes frequently
+  workspaces: 60000,       // 1 minute - semi-static
+  installedApps: 86400000, // 24 hours - very static, rarely changes
+  history: 120000,         // 2 minutes - semi-static
+  bookmarks: 300000        // 5 minutes - semi-static
+};
+
+// Track if sidecar is available to avoid repeated failed calls
+let sidecarAvailable = null; // null = unknown, true/false = known state
+let sidecarLastCheck = 0;
+const SIDECAR_CHECK_INTERVAL = 60000; // Re-check every 60 seconds
+
+/**
+ * Check if sidecar is available (with caching)
+ */
+async function isSidecarAvailable() {
+  const now = Date.now();
+  if (sidecarAvailable !== null && now - sidecarLastCheck < SIDECAR_CHECK_INTERVAL) {
+    return sidecarAvailable;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1000);
+    const res = await fetch('http://localhost:4000/health', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    sidecarAvailable = res.ok;
+  } catch {
+    sidecarAvailable = false;
+  }
+  sidecarLastCheck = now;
+  return sidecarAvailable;
+}
+
+/**
+ * Check if specific cache is fresh
+ */
+function isCacheFresh(type) {
+  const lastRefresh = electronDataCache.lastRefresh[type] || 0;
+  const ttl = CACHE_TTL[type] || 30000;
+  return Date.now() - lastRefresh < ttl;
+}
 
 // Check if running in Electron
 function isElectron() {
@@ -31,63 +85,115 @@ function isElectron() {
 }
 
 /**
- * Load all searchable data into memory cache (Electron only)
- * Called once when spotlight opens, not on every keystroke
+ * Load all searchable data into memory cache (Electron/Tauri only)
+ * Smart refresh - only fetches stale data based on TTL
  */
-export async function refreshElectronCache() {
+export async function refreshElectronCache(forceRefresh = false) {
   if (!isElectron()) return;
 
   const now = Date.now();
-  // Skip if cache is fresh
-  if (now - electronDataCache.lastRefresh < CACHE_TTL) {
-    console.log('[SearchService] Cache still fresh, skipping refresh');
-    return;
-  }
-
-  console.log('[SearchService] Refreshing Electron cache...');
   const startTime = performance.now();
 
-  try {
-    // Helper to add timeout to promises
-    const withTimeout = (promise, ms, fallback = []) =>
-      Promise.race([
-        promise,
-        new Promise(resolve => setTimeout(() => resolve(fallback), ms))
-      ]);
-
-    // Fetch FAST data in parallel (tabs, workspaces, running apps) - these are quick
-    const [tabsResult, workspacesResult, runningAppsResult] = await Promise.all([
-      // Tabs: use getTabs() method
-      withTimeout(window.electronAPI.getTabs?.().catch(() => []), 2000),
-      // Workspaces: use sendMessage for search
-      withTimeout(
-        window.electronAPI.sendMessage?.({ type: 'SEARCH_WORKSPACES', query: '', maxResults: 100 })
-          .then(r => r?.results || []).catch(() => []),
-        2000
-      ),
-      // Running apps: use getRunningApps() method
-      withTimeout(window.electronAPI.getRunningApps?.().catch(() => []), 2000)
+  // Helper to add timeout to promises
+  const withTimeout = (promise, ms, fallback = []) =>
+    Promise.race([
+      promise,
+      new Promise(resolve => setTimeout(() => resolve(fallback), ms))
     ]);
 
-    electronDataCache.tabs = Array.isArray(tabsResult) ? tabsResult : [];
-    electronDataCache.workspaces = Array.isArray(workspacesResult) ? workspacesResult : [];
-    electronDataCache.runningApps = Array.isArray(runningAppsResult) ? runningAppsResult : [];
-    electronDataCache.lastRefresh = now;
+  const refreshPromises = [];
 
-    console.log(`[SearchService] Fast cache refreshed in ${(performance.now() - startTime).toFixed(1)}ms: ${electronDataCache.tabs.length} tabs, ${electronDataCache.workspaces.length} workspaces, ${electronDataCache.runningApps.length} running apps`);
-
-    // Load installed apps in BACKGROUND (non-blocking) - can be slow on first run
-    // Only fetch if cache is empty (first load)
-    if (electronDataCache.installedApps.length === 0) {
-      window.electronAPI.getInstalledApps?.()
+  // 1. DYNAMIC DATA: Tabs & Running Apps (refresh if stale or forced)
+  if (forceRefresh || !isCacheFresh('runningApps')) {
+    refreshPromises.push(
+      withTimeout(window.electronAPI.getRunningApps?.().catch(() => []), 1000)
         .then(apps => {
-          electronDataCache.installedApps = Array.isArray(apps) ? apps : [];
-          console.log(`[SearchService] Background: loaded ${electronDataCache.installedApps.length} installed apps`);
+          electronDataCache.runningApps = Array.isArray(apps) ? apps : [];
+          electronDataCache.lastRefresh.runningApps = now;
         })
-        .catch(e => console.warn('[SearchService] Background installed apps load failed:', e));
+    );
+  }
+
+  // 2. INSTALLED APPS: Only refresh if cache is empty or expired (24h)
+  if (electronDataCache.installedApps.length === 0 || !isCacheFresh('installedApps')) {
+    refreshPromises.push(
+      withTimeout(window.electronAPI.getInstalledApps?.().catch(() => []), 3000)
+        .then(apps => {
+          if (Array.isArray(apps) && apps.length > 0) {
+            electronDataCache.installedApps = apps;
+            electronDataCache.lastRefresh.installedApps = now;
+          }
+        })
+    );
+  }
+
+  // 3. SIDECAR DATA: Only fetch if sidecar is available
+  const sidecarUp = await isSidecarAvailable();
+  console.log('[SearchService] Sidecar available:', sidecarUp);
+
+  if (sidecarUp) {
+    // Tabs from sidecar
+    if (forceRefresh || !isCacheFresh('tabs')) {
+      refreshPromises.push(
+        withTimeout(window.electronAPI.getTabs?.().catch(e => { console.error('[SearchService] getTabs error:', e); return []; }), 1000)
+          .then(tabs => {
+            console.log('[SearchService] Got tabs:', tabs?.length || 0);
+            electronDataCache.tabs = Array.isArray(tabs) ? tabs : [];
+            electronDataCache.lastRefresh.tabs = now;
+          })
+      );
     }
-  } catch (e) {
-    console.warn('[SearchService] Cache refresh failed:', e);
+
+    // Workspaces from sidecar
+    if (forceRefresh || !isCacheFresh('workspaces')) {
+      refreshPromises.push(
+        withTimeout(
+          window.electronAPI.sendMessage?.({ type: 'SEARCH_WORKSPACES', query: '', maxResults: 100 })
+            .then(r => Array.isArray(r?.results) ? r.results : []).catch(() => []),
+          1500
+        ).then(ws => {
+          electronDataCache.workspaces = ws;
+          electronDataCache.lastRefresh.workspaces = now;
+        })
+      );
+    }
+
+    // History from sidecar (background, lower priority)
+    if (!isCacheFresh('history')) {
+      refreshPromises.push(
+        withTimeout(
+          window.electronAPI.sendMessage?.({ type: 'SEARCH_HISTORY', query: '', maxResults: 100 })
+            .then(r => { console.log('[SearchService] Got history:', r?.results?.length || 0); return Array.isArray(r?.results) ? r.results : []; })
+            .catch(e => { console.error('[SearchService] history error:', e); return []; }),
+          2000
+        ).then(h => {
+          electronDataCache.history = h;
+          electronDataCache.lastRefresh.history = now;
+        })
+      );
+    }
+
+    // Bookmarks from sidecar (background, lower priority)
+    if (!isCacheFresh('bookmarks')) {
+      refreshPromises.push(
+        withTimeout(
+          window.electronAPI.sendMessage?.({ type: 'SEARCH_BOOKMARKS', query: '', maxResults: 100 })
+            .then(r => { console.log('[SearchService] Got bookmarks:', r?.results?.length || 0); return Array.isArray(r?.results) ? r.results : []; })
+            .catch(e => { console.error('[SearchService] bookmarks error:', e); return []; }),
+          2000
+        ).then(b => {
+          electronDataCache.bookmarks = b;
+          electronDataCache.lastRefresh.bookmarks = now;
+        })
+      );
+    }
+  } else {
+    console.log('[SearchService] Sidecar NOT available - skipping tabs/history/bookmarks fetch');
+  }
+
+  // Wait for all refreshes
+  if (refreshPromises.length > 0) {
+    await Promise.allSettled(refreshPromises);
   }
 }
 
@@ -98,56 +204,115 @@ export async function refreshElectronCache() {
 function searchElectronCache(query) {
   if (!query || !query.trim()) return [];
 
+  console.log('[SearchService] searchElectronCache called with:', query);
+  console.log('[SearchService] Cache state:', {
+    tabs: electronDataCache.tabs.length,
+    runningApps: electronDataCache.runningApps.length,
+    installedApps: electronDataCache.installedApps.length,
+    history: electronDataCache.history.length,
+    bookmarks: electronDataCache.bookmarks.length,
+    workspaces: electronDataCache.workspaces.length
+  });
+
   const results = [];
   const q = query.toLowerCase();
 
-  // Track running app names to mark them in installed apps list
-  const runningAppNames = new Set(
-    electronDataCache.runningApps.map(a => (a.name || '').toLowerCase())
-  );
+  // Helper to normalize app name for duplicate detection
+  const normalizeAppName = (name) => (name || '').toLowerCase().replace(/\.exe$/, '');
+
+  // Track running app names/paths for better matching
+  const runningAppsMap = new Map(); // key: normalized name -> app
+  const runningAppsPathMap = new Map(); // key: lowercase path -> app
+
+  electronDataCache.runningApps.forEach(a => {
+    const norm = normalizeAppName(a.name);
+    runningAppsMap.set(norm, a);
+    if (a.path) runningAppsPathMap.set(a.path.toLowerCase(), a);
+  });
 
   // Track added apps to avoid duplicates
-  const addedApps = new Set();
+  const addedIds = new Set();
+  const activeRunningAppNames = new Set();
 
   // Search ALL installed apps first (shows all apps, marks running ones)
   for (const app of electronDataCache.installedApps) {
     const appNameLower = (app.name || '').toLowerCase();
-    const nameMatch = appNameLower.includes(q);
+    const appNameNorm = normalizeAppName(app.name);
 
-    if (nameMatch) {
-      const isRunning = runningAppNames.has(appNameLower);
-      // Find running app info if available (for PID)
-      const runningInfo = isRunning
-        ? electronDataCache.runningApps.find(a => (a.name || '').toLowerCase() === appNameLower)
-        : null;
+    // Search match
+    if (!appNameLower.includes(q)) continue;
 
-      results.push({
-        id: `app-${app.name}`,
-        title: app.name,
-        name: app.name,
-        path: app.path,
-        pid: runningInfo?.pid,
-        description: isRunning ? (runningInfo?.title || 'Running') : 'Application',
-        type: 'app',
-        isRunning: isRunning,
-        icon: app.icon, // Pass through the icon from AppScanner
-        score: isRunning ? 95 : 75 // Running apps score higher
-      });
-      addedApps.add(appNameLower);
+    // Check if running
+    let runningInfo = runningAppsPathMap.get((app.path || '').toLowerCase());
+    if (!runningInfo) runningInfo = runningAppsMap.get(appNameNorm);
+
+    // Also try checking if installed app name contains running app name (e.g. "Google Chrome" contains "chrome")
+    if (!runningInfo) {
+      for (const [rName, rApp] of runningAppsMap.entries()) {
+        if (appNameLower.includes(rName) || rName.includes(appNameLower)) {
+          runningInfo = rApp;
+          break;
+        }
+      }
+    }
+
+    const isRunning = !!runningInfo;
+    const uniqueId = `app-${app.name}`;
+
+    results.push({
+      id: uniqueId,
+      title: app.name,
+      name: app.name,
+      path: app.path,
+      pid: runningInfo?.pid,
+      description: isRunning ? (runningInfo?.title || 'Running') : 'Application',
+      type: 'app',
+      isRunning: isRunning,
+      icon: app.icon, // Pass through the icon from AppScanner
+      score: isRunning ? 95 : 75 // Running apps score higher
+    });
+    addedIds.add(uniqueId);
+
+    if (isRunning) {
+      if (runningInfo) addedIds.add(`app-running-${runningInfo.pid}`);
+      activeRunningAppNames.add(appNameNorm);
+      if (runningInfo) activeRunningAppNames.add(normalizeAppName(runningInfo.name));
     }
   }
 
   // Add running apps that aren't in installed list (system processes, etc.)
   for (const app of electronDataCache.runningApps) {
-    const appNameLower = (app.name || '').toLowerCase();
-    if (addedApps.has(appNameLower)) continue; // Already added
+    const uniqueId = `app-running-${app.pid}`;
+    if (addedIds.has(uniqueId)) continue;
 
-    const nameMatch = appNameLower.includes(q);
-    const titleMatch = (app.title || '').toLowerCase().includes(q);
+    const appNameNorm = normalizeAppName(app.name);
+    if (activeRunningAppNames.has(appNameNorm)) continue; // Already shown effectively
+
+    // Filter match
+    const title = app.title || app.name || '';
+    const nameMatch = (app.name || '').toLowerCase().includes(q);
+    const titleMatch = title.toLowerCase().includes(q);
 
     if (nameMatch || titleMatch) {
+      // PROACTIVE: Try to find an icon from Installed Apps if missing
+      let icon = app.icon;
+      if (!icon) {
+        // Try path match
+        const installedByPath = app.path ? electronDataCache.installedApps.find(ia => ia.path && ia.path.toLowerCase() === app.path.toLowerCase()) : null;
+        if (installedByPath) icon = installedByPath.icon;
+
+        // Try loose name match if path fails
+        if (!icon) {
+          const installedByName = electronDataCache.installedApps.find(ia => {
+            const iaNorm = normalizeAppName(ia.name);
+            return iaNorm === appNameNorm || iaNorm.includes(appNameNorm) || appNameNorm.includes(iaNorm);
+          });
+          if (installedByName) icon = installedByName.icon;
+        }
+      }
+
       results.push({
-        id: `app-running-${app.pid || app.name}`,
+        id: uniqueId,
         title: app.name,
         name: app.name,
         path: app.path,
@@ -155,9 +320,12 @@ function searchElectronCache(query) {
         description: app.title || 'Running Process',
         type: 'app',
         isRunning: true,
-        icon: app.icon, // Pass through the icon from getRunningApps
+        icon: icon, // Use resolved icon
         score: nameMatch ? 90 : 80
       });
+      // Mark as added
+      addedIds.add(uniqueId);
+      activeRunningAppNames.add(appNameNorm);
     }
   }
 
@@ -196,8 +364,50 @@ function searchElectronCache(query) {
     }
   }
 
-  return results.sort((a, b) => b.score - a.score);
+  // Search cached history (if available)
+  for (const h of electronDataCache.history) {
+    const titleMatch = (h.title || '').toLowerCase().includes(q);
+    const urlMatch = (h.url || '').toLowerCase().includes(q);
+    if (titleMatch || urlMatch) {
+      results.push({
+        id: h.id || `hist-${h.url}`,
+        title: h.title,
+        url: h.url,
+        description: 'History',
+        type: 'history',
+        favicon: h.favicon,
+        score: titleMatch ? 55 : 40
+      });
+    }
+  }
+
+  // Search cached bookmarks (if available)
+  for (const b of electronDataCache.bookmarks) {
+    const titleMatch = (b.title || '').toLowerCase().includes(q);
+    const urlMatch = (b.url || '').toLowerCase().includes(q);
+    if (titleMatch || urlMatch) {
+      results.push({
+        id: b.id || `bm-${b.url}`,
+        title: b.title,
+        url: b.url,
+        description: 'Bookmark',
+        type: 'bookmark',
+        favicon: b.favicon,
+        score: titleMatch ? 65 : 45
+      });
+    }
+  }
+
+  // Sort by score
+  results.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  // Log final unique results
+  console.log('[SearchService] Search results for "' + query + '":', results.map(r => r.title));
+
+  return results;
 }
+
+
 
 // --- HELPER: Is Content Script? ---
 function isContentScript() {
@@ -317,16 +527,31 @@ async function searchDesktop(query) {
 export async function quickSearch(query, maxResults = 15) {
   if (!query || !query.trim()) return [];
 
-  // ELECTRON: Use fast in-memory cache (no IPC per search)
+  // ELECTRON/TAURI: Use in-memory cache first, fallback to live fetch if cache empty
   if (isElectron()) {
-    const cacheResults = searchElectronCache(query);
-    if (cacheResults.length > 0 || electronDataCache.lastRefresh > 0) {
-      // Cache exists (even if empty results), use it
-      const deduped = deduplicateByUrl(cacheResults);
-      return deduped.slice(0, maxResults);
+    // Pure in-memory search - instant results
+    let cacheResults = searchElectronCache(query);
+
+    // If cache returned nothing but we have installed apps, cache is working - just no matches
+    const cacheIsPopulated = electronDataCache.installedApps.length > 0 ||
+      electronDataCache.runningApps.length > 0;
+
+    // If cache is empty (not populated yet), try a quick live fetch
+    // This handles first search before cache is ready
+    if (cacheResults.length === 0 && !cacheIsPopulated) {
+      await refreshElectronCache(true);
+      cacheResults = searchElectronCache(query);
     }
-    // Cache not initialized - fall through to IPC fallback (first search only)
-    console.log('[SearchService] Electron cache empty, using IPC fallback...');
+
+    const deduped = deduplicateByUrl(cacheResults);
+    const results = deduped.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, maxResults);
+
+    // Background: trigger cache refresh for next search if data is stale
+    if (!isCacheFresh('runningApps') || !isCacheFresh('installedApps')) {
+      refreshElectronCache().catch(() => { }); // Non-blocking
+    }
+
+    return results;
   }
 
   // CHROME EXTENSION: Try Local Index FIRST
@@ -416,32 +641,36 @@ async function searchWorkspacesFallback(query) {
   if (window.electronAPI && window.electronAPI.sendMessage) {
     try {
       const response = await window.electronAPI.sendMessage({ type: 'SEARCH_WORKSPACES', query, maxResults: 20 });
-      if (response && response.results) return response.results;
+      // Always return an array - response.results may be undefined
+      return Array.isArray(response?.results) ? response.results : [];
     } catch (e) {
       console.warn('IPC Search Workspaces failed', e);
+      return []; // Return empty array on error in Electron mode
     }
   }
 
   if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
     try {
-      return await new Promise((resolve) => {
+      const result = await new Promise((resolve) => {
         let responded = false;
         // Short timeout for IPC
         const timeout = setTimeout(() => {
-          if (!responded) { responded = true; resolve(null); }
+          if (!responded) { responded = true; resolve([]); }
         }, 1000);
 
         chrome.runtime.sendMessage({ type: 'SEARCH_WORKSPACES', query, maxResults: 20 }, (response) => {
           if (responded) return;
           responded = true;
           clearTimeout(timeout);
-          if (response && response.results) {
+          if (response && Array.isArray(response.results)) {
             resolve(response.results);
           } else {
-            resolve(null); // Fallback to local logic if no results/error
+            resolve([]); // Return empty array instead of null
           }
         });
       });
+      // Only return if we got results, otherwise fall through to local fallback
+      if (result.length > 0) return result;
     } catch (e) {
       console.warn('IPC Search failed', e);
     }
@@ -450,7 +679,8 @@ async function searchWorkspacesFallback(query) {
   // 2. Local Fallback (Extension/Web)
   try {
     const response = await listWorkspaces();
-    const workspaces = Array.isArray(response) ? response : (response?.data || []);
+    let workspaces = Array.isArray(response) ? response : (response?.data || []);
+    if (!Array.isArray(workspaces)) workspaces = [];
     const results = [];
 
     // Search Workspace Names AND internal URLs
@@ -541,7 +771,7 @@ async function searchTabsFallback(query) {
       chrome.runtime.sendMessage({ type: 'SEARCH_TABS', query }, (response) => {
         if (responded) return;
         responded = true;
-        resolve(response?.results || []);
+        resolve(Array.isArray(response?.results) ? response.results : []);
       });
       setTimeout(() => { if (!responded) { responded = true; resolve([]); } }, 1000);
     });
@@ -550,13 +780,20 @@ async function searchTabsFallback(query) {
 }
 
 function searchHistoryFallback(query) {
+  // Electron IPC
+  if (window.electronAPI && window.electronAPI.sendMessage) {
+    return window.electronAPI.sendMessage({ type: 'SEARCH_HISTORY', query, maxResults: 15 })
+      .then(res => Array.isArray(res?.results) ? res.results : [])
+      .catch(() => []);
+  }
+
   if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
     return new Promise((resolve) => {
       let responded = false;
       chrome.runtime.sendMessage({ type: 'SEARCH_HISTORY', query, maxResults: 10 }, (response) => {
         if (responded) return;
         responded = true;
-        resolve(response?.results || []);
+        resolve(Array.isArray(response?.results) ? response.results : []);
       });
       setTimeout(() => { if (!responded) { responded = true; resolve([]); } }, 1000);
     });
@@ -565,13 +802,20 @@ function searchHistoryFallback(query) {
 }
 
 function searchBookmarksFallback(query) {
+  // Electron IPC
+  if (window.electronAPI && window.electronAPI.sendMessage) {
+    return window.electronAPI.sendMessage({ type: 'SEARCH_BOOKMARKS', query, maxResults: 15 })
+      .then(res => Array.isArray(res?.results) ? res.results : [])
+      .catch(() => []);
+  }
+
   if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
     return new Promise((resolve) => {
       let responded = false;
       chrome.runtime.sendMessage({ type: 'SEARCH_BOOKMARKS', query, maxResults: 10 }, (response) => {
         if (responded) return;
         responded = true;
-        resolve(response?.results || []);
+        resolve(Array.isArray(response?.results) ? response.results : []);
       });
       setTimeout(() => { if (!responded) { responded = true; resolve([]); } }, 1000);
     });

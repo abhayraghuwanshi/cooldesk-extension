@@ -388,7 +388,9 @@ export const listWorkspaceUrls = withErrorHandling(async (workspaceId, options =
  * List all scraped AI chats with optional filtering
  */
 export const listScrapedChats = withErrorHandling(async (options = {}) => {
-    const { platform, limit, offset, sortBy = 'scrapedAt', sortOrder = 'desc' } = options
+    const { platform, limit = 100, offset = 0, sortBy = 'scrapedAt', sortOrder = 'desc' } = options
+    // CRITICAL: Default limit of 100 to prevent memory explosion
+    const safeLimit = Math.min(limit || 100, 500); // Hard cap at 500
 
     const db = await getUnifiedDB()
     const tx = db.transaction(DB_CONFIG.STORES.SCRAPED_CHATS, 'readonly')
@@ -397,16 +399,16 @@ export const listScrapedChats = withErrorHandling(async (options = {}) => {
     let results = []
 
     if (platform) {
-        // Filter by platform using index
+        // Filter by platform using index with limit
         const index = store.index('by_platform')
-        const request = index.getAll(platform)
+        const request = index.getAll(platform, safeLimit + offset)
         results = await new Promise((resolve, reject) => {
             request.onsuccess = () => resolve(request.result || [])
             request.onerror = () => reject(request.error)
         })
     } else {
-        // Get all chats
-        const request = store.getAll()
+        // Get chats with limit to prevent loading entire DB into memory
+        const request = store.getAll(null, safeLimit + offset)
         results = await new Promise((resolve, reject) => {
             request.onsuccess = () => resolve(request.result || [])
             request.onerror = () => reject(request.error)
@@ -430,7 +432,7 @@ export const listScrapedChats = withErrorHandling(async (options = {}) => {
 
     // Apply pagination
     if (offset) results = results.slice(offset)
-    if (limit) results = results.slice(0, limit)
+    results = results.slice(0, safeLimit)
 
     return results
 }, {
@@ -1053,15 +1055,17 @@ export const putActivityRow = putActivityTimeSeriesEvent
 export const getAllActivity = withErrorHandling(async (options = {}) => {
     const startTime = Date.now()
     const { limit = 100 } = options // Much smaller limit for speed
+    const safeLimit = Math.min(limit, 500) // Hard cap at 500 to prevent memory explosion
 
-    console.log('[DB Debug] getAllActivity called - ultra-fast mode')
+    console.log('[DB Debug] getAllActivity called - memory-safe mode')
 
     try {
         const db = await getUnifiedDB()
 
-        // Use the fastest possible approach - direct getAll with immediate resolve
+        // Use cursor to get most recent items without loading entire DB into memory
         const tx = db.transaction(DB_CONFIG.STORES.ACTIVITY_SERIES, 'readonly')
         const store = tx.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES)
+        const index = store.index('by_timestamp')
 
         // Set a 2-second timeout on the entire operation
         const timeoutPromise = new Promise((_, reject) => {
@@ -1069,22 +1073,23 @@ export const getAllActivity = withErrorHandling(async (options = {}) => {
         })
 
         const dataPromise = new Promise((resolve, reject) => {
-            const request = store.getAll()
+            const results = []
+            // Open cursor in reverse (newest first) with limit
+            const request = index.openCursor(null, 'prev')
 
-            request.onsuccess = () => {
-                const data = request.result || []
-                console.log('[DB Debug] Fast retrieval:', data.length, 'records in', Date.now() - startTime, 'ms')
-
-                // Quick sort and limit - no complex operations
-                const sorted = data
-                    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                    .slice(0, limit)
-
-                resolve(sorted)
+            request.onsuccess = (event) => {
+                const cursor = event.target.result
+                if (cursor && results.length < safeLimit) {
+                    results.push(cursor.value)
+                    cursor.continue()
+                } else {
+                    console.log('[DB Debug] Cursor retrieval:', results.length, 'records in', Date.now() - startTime, 'ms')
+                    resolve(results)
+                }
             }
 
             request.onerror = () => {
-                console.error('[DB Debug] Fast retrieval error:', request.error)
+                console.error('[DB Debug] Cursor retrieval error:', request.error)
                 reject(request.error)
             }
         })
@@ -1583,7 +1588,7 @@ function generateId() {
 }
 
 
-export async function getTimeSeriesDataRange(startTime, endTime) {
+export async function getTimeSeriesDataRange(startTime, endTime, limit = 500) {
     const db = await getUnifiedDB();
     const transaction = db.transaction([DB_CONFIG.STORES.ACTIVITY_SERIES], 'readonly');
     const store = transaction.objectStore(DB_CONFIG.STORES.ACTIVITY_SERIES);
@@ -1591,7 +1596,8 @@ export async function getTimeSeriesDataRange(startTime, endTime) {
     const range = IDBKeyRange.bound(startTime, endTime);
 
     return new Promise((resolve, reject) => {
-        const request = index.getAll(range);
+        // CRITICAL: Use count parameter to limit results and prevent memory explosion
+        const request = index.getAll(range, limit);
 
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);

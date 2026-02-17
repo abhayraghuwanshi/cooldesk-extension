@@ -10,7 +10,8 @@
       "Bash(tree:*)",
       "Bash(C:WindowsMicrosoft.NETFramework64v4.0.30319csc.exe /nologo /optimize /out:\"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe\" \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.cs\")",
       "Bash(cmd /c \"dir c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe\")",
-      "Bash(cmd /c \"if exist c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe \\(echo EXISTS\\) else \\(echo NOT FOUND\\)\")"
+      "Bash(cmd /c \"if exist c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe \\(echo EXISTS\\) else \\(echo NOT FOUND\\)\")",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

@@ -18,6 +18,7 @@ import {
     listScrapedChats,
     listScrapingConfigs,
     listWorkspaces,
+    putActivityTimeSeriesEvent,
     saveDailyMemory,
     saveDashboard,
     saveNote,
@@ -304,11 +305,25 @@ class SyncOrchestrator {
                 chrome.tabs.onAttached
             ];
 
+            // Throttled tab sync - only sync every 5 seconds max to prevent cascading updates
+            let lastTabSync = 0;
+            const SYNC_THROTTLE_MS = 5000; // 5 seconds minimum between syncs
+
             const debouncedSyncTabs = () => {
                 if (this.tabDebounceTimer) clearTimeout(this.tabDebounceTimer);
+
+                const now = Date.now();
+                const timeSinceLastSync = now - lastTabSync;
+
+                // If we synced recently, schedule for later
+                const delay = timeSinceLastSync < SYNC_THROTTLE_MS
+                    ? SYNC_THROTTLE_MS - timeSinceLastSync + 100
+                    : 2000; // 2s debounce (up from 1s)
+
                 this.tabDebounceTimer = setTimeout(() => {
+                    lastTabSync = Date.now();
                     this.syncLocalTabs();
-                }, 1000); // 1s debounce for responsive updates
+                }, delay);
             };
 
             // Store listener references for cleanup
@@ -432,15 +447,12 @@ class SyncOrchestrator {
      * Sync local tabs to remote
      */
     async syncLocalTabs() {
-        console.log('[SyncOrchestrator] syncLocalTabs called. HostSyncEnabled:', isHostSyncEnabled(), 'isExtension:', isExtension());
         if (!isHostSyncEnabled()) return;
         // Only sync tabs from extension context, not Electron
         if (!isExtension()) return;
 
         try {
             const tabs = await chrome.tabs.query({});
-            console.log(`[SyncOrchestrator] Found ${tabs?.length || 0} local tabs`);
-
             if (!Array.isArray(tabs)) return;
 
             const cleanTabs = tabs
@@ -450,16 +462,19 @@ class SyncOrchestrator {
                     url: t.url,
                     title: t.title || '',
                     active: t.active || false,
-                    favIconUrl: t.favIconUrl || '',
-                    windowId: t.windowId,
-                    lastAccessed: t.lastAccessed
+                    favIconUrl: '', // Skip favicons to reduce payload size
+                    windowId: t.windowId
                 }));
 
-            console.log(`[SyncOrchestrator] Syncing ${cleanTabs.length} tabs after filtering`);
+            // Skip sync if no tabs changed (compare count as quick check)
+            if (this._lastTabCount === cleanTabs.length && this._lastTabUrls === cleanTabs.map(t => t.url).join('|')) {
+                return; // No change, skip sync
+            }
+            this._lastTabCount = cleanTabs.length;
+            this._lastTabUrls = cleanTabs.map(t => t.url).join('|');
+
             if (cleanTabs.length > 0) {
                 await this.pushChanges('tabs', cleanTabs);
-            } else {
-                console.log('[SyncOrchestrator] No valid tabs to sync (all filtered)');
             }
         } catch (e) {
             console.warn('[SyncOrchestrator] Failed to sync local tabs:', e);

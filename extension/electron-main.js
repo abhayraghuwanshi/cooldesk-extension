@@ -196,15 +196,52 @@ async function getRunningAppsWindows() {
         const processes = JSON.parse(stdout);
         const procArray = Array.isArray(processes) ? processes : [processes];
 
-        const apps = procArray.map(p => ({
-            id: `app-${p.Id}`,
-            pid: p.Id,
-            title: p.MainWindowTitle || p.Name,
-            name: p.Name,
-            path: p.Path || '',
-            type: 'app',
-            isRunning: true
-        })).filter(p => p.name && p.title);
+        // Deduplicate by app name - only keep one instance per app
+        // Use a Map to track unique apps by lowercase name
+        const uniqueApps = new Map();
+
+        for (const p of procArray) {
+            if (!p.Name || !p.MainWindowTitle) continue;
+
+            const appKey = p.Name.toLowerCase();
+
+            // Skip system processes and helper processes
+            if (appKey.includes('helper') || appKey.includes('renderer') ||
+                appKey.includes('gpu') || appKey.includes('crashpad') ||
+                appKey.includes('utility') || appKey.includes('broker')) {
+                continue;
+            }
+
+            // Only keep the first instance (or one with a better title)
+            if (!uniqueApps.has(appKey)) {
+                uniqueApps.set(appKey, {
+                    id: `app-${p.Id}`,
+                    pid: p.Id,
+                    title: p.MainWindowTitle || p.Name,
+                    name: p.Name,
+                    path: p.Path || '',
+                    type: 'app',
+                    isRunning: true
+                });
+            } else {
+                // If this instance has a longer/better title, use it instead
+                const existing = uniqueApps.get(appKey);
+                if (p.MainWindowTitle && p.MainWindowTitle.length > existing.title.length) {
+                    uniqueApps.set(appKey, {
+                        id: `app-${p.Id}`,
+                        pid: p.Id,
+                        title: p.MainWindowTitle,
+                        name: p.Name,
+                        path: p.Path || existing.path,
+                        type: 'app',
+                        isRunning: true
+                    });
+                }
+            }
+        }
+
+        const apps = Array.from(uniqueApps.values());
+        console.log('[Electron] getRunningAppsWindows: found', apps.length, 'unique apps:', apps.map(a => a.name));
 
         // Fetch icons for running apps (in parallel batches)
         const BATCH_SIZE = 10;
@@ -2066,13 +2103,58 @@ ipcMain.handle('sync:set-workspaces', (_event, data) => {
     // Use name-based merge for workspaces to handle multi-browser sync
     const incoming = Array.isArray(data) ? data : [];
     syncData.workspaces = mergeWorkspacesByName(syncData.workspaces, incoming);
+    // Limit workspaces if needed, but they are usually few
     syncData.lastUpdated.workspaces = Date.now();
     saveData();
     broadcastToClients('workspaces-updated', syncData.workspaces);
     return { ok: true };
 });
 
-ipcMain.handle('sync:get-urls', () => syncData.urls);
+ipcMain.handle('sync:get-scraped-chats', () => syncData.scrapedChats);
+ipcMain.handle('sync:set-scraped-chats', (_event, data) => {
+    const incoming = Array.isArray(data) ? data : [];
+    // Merge new chats
+    syncData.scrapedChats = mergeArrayById(syncData.scrapedChats, incoming, 'scrapedChats');
+    // CAP: Keep only last 50 chats to save memory
+    if (syncData.scrapedChats.length > 50) {
+        // Sort by recency (assuming createdAt or similar) and keep latest
+        syncData.scrapedChats.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        syncData.scrapedChats = syncData.scrapedChats.slice(0, 50);
+    }
+    syncData.lastUpdated.scrapedChats = Date.now();
+    saveData();
+    broadcastToClients('scraped-chats-updated', syncData.scrapedChats);
+    return { ok: true };
+});
+
+ipcMain.handle('sync:get-scraped-configs', () => syncData.scrapedConfigs);
+ipcMain.handle('sync:set-scraped-configs', (_event, data) => {
+    const incoming = Array.isArray(data) ? data : [];
+    syncData.scrapedConfigs = mergeArrayById(syncData.scrapedConfigs, incoming, 'scrapedConfigs');
+    // CAP: Keep only last 50 configs
+    if (syncData.scrapedConfigs.length > 50) {
+        syncData.scrapedConfigs = syncData.scrapedConfigs.slice(-50);
+    }
+    syncData.lastUpdated.scrapedConfigs = Date.now();
+    saveData();
+    broadcastToClients('scraped-configs-updated', syncData.scrapedConfigs);
+    return { ok: true };
+});
+
+ipcMain.handle('sync:get-daily-memory', () => syncData.dailyMemory);
+ipcMain.handle('sync:set-daily-memory', (_event, data) => {
+    const incoming = Array.isArray(data) ? data : [];
+    syncData.dailyMemory = mergeArrayById(syncData.dailyMemory, incoming);
+    // CAP: Keep last 100 entries
+    if (syncData.dailyMemory.length > 100) {
+        syncData.dailyMemory = syncData.dailyMemory.slice(-100);
+    }
+    syncData.lastUpdated.dailyMemory = Date.now();
+    saveData();
+    broadcastToClients('daily-memory-updated', syncData.dailyMemory);
+    return { ok: true };
+});
+
 ipcMain.handle('sync:set-urls', (_event, data) => {
     syncData.urls = Array.isArray(data) ? data : [];
     syncData.lastUpdated.urls = Date.now();
@@ -2132,7 +2214,7 @@ ipcMain.handle('sync:set-pins', (_event, data) => {
     return { ok: true };
 });
 
-ipcMain.handle('sync:get-scraped-chats', () => syncData.scrapedChats);
+
 // Runtime Message Handler (Bridge for chrome.runtime.sendMessage)
 ipcMain.handle('runtime:send-message', async (_event, message) => {
     // console.log('[Electron] Received runtime message:', message.type);
@@ -2360,31 +2442,7 @@ ipcMain.handle('launch-app', async (_event, appPath) => {
     }
 });
 
-ipcMain.handle('sync:set-scraped-chats', (_event, data) => {
-    syncData.scrapedChats = Array.isArray(data) ? data : [];
-    syncData.lastUpdated.scrapedChats = Date.now();
-    saveData();
-    broadcastToClients('scraped-chats-updated', syncData.scrapedChats);
-    return { ok: true };
-});
 
-ipcMain.handle('sync:get-scraped-configs', () => syncData.scrapedConfigs);
-ipcMain.handle('sync:set-scraped-configs', (_event, data) => {
-    syncData.scrapedConfigs = Array.isArray(data) ? data : [];
-    syncData.lastUpdated.scrapedConfigs = Date.now();
-    saveData();
-    broadcastToClients('scraped-configs-updated', syncData.scrapedConfigs);
-    return { ok: true };
-});
-
-ipcMain.handle('sync:get-daily-memory', () => syncData.dailyMemory);
-ipcMain.handle('sync:set-daily-memory', (_event, data) => {
-    syncData.dailyMemory = Array.isArray(data) ? data : [];
-    syncData.lastUpdated.dailyMemory = Date.now();
-    saveData();
-    broadcastToClients('daily-memory-updated', syncData.dailyMemory);
-    return { ok: true };
-});
 
 ipcMain.handle('sync:set-ui-state', (_event, data) => {
     syncData.uiState = { ...syncData.uiState, ...data };
@@ -2459,9 +2517,16 @@ async function getLocalLLM() {
 
 // Get LLM status
 ipcMain.handle('llm:get-status', async () => {
+    // Check if loaded without triggering load
+    if (!localLLM) {
+        return {
+            initialized: false,
+            modelLoaded: false,
+            isLoading: false
+        };
+    }
     try {
-        const llm = await getLocalLLM();
-        return llm.getStatus();
+        return localLLM.getStatus();
     } catch (error) {
         return {
             initialized: false,
@@ -2473,9 +2538,15 @@ ipcMain.handle('llm:get-status', async () => {
 
 // Get available models
 ipcMain.handle('llm:get-models', async () => {
+    // Check if loaded without triggering load
+    if (!localLLM) {
+        // Return empty or default state if not loaded
+        // We could load just the config here if needed, but for now safe to return empty
+        // Or trigger load? No, let's keep it lazy.
+        return {};
+    }
     try {
-        const llm = await getLocalLLM();
-        return llm.getAvailableModels();
+        return localLLM.getAvailableModels();
     } catch (error) {
         return { error: error.message };
     }

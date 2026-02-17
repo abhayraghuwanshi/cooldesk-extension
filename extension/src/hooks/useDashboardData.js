@@ -38,7 +38,9 @@ const normalize = (dashboardData) => {
       map.set(it.url, merged)
     }
   })
-  return Array.from(map.values()).sort((a, b) => (b.lastVisitTime || b.dateAdded || 0) - (a.lastVisitTime || a.dateAdded || 0))
+  return Array.from(map.values())
+    .sort((a, b) => (b.lastVisitTime || b.dateAdded || 0) - (a.lastVisitTime || a.dateAdded || 0))
+    .slice(0, 500); // CAP: Limit to 500 items to reduce renderer memory usage
 }
 
 // Build a minimal dashboard snapshot from local URL index + workspaces

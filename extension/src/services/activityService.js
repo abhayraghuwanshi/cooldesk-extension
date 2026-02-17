@@ -1,4 +1,4 @@
-import { listPings, getAllActivity } from '../db/index.js';
+import { getAllActivity, listPings } from '../db/index.js';
 
 // Enhanced URL filtering to exclude system and low-value URLs
 function isValidTrackingUrl(url) {
@@ -94,6 +94,15 @@ export async function getPins() {
  */
 export async function getActivityData() {
     try {
+        // Desktop/Tauri: Fetch from Sidecar via Shim
+        if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.getActivity) {
+            console.log('[ActivityService] Fetching activity data from Electron/Tauri API');
+            const result = await window.electronAPI.getActivity();
+            const rows = Array.isArray(result) ? result : [];
+            // Sort by time descending
+            return rows.sort((a, b) => (b.time || 0) - (a.time || 0));
+        }
+
         // First try to get data directly from IndexedDB using getAllActivity
         console.log('[ActivityService] Fetching activity data from IndexedDB');
         const result = await getAllActivity({ limit: 100 });
@@ -108,21 +117,21 @@ export async function getActivityData() {
                 scroll: Number(r?.scroll || r?.metrics?.scrollDepth) || 0,
                 forms: Number(r?.forms || r?.metrics?.forms) || 0
             }))
-            .filter(row => {
-                // Enhanced filtering for better data quality
-                return isValidTrackingUrl(row.url) && hasMinimumEngagement(row);
-            })
-            .map(row => {
-                // Add engagement score to each row
-                return {
-                    ...row,
-                    engagementScore: calculateEngagementScore(row)
-                };
-            })
-            .sort((a, b) => {
-                // Sort by engagement score for better relevance
-                return (b.engagementScore || 0) - (a.engagementScore || 0);
-            });
+                .filter(row => {
+                    // Enhanced filtering for better data quality
+                    return isValidTrackingUrl(row.url) && hasMinimumEngagement(row);
+                })
+                .map(row => {
+                    // Add engagement score to each row
+                    return {
+                        ...row,
+                        engagementScore: calculateEngagementScore(row)
+                    };
+                })
+                .sort((a, b) => {
+                    // Sort by engagement score for better relevance
+                    return (b.engagementScore || 0) - (a.engagementScore || 0);
+                });
 
             console.log('[ActivityService] Loaded', rows.length, 'activity items from IndexedDB after filtering');
             console.log('[ActivityService] Sample filtered data:', rows.slice(0, 3));
@@ -142,12 +151,12 @@ export async function getActivityData() {
                 scroll: data.scroll || 0,
                 forms: data.forms || 0
             }))
-            .filter(row => isValidTrackingUrl(row.url) && hasMinimumEngagement(row))
-            .map(row => ({
-                ...row,
-                engagementScore: calculateEngagementScore(row)
-            }))
-            .sort((a, b) => (b.engagementScore || 0) - (a.engagementScore || 0));
+                .filter(row => isValidTrackingUrl(row.url) && hasMinimumEngagement(row))
+                .map(row => ({
+                    ...row,
+                    engagementScore: calculateEngagementScore(row)
+                }))
+                .sort((a, b) => (b.engagementScore || 0) - (a.engagementScore || 0));
 
             console.log('[ActivityService] Loaded', rows.length, 'activity items from storage');
             return rows;

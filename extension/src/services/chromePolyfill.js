@@ -387,15 +387,38 @@ const createWindowsAPI = () => ({
     }
 });
 
-// History API (returns empty results in Electron)
+// History API - fetches from sidecar/electronAPI
 const createHistoryAPI = () => ({
-    search: (query, callback) => {
-        const results = [];
+    search: async (query, callback) => {
+        let results = [];
+
+        // Try to get history from electronAPI (sidecar)
+        if (typeof window !== 'undefined' && window.electronAPI?.sendMessage) {
+            try {
+                const response = await window.electronAPI.sendMessage({
+                    type: 'SEARCH_HISTORY',
+                    query: query?.text || '',
+                    maxResults: query?.maxResults || 100
+                });
+                if (Array.isArray(response?.results)) {
+                    results = response.results.map(h => ({
+                        id: h.id || h.url,
+                        url: h.url,
+                        title: h.title || '',
+                        lastVisitTime: h.lastVisitTime || h.timestamp || Date.now(),
+                        visitCount: h.visitCount || 1
+                    }));
+                }
+            } catch (e) {
+                console.warn('[Chrome Polyfill] History fetch failed:', e);
+            }
+        }
+
         if (typeof callback === 'function') {
-            setTimeout(() => callback(results), 0);
+            callback(results);
             return;
         }
-        return Promise.resolve(results);
+        return results;
     },
 
     getVisits: (details, callback) => {
@@ -424,7 +447,7 @@ const createHistoryAPI = () => ({
     }
 });
 
-// Bookmarks API (returns empty results in Electron)
+// Bookmarks API - fetches from sidecar/electronAPI
 const createBookmarksAPI = () => ({
     getTree: (callback) => {
         const tree = [];
@@ -435,13 +458,36 @@ const createBookmarksAPI = () => ({
         return Promise.resolve(tree);
     },
 
-    search: (query, callback) => {
-        const results = [];
+    search: async (query, callback) => {
+        let results = [];
+
+        // Try to get bookmarks from electronAPI (sidecar)
+        if (typeof window !== 'undefined' && window.electronAPI?.sendMessage) {
+            try {
+                const queryText = typeof query === 'string' ? query : query?.query || '';
+                const response = await window.electronAPI.sendMessage({
+                    type: 'SEARCH_BOOKMARKS',
+                    query: queryText,
+                    maxResults: 100
+                });
+                if (Array.isArray(response?.results)) {
+                    results = response.results.map(b => ({
+                        id: b.id || b.url,
+                        url: b.url,
+                        title: b.title || '',
+                        dateAdded: b.dateAdded || Date.now()
+                    }));
+                }
+            } catch (e) {
+                console.warn('[Chrome Polyfill] Bookmarks fetch failed:', e);
+            }
+        }
+
         if (typeof callback === 'function') {
-            setTimeout(() => callback(results), 0);
+            callback(results);
             return;
         }
-        return Promise.resolve(results);
+        return results;
     },
 
     getRecent: (numberOfItems, callback) => {

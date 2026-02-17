@@ -12,18 +12,6 @@ import { getTimeSeriesDataRange, listScrapedChats } from '../../db/index.js';
 import '../../styles/cooldesk.css';
 import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 
-// Debounce utility
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
 
 // Platform config derived from scrapper.json
 const PLATFORM_CONFIG = scrapperConfig.platforms.reduce((acc, platform) => {
@@ -171,7 +159,7 @@ export function ActivityFeed() {
         // 1. Fetch Chats
         try {
             // Increase limit to ensure we get all chats for "Show all" functionality
-            const chatRes = await listScrapedChats({ limit: 1000, sortBy: 'scrapedAt', sortOrder: 'desc' });
+            const chatRes = await listScrapedChats({ limit: 100, sortBy: 'scrapedAt', sortOrder: 'desc' });
             const chats = (chatRes.data || chatRes || []).map(chat => {
                 const platformInfo = getPlatformInfo(chat);
                 return {
@@ -241,12 +229,14 @@ export function ActivityFeed() {
         }
         */
 
-        // 4. Fetch App Activity
+        // 4. Fetch App Activity - LIMIT to last 2 hours to prevent memory bloat
         try {
-            const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-            const activities = await getTimeSeriesDataRange(oneDayAgo, Date.now());
+            const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000; // Only 2 hours, not 24!
+            const activities = await getTimeSeriesDataRange(twoHoursAgo, Date.now());
+            // CRITICAL: Limit to 50 items max to prevent memory explosion
             const appItems = activities
                 .filter(a => a.type === 'app')
+                .slice(0, 50)
                 .map(a => ({
                     id: a.id,
                     title: a.title || a.appName || 'Unknown App',
@@ -263,7 +253,7 @@ export function ActivityFeed() {
         }
 
         // Sort combined feed by timestamp (newest first)
-        return items.sort((a, b) => b.timestamp - a.timestamp);
+        return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100); // CAP: Limit to 100 items
     }, []);
 
     // Effect: Listen for activity DB changes
@@ -284,17 +274,44 @@ export function ActivityFeed() {
         };
     }, [loadFeed]);
 
-    // Debounced update handler (500ms delay)
-    const debouncedUpdate = useMemo(
-        () => debounce(async () => {
-            setIsLoading(true);
-            const [links, feed] = await Promise.all([loadQuickLinks(), loadFeed()]);
-            setQuickLinks(links);
-            setFeedItems(feed);
-            setIsLoading(false);
-        }, 500),
-        [loadQuickLinks, loadFeed]
-    );
+    // Throttled update handler (2000ms delay to reduce memory pressure from frequent tab events)
+    // Use useRef to maintain a stable reference that won't cause listener leaks
+    const updateFunctionsRef = useRef({ loadQuickLinks, loadFeed });
+    updateFunctionsRef.current = { loadQuickLinks, loadFeed };
+
+    const throttledUpdateRef = useRef(null);
+    if (!throttledUpdateRef.current) {
+        let lastCall = 0;
+        let pendingTimeout = null;
+        throttledUpdateRef.current = () => {
+            const now = Date.now();
+            const timeSinceLastCall = now - lastCall;
+            const THROTTLE_MS = 2000; // Only update every 2 seconds max
+
+            if (pendingTimeout) return; // Already scheduled
+
+            if (timeSinceLastCall >= THROTTLE_MS) {
+                lastCall = now;
+                const { loadQuickLinks, loadFeed } = updateFunctionsRef.current;
+                Promise.all([loadQuickLinks(), loadFeed()]).then(([links, feed]) => {
+                    setQuickLinks(links);
+                    setFeedItems(feed);
+                }).catch(console.error);
+            } else {
+                // Schedule for later
+                pendingTimeout = setTimeout(() => {
+                    pendingTimeout = null;
+                    lastCall = Date.now();
+                    const { loadQuickLinks, loadFeed } = updateFunctionsRef.current;
+                    Promise.all([loadQuickLinks(), loadFeed()]).then(([links, feed]) => {
+                        setQuickLinks(links);
+                        setFeedItems(feed);
+                    }).catch(console.error);
+                }, THROTTLE_MS - timeSinceLastCall);
+            }
+        };
+    }
+    const throttledUpdate = throttledUpdateRef.current;
 
     useEffect(() => {
         const loadAll = async () => {
@@ -306,38 +323,31 @@ export function ActivityFeed() {
         };
         loadAll();
 
-        // Event-driven updates with debouncing
+        // Event-driven updates with throttling (using stable ref to prevent listener leaks)
         try {
             if (typeof chrome !== 'undefined') {
                 // Listen to tab events for real-time updates
+                // NOTE: Using throttledUpdate which is a stable reference
                 if (chrome.tabs) {
-                    if (chrome.tabs.onCreated) chrome.tabs.onCreated.addListener(debouncedUpdate);
-                    if (chrome.tabs.onRemoved) chrome.tabs.onRemoved.addListener(debouncedUpdate);
-                    if (chrome.tabs.onUpdated) chrome.tabs.onUpdated.addListener(debouncedUpdate);
-                    if (chrome.tabs.onActivated) chrome.tabs.onActivated.addListener(debouncedUpdate);
+                    if (chrome.tabs.onCreated) chrome.tabs.onCreated.addListener(throttledUpdate);
+                    if (chrome.tabs.onRemoved) chrome.tabs.onRemoved.addListener(throttledUpdate);
+                    // SKIP onUpdated - it fires too frequently and causes memory pressure
+                    // if (chrome.tabs.onUpdated) chrome.tabs.onUpdated.addListener(throttledUpdate);
+                    if (chrome.tabs.onActivated) chrome.tabs.onActivated.addListener(throttledUpdate);
                 }
 
                 // Listen to storage changes for chat and calendar updates
                 if (chrome.storage && chrome.storage.onChanged) {
-                    const storageListener = (changes) => {
-                        /*
-                        if (changes.calendar_events) {
-                            setCalendarEvents(changes.calendar_events.newValue || []);
-                        }
-                        */
-                        debouncedUpdate();
-                    };
-                    chrome.storage.onChanged.addListener(storageListener);
+                    chrome.storage.onChanged.addListener(throttledUpdate);
 
                     return () => {
                         if (chrome.tabs) {
-                            if (chrome.tabs.onCreated) chrome.tabs.onCreated.removeListener(debouncedUpdate);
-                            if (chrome.tabs.onRemoved) chrome.tabs.onRemoved.removeListener(debouncedUpdate);
-                            if (chrome.tabs.onUpdated) chrome.tabs.onUpdated.removeListener(debouncedUpdate);
-                            if (chrome.tabs.onActivated) chrome.tabs.onActivated.removeListener(debouncedUpdate);
+                            if (chrome.tabs.onCreated) chrome.tabs.onCreated.removeListener(throttledUpdate);
+                            if (chrome.tabs.onRemoved) chrome.tabs.onRemoved.removeListener(throttledUpdate);
+                            if (chrome.tabs.onActivated) chrome.tabs.onActivated.removeListener(throttledUpdate);
                         }
                         if (chrome.storage && chrome.storage.onChanged) {
-                            chrome.storage.onChanged.removeListener(storageListener);
+                            chrome.storage.onChanged.removeListener(throttledUpdate);
                         }
                     };
                 }
@@ -347,7 +357,7 @@ export function ActivityFeed() {
             return () => { };
         }
         return () => { };
-    }, [loadQuickLinks, loadFeed, loadCalendarEvents, debouncedUpdate]);
+    }, [throttledUpdate]); // Only depend on stable throttledUpdate ref
 
     // Calculate how many favorite icons can fit in the available width
     const calculateVisibleFavorites = useCallback(() => {

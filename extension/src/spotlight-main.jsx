@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import { initChromePolyfill } from './services/chromePolyfill';
 
 // Initialize Chrome API polyfill for Electron environment
+// Initialize Chrome API polyfill for Electron environment
+import './electron-shim';
 initChromePolyfill();
 
 // Lazy load GlobalSpotlight to keep initial bundle small

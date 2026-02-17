@@ -1,10 +1,11 @@
 import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
-import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFolder, faGamepad, faGlobe, faImage, faMusic, faTerminal, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFolder, faGamepad, faGlobe, faImage, faMusic, faTerminal, faThumbtack, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
 import './GlobalSpotlight.css';
+
 
 // ==========================================
 // PERFORMANCE OPTIMIZATIONS
@@ -121,16 +122,20 @@ export function GlobalSpotlight() {
 
     // Focus input on mount and load items
     useEffect(() => {
-        if (inputRef.current) {
-            inputRef.current.focus();
-        }
-        loadPinnedItems();
-        loadContextItems();
+        // Guarantee focus on window focus (when Alt+K brings window to front)
+        const handleFocus = () => {
+            if (inputRef.current) {
+                // Determine if we need to select all text
+                setTimeout(() => {
+                    inputRef.current?.focus();
+                    inputRef.current?.select();
+                }, 10);
+            }
+        };
+        window.addEventListener('focus', handleFocus);
 
-        // Pre-load search cache for Electron (fast subsequent searches)
-        if (window.electronAPI) {
-            refreshElectronCache();
-        }
+        // Initial focus
+        handleFocus();
 
         // Listen for spotlight-shown event from Electron (when Alt+K is pressed)
         if (window.electronAPI?.subscribe) {
@@ -145,60 +150,114 @@ export function GlobalSpotlight() {
                 refreshElectronCache();
                 loadContextItems();
 
-                if (inputRef.current) {
-                    inputRef.current.focus();
-                    inputRef.current.select();
-                }
+                handleFocus();
             });
-            return () => unsubscribe();
+            return () => {
+                unsubscribe();
+                window.removeEventListener('focus', handleFocus);
+            };
         }
+
+        return () => window.removeEventListener('focus', handleFocus);
     }, []);
+
+
 
     // Load AI Context Items (Workflow Recommendation) - Uses cached data from refreshElectronCache
     // This avoids redundant IPC calls by reusing the cache populated by refreshElectronCache
+    // Load AI Context Items (Workflow Recommendation)
+    // - Combines Workspaces, Running Apps (Categorized), and Tabs
     const loadContextItems = useCallback(async () => {
         try {
-            const items = [];
+            // Fetch all data in parallel for speed
+            const [runningApps, tabs, workspaceResult] = await Promise.all([
+                window.electronAPI?.getRunningApps?.().catch(() => []) || [],
+                window.electronAPI?.getTabs?.().catch(() => []) || [],
+                window.electronAPI?.sendMessage?.({ type: 'SEARCH_WORKSPACES', query: '', maxResults: 5 })
+                    .catch(() => ({ results: [] })) || { results: [] }
+            ]);
 
-            // 1. Get Running Apps (limit to 3 relevant ones) - use cached if available
-            if (window.electronAPI?.getRunningApps) {
-                const apps = await window.electronAPI.getRunningApps();
-                // Filter for "dev" or "productivity" apps usually
-                const relevantApps = apps
-                    .filter(a => !['explorer', 'searchhost', 'taskmgr'].includes((a.name || '').toLowerCase()))
-                    .slice(0, 3)
-                    .map(a => ({ ...a, type: 'app', description: 'Active App' }));
-                items.push(...relevantApps);
+            const workspaces = workspaceResult?.results || [];
+            const recommendations = [];
+
+            // 1. Current Context (Top Workspace)
+            if (workspaces.length > 0) {
+                recommendations.push({
+                    ...workspaces[0],
+                    type: 'workspace',
+                    description: 'Current Project',
+                    // Workspace icon handled by ResultItem/ContextItem
+                });
             }
 
-            // 2. Get Active/Recent Tabs - use chrome.tabs.query which now has caching
-            if (typeof chrome !== 'undefined' && chrome.tabs?.query) {
-                try {
-                    const tabs = await chrome.tabs.query({});
-                    if (tabs && tabs.length > 0) {
-                        // Heuristic: Pick 2-3 tabs that look like "work" (docs, git, local)
-                        const workTabs = tabs
-                            .filter(t =>
-                                t.url?.includes('github') ||
-                                t.url?.includes('docs') ||
-                                t.url?.includes('localhost') ||
-                                t.url?.includes('figma') ||
-                                t.url?.includes('jira')
-                            )
-                            .slice(0, 3)
-                            .map(t => ({ ...t, type: 'tab', description: 'Recommended Tab' }));
+            // 2. Focused Development & Productivity Apps
+            const categories = {
+                'Development': ['code', 'visual studio', 'idea', 'webstorm', 'pycharm', 'sublime', 'terminal', 'powershell', 'cmd', 'git', 'cursor'],
+                'Design': ['figma', 'photoshop', 'illustrator', 'blender', 'canva'],
+                'Productivity': ['obsidian', 'notion', 'linear', 'trello', 'excel', 'word', 'slack', 'discord', 'teams', 'outlook']
+            };
 
-                        if (workTabs.length > 0) {
-                            items.push(...workTabs);
-                        } else {
-                            // Fallback to just recent tabs
-                            items.push(...tabs.slice(0, 3).map(t => ({ ...t, type: 'tab', description: 'Recent Tab' })));
-                        }
-                    }
-                } catch (e) { console.warn('Failed to fetch tabs for context', e); }
+            const usedAppNames = new Set();
+
+            // Helper to capture apps by category
+            const getApps = (categoryList, label, limit) => {
+                return runningApps
+                    .filter(a => {
+                        const name = (a.name || '').toLowerCase();
+                        if (usedAppNames.has(name)) return false;
+                        return categoryList.some(k => name.includes(k));
+                    })
+                    .slice(0, limit)
+                    .map(a => {
+                        usedAppNames.add((a.name || '').toLowerCase());
+                        return { ...a, type: 'app', description: label, isRunning: true };
+                    });
+            };
+
+            // Prioritize Dev Tools -> Design -> Communication/Docs
+            recommendations.push(...getApps(categories['Development'], 'Dev Tool', 2));
+            recommendations.push(...getApps(categories['Design'], 'Design', 1));
+
+            // 3. Relevant Work Tabs
+            const workDomains = ['github', 'localhost', 'docs', 'jira', 'linear', 'figma', 'notion', 'aws', 'vercel'];
+            const relevantTabs = tabs
+                .filter(t => workDomains.some(d => (t.url || '').toLowerCase().includes(d)))
+                // Unique by domain to avoid clutter (e.g. 5 github tabs)
+                .filter((t, index, self) =>
+                    index === self.findIndex(s => {
+                        try { return new URL(s.url).hostname === new URL(t.url).hostname; } catch { return s.url === t.url; }
+                    })
+                )
+                .slice(0, 2)
+                .map(t => ({ ...t, type: 'tab', description: 'Work Tab' }));
+
+            recommendations.push(...relevantTabs);
+
+            // 4. Fill remaining spots with Productivity/Communication Apps
+            if (recommendations.length < 6) {
+                recommendations.push(...getApps(categories['Productivity'], 'App', 6 - recommendations.length));
             }
 
-            setContextItems(items.slice(0, 6)); // Cap at 6 items
+            // 5. If still empty, add generic active apps (Browsers, Media)
+            if (recommendations.length < 4) {
+                const otherApps = runningApps
+                    .filter(a => !usedAppNames.has((a.name || '').toLowerCase()))
+                    .filter(a => !['svchost', 'csrss', 'system', 'registry', 'service'].some(s => (a.name || '').toLowerCase().includes(s)))
+                    .filter(a => ['chrome', 'firefox', 'edge', 'brave', 'spotify', 'vlc'].some(k => (a.name || '').toLowerCase().includes(k)))
+                    .slice(0, 4 - recommendations.length)
+                    .map(a => ({ ...a, type: 'app', description: 'Active App', isRunning: true }));
+                recommendations.push(...otherApps);
+            }
+
+            // Final Deduplication & Cap
+            const uniqueRecs = recommendations
+                .filter((item, index, self) =>
+                    index === self.findIndex((t) => (t.id && t.id === item.id) || (t.title === item.title && t.type === item.type))
+                )
+                .slice(0, 6);
+
+            setContextItems(uniqueRecs);
+
         } catch (e) {
             console.warn('Failed to load context items', e);
         }
@@ -336,6 +395,8 @@ export function GlobalSpotlight() {
                 // Cache results
                 searchCache.set(cacheKey, searchResults);
 
+                console.log('[Spotlight] Rendering results:', searchResults);
+
                 // Update UI
                 setResults(searchResults);
                 setSelectedIndex(-1);
@@ -354,15 +415,19 @@ export function GlobalSpotlight() {
 
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
-        // Build complete navigable list: pins + context items + search results
-        const totalPins = pinnedItems.length;
-        const totalContext = contextItems.length;
+        const isSearching = !!query.trim();
+
+        // Build complete navigable list depending on state
+        // If searching: Only Results
+        // If not searching: Pins + Context Items
+        const totalPins = isSearching ? 0 : pinnedItems.length;
+        const totalContext = isSearching ? 0 : contextItems.length;
         const totalResults = results.length;
         const totalItems = totalPins + totalContext + totalResults;
 
         // Current selected index in flat list
         let currentIndex = -1;
-        if (selectedPinIndex >= 0) {
+        if (selectedPinIndex >= 0 && !isSearching) {
             currentIndex = selectedPinIndex;
         } else if (selectedIndex >= 0) {
             currentIndex = totalPins + totalContext + selectedIndex;
@@ -372,48 +437,65 @@ export function GlobalSpotlight() {
         if (e.key === 'ArrowDown' && totalItems > 0) {
             e.preventDefault();
             const nextIndex = currentIndex + 1;
-            if (nextIndex < totalItems) {
-                if (nextIndex < totalPins) {
+
+            // If at end or not started, wrap/start
+            if (currentIndex === -1) {
+                // Start at top
+                if (totalPins > 0) setSelectedPinIndex(0);
+                else if (totalContext > 0) setSelectedPinIndex(0); // Context shares pin index logic if sequential
+                else setSelectedIndex(0);
+            } else if (nextIndex < totalItems) {
+                // Determine what the next index maps to
+                if (nextIndex < totalPins + totalContext) {
                     setSelectedPinIndex(nextIndex);
-                    setSelectedIndex(-1);
-                } else if (nextIndex < totalPins + totalContext) {
-                    setSelectedPinIndex(nextIndex); // Context items share pin index
                     setSelectedIndex(-1);
                 } else {
                     setSelectedPinIndex(-1);
                     setSelectedIndex(nextIndex - totalPins - totalContext);
+                }
+            } else {
+                // Loop back to start? Or stop? Let's stop at end like native macOS Spotlight, or loop?
+                // Users said "spam down key", implying they want to move.
+                // Let's loop back to top for convenience
+                if (totalPins > 0) {
+                    setSelectedPinIndex(0);
+                    setSelectedIndex(-1);
+                } else if (totalContext > 0) {
+                    setSelectedPinIndex(0);
+                    setSelectedIndex(-1);
+                } else {
+                    setSelectedIndex(0);
                 }
             }
         } else if (e.key === 'ArrowUp' && totalItems > 0) {
             e.preventDefault();
             const nextIndex = currentIndex - 1;
-            if (nextIndex >= 0) {
-                if (nextIndex < totalPins) {
-                    setSelectedPinIndex(nextIndex);
-                    setSelectedIndex(-1);
-                } else if (nextIndex < totalPins + totalContext) {
+
+            if (currentIndex === -1) {
+                // Start at bottom
+                setSelectedIndex(totalResults - 1);
+                setSelectedPinIndex(-1);
+            } else if (nextIndex >= 0) {
+                if (nextIndex < totalPins + totalContext) {
                     setSelectedPinIndex(nextIndex);
                     setSelectedIndex(-1);
                 } else {
                     setSelectedPinIndex(-1);
                     setSelectedIndex(nextIndex - totalPins - totalContext);
                 }
-            } else if (nextIndex === -1 && currentIndex === 0) {
-                // At first item, wrap to last
+            } else {
+                // Loop to bottom
                 if (totalResults > 0) {
                     setSelectedPinIndex(-1);
                     setSelectedIndex(totalResults - 1);
-                } else if (totalContext > 0) {
+                } else {
                     setSelectedPinIndex(totalPins + totalContext - 1);
-                    setSelectedIndex(-1);
-                } else if (totalPins > 0) {
-                    setSelectedPinIndex(totalPins - 1);
                     setSelectedIndex(-1);
                 }
             }
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            if (currentIndex >= 0) {
+            if (currentIndex >= 0 && currentIndex < totalItems) {
                 if (currentIndex < totalPins) {
                     handleSelect(pinnedItems[currentIndex]);
                 } else if (currentIndex < totalPins + totalContext) {
@@ -434,10 +516,13 @@ export function GlobalSpotlight() {
             if (currentIndex >= totalPins + totalContext && selectedIndex >= 0) {
                 togglePin(results[selectedIndex]);
             }
-        } else if ((e.key === 'Delete' || e.key === 'Backspace') && currentIndex < totalPins && currentIndex >= 0) {
+        } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isSearching && currentIndex < totalPins && currentIndex >= 0) {
             e.preventDefault();
             removePin(currentIndex);
-            setSelectedPinIndex(Math.min(currentIndex, pinnedItems.length - 2));
+            // Adjust selection after removal
+            const maxPinIndex = totalPins - 2; // -1 for removed, -1 for 0-index
+            if (maxPinIndex >= 0) setSelectedPinIndex(Math.min(currentIndex, maxPinIndex));
+            else setSelectedPinIndex(-1);
         }
 
         // Fallback handlers
@@ -456,7 +541,19 @@ export function GlobalSpotlight() {
         }
     };
 
+    // Handle Keyboard Navigation for Buttons (redirect arrows to main list)
+    const handleButtonKeyDown = (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            inputRef.current?.focus();
+            handleKeyDown(e);
+        }
+    };
+
     const handleSelect = async (item) => {
+        // Close immediately for snappy feel
+        handleClose();
+
         // For tabs, switch to the existing tab instead of opening new
         if (item.type === 'tab') {
             try {
@@ -480,7 +577,6 @@ export function GlobalSpotlight() {
                         } else if (window.electronAPI?.sendMessage) {
                             await window.electronAPI.sendMessage({ type: 'JUMP_TO_TAB', tabId: matchingTab.tabId });
                         }
-                        handleClose();
                         return;
                     }
                 }
@@ -492,7 +588,6 @@ export function GlobalSpotlight() {
                     } else if (window.electronAPI?.sendMessage) {
                         await window.electronAPI.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId });
                     }
-                    handleClose();
                     return;
                 }
 
@@ -503,7 +598,6 @@ export function GlobalSpotlight() {
                     } else {
                         window.open(item.url, '_blank');
                     }
-                    handleClose();
                     return;
                 }
             } catch (e) {
@@ -524,8 +618,7 @@ export function GlobalSpotlight() {
 
                     if (runningInstance && runningInstance.pid) {
                         // App is running - focus it
-                        await window.electronAPI.focusApp(runningInstance.pid);
-                        handleClose();
+                        await window.electronAPI.focusApp(runningInstance.pid, runningInstance.name);
                         return;
                     }
                 }
@@ -536,8 +629,16 @@ export function GlobalSpotlight() {
                 }
             } catch (e) {
                 console.warn('[Spotlight] App action failed:', e);
+                // Fallback: if focus failed, try launching (which usually focuses it anyway)
+                if (item.path && window.electronAPI?.launchApp) {
+                    try {
+                        console.log('[Spotlight] Falling back to launchApp:', item.path);
+                        await window.electronAPI.launchApp(item.path);
+                    } catch (launchErr) {
+                        console.warn('[Spotlight] Launch fallback failed:', launchErr);
+                    }
+                }
             }
-            handleClose();
             return;
         }
 
@@ -552,7 +653,6 @@ export function GlobalSpotlight() {
             // Handle commands if any
             console.log('Command executed:', item);
         }
-        handleClose();
     };
 
     const handleClose = useCallback(() => {
@@ -562,6 +662,17 @@ export function GlobalSpotlight() {
             window.electronAPI.sendMessage({ type: 'SPOTLIGHT_HIDE' });
         }
     }, []);
+
+    // Handle Escape key to close
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                handleClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleClose]);
 
     // Close on click outside
     useOnClickOutside(containerRef, handleClose);
@@ -606,6 +717,7 @@ export function GlobalSpotlight() {
                     <button
                         className={`spotlight-deep-btn ${deepSearch ? 'active' : ''}`}
                         onClick={() => setDeepSearch(!deepSearch)}
+                        onKeyDown={handleButtonKeyDown}
                         title="Toggle Deep Search"
                     >
                         ✨ Deep
@@ -613,6 +725,7 @@ export function GlobalSpotlight() {
                     <button
                         className="spotlight-close-btn"
                         onClick={handleClose}
+                        onKeyDown={handleButtonKeyDown}
                         title="Close (Esc)"
                     >
                         ×
@@ -642,34 +755,36 @@ export function GlobalSpotlight() {
                     </div>
                 )}
 
-                {/* Pinned Section - Always visible if empty or matches logic */}
-                <div className="spotlight-pins">
-                    <div className="spotlight-pins-header">
-                        <span className="spotlight-pins-title">Pinned Quick Access</span>
-                        {pinnedItems.length > 0 && !query.trim() && (
-                            <span className="spotlight-pins-hint">Use arrow keys to navigate</span>
-                        )}
+                {/* Pinned Section - Only visible when NOT searching */}
+                {!query.trim() && (
+                    <div className="spotlight-pins">
+                        <div className="spotlight-pins-header">
+                            <span className="spotlight-pins-title">Pinned Quick Access</span>
+                            {pinnedItems.length > 0 && (
+                                <span className="spotlight-pins-hint">Use arrow keys to navigate</span>
+                            )}
+                        </div>
+                        <div className="spotlight-pins-grid">
+                            {pinnedItems.map((pin, i) => (
+                                <PinItem
+                                    key={i}
+                                    pin={pin}
+                                    index={i}
+                                    isSelected={i === selectedPinIndex}
+                                    onSelect={handleSelect}
+                                    onHover={setSelectedPinIndex}
+                                    onRemove={removePin}
+                                    getAppIcon={getAppIcon}
+                                />
+                            ))}
+                            {pinnedItems.length < 8 && (
+                                <div style={{ opacity: 0.3, fontSize: 11, padding: '6px', fontStyle: 'italic' }}>
+                                    {/* Placeholder for alignment */}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <div className="spotlight-pins-grid">
-                        {pinnedItems.map((pin, i) => (
-                            <PinItem
-                                key={i}
-                                pin={pin}
-                                index={i}
-                                isSelected={i === selectedPinIndex}
-                                onSelect={handleSelect}
-                                onHover={setSelectedPinIndex}
-                                onRemove={removePin}
-                                getAppIcon={getAppIcon}
-                            />
-                        ))}
-                        {pinnedItems.length < 8 && (
-                            <div style={{ opacity: 0.3, fontSize: 11, padding: '6px', fontStyle: 'italic' }}>
-                                {/* Placeholder for alignment */}
-                            </div>
-                        )}
-                    </div>
-                </div>
+                )}
 
                 {/* Results - Limited to 10 visible for performance */}
                 {results.length > 0 && (
@@ -714,13 +829,13 @@ export function GlobalSpotlight() {
 
 function getIcon(type) {
     switch (type) {
-        case 'tab': return '🔵';
-        case 'history': return '📜';
-        case 'bookmark': return '⭐';
-        case 'workspace': return '📁';
-        case 'note': return '📝';
-        case 'app': return '💻';
-        default: return '🔗';
+        case 'tab': return faGlobe;
+        case 'history': return faHistory;
+        case 'bookmark': return faStar;
+        case 'workspace': return faFolder;
+        case 'note': return faStickyNote;
+        case 'app': return faDesktop;
+        default: return faLink;
     }
 }
 
@@ -808,32 +923,34 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
     const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
     const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
     const handlePinClick = useCallback((e) => onTogglePin(item, e), [item, onTogglePin]);
-    const handleIconError = useCallback((e) => {
-        e.target.style.display = 'none';
-        e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>';
-    }, []);
-    const handleFaviconError = useCallback((e) => {
-        e.target.style.display = 'none';
-        e.target.parentNode.innerHTML = getIcon(item.type);
-    }, [item.type]);
+
+    // Track icon load errors to show fallback
+    const [iconError, setIconError] = useState(false);
+
+    // Reset error when item changes
+    useEffect(() => {
+        setIconError(false);
+    }, [item.id, item.icon, item.favicon]);
 
     return (
         <div
-            className={`result-item ${isSelected ? 'selected' : ''} ${item.type === 'app' ? 'result-app' : ''}`}
+            className={`result-item ${isSelected ? 'selected' : ''} result-${['tab', 'bookmark', 'history', 'workspace', 'note', 'app'].includes(item.type) ? item.type : 'link'}`}
             onClick={handleClick}
             onMouseEnter={handleMouseEnter}
         >
             <div className="result-icon">
                 {item.type === 'app' ? (
-                    item.icon ? (
-                        <img src={item.icon} className="app-icon-img" alt="" onError={handleIconError} />
+                    (item.icon && !iconError) ? (
+                        <img src={item.icon} className="app-icon-img" alt="" onError={() => setIconError(true)} />
                     ) : (
                         <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
                     )
-                ) : item.favicon ? (
-                    <img src={item.favicon} onError={handleFaviconError} alt="" />
+                ) : (item.favicon && !iconError) ? (
+                    <img src={item.favicon} onError={() => setIconError(true)} alt="" />
                 ) : (
-                    <span>{getIcon(item.type)}</span>
+                    <div className="fa-icon-wrapper">
+                        <FontAwesomeIcon icon={getIcon(item.type)} />
+                    </div>
                 )}
             </div>
             <div className="result-content">
@@ -862,7 +979,7 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
                     title="Pin this"
                     onClick={handlePinClick}
                 >
-                    📌
+                    <FontAwesomeIcon icon={faThumbtack} />
                 </span>
             )}
         </div>

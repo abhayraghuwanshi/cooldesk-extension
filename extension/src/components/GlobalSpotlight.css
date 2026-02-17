@@ -1,5 +1,14 @@
 /* Global Spotlight Styles - Ported from footerBar.js */
 
+/* Ensure transparent background for the window to allow rounded corners */
+html,
+body {
+  background: transparent !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 /* Overlay - Fully transparent, just positions the spotlight */
 .spotlight-overlay {
   position: fixed;
@@ -33,7 +42,8 @@
   /* Solid dark background - no transparency */
   background: #1a1a1c;
 
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* No border */
+  border: none;
   border-radius: 12px;
 
   /* Clean shadow */
@@ -611,4 +621,107 @@
   font-size: 10px;
   color: rgba(255, 255, 255, 0.4);
   margin-left: auto;
+}
+
+/* 
+   VISUAL SEPARATION FOR RESULT TYPES 
+   Adds distinct left-border colors and subtle tints 
+   to differentiate Tabs, Apps, Bookmarks, etc.
+*/
+
+/* Tabs - Purple/Blue Theme */
+.result-item.result-tab {
+  border-left: 2px solid rgba(139, 92, 246, 0.4);
+}
+
+.result-item.result-tab.selected {
+  border-left-color: #8b5cf6;
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.08), rgba(255, 255, 255, 0.05));
+}
+
+.result-item.result-tab .result-icon {
+  color: #a78bfa;
+}
+
+/* Bookmarks - Amber/Yellow Theme */
+.result-item.result-bookmark {
+  border-left: 2px solid rgba(245, 158, 11, 0.4);
+}
+
+.result-item.result-bookmark.selected {
+  border-left-color: #f59e0b;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), rgba(255, 255, 255, 0.05));
+}
+
+.result-item.result-bookmark .result-icon {
+  color: #fbbf24;
+}
+
+/* History - Gray/Neutral Theme */
+.result-item.result-history {
+  border-left: 2px solid rgba(156, 163, 175, 0.3);
+}
+
+.result-item.result-history.selected {
+  border-left-color: #9ca3af;
+}
+
+/* Workspaces - Indigo/Cyan Theme */
+.result-item.result-workspace {
+  border-left: 2px solid rgba(6, 182, 212, 0.4);
+}
+
+.result-item.result-workspace.selected {
+  border-left-color: #06b6d4;
+  background: linear-gradient(90deg, rgba(6, 182, 212, 0.08), rgba(255, 255, 255, 0.05));
+}
+
+.result-item.result-workspace .result-icon {
+  color: #22d3ee;
+}
+
+/* Notes - Emerald/Green Theme */
+.result-item.result-note {
+  border-left: 2px solid rgba(16, 185, 129, 0.4);
+}
+
+.result-item.result-note.selected {
+  border-left-color: #10b981;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0.05));
+}
+
+/* Make badges distinct */
+.result-item.result-tab .result-badge {
+  background: rgba(139, 92, 246, 0.15);
+  color: #a78bfa;
+}
+
+.result-item.result-bookmark .result-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+/* Ensure Result App matches style */
+.result-item.result-app .result-badge {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+/* Link - Slate/Gray-Blue Theme - Made more visible */
+.result-item.result-link {
+  border-left: 2px solid #94a3b8;
+}
+
+.result-item.result-link.selected {
+  border-left-color: #cbd5e1;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.15), rgba(255, 255, 255, 0.05));
+}
+
+.result-item.result-link .result-icon {
+  color: #cbd5e1;
+}
+
+.result-item.result-link .result-badge {
+  background: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
 }
