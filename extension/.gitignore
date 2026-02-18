@@ -34,3 +34,4 @@ src-tauri/Wix/
 sync-data/
 *.gguf
 sidecar/models/
+sync-data/

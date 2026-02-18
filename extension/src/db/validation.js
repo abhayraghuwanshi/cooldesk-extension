@@ -325,6 +325,14 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.MAX_LENGTH]: 2000
             // Removed strict URL validation to handle edge cases
         },
+        title: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 500
+        },
+        favicon: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 2000
+        },
         timestamp: {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0

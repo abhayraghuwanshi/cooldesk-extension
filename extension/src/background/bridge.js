@@ -172,6 +172,8 @@ function startHostActionWS() {
       hostCooldownUntil = 0;
       // Stop HTTP polling when WS is healthy
       ensureHostPolling(false);
+      // Identify this client to the sidecar
+      try { hostWs.send(JSON.stringify({ type: 'identify', client: 'bridge' })); } catch { }
       // Drain any actions queued while offline
       drainQueuedActionsOnConnect().catch(() => { });
     };

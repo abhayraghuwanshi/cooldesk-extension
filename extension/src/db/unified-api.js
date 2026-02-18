@@ -167,7 +167,7 @@ export const saveWorkspace = withErrorHandling(async (workspaceData, options = {
     // Use transaction events for more reliable persistence check
     return new Promise((resolve, reject) => {
         tx.oncomplete = () => {
-            console.log(`[Unified API] Saved workspace: ${workspace.name} (${workspace.id})`)
+            // console.log(`[Unified API] Saved workspace: ${workspace.name} (${workspace.id})`)
 
             // Notify listeners
             if (!options.skipNotify) {

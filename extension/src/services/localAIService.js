@@ -44,6 +44,8 @@ export async function connect() {
                 console.log('[LocalAI] Connected to Electron');
                 isConnected = true;
                 reconnectAttempts = 0;
+                // Identify this client to the sidecar
+                try { ws.send(JSON.stringify({ type: 'identify', client: 'localAI' })); } catch { }
                 resolve(true);
             };
 

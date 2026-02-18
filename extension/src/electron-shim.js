@@ -17,6 +17,12 @@ function connectWebSocket() {
 
     ws = new WebSocket(WS_URL);
 
+    ws.onopen = () => {
+        console.log('[TauriShim] WS Connected');
+        // Identify this client to the sidecar
+        try { ws.send(JSON.stringify({ type: 'identify', client: 'tauri-frontend' })); } catch { }
+    };
+
     ws.onmessage = (event) => {
         try {
             const msg = JSON.parse(event.data);

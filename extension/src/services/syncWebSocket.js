@@ -296,29 +296,47 @@ class SyncWebSocket {
      */
     async handleJumpToTab(payload) {
         const { tabId, windowId } = payload;
-        console.log('[SyncWS] Received jump-to-tab request:', tabId);
+        const browserName = navigator.userAgent.includes('Edg') ? 'Edge' :
+                           navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser';
+        console.log(`[SyncWS][${browserName}] Jump-to-tab:`, tabId);
 
         // Only handle in browser extension context (not Electron)
         if (typeof chrome !== 'undefined' && chrome.tabs?.update) {
             try {
-                // Activate the tab
-                await chrome.tabs.update(tabId, { active: true });
+                // Quick check if tab exists (fast fail for cross-browser broadcasts)
+                const tab = await chrome.tabs.get(tabId);
+                if (!tab) return;
 
-                // Focus the window if windowId provided
-                if (windowId && chrome.windows?.update) {
-                    await chrome.windows.update(windowId, { focused: true });
-                } else {
-                    // Get the tab to find its window
-                    const tab = await chrome.tabs.get(tabId);
-                    if (tab?.windowId && chrome.windows?.update) {
-                        await chrome.windows.update(tab.windowId, { focused: true });
-                    }
+                const targetWindowId = windowId || tab.windowId;
+
+                // Fire all operations in parallel - don't wait for each one
+                const operations = [
+                    chrome.tabs.update(tabId, { active: true }),
+                    targetWindowId && chrome.windows?.update
+                        ? chrome.windows.update(targetWindowId, { focused: true })
+                        : Promise.resolve()
+                ];
+
+                // Also inject focus script in parallel (don't await separately)
+                if (chrome.scripting?.executeScript) {
+                    operations.push(
+                        chrome.scripting.executeScript({
+                            target: { tabId },
+                            func: () => window.focus()
+                        }).catch(() => {}) // Silently ignore script injection failures
+                    );
                 }
 
-                console.log('[SyncWS] Successfully jumped to tab:', tabId);
+                await Promise.all(operations);
+                console.log(`[SyncWS][${browserName}] Jumped to tab:`, tabId);
             } catch (e) {
-                console.warn('[SyncWS] Failed to jump to tab:', e);
+                // Silent fail for cross-browser tab IDs
+                if (!e.message?.includes('No tab with id')) {
+                    console.warn(`[SyncWS][${browserName}] Jump failed:`, e.message);
+                }
             }
+        } else {
+            console.log(`[SyncWS][${browserName}] Not in extension context, skipping`);
         }
     }
 

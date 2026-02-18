@@ -278,20 +278,70 @@ const httpServer = createServer((req, res) => {
     }
 });
 
-// WebSocket server
-wss = new WebSocketServer({ server: httpServer });
+// WebSocket server with increased payload limit (100MB for large syncs)
+wss = new WebSocketServer({
+    server: httpServer,
+    maxPayload: 100 * 1024 * 1024 // 100MB
+});
 
-wss.on('connection', (ws) => {
-    console.log('[Sidecar] Client connected. Total:', wss.clients.size);
+wss.on('connection', (ws, req) => {
+    // Track client info for debugging
+    ws.clientId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    ws.clientType = 'unknown';
+    ws.connectedAt = new Date().toISOString();
+    ws.messageCount = 0;
+
+    // Log all current clients for debugging
+    const clientSummary = Array.from(wss.clients).map(c => c.clientType || 'unknown').join(', ');
+    console.log(`[Sidecar] Client connected: ${ws.clientId} | Total: ${wss.clients.size} | Types: [${clientSummary}]`);
+
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message.toString());
+            ws.messageCount++;
+
+            // Identify client type from messages
+            if (data.type === 'identify' && data.client) {
+                // Explicit identification message
+                ws.clientType = data.client;
+                console.log(`[Sidecar] Client ${ws.clientId} identified as: ${ws.clientType}`);
+                return; // Don't process further
+            }
+
+            if (ws.clientType === 'unknown' && data.type) {
+                if (data.type === 'push-tabs' || data.type === 'push-workspaces' || data.type === 'push-activity') {
+                    ws.clientType = 'syncWebSocket';
+                } else if (data.type === 'request-state' || data.type === 'request.state') {
+                    ws.clientType = 'extensionApi';
+                } else if (data.type === 'action') {
+                    ws.clientType = 'bridge';
+                } else if (data.type === 'llm-request') {
+                    ws.clientType = 'localAI';
+                } else {
+                    ws.clientType = `other:${data.type}`;
+                }
+                console.log(`[Sidecar] Client ${ws.clientId} identified as: ${ws.clientType}`);
+            }
             handleWebSocketMessage(ws, data);
         } catch (error) {
             console.warn('[Sidecar] Invalid WebSocket message:', error);
         }
     });
-    ws.on('close', () => console.log('[Sidecar] Client disconnected'));
+
+    ws.on('close', () => {
+        console.log(`[Sidecar] Client disconnected: ${ws.clientId} (${ws.clientType}, ${ws.messageCount} msgs)`);
+    });
+
+    ws.on('error', (error) => {
+        console.warn(`[Sidecar] WebSocket error for ${ws.clientId}:`, error.message);
+    });
+
+    // Warn about unidentified clients after 5 seconds
+    setTimeout(() => {
+        if (ws.readyState === ws.OPEN && ws.clientType === 'unknown') {
+            console.log(`[Sidecar] WARNING: Client ${ws.clientId} still unidentified after 5s (${ws.messageCount} msgs)`);
+        }
+    }, 5000);
 
     // Send current state
     ws.send(JSON.stringify({
