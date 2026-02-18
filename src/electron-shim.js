@@ -23,11 +23,22 @@ function connectWebSocket() {
         try { ws.send(JSON.stringify({ type: 'identify', client: 'tauri-frontend' })); } catch { }
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
         try {
             const msg = JSON.parse(event.data);
             // msg format from sidecar: { type, payload }
             // Electron format expected: (event, arg) -> but frontend usually subscribes to 'channel'
+
+            // Handle native focus request from extension
+            if (msg.type === 'native-focus' && msg.payload?.browser) {
+                console.log('[TauriShim] Native focus requested for:', msg.payload.browser);
+                try {
+                    await invoke('focus_window', { pid: 0, name: msg.payload.browser });
+                } catch (e) {
+                    console.warn('[TauriShim] Native focus failed:', e);
+                }
+                return;
+            }
 
             // Map sidecar types to electron channels
             // e.g. 'workspaces-updated' -> 'workspaces-updated'

@@ -255,8 +255,8 @@ class SyncOrchestrator {
                 'dashboard': (data) => this.handleRemoteDashboardUpdate(data),
                 'activity': (data) => this.handleRemoteActivityUpdate(data),
                 'sync-state': (data) => this.handleSyncState(data),
-                'sync-complete': (data) => this.notifyListeners('sync-complete', data),
-                'jump-to-tab': (data) => this.handleRemoteJumpToTab(data)
+                'sync-complete': (data) => this.notifyListeners('sync-complete', data)
+                // Note: jump-to-tab is handled directly in syncWebSocket.js
             };
 
             // Store unsubscribe functions for cleanup

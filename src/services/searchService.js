@@ -230,6 +230,9 @@ function searchElectronCache(query) {
     if (a.path) runningAppsPathMap.set(a.path.toLowerCase(), a);
   });
 
+  // Debug: log running apps for matching
+  console.log('[SearchService] Running apps for matching:', [...runningAppsMap.keys()]);
+
   // Track added apps to avoid duplicates
   const addedIds = new Set();
   const activeRunningAppNames = new Set();
@@ -246,10 +249,16 @@ function searchElectronCache(query) {
     let runningInfo = runningAppsPathMap.get((app.path || '').toLowerCase());
     if (!runningInfo) runningInfo = runningAppsMap.get(appNameNorm);
 
-    // Also try checking if installed app name contains running app name (e.g. "Google Chrome" contains "chrome")
+    // Also try checking if installed app name matches running app name closely
+    // Only match if names are very similar (not just substring match)
     if (!runningInfo) {
       for (const [rName, rApp] of runningAppsMap.entries()) {
-        if (appNameLower.includes(rName) || rName.includes(appNameLower)) {
+        // Require either exact match or significant overlap (at least 5 chars and 60% match)
+        const minLen = Math.min(appNameNorm.length, rName.length);
+        const maxLen = Math.max(appNameNorm.length, rName.length);
+        if (minLen >= 5 && (appNameNorm === rName ||
+            (appNameNorm.includes(rName) && rName.length >= maxLen * 0.6) ||
+            (rName.includes(appNameNorm) && appNameNorm.length >= maxLen * 0.6))) {
           runningInfo = rApp;
           break;
         }

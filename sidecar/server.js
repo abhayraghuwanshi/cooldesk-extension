@@ -713,6 +713,13 @@ function handleWebSocketMessage(ws, data) {
             broadcastToClients('activity-updated', activities);
             break;
 
+        case 'request-native-focus':
+            // Forward to Tauri frontend to use native window focus
+            // This is more reliable than chrome.windows.update on Windows
+            console.log(`[Sidecar] Native focus requested for: ${payload?.browser}`);
+            broadcastToClients('native-focus', payload);
+            break;
+
         case 'push-tabs':
             let wsTabs = [];
             let wsDeviceId = 'ws-unknown';

@@ -987,12 +987,12 @@ export const saveUIState = withErrorHandling(async (uiStateData, options = {}) =
     severity: ErrorSeverity.MEDIUM
 })
 export const putActivityTimeSeriesEvent = withErrorHandling(async (eventData, options = {}) => {
-    console.log('[DB Debug] putActivityTimeSeriesEvent called with:', {
-        id: eventData.id,
-        url: eventData.url,
-        timestamp: eventData.timestamp,
-        hasMetrics: !!eventData.metrics
-    })
+    // console.log('[DB Debug] putActivityTimeSeriesEvent called with:', {
+    //     id: eventData.id,
+    //     url: eventData.url,
+    //     timestamp: eventData.timestamp,
+    //     hasMetrics: !!eventData.metrics
+    // })
 
     const event = validateAndSanitize({
         id: eventData.id || generateId(),

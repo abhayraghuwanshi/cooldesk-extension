@@ -1,5 +1,5 @@
 
-import { faChevronDown, faClock, faExternalLinkAlt, faGlobe, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faClock, faDesktop, faExternalLinkAlt, faGlobe, faThumbtack, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useState } from 'react';
 import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
@@ -267,6 +267,59 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
  * TabGroupCard - Card for displaying grouped tabs by domain
  * Memoized to prevent unnecessary re-renders
  */
+/**
+ * AppCard - Card component for displaying running desktop apps
+ * Similar to TabCard but for native applications
+ */
+export const AppCard = memo(function AppCard({ app, onClick }) {
+  if (!app) return null;
+
+  const { name, title, icon, pid } = app;
+  const displayName = title || name || 'Unknown App';
+  const colorClass = ICON_COLORS[Math.abs((name || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
+
+  const handleClick = () => {
+    onClick?.(app);
+  };
+
+  return (
+    <div className="cooldesk-tab-card app-card" onClick={handleClick}>
+      <div className="tab-card-header">
+        <div className={`tab-icon ${colorClass}`}>
+          {icon ? (
+            <img
+              src={icon}
+              alt=""
+              style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '4px',
+                objectFit: 'contain'
+              }}
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.nextElementSibling.style.display = 'flex';
+              }}
+            />
+          ) : null}
+          <FontAwesomeIcon
+            icon={faDesktop}
+            style={{ display: icon ? 'none' : 'flex' }}
+          />
+        </div>
+        <div className="tab-info">
+          <div className="tab-title" title={displayName}>
+            {displayName}
+          </div>
+          <div className="tab-hostname">
+            {name !== title && name ? name : 'Running'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export const TabGroupCard = memo(function TabGroupCard({ domain, tabs = [], onToggleExpand, onTabClick, onTabClose, isExpanded = false }) {
   if (!domain || tabs.length === 0) return null;
 

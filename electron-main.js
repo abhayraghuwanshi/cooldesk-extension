@@ -180,35 +180,148 @@ async function getRunningApps() {
 }
 
 /**
- * Windows: Get running apps using PowerShell
+ * Windows: Get running apps that appear in taskbar using Win32 API filtering
+ * Uses same logic as native bridge: checks WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, owner windows
  */
 async function getRunningAppsWindows() {
-    // PowerShell script to get running apps with visible windows
-    const psScript = `Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Name, Id, Path, MainWindowTitle | ConvertTo-Json`;
-    // Encode as base64 to avoid escaping issues with $_
+    // PowerShell script that uses Win32 API to find taskbar-visible windows
+    // This mimics the Python native bridge logic with ctypes
+    const psScript = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Collections.Generic;
+
+public class TaskbarApps {
+    [DllImport("user32.dll")]
+    static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    [DllImport("user32.dll")]
+    static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    const int GWL_EXSTYLE = -20;
+    const int WS_EX_TOOLWINDOW = 0x00000080;
+    const int WS_EX_APPWINDOW = 0x00040000;
+    const uint GW_OWNER = 4;
+
+    public static HashSet<uint> visiblePids = new HashSet<uint>();
+    public static Dictionary<uint, string> pidTitles = new Dictionary<uint, string>();
+
+    public static bool EnumCallback(IntPtr hWnd, IntPtr lParam) {
+        if (!IsWindowVisible(hWnd)) return true;
+
+        int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+
+        // Skip tool windows unless they have APPWINDOW style
+        if ((exStyle & WS_EX_TOOLWINDOW) != 0 && (exStyle & WS_EX_APPWINDOW) == 0) {
+            return true;
+        }
+
+        // Skip owned windows unless they have APPWINDOW style
+        IntPtr owner = GetWindow(hWnd, GW_OWNER);
+        if (owner != IntPtr.Zero && (exStyle & WS_EX_APPWINDOW) == 0) {
+            return true;
+        }
+
+        // Skip windows with empty titles
+        int titleLen = GetWindowTextLength(hWnd);
+        if (titleLen == 0) return true;
+
+        // Get PID and title
+        uint pid;
+        GetWindowThreadProcessId(hWnd, out pid);
+
+        StringBuilder sb = new StringBuilder(titleLen + 1);
+        GetWindowText(hWnd, sb, sb.Capacity);
+        string title = sb.ToString();
+
+        visiblePids.Add(pid);
+        if (!pidTitles.ContainsKey(pid) || title.Length > pidTitles[pid].Length) {
+            pidTitles[pid] = title;
+        }
+
+        return true;
+    }
+
+    public static void FindTaskbarApps() {
+        EnumWindows(EnumCallback, IntPtr.Zero);
+    }
+}
+"@
+
+[TaskbarApps]::FindTaskbarApps()
+
+$results = @()
+foreach ($procId in [TaskbarApps]::visiblePids) {
+    try {
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+        if ($proc) {
+            $title = [TaskbarApps]::pidTitles[$procId]
+            $results += @{
+                Name = $proc.Name
+                Id = $procId
+                Path = $proc.Path
+                MainWindowTitle = $title
+            }
+        }
+    } catch {}
+}
+
+$results | ConvertTo-Json -Compress
+`;
+
     const b64Script = Buffer.from(psScript, 'utf16le').toString('base64');
 
     try {
-        const { stdout } = await execAsync(`powershell -NoProfile -EncodedCommand ${b64Script}`, { windowsHide: true });
+        const { stdout, stderr } = await execAsync(`powershell -NoProfile -EncodedCommand ${b64Script}`, {
+            windowsHide: true,
+            timeout: 15000 // Increased timeout for C# compilation
+        });
 
-        if (!stdout || stdout.trim() === '') return [];
+        if (stderr) {
+            console.warn('[Electron] getRunningAppsWindows stderr:', stderr);
+        }
+
+        if (!stdout || stdout.trim() === '' || stdout.trim() === 'null') {
+            console.log('[Electron] getRunningAppsWindows: No output from script');
+            return [];
+        }
 
         const processes = JSON.parse(stdout);
         const procArray = Array.isArray(processes) ? processes : [processes];
 
         // Deduplicate by app name - only keep one instance per app
-        // Use a Map to track unique apps by lowercase name
         const uniqueApps = new Map();
 
         for (const p of procArray) {
-            if (!p.Name || !p.MainWindowTitle) continue;
+            if (!p.Name) continue;
 
             const appKey = p.Name.toLowerCase();
 
-            // Skip system processes and helper processes
+            // Skip system/helper processes
             if (appKey.includes('helper') || appKey.includes('renderer') ||
                 appKey.includes('gpu') || appKey.includes('crashpad') ||
-                appKey.includes('utility') || appKey.includes('broker')) {
+                appKey.includes('utility') || appKey.includes('broker') ||
+                appKey === 'applicationframehost' || appKey === 'textinputhost' ||
+                appKey === 'shellexperiencehost' || appKey === 'searchhost') {
                 continue;
             }
 
@@ -224,7 +337,6 @@ async function getRunningAppsWindows() {
                     isRunning: true
                 });
             } else {
-                // If this instance has a longer/better title, use it instead
                 const existing = uniqueApps.get(appKey);
                 if (p.MainWindowTitle && p.MainWindowTitle.length > existing.title.length) {
                     uniqueApps.set(appKey, {
@@ -241,7 +353,7 @@ async function getRunningAppsWindows() {
         }
 
         const apps = Array.from(uniqueApps.values());
-        console.log('[Electron] getRunningAppsWindows: found', apps.length, 'unique apps:', apps.map(a => a.name));
+        console.log('[Electron] getRunningAppsWindows: found', apps.length, 'taskbar apps:', apps.map(a => a.name));
 
         // Fetch icons for running apps (in parallel batches)
         const BATCH_SIZE = 10;

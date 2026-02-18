@@ -1,9 +1,9 @@
-import { faBrain, faClock, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faDesktop, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
-import { TabCard, TabGroupCard } from './TabCard';
+import { AppCard, TabCard, TabGroupCard } from './TabCard';
 
 // Debounce utility
 function debounce(func, wait) {
@@ -28,6 +28,7 @@ export function TabManagement() {
   const [tabActivity, setTabActivity] = useState({});
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [runningApps, setRunningApps] = useState([]);
 
   // Load auto-group and smart sort state on mount
   useEffect(() => {
@@ -122,6 +123,29 @@ export function TabManagement() {
     };
   }, []); // Empty deps - only run on mount
 
+  // Fetch running apps (Electron only)
+  useEffect(() => {
+    if (!window.electronAPI?.getRunningApps) return;
+
+    const fetchApps = async () => {
+      try {
+        const apps = await window.electronAPI.getRunningApps();
+        if (Array.isArray(apps)) {
+          setRunningApps(apps);
+        }
+      } catch (error) {
+        console.error('[TabManagement] Failed to fetch running apps:', error);
+      }
+    };
+
+    fetchApps();
+
+    // Refresh apps periodically (every 10 seconds)
+    const interval = setInterval(fetchApps, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Extension Mode (real browser extension, not Electron)
   useEffect(() => {
     const isRealExtension = typeof chrome !== 'undefined' && chrome.tabs && !window.electronAPI;
@@ -198,6 +222,17 @@ export function TabManagement() {
       }
     } catch (error) {
       console.error('[TabManagement] Failed to pin/unpin tab:', error);
+    }
+  }, []);
+
+  const handleAppClick = useCallback(async (app) => {
+    try {
+      if (window.electronAPI?.focusApp) {
+        console.log('[TabManagement] Focusing app:', app.name, app.pid);
+        await window.electronAPI.focusApp(app.pid);
+      }
+    } catch (error) {
+      console.error('[TabManagement] Failed to focus app:', error);
     }
   }, []);
 
@@ -504,7 +539,36 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 2. Grouped by Domain Section */}
+            {/* 2. Active Apps Section (Electron only) */}
+            {runningApps.length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-2xl, 20px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <FontAwesomeIcon icon={faDesktop} style={{ opacity: 0.6 }} />
+                  Active Apps ({runningApps.length})
+                </h3>
+                <div className="tabs-grid">
+                  {runningApps.map(app => (
+                    <AppCard
+                      key={app.id || app.pid}
+                      app={app}
+                      onClick={handleAppClick}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 3. Grouped by Domain Section */}
             {partitionedTabs.hasGroups && (
               <div>
                 <h3 style={{

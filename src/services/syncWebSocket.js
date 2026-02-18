@@ -296,8 +296,11 @@ class SyncWebSocket {
      */
     async handleJumpToTab(payload) {
         const { tabId, windowId } = payload;
-        const browserName = navigator.userAgent.includes('Edg') ? 'Edge' :
+        const isEdge = navigator.userAgent.includes('Edg');
+        const browserName = isEdge ? 'Edge' :
                            navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser';
+        const browserExeName = isEdge ? 'msedge' : 'chrome';
+
         console.log(`[SyncWS][${browserName}] Jump-to-tab:`, tabId);
 
         // Only handle in browser extension context (not Electron)
@@ -309,25 +312,26 @@ class SyncWebSocket {
 
                 const targetWindowId = windowId || tab.windowId;
 
-                // Fire all operations in parallel - don't wait for each one
-                const operations = [
+                // Activate tab and focus window
+                await Promise.all([
                     chrome.tabs.update(tabId, { active: true }),
                     targetWindowId && chrome.windows?.update
                         ? chrome.windows.update(targetWindowId, { focused: true })
                         : Promise.resolve()
-                ];
+                ]);
 
-                // Also inject focus script in parallel (don't await separately)
+                // Tell sidecar to use native focus on this browser
+                // This is more reliable than chrome.windows.update on Windows
+                this.send('request-native-focus', { browser: browserExeName, tabId });
+
+                // Also try script injection as backup
                 if (chrome.scripting?.executeScript) {
-                    operations.push(
-                        chrome.scripting.executeScript({
-                            target: { tabId },
-                            func: () => window.focus()
-                        }).catch(() => {}) // Silently ignore script injection failures
-                    );
+                    chrome.scripting.executeScript({
+                        target: { tabId },
+                        func: () => window.focus()
+                    }).catch(() => {});
                 }
 
-                await Promise.all(operations);
                 console.log(`[SyncWS][${browserName}] Jumped to tab:`, tabId);
             } catch (e) {
                 // Silent fail for cross-browser tab IDs
