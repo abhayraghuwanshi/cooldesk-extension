@@ -279,6 +279,11 @@ class SyncOrchestrator {
             if (isExtension()) {
                 console.log('[SyncOrchestrator] Pushing tabs FIRST (highest priority)...');
                 this.syncLocalTabs(); // Tabs first!
+
+                // Retry tab sync after short delays to ensure it completes
+                // (service worker may suspend before first sync finishes)
+                setTimeout(() => this.syncLocalTabs(), 1000);
+                setTimeout(() => this.syncLocalTabs(), 3000);
             }
 
             // THEN: Full sync for other data (workspaces, notes, etc.) - runs in background
@@ -292,6 +297,15 @@ class SyncOrchestrator {
                 this.periodicSync();
             }
         }, 60000);
+
+        // Also sync tabs specifically every 30 seconds for reliability
+        if (isExtension()) {
+            this.tabSyncInterval = setInterval(() => {
+                if (isHostSyncEnabled()) {
+                    this.syncLocalTabs();
+                }
+            }, 30000);
+        }
 
         // Tab Event Listeners - only in extension context
         if (isExtension() && chrome.tabs) {

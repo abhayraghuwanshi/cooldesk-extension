@@ -12,7 +12,8 @@
       "Bash(cmd /c \"dir c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe\")",
       "Bash(cmd /c \"if exist c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe \\(echo EXISTS\\) else \\(echo NOT FOUND\\)\")",
       "Bash(grep:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(./AppScanner.exe)"
     ],
     "deny": [],
     "ask": []

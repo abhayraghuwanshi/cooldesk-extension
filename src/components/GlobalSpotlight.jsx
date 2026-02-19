@@ -186,68 +186,39 @@ export function GlobalSpotlight() {
                     ...workspaces[0],
                     type: 'workspace',
                     description: 'Current Project',
-                    // Workspace icon handled by ResultItem/ContextItem
                 });
             }
 
-            // 2. Focused Development & Productivity Apps
-            const categories = {
-                'Development': ['code', 'visual studio', 'idea', 'webstorm', 'pycharm', 'sublime', 'terminal', 'powershell', 'cmd', 'git', 'cursor'],
-                'Design': ['figma', 'photoshop', 'illustrator', 'blender', 'canva'],
-                'Productivity': ['obsidian', 'notion', 'linear', 'trello', 'excel', 'word', 'slack', 'discord', 'teams', 'outlook']
-            };
-
+            // 2. Running Apps (show all, no category filtering)
             const usedAppNames = new Set();
+            const systemApps = ['svchost', 'csrss', 'system', 'registry', 'service', 'runtime', 'host', 'helper'];
 
-            // Helper to capture apps by category
-            const getApps = (categoryList, label, limit) => {
-                return runningApps
-                    .filter(a => {
-                        const name = (a.name || '').toLowerCase();
-                        if (usedAppNames.has(name)) return false;
-                        return categoryList.some(k => name.includes(k));
-                    })
-                    .slice(0, limit)
-                    .map(a => {
-                        usedAppNames.add((a.name || '').toLowerCase());
-                        return { ...a, type: 'app', description: label, isRunning: true };
-                    });
-            };
+            const activeApps = runningApps
+                .filter(a => {
+                    const name = (a.name || '').toLowerCase();
+                    if (usedAppNames.has(name)) return false;
+                    // Filter out system processes
+                    if (systemApps.some(s => name.includes(s))) return false;
+                    usedAppNames.add(name);
+                    return true;
+                })
+                .slice(0, 4)
+                .map(a => ({ ...a, type: 'app', description: 'Running', isRunning: true }));
 
-            // Prioritize Dev Tools -> Design -> Communication/Docs
-            recommendations.push(...getApps(categories['Development'], 'Dev Tool', 2));
-            recommendations.push(...getApps(categories['Design'], 'Design', 1));
+            recommendations.push(...activeApps);
 
             // 3. Relevant Work Tabs
-            const workDomains = ['github', 'localhost', 'docs', 'jira', 'linear', 'figma', 'notion', 'aws', 'vercel'];
             const relevantTabs = tabs
-                .filter(t => workDomains.some(d => (t.url || '').toLowerCase().includes(d)))
-                // Unique by domain to avoid clutter (e.g. 5 github tabs)
+                .filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://'))
                 .filter((t, index, self) =>
                     index === self.findIndex(s => {
                         try { return new URL(s.url).hostname === new URL(t.url).hostname; } catch { return s.url === t.url; }
                     })
                 )
                 .slice(0, 2)
-                .map(t => ({ ...t, type: 'tab', description: 'Work Tab' }));
+                .map(t => ({ ...t, type: 'tab', description: 'Tab' }));
 
             recommendations.push(...relevantTabs);
-
-            // 4. Fill remaining spots with Productivity/Communication Apps
-            if (recommendations.length < 6) {
-                recommendations.push(...getApps(categories['Productivity'], 'App', 6 - recommendations.length));
-            }
-
-            // 5. If still empty, add generic active apps (Browsers, Media)
-            if (recommendations.length < 4) {
-                const otherApps = runningApps
-                    .filter(a => !usedAppNames.has((a.name || '').toLowerCase()))
-                    .filter(a => !['svchost', 'csrss', 'system', 'registry', 'service'].some(s => (a.name || '').toLowerCase().includes(s)))
-                    .filter(a => ['chrome', 'firefox', 'edge', 'brave', 'spotify', 'vlc'].some(k => (a.name || '').toLowerCase().includes(k)))
-                    .slice(0, 4 - recommendations.length)
-                    .map(a => ({ ...a, type: 'app', description: 'Active App', isRunning: true }));
-                recommendations.push(...otherApps);
-            }
 
             // Final Deduplication & Cap
             const uniqueRecs = recommendations

@@ -75,8 +75,96 @@ function focusBrowserWindow() {
 let installedAppsCache = null;
 let installedAppsCacheTime = 0;
 const INSTALLED_APPS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours - apps rarely change
+
+// Icon cache - stores base64 icons by app name/path to avoid re-fetching
+const iconCache = new Map();
+const ICON_CACHE_FILE = join(app.getPath('userData'), 'icon-cache.json');
 const INSTALLED_APPS_CACHE_FILE = join(app.getPath('userData'), 'installed-apps-cache.json');
-const INSTALLED_APPS_CACHE_VERSION = 2; // Increment when filter logic changes to invalidate old caches
+
+/**
+ * Load icon cache from disk on startup
+ */
+function loadIconCacheFromDisk() {
+    try {
+        if (existsSync(ICON_CACHE_FILE)) {
+            const data = JSON.parse(readFileSync(ICON_CACHE_FILE, 'utf8'));
+            if (data.icons && typeof data.icons === 'object') {
+                Object.entries(data.icons).forEach(([key, value]) => {
+                    iconCache.set(key, value);
+                });
+                console.log(`[Electron] Loaded ${iconCache.size} icons from disk cache`);
+            }
+        }
+    } catch (e) {
+        console.warn('[Electron] Failed to load icon cache from disk:', e.message);
+    }
+}
+
+/**
+ * Save icon cache to disk (call periodically or on quit)
+ */
+function saveIconCacheToDisk() {
+    try {
+        const icons = Object.fromEntries(iconCache);
+        writeFileSync(ICON_CACHE_FILE, JSON.stringify({ icons, timestamp: Date.now() }), 'utf8');
+        console.log(`[Electron] Saved ${iconCache.size} icons to disk cache`);
+    } catch (e) {
+        console.warn('[Electron] Failed to save icon cache to disk:', e.message);
+    }
+}
+
+/**
+ * Fetch icons for a list of apps (uses cache, preserves existing icons)
+ */
+async function fetchIconsForApps(apps) {
+    const BATCH_SIZE = 20;
+    let fetchedCount = 0;
+
+    for (let i = 0; i < apps.length; i += BATCH_SIZE) {
+        const batch = apps.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (appItem) => {
+            const cacheKey = appItem.name?.toLowerCase();
+
+            // Skip if app already has an icon (from AppScanner.exe)
+            if (appItem.icon) {
+                // Still cache it for running apps lookup
+                if (cacheKey && !iconCache.has(cacheKey)) {
+                    iconCache.set(cacheKey, appItem.icon);
+                }
+                return;
+            }
+
+            // Check cache
+            if (cacheKey && iconCache.has(cacheKey)) {
+                appItem.icon = iconCache.get(cacheKey);
+                return;
+            }
+
+            // Try to fetch icon
+            try {
+                if (appItem.path && existsSync(appItem.path)) {
+                    const icon = await app.getFileIcon(appItem.path);
+                    if (!icon.isEmpty()) {
+                        const iconData = icon.toDataURL();
+                        iconCache.set(cacheKey, iconData);
+                        appItem.icon = iconData;
+                        fetchedCount++;
+                    }
+                }
+            } catch (e) {
+                // Ignore errors
+            }
+        }));
+    }
+
+    // Save to disk if we fetched new icons
+    if (fetchedCount > 0) {
+        saveIconCacheToDisk();
+    }
+
+    console.log(`[Electron] fetchIconsForApps: ${fetchedCount} new icons fetched, ${apps.filter(a => a.icon).length}/${apps.length} apps have icons`);
+}
+const INSTALLED_APPS_CACHE_VERSION = 3; // Increment when filter logic changes to invalidate old caches
 
 /**
  * Load installed apps from disk cache
@@ -123,6 +211,7 @@ function saveInstalledAppsToDisk(apps) {
 
 // Try to load from disk cache on startup
 loadInstalledAppsFromDisk();
+loadIconCacheFromDisk();
 
 // ==========================================
 // CHANGE DETECTION FOR SYNC
@@ -275,10 +364,15 @@ foreach ($procId in [TaskbarApps]::visiblePids) {
         $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
         if ($proc) {
             $title = [TaskbarApps]::pidTitles[$procId]
+            # Try to get path, fallback to MainModule if Path is null
+            $exePath = $proc.Path
+            if (-not $exePath) {
+                try { $exePath = $proc.MainModule.FileName } catch {}
+            }
             $results += @{
                 Name = $proc.Name
                 Id = $procId
-                Path = $proc.Path
+                Path = $exePath
                 MainWindowTitle = $title
             }
         }
@@ -353,24 +447,70 @@ $results | ConvertTo-Json -Compress
         }
 
         const apps = Array.from(uniqueApps.values());
-        console.log('[Electron] getRunningAppsWindows: found', apps.length, 'taskbar apps:', apps.map(a => a.name));
+        console.log('[Electron] getRunningAppsWindows: found', apps.length, 'taskbar apps:', apps.map(a => `${a.name}(path:${a.path ? 'yes' : 'no'})`));
 
-        // Fetch icons for running apps (in parallel batches)
-        const BATCH_SIZE = 10;
-        for (let i = 0; i < apps.length; i += BATCH_SIZE) {
-            const batch = apps.slice(i, i + BATCH_SIZE);
-            await Promise.all(batch.map(async (appItem) => {
-                try {
-                    if (appItem.path && existsSync(appItem.path)) {
-                        const icon = await app.getFileIcon(appItem.path);
+        // Fetch icons for running apps (use cache when available)
+        for (const appItem of apps) {
+            const cacheKey = appItem.name?.toLowerCase();
+
+            // Check icon cache first
+            if (cacheKey && iconCache.has(cacheKey)) {
+                appItem.icon = iconCache.get(cacheKey);
+                continue;
+            }
+
+            try {
+                let iconData = null;
+
+                // Try direct path first
+                if (!iconData && appItem.path && existsSync(appItem.path)) {
+                    const icon = await app.getFileIcon(appItem.path);
+                    if (!icon.isEmpty()) {
+                        iconData = icon.toDataURL();
+                    }
+                }
+
+                // Try to find exe from installed apps cache
+                if (!iconData && installedAppsCache && installedAppsCache.length > 0) {
+                    const installed = installedAppsCache.find(ia =>
+                        ia.name?.toLowerCase() === appItem.name?.toLowerCase() ||
+                        ia.name?.toLowerCase().includes(appItem.name?.toLowerCase())
+                    );
+                    if (installed?.path && existsSync(installed.path)) {
+                        const icon = await app.getFileIcon(installed.path);
                         if (!icon.isEmpty()) {
-                            appItem.icon = icon.toDataURL();
+                            iconData = icon.toDataURL();
                         }
                     }
-                } catch (e) {
-                    // Ignore icon fetch errors
                 }
-            }));
+
+                // Fallback: try common paths for the app
+                if (!iconData) {
+                    const possiblePaths = [
+                        `C:\\Program Files\\${appItem.name}\\${appItem.name}.exe`,
+                        `C:\\Program Files (x86)\\${appItem.name}\\${appItem.name}.exe`,
+                        `${process.env.LOCALAPPDATA}\\Programs\\${appItem.name}\\${appItem.name}.exe`,
+                        `${process.env.LOCALAPPDATA}\\${appItem.name}\\${appItem.name}.exe`,
+                    ];
+                    for (const tryPath of possiblePaths) {
+                        if (existsSync(tryPath)) {
+                            const icon = await app.getFileIcon(tryPath);
+                            if (!icon.isEmpty()) {
+                                iconData = icon.toDataURL();
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Store in cache and assign to app
+                if (iconData) {
+                    iconCache.set(cacheKey, iconData);
+                    appItem.icon = iconData;
+                }
+            } catch (e) {
+                // Ignore icon fetch errors
+            }
         }
 
         return apps;
@@ -829,6 +969,15 @@ async function getInstalledAppsWindows() {
                 const rawApps = JSON.parse(stdout);
                 if (Array.isArray(rawApps) && rawApps.length > 0) {
                     const apps = filterUserApps(rawApps);
+
+                    // AppScanner.exe already includes icons, just cache them for running apps lookup
+                    apps.forEach(appItem => {
+                        const cacheKey = appItem.name?.toLowerCase();
+                        if (cacheKey && appItem.icon && !iconCache.has(cacheKey)) {
+                            iconCache.set(cacheKey, appItem.icon);
+                        }
+                    });
+
                     installedAppsCache = apps;
                     installedAppsCacheTime = now;
                     console.log(`[Electron] AppScanner.exe found ${rawApps.length} raw apps, filtered to ${apps.length} user apps in ${(performance.now() - startTime).toFixed(0)}ms`);
@@ -884,6 +1033,10 @@ async function getInstalledAppsWindows() {
 
     const rawResult = Array.from(apps.values()).sort((a, b) => a.name.localeCompare(b.name));
     const result = filterUserApps(rawResult);
+
+    // Fetch icons for installed apps
+    await fetchIconsForApps(result);
+
     installedAppsCache = result;
     installedAppsCacheTime = now;
     console.log(`[Electron] getInstalledAppsWindows: found ${rawResult.length} raw apps, filtered to ${result.length} user apps in ${(performance.now() - startTime).toFixed(0)}ms`);
@@ -3018,6 +3171,7 @@ app.on('before-quit', () => {
 
     // Save data before quitting
     saveData();
+    saveIconCacheToDisk();
 
     // Close spotlight window
     if (spotlightWindow && !spotlightWindow.isDestroyed()) {

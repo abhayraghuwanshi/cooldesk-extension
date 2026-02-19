@@ -116,15 +116,25 @@ export async function refreshElectronCache(forceRefresh = false) {
 
   // 2. INSTALLED APPS: Only refresh if cache is empty or expired (24h)
   if (electronDataCache.installedApps.length === 0 || !isCacheFresh('installedApps')) {
-    refreshPromises.push(
-      withTimeout(window.electronAPI.getInstalledApps?.().catch(() => []), 3000)
-        .then(apps => {
-          if (Array.isArray(apps) && apps.length > 0) {
-            electronDataCache.installedApps = apps;
-            electronDataCache.lastRefresh.installedApps = now;
-          }
-        })
-    );
+    if (window.electronAPI?.getInstalledApps) {
+      refreshPromises.push(
+        withTimeout(window.electronAPI.getInstalledApps().catch(e => {
+          console.error('[SearchService] getInstalledApps error:', e);
+          return [];
+        }), 10000)
+          .then(apps => {
+            if (Array.isArray(apps) && apps.length > 0) {
+              electronDataCache.installedApps = apps;
+              electronDataCache.lastRefresh.installedApps = now;
+              console.log(`[SearchService] Loaded ${apps.length} installed apps`);
+            } else {
+              console.warn('[SearchService] getInstalledApps returned empty or invalid:', apps);
+            }
+          })
+      );
+    } else {
+      console.warn('[SearchService] getInstalledApps not available');
+    }
   }
 
   // 3. SIDECAR DATA: Only fetch if sidecar is available
@@ -545,11 +555,15 @@ export async function quickSearch(query, maxResults = 15) {
     const cacheIsPopulated = electronDataCache.installedApps.length > 0 ||
       electronDataCache.runningApps.length > 0;
 
+    console.log(`[SearchService] quickSearch: query="${query}", cacheResults=${cacheResults.length}, cachePopulated=${cacheIsPopulated}, installedApps=${electronDataCache.installedApps.length}, runningApps=${electronDataCache.runningApps.length}`);
+
     // If cache is empty (not populated yet), try a quick live fetch
     // This handles first search before cache is ready
     if (cacheResults.length === 0 && !cacheIsPopulated) {
+      console.log('[SearchService] Cache empty, forcing refresh...');
       await refreshElectronCache(true);
       cacheResults = searchElectronCache(query);
+      console.log(`[SearchService] After refresh: ${cacheResults.length} results, installedApps=${electronDataCache.installedApps.length}`);
     }
 
     const deduped = deduplicateByUrl(cacheResults);
