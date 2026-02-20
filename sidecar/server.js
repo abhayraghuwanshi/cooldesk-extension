@@ -300,6 +300,8 @@ wss.on('connection', (ws, req) => {
             const data = JSON.parse(message.toString());
             ws.messageCount++;
 
+            console.log(`[Sidecar] Message from ${ws.clientId}: type=${data.type}`);
+
             // Identify client type from messages
             if (data.type === 'identify' && data.client) {
                 // Explicit identification message
@@ -315,7 +317,7 @@ wss.on('connection', (ws, req) => {
                     ws.clientType = 'extensionApi';
                 } else if (data.type === 'action') {
                     ws.clientType = 'bridge';
-                } else if (data.type === 'llm-request') {
+                } else if (data.type === 'llm-request' || data.type === 'llm-chat') {
                     ws.clientType = 'localAI';
                 } else {
                     ws.clientType = `other:${data.type}`;
@@ -421,13 +423,13 @@ async function handleGetRequest(path, url, res) {
 
     if (path.startsWith('/llm/')) {
         if (path === '/llm/models') {
-            const models = await localLLM.getModels();
+            const models = localLLM.getAvailableModels();
             res.writeHead(200);
             res.end(JSON.stringify(models));
             return;
         }
         if (path === '/llm/status') {
-            const status = await localLLM.getStatus();
+            const status = localLLM.getStatus();
             res.writeHead(200);
             res.end(JSON.stringify(status));
             return;
@@ -588,6 +590,8 @@ async function handlePostRequest(path, data, res) {
 
 function handleWebSocketMessage(ws, data) {
     const { type, payload } = data;
+
+    console.log(`[Sidecar] handleWebSocketMessage: type=${type}, hasPayload=${!!payload}`);
 
     // Helper to process LLM request
     const handleLLM = (promptStr) => {
@@ -752,15 +756,23 @@ function handleWebSocketMessage(ws, data) {
             break;
 
         case 'llm-chat':
+            console.log(`[Sidecar] llm-chat received - prompt: "${payload.prompt?.substring(0, 50)}...", requestId: ${payload.requestId}`);
+            console.log(`[Sidecar] LLM Status:`, localLLM.getStatus());
             localLLM.chat(payload.prompt, payload.options || {})
-                .then(response => ws.send(JSON.stringify({
-                    type: 'llm-chat-response',
-                    payload: { ok: true, response, requestId: payload.requestId }
-                })))
-                .catch(err => ws.send(JSON.stringify({
-                    type: 'llm-chat-response',
-                    payload: { ok: false, error: err.message, requestId: payload.requestId }
-                })));
+                .then(response => {
+                    console.log(`[Sidecar] llm-chat response ready, length: ${response?.length || 0}`);
+                    ws.send(JSON.stringify({
+                        type: 'llm-chat-response',
+                        payload: { ok: true, response, requestId: payload.requestId }
+                    }));
+                })
+                .catch(err => {
+                    console.error(`[Sidecar] llm-chat error:`, err.message);
+                    ws.send(JSON.stringify({
+                        type: 'llm-chat-response',
+                        payload: { ok: false, error: err.message, requestId: payload.requestId }
+                    }));
+                });
             break;
 
         case 'llm-chat-stream':

@@ -39,6 +39,25 @@ class LRUCache {
 // Global cache persists across re-renders
 const searchCache = new LRUCache(100);
 
+// Track app usage for recommendations
+async function trackAppUsage(appName) {
+    if (!appName) return;
+    try {
+        const data = await storageGet(['frequent_apps']);
+        const frequent = data.frequent_apps || {};
+        const key = appName.toLowerCase();
+        frequent[key] = (frequent[key] || 0) + 1;
+
+        // Keep only top 20 apps
+        const sorted = Object.entries(frequent)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 20);
+        await storageSet({ frequent_apps: Object.fromEntries(sorted) });
+    } catch (e) {
+        // Ignore tracking errors
+    }
+}
+
 // Map app names to FontAwesome icons
 const APP_ICONS = {
     // Browsers
@@ -134,12 +153,16 @@ export function GlobalSpotlight() {
         };
         window.addEventListener('focus', handleFocus);
 
-        // Initial focus
+        // Initial focus and load
         handleFocus();
+        console.log('[Spotlight] Initial mount - loading context items');
+        loadContextItems();
+        loadPinnedItems();
 
         // Listen for spotlight-shown event from Electron (when Alt+K is pressed)
         if (window.electronAPI?.subscribe) {
             const unsubscribe = window.electronAPI.subscribe('spotlight-shown', () => {
+                console.log('[Spotlight] spotlight-shown event received');
                 // Reset state and focus input
                 setQuery('');
                 setResults([]);
@@ -163,74 +186,107 @@ export function GlobalSpotlight() {
 
 
 
-    // Load AI Context Items (Workflow Recommendation) - Uses cached data from refreshElectronCache
-    // This avoids redundant IPC calls by reusing the cache populated by refreshElectronCache
-    // Load AI Context Items (Workflow Recommendation)
-    // - Combines Workspaces, Running Apps (Categorized), and Tabs
+    // Load Recommendations - Shows frequently used apps and active tabs when Spotlight opens
     const loadContextItems = useCallback(async () => {
+        console.log('[Spotlight] loadContextItems called');
         try {
-            // Fetch all data in parallel for speed
-            const [runningApps, tabs, workspaceResult] = await Promise.all([
-                window.electronAPI?.getRunningApps?.().catch(() => []) || [],
-                window.electronAPI?.getTabs?.().catch(() => []) || [],
-                window.electronAPI?.sendMessage?.({ type: 'SEARCH_WORKSPACES', query: '', maxResults: 5 })
-                    .catch(() => ({ results: [] })) || { results: [] }
+            // Fetch all data in parallel
+            console.log('[Spotlight] Fetching data...');
+            const [runningApps, installedApps, tabs, frequentApps] = await Promise.all([
+                window.electronAPI?.getRunningApps?.().catch(e => { console.error('[Spotlight] getRunningApps error:', e); return []; }) || [],
+                window.electronAPI?.getInstalledApps?.().catch(e => { console.error('[Spotlight] getInstalledApps error:', e); return []; }) || [],
+                window.electronAPI?.getTabs?.().catch(e => { console.error('[Spotlight] getTabs error:', e); return []; }) || [],
+                storageGet(['frequent_apps']).then(d => d.frequent_apps || {}).catch(() => ({}))
             ]);
 
-            const workspaces = workspaceResult?.results || [];
+            console.log('[Spotlight] Data fetched:', {
+                runningApps: runningApps?.length || 0,
+                installedApps: installedApps?.length || 0,
+                tabs: tabs?.length || 0,
+                frequentApps: Object.keys(frequentApps).length
+            });
+
             const recommendations = [];
+            const usedIds = new Set();
 
-            // 1. Current Context (Top Workspace)
-            if (workspaces.length > 0) {
-                recommendations.push({
-                    ...workspaces[0],
-                    type: 'workspace',
-                    description: 'Current Project',
-                });
-            }
+            // System apps to filter out
+            const systemApps = ['svchost', 'csrss', 'system', 'registry', 'service', 'runtime', 'host', 'helper', 'background', 'agent'];
 
-            // 2. Running Apps (show all, no category filtering)
-            const usedAppNames = new Set();
-            const systemApps = ['svchost', 'csrss', 'system', 'registry', 'service', 'runtime', 'host', 'helper'];
-
+            // 1. Running Apps (top priority - what user is actively using)
+            // Try to get icons from installed apps cache if running app doesn't have one
             const activeApps = runningApps
                 .filter(a => {
                     const name = (a.name || '').toLowerCase();
-                    if (usedAppNames.has(name)) return false;
-                    // Filter out system processes
+                    if (usedIds.has(name)) return false;
                     if (systemApps.some(s => name.includes(s))) return false;
-                    usedAppNames.add(name);
+                    usedIds.add(name);
                     return true;
                 })
                 .slice(0, 4)
-                .map(a => ({ ...a, type: 'app', description: 'Running', isRunning: true }));
+                .map(a => {
+                    // If running app doesn't have icon, try to find it from installed apps
+                    let icon = a.icon;
+                    if (!icon && installedApps.length > 0) {
+                        const installed = installedApps.find(ia =>
+                            ia.name?.toLowerCase() === a.name?.toLowerCase()
+                        );
+                        if (installed?.icon) icon = installed.icon;
+                    }
+                    return { ...a, icon, type: 'app', description: 'Running', isRunning: true };
+                });
 
+            console.log('[Spotlight] Active apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(icon:${!!a.icon})`));
             recommendations.push(...activeApps);
 
-            // 3. Relevant Work Tabs
+            // 2. Frequently Used Apps (from usage history)
+            const sortedFrequent = Object.entries(frequentApps)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 4);
+
+            for (const [appName] of sortedFrequent) {
+                if (usedIds.has(appName.toLowerCase())) continue;
+
+                // Find app in installed apps
+                const app = installedApps.find(a =>
+                    a.name?.toLowerCase() === appName.toLowerCase()
+                );
+                if (app) {
+                    usedIds.add(appName.toLowerCase());
+                    recommendations.push({
+                        ...app,
+                        type: 'app',
+                        description: 'Frequent',
+                        isRunning: false
+                    });
+                }
+            }
+
+            // 3. Active Tabs (unique by domain)
             const relevantTabs = tabs
-                .filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://'))
+                .filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://') && !t.url.startsWith('about:'))
                 .filter((t, index, self) =>
                     index === self.findIndex(s => {
                         try { return new URL(s.url).hostname === new URL(t.url).hostname; } catch { return s.url === t.url; }
                     })
                 )
-                .slice(0, 2)
-                .map(t => ({ ...t, type: 'tab', description: 'Tab' }));
+                .slice(0, 3)
+                .map(t => ({
+                    ...t,
+                    type: 'tab',
+                    description: 'Active Tab',
+                    favicon: t.favIconUrl || t.favicon  // Map favIconUrl to favicon
+                }));
 
+            console.log('[Spotlight] Relevant tabs:', relevantTabs.length);
             recommendations.push(...relevantTabs);
 
-            // Final Deduplication & Cap
-            const uniqueRecs = recommendations
-                .filter((item, index, self) =>
-                    index === self.findIndex((t) => (t.id && t.id === item.id) || (t.title === item.title && t.type === item.type))
-                )
-                .slice(0, 6);
-
-            setContextItems(uniqueRecs);
+            // Cap at 8 items
+            const finalRecs = recommendations.slice(0, 8);
+            console.log('[Spotlight] Final recommendations:', finalRecs.length, finalRecs.map(r => r.name || r.title));
+            setContextItems(finalRecs);
 
         } catch (e) {
-            console.warn('Failed to load context items', e);
+            console.warn('Failed to load recommendations', e);
         }
     }, []);
 
@@ -579,6 +635,9 @@ export function GlobalSpotlight() {
         // For apps, focus running app or launch installed app
         if (item.type === 'app') {
             try {
+                // Track app usage for recommendations
+                trackAppUsage(item.name);
+
                 // For pinned apps, we need to find the current running instance
                 // because the stored PID might be stale
                 if (window.electronAPI?.getRunningApps) {
@@ -703,11 +762,11 @@ export function GlobalSpotlight() {
                     </button>
                 </div>
 
-                {/* Context Section (AI Recommended) */}
+                {/* Recommendations Section - Shows when query is empty */}
                 {!query.trim() && contextItems.length > 0 && (
                     <div className="spotlight-context">
                         <div className="spotlight-pins-header">
-                            <span className="spotlight-pins-title">✨ AI Suggested Workflow</span>
+                            <span className="spotlight-pins-title">Suggestions</span>
                         </div>
                         <div className="spotlight-pins-grid context-grid">
                             {contextItems.map((item, i) => (

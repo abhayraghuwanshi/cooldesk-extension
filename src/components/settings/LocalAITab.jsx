@@ -1,12 +1,32 @@
 /**
  * Local AI Models Tab - Settings Component
- * Only visible in Electron desktop app
+ * Works with both Tauri (sidecar) and Electron desktop apps
  * Manages local LLM download, loading, and configuration
  */
 
 import { faCircleNotch, faCloud, faDownload, faMemory, faRocket, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
+
+// Sidecar API URL (Tauri desktop app runs sidecar on port 4000)
+const SIDECAR_URL = 'http://127.0.0.1:4000';
+
+// Helper to call sidecar HTTP API
+async function sidecarGet(path) {
+    const res = await fetch(`${SIDECAR_URL}${path}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}
+
+async function sidecarPost(path, data = {}) {
+    const res = await fetch(`${SIDECAR_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}
 
 export default function LocalAITab() {
     const [status, setStatus] = useState(null);
@@ -15,37 +35,76 @@ export default function LocalAITab() {
     const [error, setError] = useState('');
     const [downloadProgress, setDownloadProgress] = useState({});
     const [loadingModel, setLoadingModel] = useState(null);
+    const [sidecarAvailable, setSidecarAvailable] = useState(null); // null = checking, true/false = result
 
-    // Check if running in Electron
-    const isElectron = typeof window !== 'undefined' && window.electronAPI?.llm;
-
+    // Check sidecar availability on mount
     useEffect(() => {
-        if (!isElectron) return;
-        loadStatus();
-        loadModels();
+        let ws = null;
+        let mounted = true;
 
-        // Listen for progress updates
-        const removeProgress = window.electronAPI.llm.onProgress((data) => {
-            if (data.type === 'download') {
-                setDownloadProgress(prev => ({ ...prev, [data.modelName]: data.progress }));
-            } else if (data.type === 'loading') {
-                setLoadingModel(data.modelName);
-            } else if (data.type === 'loaded') {
-                setLoadingModel(null);
-                loadStatus();
-                loadModels();
-            } else if (data.type === 'error') {
-                setError(data.error || 'Unknown error');
-                setLoadingModel(null);
+        async function checkSidecar() {
+            try {
+                const health = await fetch(`${SIDECAR_URL}/health`, { method: 'GET' });
+                if (health.ok && mounted) {
+                    setSidecarAvailable(true);
+                    loadStatus();
+                    loadModels();
+
+                    // Connect WebSocket for progress updates
+                    ws = new WebSocket(`ws://127.0.0.1:4000`);
+                    ws.onopen = () => {
+                        ws.send(JSON.stringify({ type: 'identify', client: 'localAITab' }));
+                    };
+                    ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'llm-progress' || data.type === 'llm-download-progress') {
+                                const { type: progressType, progress, modelName, error: progressError } = data.payload || {};
+                                if (progressType === 'download' || data.type === 'llm-download-progress') {
+                                    setDownloadProgress(prev => ({ ...prev, [modelName]: progress }));
+                                } else if (progressType === 'loading') {
+                                    setLoadingModel(modelName);
+                                } else if (progressType === 'loaded') {
+                                    setLoadingModel(null);
+                                    loadStatus();
+                                    loadModels();
+                                } else if (progressType === 'error') {
+                                    setError(progressError || 'Unknown error');
+                                    setLoadingModel(null);
+                                }
+                            } else if (data.type === 'llm-loaded') {
+                                setLoadingModel(null);
+                                loadStatus();
+                                loadModels();
+                            } else if (data.type === 'llm-error') {
+                                setError(data.payload?.error || 'Unknown error');
+                                setLoadingModel(null);
+                            }
+                        } catch (e) {
+                            // Ignore parse errors
+                        }
+                    };
+                } else if (mounted) {
+                    setSidecarAvailable(false);
+                }
+            } catch (e) {
+                if (mounted) {
+                    setSidecarAvailable(false);
+                }
             }
-        });
+        }
 
-        return () => removeProgress?.();
-    }, [isElectron]);
+        checkSidecar();
+
+        return () => {
+            mounted = false;
+            if (ws) ws.close();
+        };
+    }, []);
 
     const loadStatus = async () => {
         try {
-            const s = await window.electronAPI.llm.getStatus();
+            const s = await sidecarGet('/llm/status');
             setStatus(s);
         } catch (e) {
             setError(e.message);
@@ -55,7 +114,7 @@ export default function LocalAITab() {
     const loadModels = async () => {
         setLoading(true);
         try {
-            const m = await window.electronAPI.llm.getModels();
+            const m = await sidecarGet('/llm/models');
             setModels(m || {});
         } catch (e) {
             setError(e.message);
@@ -68,8 +127,8 @@ export default function LocalAITab() {
         setError('');
         setDownloadProgress(prev => ({ ...prev, [modelName]: 0 }));
         try {
-            const result = await window.electronAPI.llm.downloadModel(modelName);
-            if (!result.ok) {
+            const result = await sidecarPost('/llm/download', { modelName });
+            if (result && !result.ok && result.error) {
                 setError(result.error || 'Download failed');
             } else {
                 loadModels();
@@ -89,8 +148,8 @@ export default function LocalAITab() {
         setError('');
         setLoadingModel(modelName);
         try {
-            const result = await window.electronAPI.llm.loadModel(modelName);
-            if (!result.ok) {
+            const result = await sidecarPost('/llm/load', { modelName });
+            if (result && !result.ok && result.error) {
                 setError(result.error || 'Failed to load model');
             }
             loadStatus();
@@ -105,7 +164,7 @@ export default function LocalAITab() {
     const handleUnload = async () => {
         setError('');
         try {
-            await window.electronAPI.llm.unloadModel();
+            await sidecarPost('/llm/unload');
             loadStatus();
             loadModels();
         } catch (e) {
@@ -113,8 +172,22 @@ export default function LocalAITab() {
         }
     };
 
-    // Not in Electron - show message
-    if (!isElectron) {
+    // Still checking sidecar availability
+    if (sidecarAvailable === null) {
+        return (
+            <div style={{
+                padding: 32,
+                textAlign: 'center',
+                color: 'rgba(255,255,255,0.5)'
+            }}>
+                <FontAwesomeIcon icon={faCircleNotch} spin style={{ fontSize: 32, marginBottom: 16 }} />
+                <p style={{ margin: 0, fontSize: 13 }}>Connecting to AI service...</p>
+            </div>
+        );
+    }
+
+    // Sidecar not available - show message
+    if (!sidecarAvailable) {
         return (
             <div style={{
                 padding: 32,
@@ -126,7 +199,7 @@ export default function LocalAITab() {
                 <p style={{ margin: 0, fontSize: 13 }}>
                     Local AI models are only available in the CoolDesk desktop app.
                     <br />
-                    Install the desktop app to use on-device AI features.
+                    Ensure the desktop app is running to use on-device AI features.
                 </p>
             </div>
         );

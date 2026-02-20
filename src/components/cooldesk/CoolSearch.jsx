@@ -1230,13 +1230,22 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         if (query.startsWith('/ai')) {
           const prompt = query.slice(3).trim();
 
-          // Check if running in Electron with LLM support
-          const isElectron = typeof window !== 'undefined' && window.electronAPI?.llm;
+          // Sidecar API URL (Tauri desktop app runs sidecar on port 4000)
+          const SIDECAR_URL = 'http://127.0.0.1:4000';
 
-          if (!isElectron) {
+          // Check if sidecar is available
+          let sidecarAvailable = false;
+          try {
+            const health = await fetch(`${SIDECAR_URL}/health`, { method: 'GET' });
+            sidecarAvailable = health.ok;
+          } catch (e) {
+            sidecarAvailable = false;
+          }
+
+          if (!sidecarAvailable) {
             setCommandFeedback({
               type: 'error',
-              message: 'Local AI is only available in the desktop app'
+              message: 'Local AI is only available in the desktop app. Ensure the app is running.'
             });
             return;
           }
@@ -1259,29 +1268,33 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             setSearchSuggestions([]);
 
             // Check if model is loaded, if not, load it automatically
-            const status = await window.electronAPI.llm.getStatus();
+            const statusRes = await fetch(`${SIDECAR_URL}/llm/status`);
+            const status = await statusRes.json();
 
             if (!status.modelLoaded) {
               // Show loading message
               setAiChatMessages(prev => [
                 ...prev,
-                { role: 'system', content: '🔄 Model not loaded. Loading TinyLlama model...' }
+                { role: 'system', content: '🔄 Model not loaded. Loading model...' }
               ]);
 
               // Get available models
-              const modelsResult = await window.electronAPI.llm.getModels();
+              const modelsRes = await fetch(`${SIDECAR_URL}/llm/models`);
+              const modelsResult = await modelsRes.json();
               console.log('[AI Chat] Models result:', modelsResult);
 
               // Models is an object: {filename: {status, displayName, ...}}
-              // Get just the filenames (keys)
-              const modelFilenames = Object.keys(modelsResult || {});
+              // Get just the filenames (keys) of downloaded models
+              const modelFilenames = Object.keys(modelsResult || {}).filter(
+                name => modelsResult[name]?.downloaded
+              );
 
-              console.log('[AI Chat] Model filenames:', modelFilenames);
+              console.log('[AI Chat] Downloaded model filenames:', modelFilenames);
 
-              // Find best available model: Phi-3 > Llama 3.2 > TinyLlama > any other
+              // Find best available model: Phi-3 > Llama 3.2 > any other
               const modelToLoad = modelFilenames.find(name => name.toLowerCase().includes('phi-3'))
                 || modelFilenames.find(name => name.toLowerCase().includes('llama-3.2'))
-                || modelFilenames.find(name => name.toLowerCase().includes('tinyllama'))
+                || modelFilenames.find(name => name.toLowerCase().includes('llama'))
                 || modelFilenames[0];
 
               console.log('[AI Chat] Model to load:', modelToLoad);
@@ -1295,10 +1308,15 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
                 return;
               }
 
-              // Load the model (pass filename directly, same as Settings does)
-              const loadResult = await window.electronAPI.llm.loadModel(modelToLoad);
+              // Load the model via sidecar
+              const loadRes = await fetch(`${SIDECAR_URL}/llm/load`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelName: modelToLoad })
+              });
+              const loadResult = await loadRes.json();
 
-              if (!loadResult?.ok) {
+              if (!loadResult?.ok && loadResult?.error) {
                 setIsAiLoading(false);
                 setAiChatMessages(prev => [
                   ...prev,
@@ -1318,29 +1336,76 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               });
             }
 
-            const result = await window.electronAPI.llm.chat(prompt);
+            // Use WebSocket for chat to get response
+            // Connect to sidecar WebSocket
+            console.log('[AI Chat] Connecting to sidecar WebSocket...');
+            const ws = new WebSocket('ws://127.0.0.1:4000');
+            const requestId = `chat-${Date.now()}`;
 
-            console.log('[AI Chat] Raw result:', result); // Debug log
+            ws.onopen = () => {
+              console.log('[AI Chat] WebSocket connected, sending chat request...');
+              console.log('[AI Chat] Prompt:', prompt);
+              console.log('[AI Chat] RequestId:', requestId);
+              ws.send(JSON.stringify({ type: 'identify', client: 'coolSearchAI' }));
+              ws.send(JSON.stringify({
+                type: 'llm-chat',
+                payload: { prompt, requestId }
+              }));
+            };
 
-            // Check if the request failed
-            if (!result?.ok) {
+            ws.onmessage = (event) => {
+              try {
+                const data = JSON.parse(event.data);
+                console.log('[AI Chat] Received message:', data.type, data.payload?.requestId);
+                if (data.type === 'llm-chat-response' && data.payload?.requestId === requestId) {
+                  console.log('[AI Chat] Got matching response!', data.payload);
+                  ws.close();
+
+                  if (!data.payload?.ok) {
+                    setIsAiLoading(false);
+                    setAiChatMessages(prev => [
+                      ...prev,
+                      { role: 'error', content: data.payload?.error || 'Failed to get response from AI model' }
+                    ]);
+                    return;
+                  }
+
+                  // Extract the actual response text
+                  const responseText = data.payload.response || 'No response received';
+
+                  // Add AI response to chat
+                  setAiChatMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
+                  setIsAiLoading(false);
+
+                  // Clear input but keep pill active for follow-up questions
+                  setSearchValue('');
+                }
+              } catch (e) {
+                console.error('[AI Chat] Parse error:', e);
+              }
+            };
+
+            ws.onerror = () => {
+              ws.close();
               setIsAiLoading(false);
               setAiChatMessages(prev => [
                 ...prev,
-                { role: 'error', content: result?.error || 'Failed to get response from AI model' }
+                { role: 'error', content: 'Connection error. Is the desktop app running?' }
               ]);
-              return;
-            }
+            };
 
-            // Extract the actual response text from the result object
-            const responseText = result.response || 'No response received';
+            // Timeout after 60 seconds
+            setTimeout(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.close();
+                setIsAiLoading(false);
+                setAiChatMessages(prev => [
+                  ...prev,
+                  { role: 'error', content: 'Request timed out. The model may be taking too long.' }
+                ]);
+              }
+            }, 60000);
 
-            // Add AI response to chat
-            setAiChatMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
-            setIsAiLoading(false);
-
-            // Clear input but keep pill active for follow-up questions
-            setSearchValue('');
           } catch (error) {
             setIsAiLoading(false);
             setAiChatMessages(prev => [
