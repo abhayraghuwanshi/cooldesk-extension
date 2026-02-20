@@ -741,12 +741,19 @@ function handleWebSocketMessage(ws, data) {
 
         // LLM Handlers
         case 'llm-get-status':
-            // Logic matches electron-main.js
-            ws.send(JSON.stringify({ type: 'llm-status', payload: localLLM.getStatus() }));
+            // Include requestId for response matching
+            ws.send(JSON.stringify({
+                type: 'llm-status',
+                payload: { ...localLLM.getStatus(), ok: true, requestId: payload?.requestId }
+            }));
             break;
 
         case 'llm-get-models':
-            ws.send(JSON.stringify({ type: 'llm-models', payload: localLLM.getAvailableModels() }));
+            // Models is an object keyed by filename, wrap it properly
+            ws.send(JSON.stringify({
+                type: 'llm-models',
+                payload: { models: localLLM.getAvailableModels(), ok: true, requestId: payload?.requestId }
+            }));
             break;
 
         case 'llm-load-model':

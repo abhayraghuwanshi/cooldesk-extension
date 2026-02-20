@@ -1,11 +1,14 @@
 /**
  * Local AI Service - Browser Extension Client
  *
- * Communicates with the Electron app's local LLM via WebSocket.
- * Falls back gracefully when Electron app is not running.
+ * Communicates with the sidecar's local LLM via WebSocket.
+ * Works in both browser extension and Tauri desktop app.
+ * Falls back gracefully when sidecar is not running.
  */
 
-import { getWebSocketUrl, isHostSyncEnabled } from './syncConfig.js';
+// Default sidecar WebSocket URL
+const SIDECAR_WS_URL = 'ws://127.0.0.1:4000';
+const SIDECAR_HTTP_URL = 'http://127.0.0.1:4000';
 
 // ==========================================
 // STATE
@@ -22,7 +25,7 @@ const MAX_RECONNECT_ATTEMPTS = 3;
 // ==========================================
 
 /**
- * Connect to Electron app's WebSocket server
+ * Connect to sidecar's WebSocket server
  * @returns {Promise<boolean>} Whether connection succeeded
  */
 export async function connect() {
@@ -30,15 +33,24 @@ export async function connect() {
         return true;
     }
 
-    if (!isHostSyncEnabled()) {
-        console.log('[LocalAI] Host sync not enabled, skipping connection');
+    // First check if sidecar is running via HTTP health check
+    try {
+        const health = await fetch(`${SIDECAR_HTTP_URL}/health`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(2000)
+        });
+        if (!health.ok) {
+            console.log('[LocalAI] Sidecar health check failed');
+            return false;
+        }
+    } catch (e) {
+        console.log('[LocalAI] Sidecar not reachable:', e.message);
         return false;
     }
 
     return new Promise((resolve) => {
         try {
-            const wsUrl = getWebSocketUrl();
-            ws = new WebSocket(wsUrl);
+            ws = new WebSocket(SIDECAR_WS_URL);
 
             ws.onopen = () => {
                 console.log('[LocalAI] Connected to Electron');
@@ -91,7 +103,9 @@ export async function connect() {
 function handleMessage(data) {
     const { type, payload } = data;
 
-    // Check for pending request
+    console.log('[LocalAI] Received message:', type, payload?.requestId);
+
+    // Check for pending request by requestId in payload
     if (payload?.requestId && pendingRequests.has(payload.requestId)) {
         const { resolve, reject } = pendingRequests.get(payload.requestId);
         pendingRequests.delete(payload.requestId);
@@ -104,16 +118,38 @@ function handleMessage(data) {
         return;
     }
 
+    // Handle response types that map to request types
+    // The sidecar sends 'llm-status' in response to 'llm-get-status', etc.
+    const responseTypeMap = {
+        'llm-status': 'llm-get-status',
+        'llm-models': 'llm-get-models',
+        'llm-model-loaded': 'llm-load-model',
+        'llm-chat-response': 'llm-chat'
+    };
+
+    // For responses without requestId, try to match by type (legacy support)
+    if (responseTypeMap[type] && !payload?.requestId) {
+        // Find any pending request of the corresponding type
+        for (const [reqId, req] of pendingRequests.entries()) {
+            if (req.type === responseTypeMap[type]) {
+                pendingRequests.delete(reqId);
+                if (payload?.ok === false) {
+                    req.reject(new Error(payload?.error || 'Unknown error'));
+                } else {
+                    req.resolve(payload);
+                }
+                return;
+            }
+        }
+    }
+
     // Handle broadcast messages
     switch (type) {
-        case 'llm-status':
-        case 'llm-models':
-        case 'llm-model-loaded':
-            // These are responses to requests
-            break;
         case 'llm-progress':
             // Emit progress event
-            window.dispatchEvent(new CustomEvent('llm-progress', { detail: payload }));
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('llm-progress', { detail: payload }));
+            }
             break;
         default:
             // Other messages handled elsewhere
@@ -128,25 +164,31 @@ async function request(type, payload = {}, timeout = 60000) {
     if (!isConnected) {
         const connected = await connect();
         if (!connected) {
-            throw new Error('Not connected to Electron app. Please ensure CoolDesk desktop app is running.');
+            throw new Error('Not connected to sidecar. Please ensure CoolDesk desktop app is running.');
         }
     }
 
     const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+    console.log('[LocalAI] Sending request:', type, 'requestId:', requestId);
+
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
             pendingRequests.delete(requestId);
+            console.error('[LocalAI] Request timeout for:', type, requestId);
             reject(new Error('Request timeout'));
         }, timeout);
 
         pendingRequests.set(requestId, {
+            type, // Store the request type for matching responses without requestId
             resolve: (data) => {
                 clearTimeout(timer);
+                console.log('[LocalAI] Request resolved:', type, requestId);
                 resolve(data);
             },
             reject: (err) => {
                 clearTimeout(timer);
+                console.error('[LocalAI] Request rejected:', type, requestId, err);
                 reject(err);
             }
         });
@@ -168,12 +210,17 @@ async function request(type, payload = {}, timeout = 60000) {
  */
 export async function isAvailable() {
     try {
+        console.log('[LocalAI] Checking availability...');
         const connected = await connect();
+        console.log('[LocalAI] Connected:', connected);
         if (!connected) return false;
 
         const status = await getStatus();
-        return status.initialized === true;
-    } catch {
+        console.log('[LocalAI] Status:', status);
+        // initialized can be true even if model not loaded yet
+        return status.initialized === true || status.modelLoaded === true;
+    } catch (e) {
+        console.error('[LocalAI] isAvailable error:', e);
         return false;
     }
 }
@@ -191,7 +238,9 @@ export async function getStatus() {
  * @returns {Promise<Object>}
  */
 export async function getModels() {
-    return request('llm-get-models');
+    const result = await request('llm-get-models');
+    // Server wraps models in { models: {...}, ok: true, requestId }
+    return result.models || result;
 }
 
 /**

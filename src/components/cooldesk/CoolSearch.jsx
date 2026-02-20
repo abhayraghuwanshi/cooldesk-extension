@@ -4,16 +4,15 @@ import {
   faComment,
   faHome,
   faLayerGroup,
-  faPlus,
   faRobot
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import annyang from 'annyang';
 import Fuse from 'fuse.js';
 import React, { useEffect, useRef, useState } from 'react';
-import { executeAction } from '../../services/commandActions.js';
 import { CommandExecutor } from '../../services/commandExecutor.js';
 import { CommandParser } from '../../services/commandParser.js';
+import * as LocalAI from '../../services/localAIService.js';
 import { isNaturalLanguageQuery, naturalLanguageSearch } from '../../services/searchService.js';
 import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
 import { ExpandedSearchPanel } from './ExpandedSearchPanel.jsx';
@@ -34,8 +33,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
   // Liquid UI State
   const [commandMode, setCommandMode] = useState('default'); // 'default', 'nav', 'action', 'ai'
-  const [activePill, setActivePill] = useState(null); // { label: 'ADD', prefix: '/add' }
-  const [currentTab, setCurrentTab] = useState(null); // { title, url, favicon }
+  const [activePill, setActivePill] = useState(null); // { label: 'AI', prefix: '/ai' }
 
   // Search suggestions state
   const [searchSuggestions, setSearchSuggestions] = useState([]);
@@ -354,80 +352,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         return;
       }
 
-      let pillSuggestions = [];
-      if (activePill.prefix === '/add') {
-        if (currentTab) {
-          pillSuggestions.push({
-            command: `/add tab ${currentTab.url}`,
-            title: `Add "${currentTab.title}"`,
-            description: `Save this tab to a workspace`,
-            icon: '🌍',
-            category: 'Context',
-            metadata: { url: currentTab.url, title: currentTab.title }
-          });
-        }
-        pillSuggestions.push(
-          { command: '/add note', title: 'Add Note', description: 'Quickly jot down a thought', icon: '📝', category: 'Action' },
-          { command: '/add workspace', title: 'Add Workspace', description: 'Create a new project space', icon: '📁', category: 'Action' }
-        );
-      } else if (activePill.prefix === '/share') {
-        pillSuggestions = [
-          { command: '/share community', title: 'Share to Community', description: 'Publish your workspace for others', icon: '🌍', category: 'Action' },
-          { command: '/share team', title: 'Share with Team', description: 'Collaborate with your coworkers', icon: '👥', category: 'Action' }
-        ];
-      } else if (activePill.prefix === '/ai') {
-        // Dynamic AI Prompt Mode
-        if (query && query.trim().length > 0) {
-          pillSuggestions = [{
-            command: `__ai_prompt__:${query}`,
-            title: `Ask AI: "${query}"`,
-            description: 'Press Enter to get AI response',
-            icon: faRobot,
-            category: 'AI',
-            type: 'dynamic-action'
-          }];
-        } else {
-          // Empty state / Hint with examples
-          // Only show examples if no chat is active
-          if (aiChatMessages.length > 0 || isAiLoading) {
-            pillSuggestions = [];
-          } else {
-            pillSuggestions = [
-              {
-                command: '',
-                title: 'Type your prompt...',
-                description: 'Ask the local AI anything',
-                icon: faRobot,
-                category: 'Info'
-              },
-              {
-                command: '__ai_prompt__:What is 2+2?',
-                title: 'Example: What is 2+2?',
-                description: 'Simple math question',
-                icon: '🔢',
-                category: 'Examples'
-              },
-              {
-                command: '__ai_prompt__:Explain quantum computing in one sentence',
-                title: 'Example: Explain quantum computing',
-                description: 'Get a brief explanation',
-                icon: '🧠',
-                category: 'Examples'
-              }
-            ];
-          }
-        }
-      }
-
-      const filtered = query === ''
-        ? pillSuggestions
-        : pillSuggestions.filter(s =>
-          (s.type === 'dynamic-action') || // Always show dynamic
-          (s.title?.toLowerCase().includes(query)) ||
-          (s.description?.toLowerCase().includes(query))
-        );
-
-      setCommandSuggestions(filtered);
+      // Only AI pill is supported now - no suggestions needed for AI mode
+      // User just types their prompt directly
+      setCommandSuggestions([]);
       setSearchSuggestions([]);
       setSelectedSuggestionIndex(-1);
       return;
@@ -438,18 +365,17 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       const query = searchValue.slice(1).toLowerCase();
 
       const fetchFlattenedSuggestions = async () => {
-        // Simplified Command List
+        // Simplified Command List - Navigation and AI only
         const commands = [
           // Navigation
           { command: '/notes', title: 'Notes', description: 'Go to Notes', icon: faBook, category: 'Nav' },
-          { command: '/notes create', title: 'Create Note', description: 'Quickly add a new note', icon: faPlus, category: 'Action' },
           { command: '/chat', title: 'Chat', description: 'Go to AI Chat', icon: faComment, category: 'Nav' },
           { command: '/tabs', title: 'Tabs', description: 'Manage Tabs', icon: faLayerGroup, category: 'Nav' },
           { command: '/workspaces', title: 'Workspaces', description: 'Manage Workspaces', icon: faBriefcase, category: 'Nav' },
           { command: '/overview', title: 'Dashboard', description: 'Go to Dashboard', icon: faHome, category: 'Nav' },
 
           // AI Commands
-          { command: '/ai', title: 'Test Local AI', description: 'Test local LLM with custom prompt', icon: faRobot, category: 'AI' },
+          { command: '/ai', title: 'Ask AI', description: 'Chat with local LLM', icon: faRobot, category: 'AI' },
         ];
 
         if (query === '') {
@@ -695,29 +621,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     }
   }, [searchValue, activePill]);
 
-  // Fetch current tab info on mount or focus
-  useEffect(() => {
-    const fetchCurrentTab = async () => {
-      try {
-        if (chrome?.tabs?.query) {
-          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-          if (tab && !tab.url.startsWith('chrome://')) {
-            setCurrentTab({
-              title: tab.title,
-              url: tab.url,
-              favicon: tab.favIconUrl
-            });
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to fetch current tab:', e);
-      }
-    };
-
-    fetchCurrentTab();
-    window.addEventListener('focus', fetchCurrentTab);
-    return () => window.removeEventListener('focus', fetchCurrentTab);
-  }, []);
 
 
 
@@ -997,26 +900,14 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   const handleChange = (e) => {
     const value = e.target.value;
 
-    // Detect space after command for Pill creation
+    // Detect space after command for Pill creation (only /ai supported)
     if (value.endsWith(' ')) {
       const trimmed = value.trim().toLowerCase();
-      const supportedPills = {
-        '/add': 'ADD',
-        '/share': 'SHARE',
-        '/notes': 'NOTES',
-        '/workspace': 'WORKSPACE',
-        '/chat': 'CHAT',
-        '/tabs': 'TABS',
-        '/create': 'CREATE',
-        '/notes create': 'CREATE',
-        '/ai': 'AI'
-      };
-
-      if (supportedPills[trimmed]) {
-        setActivePill({ label: supportedPills[trimmed], prefix: trimmed });
+      if (trimmed === '/ai') {
+        setActivePill({ label: 'AI', prefix: '/ai' });
         setSearchValue('');
         setAutocompleteHint('');
-        setCommandSuggestions([]); // Clear suggestions
+        setCommandSuggestions([]);
         return;
       }
     }
@@ -1071,15 +962,10 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       if (activeSuggestions.length > 0) {
         e.preventDefault();
         const first = activeSuggestions[0];
-        const supportedPrefixes = {
-          '/add': 'ADD',
-          '/share': 'SHARE',
-          '/notes': 'NOTES',
-          '/ai': 'AI'
-        };
 
-        if (supportedPrefixes[first.command] && !activePill) {
-          setActivePill({ label: supportedPrefixes[first.command], prefix: first.command });
+        // Only /ai converts to pill
+        if (first.command === '/ai' && !activePill) {
+          setActivePill({ label: 'AI', prefix: '/ai' });
           setSearchValue('');
           setAutocompleteHint('');
           return;
@@ -1104,17 +990,11 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         return;
       }
 
-      // 2. If it's a known prefix with no args, convert to Pill
-      const supportedPrefixes = {
-        '/add': 'ADD',
-        '/share': 'SHARE',
-        '/notes': 'NOTES',
-        '/ai': 'AI'
-      };
+      // 2. If it's /ai with no args, convert to Pill
       const trimmed = searchValue.trim().toLowerCase();
-      if (supportedPrefixes[trimmed] && !activePill) {
+      if (trimmed === '/ai' && !activePill) {
         e.preventDefault();
-        setActivePill({ label: supportedPrefixes[trimmed], prefix: trimmed });
+        setActivePill({ label: 'AI', prefix: '/ai' });
         setSearchValue('');
         setAutocompleteHint('');
         return;
@@ -1131,6 +1011,16 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
         handleSubmit(e);
         return;
+      }
+
+      // 4. If there are search suggestions with URLs, open the first one
+      if (activeSuggestions.length > 0 && !isCommandMode) {
+        const firstWithUrl = activeSuggestions.find(s => s.url);
+        if (firstWithUrl) {
+          e.preventDefault();
+          onSelectSuggestion(firstWithUrl);
+          return;
+        }
       }
     }
 
@@ -1209,46 +1099,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           return;
         }
 
-        // Handle Action Commands (/add, /share)
-        if (query.startsWith('/add') || query.startsWith('/share')) {
-          const result = await executeAction(query, '', (feedback) => setCommandFeedback(feedback));
-          if (result.success) {
-            // Handle workspace switch if created
-            if (result.workspace) {
-              window.dispatchEvent(new CustomEvent('workspaceChanged', {
-                detail: { workspace: result.workspace }
-              }));
-            }
-            handleClose();
-            setSearchValue('');
-            setActivePill(null);
-          }
-          return;
-        }
-
         // Handle AI Command (/ai <prompt>)
         if (query.startsWith('/ai')) {
           const prompt = query.slice(3).trim();
-
-          // Sidecar API URL (Tauri desktop app runs sidecar on port 4000)
-          const SIDECAR_URL = 'http://127.0.0.1:4000';
-
-          // Check if sidecar is available
-          let sidecarAvailable = false;
-          try {
-            const health = await fetch(`${SIDECAR_URL}/health`, { method: 'GET' });
-            sidecarAvailable = health.ok;
-          } catch (e) {
-            sidecarAvailable = false;
-          }
-
-          if (!sidecarAvailable) {
-            setCommandFeedback({
-              type: 'error',
-              message: 'Local AI is only available in the desktop app. Ensure the app is running.'
-            });
-            return;
-          }
 
           if (!prompt) {
             setCommandFeedback({
@@ -1267,9 +1120,20 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             setCommandSuggestions([]);
             setSearchSuggestions([]);
 
+            // Check if Local AI is available (connects to sidecar WebSocket)
+            const isAvailable = await LocalAI.isAvailable();
+            if (!isAvailable) {
+              setIsAiLoading(false);
+              setAiChatMessages(prev => [
+                ...prev,
+                { role: 'error', content: 'Local AI not available. Ensure the CoolDesk desktop app is running.' }
+              ]);
+              return;
+            }
+
             // Check if model is loaded, if not, load it automatically
-            const statusRes = await fetch(`${SIDECAR_URL}/llm/status`);
-            const status = await statusRes.json();
+            const status = await LocalAI.getStatus();
+            console.log('[AI Chat] Status:', status);
 
             if (!status.modelLoaded) {
               // Show loading message
@@ -1279,8 +1143,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               ]);
 
               // Get available models
-              const modelsRes = await fetch(`${SIDECAR_URL}/llm/models`);
-              const modelsResult = await modelsRes.json();
+              const modelsResult = await LocalAI.getModels();
               console.log('[AI Chat] Models result:', modelsResult);
 
               // Models is an object: {filename: {status, displayName, ...}}
@@ -1308,109 +1171,46 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
                 return;
               }
 
-              // Load the model via sidecar
-              const loadRes = await fetch(`${SIDECAR_URL}/llm/load`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ modelName: modelToLoad })
-              });
-              const loadResult = await loadRes.json();
-
-              if (!loadResult?.ok && loadResult?.error) {
+              // Load the model
+              try {
+                await LocalAI.loadModel(modelToLoad);
+                // Update message to show model loaded
+                setAiChatMessages(prev => {
+                  const newMessages = [...prev];
+                  const lastIdx = newMessages.length - 1;
+                  if (newMessages[lastIdx]?.role === 'system') {
+                    newMessages[lastIdx] = { role: 'system', content: `✅ ${modelToLoad} loaded successfully!` };
+                  }
+                  return newMessages;
+                });
+              } catch (loadError) {
                 setIsAiLoading(false);
                 setAiChatMessages(prev => [
                   ...prev,
-                  { role: 'error', content: `Failed to load model: ${loadResult?.error || 'Unknown error'}` }
+                  { role: 'error', content: `Failed to load model: ${loadError.message}` }
                 ]);
                 return;
               }
-
-              // Update message to show model loaded
-              setAiChatMessages(prev => {
-                const newMessages = [...prev];
-                const lastIdx = newMessages.length - 1;
-                if (newMessages[lastIdx]?.role === 'system') {
-                  newMessages[lastIdx] = { role: 'system', content: `✅ ${modelToLoad} loaded successfully!` };
-                }
-                return newMessages;
-              });
             }
 
-            // Use WebSocket for chat to get response
-            // Connect to sidecar WebSocket
-            console.log('[AI Chat] Connecting to sidecar WebSocket...');
-            const ws = new WebSocket('ws://127.0.0.1:4000');
-            const requestId = `chat-${Date.now()}`;
+            // Chat with the model using LocalAI service
+            console.log('[AI Chat] Sending prompt:', prompt);
+            const responseText = await LocalAI.chat(prompt);
+            console.log('[AI Chat] Response:', responseText);
 
-            ws.onopen = () => {
-              console.log('[AI Chat] WebSocket connected, sending chat request...');
-              console.log('[AI Chat] Prompt:', prompt);
-              console.log('[AI Chat] RequestId:', requestId);
-              ws.send(JSON.stringify({ type: 'identify', client: 'coolSearchAI' }));
-              ws.send(JSON.stringify({
-                type: 'llm-chat',
-                payload: { prompt, requestId }
-              }));
-            };
+            // Add AI response to chat
+            setAiChatMessages(prev => [...prev, { role: 'assistant', content: responseText || 'No response received' }]);
+            setIsAiLoading(false);
 
-            ws.onmessage = (event) => {
-              try {
-                const data = JSON.parse(event.data);
-                console.log('[AI Chat] Received message:', data.type, data.payload?.requestId);
-                if (data.type === 'llm-chat-response' && data.payload?.requestId === requestId) {
-                  console.log('[AI Chat] Got matching response!', data.payload);
-                  ws.close();
-
-                  if (!data.payload?.ok) {
-                    setIsAiLoading(false);
-                    setAiChatMessages(prev => [
-                      ...prev,
-                      { role: 'error', content: data.payload?.error || 'Failed to get response from AI model' }
-                    ]);
-                    return;
-                  }
-
-                  // Extract the actual response text
-                  const responseText = data.payload.response || 'No response received';
-
-                  // Add AI response to chat
-                  setAiChatMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
-                  setIsAiLoading(false);
-
-                  // Clear input but keep pill active for follow-up questions
-                  setSearchValue('');
-                }
-              } catch (e) {
-                console.error('[AI Chat] Parse error:', e);
-              }
-            };
-
-            ws.onerror = () => {
-              ws.close();
-              setIsAiLoading(false);
-              setAiChatMessages(prev => [
-                ...prev,
-                { role: 'error', content: 'Connection error. Is the desktop app running?' }
-              ]);
-            };
-
-            // Timeout after 60 seconds
-            setTimeout(() => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.close();
-                setIsAiLoading(false);
-                setAiChatMessages(prev => [
-                  ...prev,
-                  { role: 'error', content: 'Request timed out. The model may be taking too long.' }
-                ]);
-              }
-            }, 60000);
+            // Clear input but keep pill active for follow-up questions
+            setSearchValue('');
 
           } catch (error) {
+            console.error('[AI Chat] Error:', error);
             setIsAiLoading(false);
             setAiChatMessages(prev => [
               ...prev,
-              { role: 'error', content: error.message || 'Failed to get response. Is a model loaded?' }
+              { role: 'error', content: error.message || 'Failed to get response. Is the desktop app running?' }
             ]);
           }
           return;
@@ -1491,42 +1291,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         '/overview': 'overview'
       };
 
-      const supportedPrefixes = {
-        '/add': 'ADD',
-        '/share': 'SHARE',
-        '/notes': 'NOTES',
-        '/notes create': 'CREATE',
-        '/create': 'CREATE',
-        '/ai': 'AI'
-      };
-
-      // Handle Dynamic Note Creation
-      if (cmd.startsWith('__create_note__:')) {
-        const noteContent = cmd.replace('__create_note__:', '');
-        const executeCmd = `/add note ${noteContent}`;
-        handleSubmit({ preventDefault: () => { } }, executeCmd);
-        return;
-      }
-
-      // Handle Dynamic AI Prompt
-      if (cmd.startsWith('__ai_prompt__:')) {
-        const prompt = cmd.replace('__ai_prompt__:', '');
-        const executeCmd = `/ai ${prompt}`;
-        handleSubmit({ preventDefault: () => { } }, executeCmd);
-        return;
-      }
-
-      // Check if command requires arguments
-      const requiresArgs = ['!jump', '!go', '!spot', '!history', '!answer', '!write', '!ws', '/add', '/share', '/notes', '/create'];
-      const baseCmd = cmd.split(' ')[0];
-      const needsMore = requiresArgs.includes(baseCmd) && cmd.split(' ').length === 1;
-
-      // Flattened Execution: If it's a fully composed command, execute immediately
-      if (item.category === 'Quick Save' || item.category === 'Select Destination' || (cmd.split(' ').length > 1 && !needsMore && !supportedPrefixes[cmd])) {
-        handleSubmit({ preventDefault: () => { } }, cmd);
-        return;
-      }
-
       // Navigation Priority: Check for core navigation matches first
       if (navigationMap[cmd] && onNavigate) {
         onNavigate(navigationMap[cmd]);
@@ -1536,16 +1300,13 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         return;
       }
 
-      // Command Pivot: If it needs args, just fill and wait
-      if (needsMore || supportedPrefixes[cmd]) {
-        setSearchValue(cmd + ' '); // Actually, if we use supportedPrefixes, we typically set searchValue to '' below
+      // Only /ai converts to pill mode
+      if (cmd === '/ai') {
+        setActivePill({ label: 'AI', prefix: '/ai' });
+        setSearchValue('');
+        setAutocompleteHint('');
         setCommandSuggestions([]);
         setSelectedSuggestionIndex(-1);
-        if (supportedPrefixes[cmd]) {
-          setActivePill({ label: supportedPrefixes[cmd], prefix: cmd });
-          setSearchValue('');
-          setAutocompleteHint('');
-        }
         return;
       }
 
@@ -1830,62 +1591,119 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       position: 'relative',
       zIndex: 10002 // Ensure container is above other elements
     }}>
-      {/* AI Chat - Modern Premium Design */}
+      {/* AI Chat - Futuristic Holographic Design */}
       {activePill?.prefix === '/ai' && aiChatMessages.length > 0 && (
-        <div style={{
+        <div className="ai-chat-panel" style={{
           marginBottom: '12px',
-          maxHeight: '450px',
+          maxHeight: '500px',
           overflowY: 'auto',
           overflowX: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%)',
-          backdropFilter: 'blur(40px)',
-          WebkitBackdropFilter: 'blur(40px)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '20px',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset',
+          position: 'relative',
+          background: 'linear-gradient(165deg, rgba(10, 10, 20, 0.97) 0%, rgba(15, 10, 30, 0.98) 50%, rgba(5, 15, 25, 0.99) 100%)',
+          backdropFilter: 'blur(40px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+          border: '1px solid transparent',
+          borderRadius: '24px',
+          boxShadow: `
+            0 0 0 1px rgba(139, 92, 246, 0.15),
+            0 0 60px -20px rgba(139, 92, 246, 0.4),
+            0 30px 60px -30px rgba(0, 0, 0, 0.7),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05)
+          `,
           scrollbarWidth: 'none',
           msOverflowStyle: 'none'
         }}>
-          {/* Chat Header */}
+          {/* Animated gradient border */}
+          <div style={{
+            position: 'absolute',
+            inset: '-1px',
+            borderRadius: '24px',
+            background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.5), rgba(59, 130, 246, 0.3), rgba(236, 72, 153, 0.3), rgba(139, 92, 246, 0.5))',
+            backgroundSize: '300% 300%',
+            animation: 'gradientShift 8s ease infinite',
+            zIndex: -1,
+            opacity: 0.6,
+            filter: 'blur(1px)'
+          }} />
+
+          {/* Inner glow effect */}
+          <div style={{
+            position: 'absolute',
+            top: '0',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '80%',
+            height: '120px',
+            background: 'radial-gradient(ellipse at center, rgba(139, 92, 246, 0.15) 0%, transparent 70%)',
+            pointerEvents: 'none',
+            zIndex: 0
+          }} />
+
+          {/* Chat Header - Minimalist Floating */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '16px 20px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-            background: 'rgba(255, 255, 255, 0.02)'
+            padding: '18px 24px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+            background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%)',
+            position: 'relative',
+            zIndex: 1
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {/* Animated AI Icon */}
               <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 50%, #3B82F6 100%)',
+                width: '42px',
+                height: '42px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%)',
+                border: '1px solid rgba(139, 92, 246, 0.3)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 4px 12px rgba(139, 92, 246, 0.4)',
-                fontSize: '16px'
+                position: 'relative',
+                overflow: 'hidden'
               }}>
-                <FontAwesomeIcon icon={faRobot} style={{ color: '#fff' }} />
+                {/* Rotating ring */}
+                <div style={{
+                  position: 'absolute',
+                  inset: '2px',
+                  borderRadius: '12px',
+                  border: '2px solid transparent',
+                  borderTopColor: isAiLoading ? '#8B5CF6' : 'transparent',
+                  borderRightColor: isAiLoading ? '#3B82F6' : 'transparent',
+                  animation: isAiLoading ? 'spin 1s linear infinite' : 'none'
+                }} />
+                <FontAwesomeIcon
+                  icon={faRobot}
+                  style={{
+                    color: '#A78BFA',
+                    fontSize: '18px',
+                    filter: 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.5))'
+                  }}
+                />
               </div>
               <div>
                 <div style={{
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: '#F8FAFC',
-                  letterSpacing: '-0.01em'
+                  fontSize: '15px',
+                  fontWeight: 700,
+                  background: 'linear-gradient(135deg, #E0E7FF 0%, #C4B5FD 50%, #A78BFA 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                  letterSpacing: '-0.02em'
                 }}>
-                  CoolDesk AI
+                  Neural Assistant
                 </div>
                 <div style={{
                   fontSize: '11px',
-                  color: isAiLoading ? '#22C55E' : 'rgba(255, 255, 255, 0.4)',
+                  color: isAiLoading ? '#34D399' : 'rgba(148, 163, 184, 0.8)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px'
+                  gap: '6px',
+                  marginTop: '2px'
                 }}>
                   {isAiLoading ? (
                     <>
@@ -1893,13 +1711,23 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
                         width: '6px',
                         height: '6px',
                         borderRadius: '50%',
-                        background: '#22C55E',
-                        animation: 'pulse 1s ease-in-out infinite'
-                      }}></span>
-                      Thinking...
+                        background: '#34D399',
+                        boxShadow: '0 0 8px #34D399',
+                        animation: 'pulse 1.5s ease-in-out infinite'
+                      }} />
+                      <span style={{ fontWeight: 500 }}>Processing...</span>
                     </>
                   ) : (
-                    <>Local AI Active</>
+                    <>
+                      <span style={{
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: '#8B5CF6',
+                        boxShadow: '0 0 6px rgba(139, 92, 246, 0.5)'
+                      }} />
+                      <span>Local LLM • Ready</span>
+                    </>
                   )}
                 </div>
               </div>
@@ -1910,30 +1738,36 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
                 setActivePill(null);
               }}
               style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '8px',
-                padding: '6px 12px',
-                color: 'rgba(255, 255, 255, 0.6)',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '10px',
+                padding: '8px 14px',
+                color: 'rgba(255, 255, 255, 0.5)',
                 fontSize: '12px',
-                fontWeight: 500,
+                fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                letterSpacing: '0.02em'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
                 e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
                 e.currentTarget.style.color = '#F87171';
+                e.currentTarget.style.transform = 'scale(1.02)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                e.currentTarget.style.color = 'rgba(255, 255, 255, 0.6)';
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.color = 'rgba(255, 255, 255, 0.5)';
+                e.currentTarget.style.transform = 'scale(1)';
               }}
             >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
               Clear
             </button>
           </div>
@@ -1942,175 +1776,189 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           <div style={{
             display: 'flex',
             flexDirection: 'column',
-            padding: '20px',
-            gap: '20px'
+            padding: '24px',
+            gap: '24px',
+            position: 'relative',
+            zIndex: 1
           }}>
             {aiChatMessages.map((msg, idx) => (
               <div
                 key={idx}
                 style={{
                   display: 'flex',
-                  gap: '14px',
-                  animation: 'fadeInUp 0.3s ease-out',
+                  flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
+                  gap: '16px',
+                  animation: 'messageSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
                   animationFillMode: 'both',
-                  animationDelay: `${idx * 0.05}s`
+                  animationDelay: `${idx * 0.08}s`
                 }}
               >
                 {/* Avatar */}
                 <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: msg.role === 'user' ? '10px' : '12px',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: msg.role === 'user' ? '12px' : '16px',
                   background: msg.role === 'user'
-                    ? 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)'
+                    ? 'linear-gradient(135deg, #818CF8 0%, #6366F1 100%)'
                     : msg.role === 'assistant'
-                      ? 'linear-gradient(135deg, #3B82F6 0%, #6366F1 100%)'
+                      ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%)'
                       : msg.role === 'error'
-                        ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)'
-                        : 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                        ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.2) 100%)'
+                        : 'linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.2) 100%)',
+                  border: msg.role === 'user'
+                    ? 'none'
+                    : `1px solid ${msg.role === 'assistant' ? 'rgba(139, 92, 246, 0.3)' : msg.role === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
                   boxShadow: msg.role === 'user'
-                    ? '0 4px 12px rgba(167, 139, 250, 0.3)'
-                    : msg.role === 'assistant'
-                      ? '0 4px 12px rgba(59, 130, 246, 0.3)'
-                      : '0 4px 12px rgba(239, 68, 68, 0.3)',
+                    ? '0 4px 20px rgba(99, 102, 241, 0.4)'
+                    : '0 4px 15px rgba(0, 0, 0, 0.2)',
                   fontSize: '14px',
                   color: '#fff'
                 }}>
                   {msg.role === 'user' ? (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                      <circle cx="12" cy="7" r="4"></circle>
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
                     </svg>
                   ) : msg.role === 'assistant' ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"></path>
-                      <path d="M7.5 13a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"></path>
-                      <path d="M16.5 13a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"></path>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2l2 4h4l-3 3 1 5-4-2-4 2 1-5-3-3h4l2-4z" />
+                      <circle cx="12" cy="16" r="4" />
                     </svg>
                   ) : (
-                    <span style={{ fontSize: '12px' }}>!</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={msg.role === 'error' ? '#F87171' : '#FBBF24'} strokeWidth="2.5">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 8v4M12 16h.01" />
+                    </svg>
                   )}
                 </div>
 
                 {/* Message Content */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {/* Sender Name */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    marginBottom: '6px'
-                  }}>
-                    <span style={{
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      color: msg.role === 'user' ? '#C4B5FD' : msg.role === 'assistant' ? '#93C5FD' : '#FCA5A5',
-                      letterSpacing: '-0.01em'
-                    }}>
-                      {msg.role === 'user' ? 'You' : msg.role === 'assistant' ? 'AI' : 'Error'}
-                    </span>
-                    <span style={{
-                      fontSize: '11px',
-                      color: 'rgba(255, 255, 255, 0.3)'
-                    }}>
-                      just now
-                    </span>
-                  </div>
-
+                <div style={{
+                  flex: 1,
+                  minWidth: 0,
+                  maxWidth: msg.role === 'user' ? '75%' : '85%'
+                }}>
                   {/* Message Bubble */}
                   <div style={{
                     fontSize: '14px',
-                    lineHeight: '1.7',
-                    color: msg.role === 'error' ? '#FCA5A5' : '#E2E8F0',
-                    padding: '14px 16px',
+                    lineHeight: '1.75',
+                    color: msg.role === 'error' ? '#FCA5A5' : msg.role === 'user' ? '#F1F5F9' : '#E2E8F0',
+                    padding: '16px 20px',
                     background: msg.role === 'user'
-                      ? 'rgba(139, 92, 246, 0.1)'
+                      ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(139, 92, 246, 0.2) 100%)'
                       : msg.role === 'assistant'
-                        ? 'rgba(30, 41, 59, 0.8)'
-                        : 'rgba(239, 68, 68, 0.1)',
+                        ? 'linear-gradient(135deg, rgba(30, 35, 50, 0.6) 0%, rgba(20, 25, 40, 0.7) 100%)'
+                        : 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.08) 100%)',
                     border: `1px solid ${msg.role === 'user'
-                      ? 'rgba(139, 92, 246, 0.2)'
+                      ? 'rgba(99, 102, 241, 0.3)'
                       : msg.role === 'assistant'
-                        ? 'rgba(255, 255, 255, 0.06)'
+                        ? 'rgba(255, 255, 255, 0.05)'
                         : 'rgba(239, 68, 68, 0.2)'}`,
-                    borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                    borderRadius: msg.role === 'user' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
-                    boxShadow: msg.role === 'assistant' ? '0 2px 8px rgba(0, 0, 0, 0.15)' : 'none'
+                    boxShadow: msg.role === 'user'
+                      ? '0 4px 20px rgba(99, 102, 241, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                      : msg.role === 'assistant'
+                        ? '0 4px 20px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.02)'
+                        : 'none',
+                    position: 'relative',
+                    overflow: 'hidden'
                   }}>
-                    {msg.content}
+                    {/* Subtle shine effect for assistant messages */}
+                    {msg.role === 'assistant' && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: '-100%',
+                        width: '100%',
+                        height: '100%',
+                        background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.02), transparent)',
+                        animation: 'shimmer 3s ease-in-out infinite'
+                      }} />
+                    )}
+                    <span style={{ position: 'relative', zIndex: 1 }}>{msg.content}</span>
+                  </div>
+
+                  {/* Timestamp */}
+                  <div style={{
+                    fontSize: '10px',
+                    color: 'rgba(148, 163, 184, 0.5)',
+                    marginTop: '6px',
+                    textAlign: msg.role === 'user' ? 'right' : 'left',
+                    paddingLeft: msg.role === 'user' ? 0 : '20px',
+                    paddingRight: msg.role === 'user' ? '20px' : 0
+                  }}>
+                    just now
                   </div>
                 </div>
               </div>
             ))}
 
-            {/* Typing Indicator */}
+            {/* Typing Indicator - Futuristic */}
             {isAiLoading && (
               <div style={{
                 display: 'flex',
-                gap: '14px',
-                animation: 'fadeInUp 0.3s ease-out'
+                gap: '16px',
+                animation: 'messageSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
               }}>
                 <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #3B82F6 0%, #6366F1 100%)',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%)',
+                  border: '1px solid rgba(139, 92, 246, 0.3)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  flexShrink: 0,
-                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                  flexShrink: 0
                 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"></path>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" strokeWidth="1.5" style={{ animation: 'pulse 2s ease-in-out infinite' }}>
+                    <path d="M12 2l2 4h4l-3 3 1 5-4-2-4 2 1-5-3-3h4l2-4z" />
+                    <circle cx="12" cy="16" r="4" />
                   </svg>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    color: '#93C5FD',
-                    marginBottom: '6px'
-                  }}>AI</div>
-                  <div style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '14px 18px',
-                    background: 'rgba(30, 41, 59, 0.8)',
-                    border: '1px solid rgba(255, 255, 255, 0.06)',
-                    borderRadius: '16px 16px 16px 4px'
-                  }}>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {[0, 1, 2].map(i => (
-                        <div
-                          key={i}
-                          style={{
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)',
-                            animation: `bounce 1.4s ease-in-out ${i * 0.16}s infinite`
-                          }}
-                        />
-                      ))}
-                    </div>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '16px 24px',
+                  background: 'linear-gradient(135deg, rgba(30, 35, 50, 0.6) 0%, rgba(20, 25, 40, 0.7) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '20px 20px 20px 4px',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)'
+                }}>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    {[0, 1, 2].map(i => (
+                      <div
+                        key={i}
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: `linear-gradient(135deg, ${i === 0 ? '#8B5CF6' : i === 1 ? '#6366F1' : '#3B82F6'}, ${i === 0 ? '#A78BFA' : i === 1 ? '#818CF8' : '#60A5FA'})`,
+                          boxShadow: `0 0 10px ${i === 0 ? 'rgba(139, 92, 246, 0.5)' : i === 1 ? 'rgba(99, 102, 241, 0.5)' : 'rgba(59, 130, 246, 0.5)'}`,
+                          animation: `bounce 1.4s ease-in-out ${i * 0.16}s infinite`
+                        }}
+                      />
+                    ))}
                   </div>
+                  <span style={{
+                    fontSize: '12px',
+                    color: 'rgba(148, 163, 184, 0.7)',
+                    marginLeft: '4px',
+                    fontWeight: 500
+                  }}>
+                    Generating response
+                  </span>
                 </div>
               </div>
             )}
           </div>
-
-          {/* Subtle gradient fade at bottom */}
-          <div style={{
-            height: '1px',
-            background: 'linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.3), rgba(59, 130, 246, 0.3), transparent)'
-          }} />
         </div>
       )}
 
@@ -2151,6 +1999,8 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             gap: '6px',
             padding: '4px 10px',
             marginRight: '8px',
+            marginTop: '8px',
+            alignSelf: 'flex-start',
             background: 'rgba(139, 92, 246, 0.2)',
             border: '1px solid rgba(139, 92, 246, 0.4)',
             borderRadius: '6px',
@@ -2169,47 +2019,72 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           fontSize: '18px',
           color: isAISearch ? '#A78BFA' : 'var(--accent-color, #34C759)',
           marginRight: '4px',
+          marginTop: '8px',
           userSelect: 'none',
           display: 'flex',
           alignItems: 'center',
+          alignSelf: 'flex-start',
+          height: '24px',
           transition: 'color 0.2s ease'
         }}>
           {isAISearch ? (
             <FontAwesomeIcon icon={faRobot} style={{ fontSize: '14px' }} title="AI-powered search" />
           ) : '>'}
         </span>
-        <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
-          <input
+        <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'flex-start', marginTop: '4px' }}>
+          <textarea
             ref={inputRef}
-            type="text"
-            className="cooldesk-search-input"
+            className="cooldesk-search-input cooldesk-search-textarea"
             placeholder={placeholder}
             value={searchValue}
             onChange={handleChange}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              // Allow Shift+Enter for new lines, Enter alone submits
+              if (e.key === 'Enter' && !e.shiftKey) {
+                handleKeyDown(e);
+              } else if (e.key === 'Enter' && e.shiftKey) {
+                // Allow newline insertion - don't prevent default
+              } else {
+                handleKeyDown(e);
+              }
+            }}
+            onInput={(e) => {
+              // Auto-resize textarea
+              e.target.style.height = 'auto';
+              const newHeight = Math.min(e.target.scrollHeight, 200); // Max 200px (~5-6 lines)
+              e.target.style.height = `${newHeight}px`;
+            }}
+            rows={1}
             style={{
               position: 'relative',
               zIndex: 2,
               background: 'transparent',
-              caretColor: 'var(--text-primary, #F8FAFC)' // Ensure caret is visible
+              caretColor: 'var(--text-primary, #F8FAFC)',
+              resize: 'none',
+              overflow: 'hidden',
+              minHeight: '24px',
+              maxHeight: '200px',
+              lineHeight: '24px',
+              paddingTop: '0',
+              paddingBottom: '8px'
             }}
           />
           {/* Ghost text for autocomplete hint */}
-          {autocompleteHint && autocompleteHint !== searchValue && (
+          {autocompleteHint && autocompleteHint !== searchValue && !searchValue.includes('\n') && (
             <div style={{
               position: 'absolute',
-              left: '0', // Match input padding (which is 0 horizontal)
-              top: '50%',
-              transform: 'translateY(-50%)',
-              fontSize: 'var(--font-lg)', // Match CSS variable
+              left: '0',
+              top: '0',
+              fontSize: 'var(--font-lg)',
               fontWeight: 500,
-              letterSpacing: '-0.01em', // Match CSS
+              letterSpacing: '-0.01em',
               pointerEvents: 'none',
               zIndex: 1,
               whiteSpace: 'pre',
               fontFamily: 'inherit',
               display: 'flex',
-              color: 'transparent' // Base text transparent to avoid artifacts
+              lineHeight: '24px',
+              color: 'transparent'
             }}>
               {/* Invisible spacer matching typed text */}
               <span style={{
@@ -2221,6 +2096,20 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
                 color: 'rgba(148, 163, 184, 0.5)',
                 fontStyle: 'italic'
               }}>{autocompleteHint.slice(searchValue.length)}</span>
+            </div>
+          )}
+          {/* Multi-line hint */}
+          {searchValue.length > 50 && !searchValue.includes('\n') && (
+            <div style={{
+              position: 'absolute',
+              right: '0',
+              bottom: '-18px',
+              fontSize: '10px',
+              color: 'rgba(148, 163, 184, 0.4)',
+              pointerEvents: 'none',
+              zIndex: 1
+            }}>
+              Shift+Enter for new line
             </div>
           )}
         </div>

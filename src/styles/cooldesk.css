@@ -320,11 +320,12 @@
   border-radius: 12px;
   /* Boxier terminal look */
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 8px 12px;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  min-height: 44px;
 }
 
 .cooldesk-search-box.command-nav {
@@ -372,6 +373,36 @@
   box-shadow: none !important;
   -webkit-appearance: none;
   appearance: none;
+}
+
+/* Textarea variant for multi-line input */
+textarea.cooldesk-search-textarea {
+  width: 100%;
+  min-height: 24px;
+  max-height: 200px;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.5;
+  padding: 8px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.3) transparent;
+}
+
+textarea.cooldesk-search-textarea::-webkit-scrollbar {
+  width: 4px;
+}
+
+textarea.cooldesk-search-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 2px;
+}
+
+textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.5);
 }
 
 /* Remove Chrome Autofill Background */
@@ -493,6 +524,83 @@
 
 .expanded-search-panel {
   animation: expandedPanelSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* AI Chat Panel Animations */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  50%, 100% {
+    left: 100%;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0) translateY(0);
+  }
+  40% {
+    transform: scale(1) translateY(-4px);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.ai-chat-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ai-chat-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ai-chat-panel::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.2);
+  border-radius: 3px;
+}
+
+.ai-chat-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.4);
 }
 
 .expanded-search-panel::-webkit-scrollbar {
