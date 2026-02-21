@@ -139,6 +139,58 @@ export const formatTime = (ms) => {
 };
 
 
+/**
+ * Enriches running apps with icons and friendly names from installed apps
+ * @param {Array} runningApps - Array of running app objects from getRunningApps()
+ * @param {Array} installedApps - Array of installed app objects from getInstalledApps()
+ * @returns {Array} - Running apps enriched with icons and display names
+ */
+export const enrichRunningAppsWithIcons = (runningApps, installedApps) => {
+  if (!Array.isArray(runningApps)) return [];
+  if (!Array.isArray(installedApps) || installedApps.length === 0) return runningApps;
+
+  return runningApps.map(app => {
+    let icon = app.icon;
+    let displayName = app.name;
+    const runningName = (app.name || '').toLowerCase().replace('.exe', '');
+    const runningPath = (app.path || '').toLowerCase();
+
+    if (!icon) {
+      // Try to find matching installed app for icon and friendly name
+      const installed = installedApps.find(ia => {
+        const installedName = (ia.name || '').toLowerCase();
+        const installedPath = (ia.path || '').toLowerCase();
+
+        // Best match: same exe path
+        if (runningPath && installedPath && runningPath === installedPath) return true;
+
+        // Match by exe filename
+        const runningExe = runningPath.split(/[/\\]/).pop()?.replace('.exe', '');
+        const installedExe = installedPath.split(/[/\\]/).pop()?.replace('.exe', '');
+        if (runningExe && installedExe && runningExe === installedExe) return true;
+
+        // Exact name match
+        if (installedName === runningName) return true;
+
+        // Running app name contains installed name or vice versa
+        if (runningName.length > 2 && installedName.length > 2) {
+          if (runningName.includes(installedName) || installedName.includes(runningName)) return true;
+        }
+
+        return false;
+      });
+
+      if (installed) {
+        if (installed.icon) icon = installed.icon;
+        // Use friendly name from installed apps (e.g., "Google Chrome" instead of "chrome.exe")
+        if (installed.name) displayName = installed.name;
+      }
+    }
+
+    return { ...app, icon, name: displayName };
+  });
+};
+
 // Simple Circuit Breaker for Gemini calls (module-local)
 export const createCircuitBreaker = ({ failureThreshold = 3, cooldownMs = 60_000, halfOpenMaxRequests = 1 } = {}) => {
   let state = 'CLOSED'; // CLOSED | OPEN | HALF_OPEN

@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import scrapperConfig from '../../data/scrapper.json';
 import { getTimeSeriesDataRange, listScrapedChats } from '../../db/index.js';
 import '../../styles/cooldesk.css';
-import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
+import { enrichRunningAppsWithIcons, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 
 
 // Platform config derived from scrapper.json
@@ -64,6 +64,8 @@ export function ActivityFeed() {
     const [chatsShowingAll, setChatsShowingAll] = useState(new Set());
     const [isPending, startTransition] = useTransition();
     const favContainerRef = useRef(null);
+    const [runningApps, setRunningApps] = useState([]);
+    const [installedApps, setInstalledApps] = useState([]);
 
     // Clock and region detection
     useEffect(() => {
@@ -76,6 +78,39 @@ export function ActivityFeed() {
             setRegion('Local Time');
         }
         return () => clearInterval(timer);
+    }, []);
+
+    // Fetch running apps and installed apps (Electron only)
+    useEffect(() => {
+        if (!window.electronAPI?.getRunningApps) return;
+
+        const fetchApps = async () => {
+            try {
+                const [running, installed] = await Promise.all([
+                    window.electronAPI.getRunningApps(),
+                    window.electronAPI.getInstalledApps?.() || []
+                ]);
+
+                if (Array.isArray(installed)) {
+                    setInstalledApps(installed);
+                }
+
+                if (Array.isArray(running)) {
+                    // Enrich running apps with icons
+                    const enriched = enrichRunningAppsWithIcons(running, installed);
+                    setRunningApps(enriched);
+                }
+            } catch (error) {
+                console.error('[ActivityFeed] Failed to fetch apps:', error);
+            }
+        };
+
+        fetchApps();
+
+        // Refresh apps periodically (every 15 seconds)
+        const interval = setInterval(fetchApps, 15000);
+
+        return () => clearInterval(interval);
     }, []);
 
     // Load calendar events
@@ -502,7 +537,7 @@ export function ActivityFeed() {
             }))
             .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
 
-        // Group apps by App Name
+        // Group apps by App Name (from activity tracking)
         const appsByName = {};
         apps.forEach(app => {
             const name = app.appName || 'Other';
@@ -527,6 +562,35 @@ export function ActivityFeed() {
             }))
             .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
 
+        // Create running apps list (apps currently running)
+        const runningAppItems = runningApps.map(app => ({
+            id: `running-${app.pid || app.name}`,
+            type: 'running-app',
+            name: app.name,
+            title: app.title || app.name,
+            icon: app.icon,
+            pid: app.pid,
+            path: app.path,
+            timestamp: Date.now(),
+            isRunning: true
+        }));
+
+        // Create installed apps list (all available apps, excluding running ones)
+        const runningNames = new Set(runningApps.map(a => (a.name || '').toLowerCase()));
+        const installedAppItems = installedApps
+            .filter(app => !runningNames.has((app.name || '').toLowerCase()))
+            .slice(0, 20) // Limit to 20 installed apps
+            .map(app => ({
+                id: `installed-${app.name}`,
+                type: 'installed-app',
+                name: app.name,
+                title: app.title || app.name,
+                icon: app.icon,
+                path: app.path,
+                timestamp: 0, // No timestamp for installed apps
+                isRunning: false
+            }));
+
         // Merge chat groups and tab groups
         const result = [];
 
@@ -548,7 +612,7 @@ export function ActivityFeed() {
             }
         });
 
-        // Add app groups
+        // Add app groups (activity tracking)
         groupedApps.forEach(group => {
             if (group.count === 1) {
                 result.push({ ...group.apps[0], isGrouped: false });
@@ -557,8 +621,36 @@ export function ActivityFeed() {
             }
         });
 
-        // Sort final result by timestamp
+        // For 'apps' tab or 'all' tab, also add running and installed apps
+        if (activeTab === 'apps' || activeTab === 'all') {
+            // Add running apps at the top
+            runningAppItems.forEach(app => {
+                result.push(app);
+            });
+
+            // Add installed apps section (only in 'apps' tab to avoid clutter)
+            if (activeTab === 'apps' && installedAppItems.length > 0) {
+                installedAppItems.forEach(app => {
+                    result.push(app);
+                });
+            }
+        }
+
+        // Sort final result by timestamp (running apps first, then by time)
         return result.sort((a, b) => {
+            // Running apps always first
+            if (a.type === 'running-app' && b.type !== 'running-app') return -1;
+            if (b.type === 'running-app' && a.type !== 'running-app') return 1;
+
+            // Installed apps always last
+            if (a.type === 'installed-app' && b.type !== 'installed-app') return 1;
+            if (b.type === 'installed-app' && a.type !== 'installed-app') return -1;
+
+            // Sort by name for installed apps
+            if (a.type === 'installed-app' && b.type === 'installed-app') {
+                return (a.name || '').localeCompare(b.name || '');
+            }
+
             const tsA = a.type === 'tab-group' ? a.latestTimestamp :
                 a.type === 'chat-group' ? a.latestTimestamp :
                     a.type === 'app-group' ? a.latestTimestamp : a.timestamp;
@@ -568,7 +660,7 @@ export function ActivityFeed() {
                     b.type === 'app-group' ? b.latestTimestamp : b.timestamp;
             return tsB - tsA;
         });
-    }, [feedItems, activeTab]);
+    }, [feedItems, activeTab, runningApps, installedApps]);
 
     const toggleDomainExpand = useCallback((domain) => {
         startTransition(() => {
@@ -1467,6 +1559,181 @@ export function ActivityFeed() {
                                                     ))}
                                                 </div>
                                             )}
+                                        </div>
+                                    );
+                                }
+
+                                // Handle running apps (currently active desktop apps)
+                                if (item.type === 'running-app') {
+                                    return (
+                                        <div key={item.id}
+                                            onClick={async () => {
+                                                if (window.electronAPI?.focusApp && item.pid) {
+                                                    await window.electronAPI.focusApp(item.pid, item.name);
+                                                }
+                                            }}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                padding: '12px 16px',
+                                                cursor: 'pointer',
+                                                borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
+                                                transition: 'background 0.2s',
+                                                position: 'relative'
+                                            }}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                        >
+                                            {/* Icon */}
+                                            <div style={{
+                                                width: '36px',
+                                                height: '36px',
+                                                borderRadius: '10px',
+                                                background: 'rgba(34, 197, 94, 0.15)',
+                                                border: '1px solid rgba(34, 197, 94, 0.25)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                flexShrink: 0,
+                                                overflow: 'hidden'
+                                            }}>
+                                                {item.icon ? (
+                                                    <img
+                                                        src={item.icon}
+                                                        alt=""
+                                                        style={{ width: '24px', height: '24px', objectFit: 'contain' }}
+                                                        onError={e => { e.target.style.display = 'none'; }}
+                                                    />
+                                                ) : (
+                                                    <span style={{ fontSize: '18px' }}>🖥️</span>
+                                                )}
+                                            </div>
+
+                                            {/* Info */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    fontSize: 'var(--font-base)',
+                                                    color: 'var(--text-primary, #F1F5F9)',
+                                                    fontWeight: 500,
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    marginBottom: '2px'
+                                                }}>
+                                                    {item.name}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: 'var(--font-xs)',
+                                                    color: 'var(--text-secondary, #64748B)'
+                                                }}>
+                                                    {item.title !== item.name ? item.title : 'Running'}
+                                                </div>
+                                            </div>
+
+                                            {/* Badge */}
+                                            <div style={{
+                                                fontSize: 'var(--font-xs)',
+                                                fontWeight: 600,
+                                                color: '#22C55E',
+                                                background: 'rgba(34, 197, 94, 0.1)',
+                                                border: '1px solid rgba(34, 197, 94, 0.2)',
+                                                padding: '2px 6px',
+                                                borderRadius: '4px',
+                                                textTransform: 'uppercase',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                            }}>
+                                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22C55E' }}></div>
+                                                Running
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                // Handle installed apps (available but not running)
+                                if (item.type === 'installed-app') {
+                                    return (
+                                        <div key={item.id}
+                                            onClick={async () => {
+                                                if (window.electronAPI?.launchApp && item.path) {
+                                                    await window.electronAPI.launchApp(item.path);
+                                                }
+                                            }}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                padding: '12px 16px',
+                                                cursor: 'pointer',
+                                                borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
+                                                transition: 'background 0.2s',
+                                                position: 'relative',
+                                                opacity: 0.8
+                                            }}
+                                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'; e.currentTarget.style.opacity = '1'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.opacity = '0.8'; }}
+                                        >
+                                            {/* Icon */}
+                                            <div style={{
+                                                width: '36px',
+                                                height: '36px',
+                                                borderRadius: '10px',
+                                                background: 'rgba(100, 116, 139, 0.15)',
+                                                border: '1px solid rgba(100, 116, 139, 0.25)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                flexShrink: 0,
+                                                overflow: 'hidden'
+                                            }}>
+                                                {item.icon ? (
+                                                    <img
+                                                        src={item.icon}
+                                                        alt=""
+                                                        style={{ width: '24px', height: '24px', objectFit: 'contain' }}
+                                                        onError={e => { e.target.style.display = 'none'; }}
+                                                    />
+                                                ) : (
+                                                    <span style={{ fontSize: '18px' }}>📦</span>
+                                                )}
+                                            </div>
+
+                                            {/* Info */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    fontSize: 'var(--font-base)',
+                                                    color: 'var(--text-primary, #F1F5F9)',
+                                                    fontWeight: 500,
+                                                    whiteSpace: 'nowrap',
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    marginBottom: '2px'
+                                                }}>
+                                                    {item.name}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: 'var(--font-xs)',
+                                                    color: 'var(--text-secondary, #64748B)'
+                                                }}>
+                                                    Click to launch
+                                                </div>
+                                            </div>
+
+                                            {/* Badge */}
+                                            <div style={{
+                                                fontSize: 'var(--font-xs)',
+                                                fontWeight: 600,
+                                                color: '#64748B',
+                                                background: 'rgba(100, 116, 139, 0.1)',
+                                                border: '1px solid rgba(100, 116, 139, 0.2)',
+                                                padding: '2px 6px',
+                                                borderRadius: '4px',
+                                                textTransform: 'uppercase'
+                                            }}>
+                                                Installed
+                                            </div>
                                         </div>
                                     );
                                 }

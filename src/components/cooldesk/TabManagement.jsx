@@ -1,7 +1,7 @@
 import { faBrain, faClock, faDesktop, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { getBaseDomainFromUrl } from '../../utils/helpers.js';
+import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, TabCard, TabGroupCard } from './TabCard';
 
@@ -129,11 +129,19 @@ export function TabManagement() {
 
     const fetchApps = async () => {
       try {
-        const apps = await window.electronAPI.getRunningApps();
+        // Fetch running apps and installed apps in parallel
+        const [apps, installedApps] = await Promise.all([
+          window.electronAPI.getRunningApps(),
+          window.electronAPI.getInstalledApps?.() || []
+        ]);
+
         if (Array.isArray(apps)) {
-          const sortedApps = [...apps].sort((a, b) => {
-            const nameA = (a.title || a.name || '').toLowerCase();
-            const nameB = (b.title || b.name || '').toLowerCase();
+          // Enrich running apps with icons from installed apps using utility
+          const enrichedApps = enrichRunningAppsWithIcons(apps, installedApps);
+
+          const sortedApps = [...enrichedApps].sort((a, b) => {
+            const nameA = (a.name || '').toLowerCase();
+            const nameB = (b.name || '').toLowerCase();
             return nameA.localeCompare(nameB);
           });
           setRunningApps(sortedApps);

@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
-import { getFaviconUrl } from '../utils/helpers';
+import { enrichRunningAppsWithIcons, getFaviconUrl } from '../utils/helpers';
 import './GlobalSpotlight.css';
 
 
@@ -214,8 +214,9 @@ export function GlobalSpotlight() {
             const systemApps = ['svchost', 'csrss', 'system', 'registry', 'service', 'runtime', 'host', 'helper', 'background', 'agent'];
 
             // 1. Running Apps (top priority - what user is actively using)
-            // Try to get icons from installed apps cache if running app doesn't have one
-            const activeApps = runningApps
+            // Enrich with icons from installed apps, then filter
+            const enrichedRunning = enrichRunningAppsWithIcons(runningApps, installedApps);
+            const activeApps = enrichedRunning
                 .filter(a => {
                     const name = (a.name || '').toLowerCase();
                     if (usedIds.has(name)) return false;
@@ -224,47 +225,7 @@ export function GlobalSpotlight() {
                     return true;
                 })
                 .slice(0, 4)
-                .map(a => {
-                    // Try to find matching installed app for icon and friendly name
-                    let icon = a.icon;
-                    let displayName = a.name; // Default to process name
-                    const runningName = (a.name || '').toLowerCase().replace('.exe', '');
-                    const runningPath = (a.path || '').toLowerCase();
-
-                    if (installedApps.length > 0) {
-                        // Try multiple matching strategies
-                        const installed = installedApps.find(ia => {
-                            const installedName = (ia.name || '').toLowerCase();
-                            const installedPath = (ia.path || '').toLowerCase();
-
-                            // Best match: same exe path
-                            if (runningPath && installedPath && runningPath === installedPath) return true;
-
-                            // Match by exe filename
-                            const runningExe = runningPath.split(/[/\\]/).pop()?.replace('.exe', '');
-                            const installedExe = installedPath.split(/[/\\]/).pop()?.replace('.exe', '');
-                            if (runningExe && installedExe && runningExe === installedExe) return true;
-
-                            // Exact name match
-                            if (installedName === runningName) return true;
-
-                            // Running app name contains installed name or vice versa
-                            if (runningName.includes(installedName) || installedName.includes(runningName)) return true;
-
-                            return false;
-                        });
-
-                        if (installed) {
-                            if (installed.icon) icon = installed.icon;
-                            // Use friendly name from installed apps (e.g., "Google Chrome" instead of "chrome.exe")
-                            if (installed.name) displayName = installed.name;
-                            console.log(`[Spotlight] Matched running "${a.name}" to installed "${installed.name}" (icon: ${!!installed.icon})`);
-                        } else {
-                            console.log(`[Spotlight] No match for running app: "${a.name}" (path: ${a.path})`);
-                        }
-                    }
-                    return { ...a, icon, name: displayName, type: 'app', description: 'Running', isRunning: true };
-                });
+                .map(a => ({ ...a, type: 'app', description: 'Running', isRunning: true }));
 
             console.log('[Spotlight] Active apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(icon:${!!a.icon})`));
             recommendations.push(...activeApps);
