@@ -112,7 +112,7 @@ pub async fn get_status() -> Result<LlmStatus, String> {
     Ok(state.clone())
 }
 
-pub async fn load_model(name: &str) -> Result<(), String> {
+pub async fn load_model(name: &str, gpu_layers: u32) -> Result<(), String> {
     {
         let mut state = GLOBAL_LLM_STATE.lock().await;
         if state.is_loading {
@@ -132,10 +132,10 @@ pub async fn load_model(name: &str) -> Result<(), String> {
         return Err(format!("Model file not found: {:?}", model_path));
     }
 
-    log::info!("[LLM] Loading model from: {:?}", model_path);
+    log::info!("[LLM] Loading model from: {:?} (gpu_layers: {})", model_path, gpu_layers);
 
     // Actually load via the engine
-    match super::engine::engine_load_model(model_path).await {
+    match super::engine::engine_load_model(model_path, gpu_layers).await {
         Ok(_) => {
             let mut state = GLOBAL_LLM_STATE.lock().await;
             state.is_loading = false;

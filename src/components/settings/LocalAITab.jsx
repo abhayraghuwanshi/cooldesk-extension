@@ -4,7 +4,7 @@
  * Manages local LLM download, loading, and configuration
  */
 
-import { faCircleNotch, faCloud, faDownload, faMemory, faRocket, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faBolt, faCircleNotch, faCloud, faDownload, faMemory, faMicrochip, faRocket, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 
@@ -36,6 +36,8 @@ export default function LocalAITab() {
     const [downloadProgress, setDownloadProgress] = useState({});
     const [loadingModel, setLoadingModel] = useState(null);
     const [sidecarAvailable, setSidecarAvailable] = useState(null); // null = checking, true/false = result
+    const [gpuEnabled, setGpuEnabled] = useState(false);
+    const [gpuLayers, setGpuLayers] = useState(99); // 99 = offload all layers
 
     // Check sidecar availability on mount
     useEffect(() => {
@@ -148,7 +150,8 @@ export default function LocalAITab() {
         setError('');
         setLoadingModel(modelName);
         try {
-            const result = await sidecarPost('/llm/load', { modelName });
+            const layers = gpuEnabled ? gpuLayers : 0;
+            const result = await sidecarPost('/llm/load', { modelName, gpuLayers: layers });
             if (result && !result.ok && result.error) {
                 setError(result.error || 'Failed to load model');
             }
@@ -290,6 +293,102 @@ export default function LocalAITab() {
                         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Available</div>
                     </div>
                 </div>
+            </div>
+
+            {/* GPU Acceleration Settings */}
+            <div style={{
+                padding: 20,
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: 16,
+                border: '1px solid rgba(255,255,255,0.06)'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: 12,
+                        background: gpuEnabled
+                            ? 'linear-gradient(135deg, #f59e0b, #ef4444)'
+                            : 'linear-gradient(135deg, #4b5563, #374151)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#fff', transition: 'all 0.3s'
+                    }}>
+                        <FontAwesomeIcon icon={faBolt} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#fff' }}>
+                            GPU Acceleration
+                        </h3>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
+                            {gpuEnabled ? `Offloading ${gpuLayers} layers to GPU` : 'Running on CPU only'}
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setGpuEnabled(!gpuEnabled)}
+                        style={{
+                            width: 48, height: 26, borderRadius: 13, border: 'none',
+                            background: gpuEnabled ? '#f59e0b' : 'rgba(255,255,255,0.15)',
+                            cursor: 'pointer', position: 'relative',
+                            transition: 'background 0.3s'
+                        }}
+                    >
+                        <div style={{
+                            width: 20, height: 20, borderRadius: 10,
+                            background: '#fff',
+                            position: 'absolute', top: 3,
+                            left: gpuEnabled ? 25 : 3,
+                            transition: 'left 0.3s',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                        }} />
+                    </button>
+                </div>
+
+                {gpuEnabled && (
+                    <div style={{
+                        padding: 16, background: 'rgba(0,0,0,0.2)',
+                        borderRadius: 12
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                            <label style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+                                <FontAwesomeIcon icon={faMicrochip} style={{ marginRight: 6 }} />
+                                GPU Layers
+                            </label>
+                            <span style={{
+                                fontSize: 13, fontWeight: 600,
+                                color: '#f59e0b'
+                            }}>
+                                {gpuLayers === 99 ? 'All (99)' : gpuLayers}
+                            </span>
+                        </div>
+                        <input
+                            type="range"
+                            min="1" max="99"
+                            value={gpuLayers}
+                            onChange={(e) => setGpuLayers(Number(e.target.value))}
+                            style={{
+                                width: '100%', height: 6,
+                                borderRadius: 3,
+                                appearance: 'none',
+                                background: `linear-gradient(to right, #f59e0b 0%, #f59e0b ${gpuLayers}%, rgba(255,255,255,0.1) ${gpuLayers}%, rgba(255,255,255,0.1) 100%)`,
+                                outline: 'none', cursor: 'pointer'
+                            }}
+                        />
+                        <div style={{
+                            display: 'flex', justifyContent: 'space-between',
+                            fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4
+                        }}>
+                            <span>Less VRAM</span>
+                            <span>More VRAM (faster)</span>
+                        </div>
+                        <div style={{
+                            marginTop: 12, padding: '8px 12px',
+                            background: 'rgba(245, 158, 11, 0.1)',
+                            borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.2)',
+                            fontSize: 12, color: 'rgba(255,255,255,0.6)'
+                        }}>
+                            💡 Set to <strong style={{ color: '#f59e0b' }}>99</strong> to offload all layers.
+                            Lower if you get out-of-memory errors. Requires CUDA/Vulkan GPU.
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Error Display */}

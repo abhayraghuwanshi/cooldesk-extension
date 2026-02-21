@@ -1115,6 +1115,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             // Add user message to chat
             setAiChatMessages(prev => [...prev, { role: 'user', content: prompt }]);
             setIsAiLoading(true);
+            setSearchValue(''); // Clear input immediately after sending
 
             // Clear suggestions to show chat panel
             setCommandSuggestions([]);

@@ -16,6 +16,7 @@ use std::sync::Mutex;
 enum EngineCommand {
     LoadModel {
         path: PathBuf,
+        gpu_layers: u32,
         respond: mpsc::Sender<Result<(), String>>,
     },
     UnloadModel {
@@ -59,19 +60,26 @@ fn engine_thread(rx: mpsc::Receiver<EngineCommand>) {
             return;
         }
     };
-    log::info!("[LLM Engine] Backend initialized");
+
+    let gpu_supported = backend.supports_gpu_offload();
+    log::info!("[LLM Engine] Backend initialized, GPU offload supported: {}", gpu_supported);
 
     let mut current_model: Option<LlamaModel> = None;
 
     while let Ok(cmd) = rx.recv() {
         match cmd {
-            EngineCommand::LoadModel { path, respond } => {
-                log::info!("[LLM Engine] Loading model: {:?}", path);
+            EngineCommand::LoadModel { path, gpu_layers, respond } => {
+                log::info!("[LLM Engine] Loading model: {:?} (gpu_layers: {})", path, gpu_layers);
 
                 // Unload previous model
                 current_model = None;
 
-                let params = LlamaModelParams::default();
+                let mut params = LlamaModelParams::default();
+                if gpu_layers > 0 && gpu_supported {
+                    params = params.with_n_gpu_layers(gpu_layers);
+                    log::info!("[LLM Engine] GPU offload enabled: {} layers", gpu_layers);
+                }
+
                 match LlamaModel::load_from_file(&backend, &path, &params) {
                     Ok(model) => {
                         log::info!("[LLM Engine] Model loaded successfully");
@@ -250,11 +258,11 @@ fn send_command(cmd: EngineCommand) -> Result<(), String> {
 }
 
 /// Load a model file (async-safe, sends to engine thread)
-pub async fn engine_load_model(path: PathBuf) -> Result<(), String> {
+pub async fn engine_load_model(path: PathBuf, gpu_layers: u32) -> Result<(), String> {
     start_engine(); // ensure engine is running
 
     let (tx, rx) = mpsc::channel();
-    send_command(EngineCommand::LoadModel { path, respond: tx })?;
+    send_command(EngineCommand::LoadModel { path, gpu_layers, respond: tx })?;
 
     tokio::task::spawn_blocking(move || rx.recv().map_err(|e| format!("Recv error: {}", e))?)
         .await

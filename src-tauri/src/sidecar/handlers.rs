@@ -581,10 +581,13 @@ pub async fn llm_status() -> Json<LlmStatus> {
 #[serde(rename_all = "camelCase")]
 pub struct LoadModelRequest {
     pub model_name: String,
+    #[serde(default)]
+    pub gpu_layers: Option<u32>,
 }
 
 pub async fn llm_load(Json(req): Json<LoadModelRequest>) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    if load_model(&req.model_name).await.is_ok() {
+    let gpu_layers = req.gpu_layers.unwrap_or(0);
+    if load_model(&req.model_name, gpu_layers).await.is_ok() {
         Ok(Json(SuccessResponse { success: true }))
     } else {
         Ok(Json(SuccessResponse { success: false }))

@@ -466,10 +466,14 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            let gpu_layers = msg.payload.as_ref()
+                .and_then(|p| p.get("gpuLayers"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
 
-            log::info!("[Sidecar] WS llm-load-model: {}", model_name);
+            log::info!("[Sidecar] WS llm-load-model: {} (gpu_layers: {})", model_name, gpu_layers);
 
-            match crate::sidecar::llm::models::load_model(&model_name).await {
+            match crate::sidecar::llm::models::load_model(&model_name, gpu_layers).await {
                 Ok(_) => {
                     state.broadcast("llm-model-loaded", serde_json::json!({
                         "ok": true,
