@@ -1,9 +1,10 @@
 import { faChrome, faDiscord, faEdge, faFirefox, faGithub, faSlack, faSpotify } from '@fortawesome/free-brands-svg-icons';
-import { faCalculator, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFolder, faGamepad, faGlobe, faImage, faMusic, faTerminal, faThumbtack, faVideo } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComments, faDesktop, faEnvelope, faFile, faFlask, faFolder, faGamepad, faGlobe, faGraduationCap, faHashtag, faHeartPulse, faHistory, faHome, faImage, faLightbulb, faLink, faMusic, faNewspaper, faPalette, faPlane, faRobot, faSearch, faShoppingBag, faStar, faStickyNote, faTasks, faTerminal, faThumbtack, faTools, faUtensils, faVial, faVideo } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
+import { getFaviconUrl } from '../utils/helpers';
 import './GlobalSpotlight.css';
 
 
@@ -857,12 +858,71 @@ export function GlobalSpotlight() {
     );
 }
 
-function getIcon(type) {
+// Map workspace names to category icons (mirrors WorkspaceCard logic)
+const WORKSPACE_CATEGORY_ICONS = {
+    finance: faChartLine,
+    health: faHeartPulse,
+    education: faGraduationCap,
+    sports: faGamepad,
+    social: faHashtag,
+    travel: faPlane,
+    entertainment: faVideo,
+    shopping: faShoppingBag,
+    food: faUtensils,
+    utilities: faTools,
+    github: faGithub,
+    git: faGithub,
+    dev: faCode,
+    development: faCode,
+    coding: faCode,
+    code: faCode,
+    terminal: faTerminal,
+    ai: faRobot,
+    gpt: faRobot,
+    openai: faRobot,
+    work: faBriefcase,
+    business: faBriefcase,
+    office: faBriefcase,
+    personal: faHome,
+    home: faHome,
+    tasks: faTasks,
+    management: faTasks,
+    project: faTasks,
+    design: faPalette,
+    creative: faPalette,
+    research: faSearch,
+    google: faSearch,
+    search: faSearch,
+    cloud: faCloud,
+    gaming: faGamepad,
+    games: faGamepad,
+    music: faMusic,
+    video: faVideo,
+    news: faNewspaper,
+    reading: faFlask,
+    ideas: faLightbulb,
+    test: faVial,
+    lab: faFlask,
+};
+
+// Get contextual icon for workspace based on its name
+function getWorkspaceIcon(name) {
+    if (!name) return faFolder;
+    const normalized = name.toLowerCase().trim();
+    for (const [key, icon] of Object.entries(WORKSPACE_CATEGORY_ICONS)) {
+        if (normalized === key || normalized.includes(key + ' ') || normalized.includes(' ' + key) || normalized.startsWith(key)) {
+            return icon;
+        }
+    }
+    return faFolder;
+}
+
+function getIcon(type, name) {
     switch (type) {
         case 'tab': return faGlobe;
         case 'history': return faHistory;
         case 'bookmark': return faStar;
-        case 'workspace': return faFolder;
+        case 'workspace': return getWorkspaceIcon(name);
         case 'note': return faStickyNote;
         case 'app': return faDesktop;
         default: return faLink;
@@ -896,11 +956,14 @@ const PinItem = memo(function PinItem({ pin, index, isSelected, onSelect, onHove
                     ) : (
                         <FontAwesomeIcon icon={getAppIcon(pin.name)} className="app-icon" />
                     )
-                ) : pin.favicon ? (
-                    <img src={pin.favicon} onError={handleFaviconError} alt="" />
-                ) : (
-                    <FontAwesomeIcon icon={faGlobe} />
-                )}
+                ) : (() => {
+                    const resolvedFavicon = pin.favicon || (pin.url ? getFaviconUrl(pin.url, 32, null, true) : null);
+                    return resolvedFavicon ? (
+                        <img src={resolvedFavicon} onError={handleFaviconError} alt="" />
+                    ) : (
+                        <FontAwesomeIcon icon={faGlobe} />
+                    );
+                })()}
             </div>
             <span className="pin-label">{pin.title || pin.name || 'Link'}</span>
             <span className="pin-remove" onClick={handleRemove}>×</span>
@@ -934,11 +997,14 @@ const ContextItem = memo(function ContextItem({ item, index, pinnedLength, isSel
                     ) : (
                         <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
                     )
-                ) : item.favicon ? (
-                    <img src={item.favicon} onError={handleFaviconError} alt="" />
-                ) : (
-                    <FontAwesomeIcon icon={item.type === 'workspace' ? faFolder : faGlobe} />
-                )}
+                ) : (() => {
+                    const resolvedFavicon = item.favicon || (item.url ? getFaviconUrl(item.url, 32, null, true) : null);
+                    return resolvedFavicon ? (
+                        <img src={resolvedFavicon} onError={handleFaviconError} alt="" />
+                    ) : (
+                        <FontAwesomeIcon icon={item.type === 'workspace' ? getWorkspaceIcon(item.title || item.name) : faGlobe} />
+                    );
+                })()}
             </div>
             <div className="context-item-details">
                 <span className="pin-label">{item.title || item.name}</span>
@@ -975,13 +1041,16 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
                     ) : (
                         <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
                     )
-                ) : (item.favicon && !iconError) ? (
-                    <img src={item.favicon} onError={() => setIconError(true)} alt="" />
-                ) : (
-                    <div className="fa-icon-wrapper">
-                        <FontAwesomeIcon icon={getIcon(item.type)} />
-                    </div>
-                )}
+                ) : (() => {
+                    const resolvedFavicon = item.favicon || (item.url ? getFaviconUrl(item.url, 32, null, true) : null);
+                    return resolvedFavicon && !iconError ? (
+                        <img src={resolvedFavicon} onError={() => setIconError(true)} alt="" />
+                    ) : (
+                        <div className="fa-icon-wrapper">
+                            <FontAwesomeIcon icon={getIcon(item.type, item.title || item.name)} />
+                        </div>
+                    );
+                })()}
             </div>
             <div className="result-content">
                 <span className="result-title">{item.title || item.name}</span>

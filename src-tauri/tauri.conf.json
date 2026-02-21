@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.cooldesk.app",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "../dist-tauri",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"

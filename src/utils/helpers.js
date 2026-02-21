@@ -95,7 +95,7 @@ export const getUrlParts = (url) => {
   }
 }
 
-export const getFaviconUrl = (url, _size = 32, favIconUrl = null) => {
+export const getFaviconUrl = (url, _size = 32, favIconUrl = null, useBaseDomain = false) => {
   try {
     // 1️⃣ Chrome cached favicon (best quality, works offline)
     if (favIconUrl && favIconUrl.startsWith('http')) {
@@ -106,8 +106,12 @@ export const getFaviconUrl = (url, _size = 32, favIconUrl = null) => {
     // Only resolve favicons for http/https pages
     if (!['http:', 'https:'].includes(u.protocol)) return null;
 
-    // 2️⃣ Use DuckDuckGo - simpler and often more reliable for varied domains
-    return `https://icons.duckduckgo.com/ip3/${u.hostname}.ico`;
+    // 2️⃣ Use base domain for more consistent favicon matching
+    // e.g., mail.google.com -> google.com favicon
+    const domain = useBaseDomain ? getBaseDomain(u.hostname) : u.hostname;
+
+    // 3️⃣ Use DuckDuckGo - simpler and often more reliable for varied domains
+    return `https://icons.duckduckgo.com/ip3/${domain}.ico`;
   } catch {
     return null;
   }

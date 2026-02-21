@@ -156,27 +156,62 @@ pub async fn load_model(name: &str, gpu_layers: u32) -> Result<(), String> {
 }
 
 pub async fn download_model(name: &str) -> Result<String, String> {
-    let mut state = GLOBAL_LLM_STATE.lock().await;
-    let url = "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"; // Stub lookup
-    
+    // Look up the download URL from model definitions
+    let models = get_available_models().await?;
+    let model = models.iter().find(|m| m.filename == name)
+        .ok_or_else(|| format!("Unknown model: {}", name))?;
+
+    if model.downloaded {
+        return Ok(format!("Model {} already downloaded", name));
+    }
+
+    let url = model.download_url.clone();
     let mut path = get_models_dir();
     path.push(name);
-    
-    state.is_loading = true;
-    state.load_progress = 0.0;
-    
-    // In a real implementation we would stream using reqwest and tokio::fs::File
-    // for now we simulate download
-    state.load_progress = 100.0;
-    state.is_loading = false;
-    
-    Ok(path.to_string_lossy().to_string())
+
+    {
+        let mut state = GLOBAL_LLM_STATE.lock().await;
+        state.is_loading = true;
+        state.load_progress = 0.0;
+    }
+
+    log::info!("[LLM] Downloading model {} from {}", name, url);
+
+    // Download using reqwest
+    match reqwest::get(&url).await {
+        Ok(response) => {
+            let total_size = response.content_length().unwrap_or(0);
+            let bytes = response.bytes().await
+                .map_err(|e| format!("Download failed: {}", e))?;
+
+            tokio::fs::write(&path, &bytes).await
+                .map_err(|e| format!("Failed to save model: {}", e))?;
+
+            log::info!("[LLM] Model downloaded: {} ({} bytes)", name, bytes.len());
+
+            let mut state = GLOBAL_LLM_STATE.lock().await;
+            state.load_progress = 100.0;
+            state.is_loading = false;
+
+            Ok(path.to_string_lossy().to_string())
+        }
+        Err(e) => {
+            let mut state = GLOBAL_LLM_STATE.lock().await;
+            state.is_loading = false;
+            state.load_progress = 0.0;
+            Err(format!("Download failed: {}", e))
+        }
+    }
 }
 
 pub async fn unload_model() -> Result<(), String> {
+    // Actually unload from the engine thread
+    let _ = super::engine::engine_unload_model().await;
+
     let mut state = GLOBAL_LLM_STATE.lock().await;
     state.model_loaded = false;
     state.current_model = None;
+    log::info!("[LLM] Model unloaded");
     Ok(())
 }
 
