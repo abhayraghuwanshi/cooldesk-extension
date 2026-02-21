@@ -198,7 +198,7 @@ async function buildIndex() {
         if (workspaceList.length > 0) {
             let totalUrls = 0;
             workspaceList.forEach(ws => {
-                console.log('[SearchIndexer] Processing workspace:', ws.name, 'with', (ws.urls || []).length, 'URLs');
+                // console.log('[SearchIndexer] Processing workspace:', ws.name, 'with', (ws.urls || []).length, 'URLs');
                 index.push({
                     i: `ws_${ws.id}`,
                     t: 'workspace',

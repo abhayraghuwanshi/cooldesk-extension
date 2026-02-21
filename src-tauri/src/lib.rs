@@ -4,6 +4,9 @@ use serde::Serialize;
 use tauri::Manager; // Import Manager trait
 use std::collections::HashMap;
 
+// Rust sidecar server module
+mod sidecar;
+
 #[derive(Serialize, Clone)]
 struct RunningApp {
     id: String,
@@ -293,21 +296,11 @@ pub fn run() {
         )?;
       }
 
-      // Spawn Sidecar (Node.js) - Using system node for development
-      let script_path = app.path().resolve("sidecar/server.bundle.mjs", tauri::path::BaseDirectory::Resource)?;
-      
-      // Use command("node") instead of sidecar("node") to use system node
-      let sidecar_command = app.shell().command("node")
-          .args([script_path.to_string_lossy().to_string()]);
-      
-      let (mut rx, _) = sidecar_command.spawn().expect("Failed to spawn sidecar");
-
-      tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            if let tauri_plugin_shell::process::CommandEvent::Stdout(_) = event {
-                // log::info!("Sidecar: {:?}", String::from_utf8(line));
-            }
-        }
+      // Spawn Rust Sidecar Server (replaces Node.js sidecar)
+      tauri::async_runtime::spawn(async {
+          if let Err(e) = sidecar::start_server().await {
+              log::error!("[Sidecar] Server failed: {}", e);
+          }
       });
 
       // Register Global Shortcut

@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "cooldesk",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.cooldesk.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -50,9 +50,6 @@
       "bin/AppScanner",
       "bin/BrowserFocus",
       "bin/AppFocus"
-    ],
-    "resources": [
-      "../sidecar/server.bundle.mjs"
     ]
   }
 }

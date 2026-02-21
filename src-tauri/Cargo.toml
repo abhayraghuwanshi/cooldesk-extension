@@ -27,5 +27,14 @@ tauri-plugin-shell = "2"
 sysinfo = "0.30"
 tauri-plugin-global-shortcut = "2"
 
+# Sidecar server dependencies
+axum = { version = "0.7", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors"] }
+futures-util = "0.3"
+chrono = "0.4"
+url = "2"
+rand = "0.8"
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }

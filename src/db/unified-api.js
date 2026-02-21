@@ -477,7 +477,7 @@ export const saveScrapedChat = withErrorHandling(async (chatData, options = {}) 
 
     return new Promise((resolve, reject) => {
         request.onsuccess = () => {
-            console.log(`[Unified API] Saved scraped chat: ${chat.title} (${chat.chatId})`)
+            // console.log(`[Unified API] Saved scraped chat: ${chat.title} (${chat.chatId})`)
 
             // Notify listeners
             if (!options.skipNotify) {

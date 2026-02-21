@@ -13,9 +13,15 @@
       "Bash(cmd /c \"if exist c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe \\(echo EXISTS\\) else \\(echo NOT FOUND\\)\")",
       "Bash(grep:*)",
       "Bash(cargo check:*)",
-      "Bash(./AppScanner.exe)"
+      "Bash(./AppScanner.exe)",
+      "Bash(ping:*)",
+      "Bash(curl:*)",
+      "Bash(npm run tauri:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "c:\\Users\\raghu\\projects\\extension\\src-tauri\\src"
+    ]
   }
 }
