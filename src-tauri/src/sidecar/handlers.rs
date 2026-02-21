@@ -541,3 +541,103 @@ pub async fn post_sync(
     let data = state.sync_data.read().await;
     Json(data.clone())
 }
+
+// ==========================================
+// LLM Handlers (Phase 2 Migration)
+// ==========================================
+
+use crate::sidecar::llm::models::{ModelInfo, LlmStatus, get_available_models, get_status, load_model, unload_model, download_model};
+use crate::sidecar::llm::inference::{chat};
+use crate::sidecar::llm::tasks::{summarize, categorize};
+
+pub async fn llm_models() -> Json<HashMap<String, ModelInfo>> {
+    if let Ok(models) = get_available_models().await {
+        let map: HashMap<String, ModelInfo> = models
+            .into_iter()
+            .map(|m| (m.filename.clone(), m))
+            .collect();
+        Json(map)
+    } else {
+        Json(HashMap::new())
+    }
+}
+
+pub async fn llm_status() -> Json<LlmStatus> {
+    if let Ok(status) = get_status().await {
+        Json(status)
+    } else {
+        Json(LlmStatus {
+            initialized: false,
+            model_loaded: false,
+            current_model: None,
+            is_loading: false,
+            load_progress: 0.0,
+            models_dir: String::new(),
+        })
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoadModelRequest {
+    pub model_name: String,
+}
+
+pub async fn llm_load(Json(req): Json<LoadModelRequest>) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
+    if load_model(&req.model_name).await.is_ok() {
+        Ok(Json(SuccessResponse { success: true }))
+    } else {
+        Ok(Json(SuccessResponse { success: false }))
+    }
+}
+
+pub async fn llm_unload() -> StatusCode {
+    let _ = unload_model().await;
+    StatusCode::NO_CONTENT
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ChatRequest {
+    pub prompt: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ChatResponse {
+    pub response: String,
+}
+
+pub async fn llm_chat(Json(req): Json<ChatRequest>) -> Json<ChatResponse> {
+    if let Ok(response) = chat(&req.prompt).await {
+        Json(ChatResponse { response })
+    } else {
+        Json(ChatResponse { response: "".to_string() })
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SummarizeRequest {
+    pub text: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadModelRequest {
+    pub model_name: String,
+}
+
+pub async fn llm_download(Json(req): Json<DownloadModelRequest>) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
+    if download_model(&req.model_name).await.is_ok() {
+        Ok(Json(SuccessResponse { success: true }))
+    } else {
+        Ok(Json(SuccessResponse { success: false }))
+    }
+}
+
+pub async fn llm_summarize(Json(req): Json<SummarizeRequest>) -> Json<ChatResponse> {
+    if let Ok(response) = summarize(&req.text, 3).await {
+        Json(ChatResponse { response })
+    } else {
+        Json(ChatResponse { response: "".to_string() })
+    }
+}
+

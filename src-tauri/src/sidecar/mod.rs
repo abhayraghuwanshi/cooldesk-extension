@@ -6,5 +6,6 @@ pub mod storage;
 pub mod sync;
 pub mod server;
 pub mod handlers;
+pub mod llm;
 
 pub use server::start_server;

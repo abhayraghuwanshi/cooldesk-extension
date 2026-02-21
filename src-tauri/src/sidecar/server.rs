@@ -61,6 +61,14 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/ws", get(ws_handler))
         // Fallback for root WebSocket connection
         .route("/", get(ws_handler))
+        // LLM specific endpoints
+        .route("/llm/models", get(llm_models))
+        .route("/llm/status", get(llm_status))
+        .route("/llm/download", post(llm_download))
+        .route("/llm/load", post(llm_load))
+        .route("/llm/unload", post(llm_unload))
+        .route("/llm/chat", post(llm_chat))
+        .route("/llm/summarize", post(llm_summarize))
         .layer(cors)
         .with_state(state);
 
@@ -403,6 +411,183 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
                 let browser = payload.get("browser").and_then(|v| v.as_str()).unwrap_or("unknown");
                 log::info!("[Sidecar] Native focus requested for: {}", browser);
                 state.broadcast("native-focus", payload);
+            }
+        }
+
+        // ==========================================
+        // LLM WebSocket Handlers (for localAIService.js)
+        // ==========================================
+
+        "llm-get-status" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            if let Ok(status) = crate::sidecar::llm::models::get_status().await {
+                let mut response = serde_json::to_value(&status).unwrap_or_default();
+                if let Some(obj) = response.as_object_mut() {
+                    obj.insert("ok".to_string(), serde_json::json!(true));
+                    obj.insert("requestId".to_string(), serde_json::json!(request_id));
+                }
+                state.broadcast("llm-status", response);
+            }
+        }
+
+        "llm-get-models" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            if let Ok(models) = crate::sidecar::llm::models::get_available_models().await {
+                let models_map: std::collections::HashMap<String, _> = models
+                    .into_iter()
+                    .map(|m| (m.filename.clone(), m))
+                    .collect();
+                state.broadcast("llm-models", serde_json::json!({
+                    "ok": true,
+                    "requestId": request_id,
+                    "models": models_map
+                }));
+            }
+        }
+
+        "llm-load-model" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let model_name = msg.payload.as_ref()
+                .and_then(|p| p.get("modelName"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            log::info!("[Sidecar] WS llm-load-model: {}", model_name);
+
+            match crate::sidecar::llm::models::load_model(&model_name).await {
+                Ok(_) => {
+                    state.broadcast("llm-model-loaded", serde_json::json!({
+                        "ok": true,
+                        "requestId": request_id,
+                        "modelName": model_name
+                    }));
+                }
+                Err(e) => {
+                    state.broadcast("llm-model-loaded", serde_json::json!({
+                        "ok": false,
+                        "requestId": request_id,
+                        "error": e
+                    }));
+                }
+            }
+        }
+
+        "llm-chat" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let prompt = msg.payload.as_ref()
+                .and_then(|p| p.get("prompt"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            match crate::sidecar::llm::inference::chat(&prompt).await {
+                Ok(response) => {
+                    state.broadcast("llm-chat-response", serde_json::json!({
+                        "ok": true,
+                        "requestId": request_id,
+                        "response": response
+                    }));
+                }
+                Err(e) => {
+                    state.broadcast("llm-chat-response", serde_json::json!({
+                        "ok": false,
+                        "requestId": request_id,
+                        "error": e
+                    }));
+                }
+            }
+        }
+
+        "llm-summarize" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let text = msg.payload.as_ref()
+                .and_then(|p| p.get("text"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let max_length = msg.payload.as_ref()
+                .and_then(|p| p.get("maxLength"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(3) as usize;
+
+            match crate::sidecar::llm::tasks::summarize(&text, max_length).await {
+                Ok(summary) => {
+                    state.broadcast("llm-chat-response", serde_json::json!({
+                        "ok": true,
+                        "requestId": request_id,
+                        "summary": summary
+                    }));
+                }
+                Err(e) => {
+                    state.broadcast("llm-chat-response", serde_json::json!({
+                        "ok": false,
+                        "requestId": request_id,
+                        "error": e
+                    }));
+                }
+            }
+        }
+
+        "llm-categorize" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let title = msg.payload.as_ref()
+                .and_then(|p| p.get("title"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let url = msg.payload.as_ref()
+                .and_then(|p| p.get("url"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let categories: Vec<String> = msg.payload.as_ref()
+                .and_then(|p| p.get("categories"))
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+
+            match crate::sidecar::llm::tasks::categorize(&title, &url, categories).await {
+                Ok(category) => {
+                    state.broadcast("llm-chat-response", serde_json::json!({
+                        "ok": true,
+                        "requestId": request_id,
+                        "category": category
+                    }));
+                }
+                Err(e) => {
+                    state.broadcast("llm-chat-response", serde_json::json!({
+                        "ok": false,
+                        "requestId": request_id,
+                        "error": e
+                    }));
+                }
             }
         }
 
