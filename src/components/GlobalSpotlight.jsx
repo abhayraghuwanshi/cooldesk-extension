@@ -225,15 +225,45 @@ export function GlobalSpotlight() {
                 })
                 .slice(0, 4)
                 .map(a => {
-                    // If running app doesn't have icon, try to find it from installed apps
+                    // Try to find matching installed app for icon and friendly name
                     let icon = a.icon;
-                    if (!icon && installedApps.length > 0) {
-                        const installed = installedApps.find(ia =>
-                            ia.name?.toLowerCase() === a.name?.toLowerCase()
-                        );
-                        if (installed?.icon) icon = installed.icon;
+                    let displayName = a.name; // Default to process name
+                    const runningName = (a.name || '').toLowerCase().replace('.exe', '');
+                    const runningPath = (a.path || '').toLowerCase();
+
+                    if (installedApps.length > 0) {
+                        // Try multiple matching strategies
+                        const installed = installedApps.find(ia => {
+                            const installedName = (ia.name || '').toLowerCase();
+                            const installedPath = (ia.path || '').toLowerCase();
+
+                            // Best match: same exe path
+                            if (runningPath && installedPath && runningPath === installedPath) return true;
+
+                            // Match by exe filename
+                            const runningExe = runningPath.split(/[/\\]/).pop()?.replace('.exe', '');
+                            const installedExe = installedPath.split(/[/\\]/).pop()?.replace('.exe', '');
+                            if (runningExe && installedExe && runningExe === installedExe) return true;
+
+                            // Exact name match
+                            if (installedName === runningName) return true;
+
+                            // Running app name contains installed name or vice versa
+                            if (runningName.includes(installedName) || installedName.includes(runningName)) return true;
+
+                            return false;
+                        });
+
+                        if (installed) {
+                            if (installed.icon) icon = installed.icon;
+                            // Use friendly name from installed apps (e.g., "Google Chrome" instead of "chrome.exe")
+                            if (installed.name) displayName = installed.name;
+                            console.log(`[Spotlight] Matched running "${a.name}" to installed "${installed.name}" (icon: ${!!installed.icon})`);
+                        } else {
+                            console.log(`[Spotlight] No match for running app: "${a.name}" (path: ${a.path})`);
+                        }
                     }
-                    return { ...a, icon, type: 'app', description: 'Running', isRunning: true };
+                    return { ...a, icon, name: displayName, type: 'app', description: 'Running', isRunning: true };
                 });
 
             console.log('[Spotlight] Active apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(icon:${!!a.icon})`));
@@ -247,10 +277,16 @@ export function GlobalSpotlight() {
             for (const [appName] of sortedFrequent) {
                 if (usedIds.has(appName.toLowerCase())) continue;
 
-                // Find app in installed apps
-                const app = installedApps.find(a =>
-                    a.name?.toLowerCase() === appName.toLowerCase()
-                );
+                // Find app in installed apps with flexible matching
+                const frequentName = appName.toLowerCase();
+                const app = installedApps.find(a => {
+                    const installedName = (a.name || '').toLowerCase();
+                    if (installedName === frequentName) return true;
+                    if (frequentName.includes(installedName) || installedName.includes(frequentName)) return true;
+                    const exeName = (a.path || '').split(/[/\\]/).pop()?.toLowerCase().replace('.exe', '');
+                    if (exeName && (frequentName.includes(exeName) || exeName.includes(frequentName))) return true;
+                    return false;
+                });
                 if (app) {
                     usedIds.add(appName.toLowerCase());
                     recommendations.push({
@@ -1007,7 +1043,7 @@ const ContextItem = memo(function ContextItem({ item, index, pinnedLength, isSel
                 })()}
             </div>
             <div className="context-item-details">
-                <span className="pin-label">{item.title || item.name}</span>
+                <span className="pin-label">{item.type === 'app' ? (item.name || item.title) : (item.title || item.name)}</span>
                 <span className="context-item-desc">{item.description || item.category || 'Suggested'}</span>
             </div>
         </div>
