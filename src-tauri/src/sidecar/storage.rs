@@ -40,7 +40,9 @@ pub fn load_data() -> SyncData {
         Ok(content) => {
             match serde_json::from_str::<SyncData>(&content) {
                 Ok(mut data) => {
-                    log::info!("[Sidecar] Loaded sync data from disk");
+                    log::info!("[Sidecar] Loaded sync data from disk: {} notes, {} workspaces, {} urls, {} pins, {} urlNotes",
+                        data.notes.len(), data.workspaces.len(), data.urls.len(),
+                        data.pins.len(), data.url_notes.len());
                     // Clear transient data
                     data.device_tabs_map.clear();
                     data.tabs.clear();
@@ -63,8 +65,12 @@ pub fn load_data() -> SyncData {
 pub fn save_data(data: &SyncData) -> std::io::Result<()> {
     ensure_data_dir()?;
     let file_path = get_data_file();
+    log::debug!("[Sidecar] Saving sync data: {} notes, {} workspaces to {:?}",
+        data.notes.len(), data.workspaces.len(), file_path);
     let content = serde_json::to_string_pretty(data)?;
+    let content_len = content.len();
     fs::write(&file_path, content)?;
+    log::debug!("[Sidecar] Save complete: {} bytes written", content_len);
     Ok(())
 }
 

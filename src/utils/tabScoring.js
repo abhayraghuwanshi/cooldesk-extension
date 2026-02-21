@@ -164,8 +164,11 @@ export async function scoreAndSortTabs(tabs) {
         _score: calculateTabScore(tab, activityData)
     }));
 
-    // Sort by score (descending)
-    const sorted = tabsWithScores.sort((a, b) => b._score - a._score);
+    // Sort by score (descending), tie-breaker by id
+    const sorted = tabsWithScores.sort((a, b) => {
+        if (b._score !== a._score) return b._score - a._score;
+        return (a.id || 0) - (b.id || 0); // fallback tie-breaker
+    });
 
     // Remove score property before returning
     return sorted.map(({ _score, ...tab }) => tab);

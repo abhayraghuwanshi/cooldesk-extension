@@ -1,0 +1,88 @@
+{
+  "manifest_version": 3,
+  "name": "New Tab by Cooldesk - Start Smarter",
+  "version": "1.0.7",
+  "action": {
+    "default_title": "Open CoolDesk"
+  },
+  "options_page": "index.html",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "history",
+    "bookmarks",
+    "tabs",
+    "tabGroups",
+    "windows",
+    "scripting",
+    "idle",
+    "activeTab",
+    "sessions",
+    "search",
+    "alarms",
+    "commands",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' wss://signaling-server.raghuwanshi-abhay405.workers.dev http://localhost:5173 ws://localhost:5173 http://127.0.0.1:4000 ws://127.0.0.1:4000 http://localhost:4000 ws://localhost:4000; frame-src https://www.google.com"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/*",
+        "dist/*",
+        "src/components/footerBar.js",
+        "src/content-scripts/contentInteractions.js",
+        "src/scrapers/clickToScrape.js",
+        "src/scrapers/genericLinkScraper.js",
+        "logo-2.png",
+        "index.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "src/content-scripts/interactionContent.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "src/content-scripts/activity-tracker.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "open_spotlight": {
+      "suggested_key": {
+        "default": "Alt+S",
+        "mac": "Alt+S",
+        "windows": "Alt+S"
+      },
+      "description": "Open CoolDesk Spotlight Search"
+    }
+  }
+}

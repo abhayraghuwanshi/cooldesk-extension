@@ -131,7 +131,12 @@ export function TabManagement() {
       try {
         const apps = await window.electronAPI.getRunningApps();
         if (Array.isArray(apps)) {
-          setRunningApps(apps);
+          const sortedApps = [...apps].sort((a, b) => {
+            const nameA = (a.title || a.name || '').toLowerCase();
+            const nameB = (b.title || b.name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+          });
+          setRunningApps(sortedApps);
         }
       } catch (error) {
         console.error('[TabManagement] Failed to fetch running apps:', error);
@@ -305,12 +310,14 @@ export function TabManagement() {
       }
     });
 
-    // 4. Recent Unique (Priority 3: Top singles by activity)
     // Sort singles by activity if available
     const sortedSingles = [...singles].sort((a, b) => {
       const scoreA = tabActivity[a.id] || 0;
       const scoreB = tabActivity[b.id] || 0;
-      return scoreB - scoreA;
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA;
+      }
+      return (a.title || '').localeCompare(b.title || '');
     });
 
     // Take top 8 as "Recent" (active or high score)
@@ -583,6 +590,7 @@ export function TabManagement() {
                 </h3>
                 <div className="tabs-grid">
                   {Object.entries(partitionedTabs.grouped)
+                    .sort(([domainA], [domainB]) => domainA.localeCompare(domainB))
                     .map(([domain, domainTabs]) => (
                       <TabGroupCard
                         key={domain}
