@@ -355,6 +355,82 @@ export async function agentRequest(userInput, context = {}) {
     return result.result;
 }
 
+// ==========================================
+// TASK NAMING (Task-First Tab Modeling)
+// ==========================================
+
+/**
+ * Generate a concise task name based on tab titles and URLs
+ * @param {Object} task - Task object with tabIds
+ * @returns {Promise<string|null>} - Generated task name (2-4 words) or null on failure
+ */
+export async function nameTask(task) {
+    if (!task?.tabIds || task.tabIds.length === 0) {
+        return null;
+    }
+
+    // Check if AI is available
+    const available = await isAvailable();
+    if (!available) {
+        console.log('[LocalAI] AI not available for task naming');
+        return null;
+    }
+
+    try {
+        // Gather tab information
+        const tabInfos = [];
+        for (const tabId of task.tabIds.slice(0, 5)) { // Limit to 5 tabs for brevity
+            try {
+                const tab = await chrome.tabs.get(tabId);
+                if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+                    let domain = '';
+                    try {
+                        domain = new URL(tab.url).hostname.replace('www.', '');
+                    } catch { }
+                    tabInfos.push({
+                        title: tab.title || '',
+                        domain
+                    });
+                }
+            } catch {
+                // Tab might be closed, skip it
+            }
+        }
+
+        if (tabInfos.length === 0) {
+            return null;
+        }
+
+        // Build prompt
+        const tabDescriptions = tabInfos
+            .map(t => `"${t.title}" (${t.domain})`)
+            .join(', ');
+
+        const prompt = `Based on these browser tabs: ${tabDescriptions}
+
+Generate a concise task name (2-4 words) that describes what the user is working on.
+Just respond with the task name, nothing else. Examples: "React Hooks Research", "Bug Fix Investigation", "Shopping Comparison"`;
+
+        const result = await request('llm-chat', {
+            prompt,
+            options: { maxTokens: 20 }
+        }, 15000);
+
+        const name = result?.response?.trim();
+
+        // Validate response (should be reasonable length)
+        if (name && name.length > 0 && name.length <= 50 && name.split(/\s+/).length <= 6) {
+            console.log('[LocalAI] Generated task name:', name);
+            return name;
+        }
+
+        return null;
+    } catch (e) {
+        console.warn('[LocalAI] Task naming failed:', e.message);
+        return null;
+    }
+}
+
 /**
  * Disconnect from WebSocket
  */

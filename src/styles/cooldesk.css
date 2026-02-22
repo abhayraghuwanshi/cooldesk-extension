@@ -3973,6 +3973,94 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 /* ==========================================
+   TASK GROUP CARD - Task-First Tab Modeling
+   ========================================== */
+
+.cooldesk-task-group-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.cooldesk-task-group-card:hover {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(20, 30, 48, 0.98) 100%);
+  border-color: rgba(100, 116, 139, 0.6);
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(100, 116, 139, 0.2);
+}
+
+.cooldesk-task-group-card.active-task {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(30, 41, 59, 0.98) 100%);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow:
+    0 4px 16px rgba(59, 130, 246, 0.15),
+    0 0 0 1px rgba(59, 130, 246, 0.2);
+}
+
+.task-active-badge {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.25));
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-top: none;
+  padding: 2px 10px;
+  border-radius: 0 0 8px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #60A5FA;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+}
+
+.task-name {
+  cursor: text;
+}
+
+.task-name-input {
+  font-family: inherit;
+}
+
+.task-ai-name-btn {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.cooldesk-task-group-card:hover .task-ai-name-btn {
+  opacity: 1;
+}
+
+.task-ai-name-btn:hover {
+  background: rgba(147, 51, 234, 0.3) !important;
+  border-color: rgba(147, 51, 234, 0.6) !important;
+}
+
+/* Task color variants */
+.cooldesk-task-group-card .tab-group-icon.blue { background: rgba(59, 130, 246, 0.2); color: #60A5FA; }
+.cooldesk-task-group-card .tab-group-icon.green { background: rgba(34, 197, 94, 0.2); color: #4ADE80; }
+.cooldesk-task-group-card .tab-group-icon.orange { background: rgba(249, 115, 22, 0.2); color: #FB923C; }
+.cooldesk-task-group-card .tab-group-icon.purple { background: rgba(147, 51, 234, 0.2); color: #A78BFA; }
+.cooldesk-task-group-card .tab-group-icon.pink { background: rgba(236, 72, 153, 0.2); color: #F472B6; }
+.cooldesk-task-group-card .tab-group-icon.cyan { background: rgba(34, 211, 238, 0.2); color: #22D3EE; }
+.cooldesk-task-group-card .tab-group-icon.red { background: rgba(239, 68, 68, 0.2); color: #F87171; }
+.cooldesk-task-group-card .tab-group-icon.yellow { background: rgba(250, 204, 21, 0.2); color: #FACC15; }
+
+/* ==========================================
    AI CHAT UI - Premium Modern Design
    ========================================== */
 

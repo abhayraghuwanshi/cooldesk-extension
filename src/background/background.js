@@ -114,6 +114,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // Global Command Handlers (Keyboard Shortcuts)
+if (chrome?.commands?.onCommand) {
 chrome.commands.onCommand.addListener(async (command) => {
   console.log('[Background] Command received:', command);
 
@@ -148,6 +149,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 
 });
+} // End of chrome.commands check
 
 // MV3 background service worker (type: module)
 
@@ -277,6 +279,23 @@ import { forceIndexRebuild, initializeSearchIndexer } from './searchIndexer.js';
 import { handleGetTabActivity } from './tabCleanup.js';
 import { handleUrlNotesMessages } from './urlNotesHandler.js';
 import { initializeWorkspaces } from './workspaces.js';
+
+// Task Manager for Task-First Tab Modeling
+import {
+  initialize as initializeTaskManager,
+  handleTabCreated as taskHandleTabCreated,
+  handleTabActivated as taskHandleTabActivated,
+  handleTabRemoved as taskHandleTabRemoved,
+  handleTabUpdated as taskHandleTabUpdated,
+  getAllTasks,
+  getTaskById,
+  getTaskForTab,
+  renameTask,
+  setTaskAiNamed,
+  moveTabToTask,
+  mergeTasksInto,
+  getActiveTaskId
+} from './taskManager.js';
 
 // Initialize Search Indexer (Background Service)
 initializeSearchIndexer(); // Re-enabled for spotlight search
@@ -482,6 +501,47 @@ async function main() {
     console.log('[Background] Daily summary scheduler initialized');
   } catch (e) {
     console.warn('[Background] Daily summary scheduler init failed:', e.message);
+  }
+
+  // Initialize Task Manager for Task-First Tab Modeling
+  try {
+    await initializeTaskManager();
+    console.log('[Background] Task Manager initialized');
+
+    // Set up task manager tab event listeners
+    chrome.tabs.onCreated.addListener(async (tab) => {
+      try {
+        await taskHandleTabCreated(tab);
+      } catch (e) {
+        console.error('[Background] Task tab created error:', e);
+      }
+    });
+
+    chrome.tabs.onActivated.addListener(async (activeInfo) => {
+      try {
+        await taskHandleTabActivated(activeInfo.tabId);
+      } catch (e) {
+        console.error('[Background] Task tab activated error:', e);
+      }
+    });
+
+    chrome.tabs.onRemoved.addListener(async (tabId) => {
+      try {
+        await taskHandleTabRemoved(tabId);
+      } catch (e) {
+        console.error('[Background] Task tab removed error:', e);
+      }
+    });
+
+    chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+      try {
+        await taskHandleTabUpdated(tabId, changeInfo, tab);
+      } catch (e) {
+        console.error('[Background] Task tab updated error:', e);
+      }
+    });
+  } catch (e) {
+    console.error('[Background] Task Manager init failed:', e.message);
   }
 
   // Bridge DB change broadcasts to UI: when RTC updates workspaces, refresh dashboard
@@ -1021,8 +1081,15 @@ async function main() {
     }
 
     // Handle activity tracking messages from content scripts
-    // Skip activity handling for chat scraping messages, calendar triggers, and tab navigation
-    if (msg.type && sender.tab && msg.type !== 'AUTO_SCRAPED_CHATS' && msg.type !== 'SCRAPED_LINKS' && msg.type !== 'TRIGGER_CALENDAR_SCRAPE' && msg.type !== 'CALENDAR_EVENTS_SCRAPED' && msg.type !== 'TRIGGER_MANUAL_CHATS_SCRAPE' && msg.type !== 'TRIGGER_ALL_CHATS_SCRAPE' && msg.type !== 'JUMP_TO_TAB') {
+    // Skip activity handling for chat scraping messages, calendar triggers, tab navigation, and task management
+    const skipActivityTypes = [
+      'AUTO_SCRAPED_CHATS', 'SCRAPED_LINKS', 'TRIGGER_CALENDAR_SCRAPE', 'CALENDAR_EVENTS_SCRAPED',
+      'TRIGGER_MANUAL_CHATS_SCRAPE', 'TRIGGER_ALL_CHATS_SCRAPE', 'JUMP_TO_TAB',
+      // Task Manager messages
+      'GET_ALL_TASKS', 'GET_TASK_FOR_TAB', 'GET_TASK_BY_ID', 'RENAME_TASK',
+      'MOVE_TAB_TO_TASK', 'MERGE_TASKS', 'AI_NAME_TASK'
+    ];
+    if (msg.type && sender.tab && !skipActivityTypes.includes(msg.type)) {
       console.log('[Background Debug] Potential activity message:', { type: msg.type, url: sender.tab?.url });
 
       const activityHandled = handleActivityContentScriptMessage(msg, sender);
@@ -2443,6 +2510,116 @@ async function main() {
         console.error('[Background] Index rebuild failed:', e);
         sendResponse({ success: false, error: e.message });
       });
+      return true;
+    }
+
+    // ============================================================================
+    // TASK MANAGER MESSAGE HANDLERS - Task-First Tab Modeling
+    // ============================================================================
+
+    if (msg?.type === 'GET_ALL_TASKS') {
+      (async () => {
+        try {
+          // Ensure task manager is initialized
+          await initializeTaskManager();
+          const tasks = getAllTasks();
+          const activeTaskId = getActiveTaskId();
+          console.log('[Background] GET_ALL_TASKS returning', tasks.length, 'tasks');
+          sendResponse({ success: true, tasks, activeTaskId });
+        } catch (e) {
+          console.error('[Background] GET_ALL_TASKS error:', e);
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'GET_TASK_FOR_TAB') {
+      try {
+        const task = getTaskForTab(msg.tabId);
+        sendResponse({ success: true, task });
+      } catch (e) {
+        console.error('[Background] GET_TASK_FOR_TAB error:', e);
+        sendResponse({ success: false, error: e.message });
+      }
+      return true;
+    }
+
+    if (msg?.type === 'GET_TASK_BY_ID') {
+      try {
+        const task = getTaskById(msg.taskId);
+        sendResponse({ success: true, task });
+      } catch (e) {
+        console.error('[Background] GET_TASK_BY_ID error:', e);
+        sendResponse({ success: false, error: e.message });
+      }
+      return true;
+    }
+
+    if (msg?.type === 'RENAME_TASK') {
+      (async () => {
+        try {
+          const result = await renameTask(msg.taskId, msg.name);
+          sendResponse({ success: result });
+        } catch (e) {
+          console.error('[Background] RENAME_TASK error:', e);
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'MOVE_TAB_TO_TASK') {
+      (async () => {
+        try {
+          const result = await moveTabToTask(msg.tabId, msg.taskId);
+          sendResponse({ success: result });
+        } catch (e) {
+          console.error('[Background] MOVE_TAB_TO_TASK error:', e);
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'MERGE_TASKS') {
+      (async () => {
+        try {
+          const result = await mergeTasksInto(msg.sourceTaskId, msg.targetTaskId);
+          sendResponse({ success: result });
+        } catch (e) {
+          console.error('[Background] MERGE_TASKS error:', e);
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true;
+    }
+
+    if (msg?.type === 'AI_NAME_TASK') {
+      (async () => {
+        try {
+          const task = getTaskById(msg.taskId);
+          if (!task) {
+            sendResponse({ success: false, error: 'Task not found' });
+            return;
+          }
+
+          // Dynamically import localAIService to avoid circular dependencies
+          const { nameTask } = await import('../services/localAIService.js');
+          const name = await nameTask(task);
+
+          if (name) {
+            await renameTask(msg.taskId, name);
+            await setTaskAiNamed(msg.taskId, true);
+            sendResponse({ success: true, name });
+          } else {
+            sendResponse({ success: false, error: 'AI naming failed' });
+          }
+        } catch (e) {
+          console.error('[Background] AI_NAME_TASK error:', e);
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
       return true;
     }
   });

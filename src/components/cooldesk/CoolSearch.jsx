@@ -43,6 +43,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
   // AI Chat Panel state
   const [aiChatMessages, setAiChatMessages] = useState([]); // [{role: 'user'|'assistant', content: string}]
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isModelLoading, setIsModelLoading] = useState(false); // Loading state for model selection
 
   // Performance Optimizations
   const workspacesCache = useRef(null);
@@ -352,6 +353,89 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         return;
       }
 
+      // Model Selection Stage
+      if (activePill.stage === 'MODEL_SELECT') {
+        const fetchModels = async () => {
+          try {
+            // Check if sidecar is available
+            const isAvailable = await LocalAI.isAvailable();
+            if (!isAvailable) {
+              setCommandSuggestions([{
+                command: '/model',
+                title: 'Desktop App Not Running',
+                description: 'Please start the CoolDesk desktop app to use AI',
+                icon: faRobot,
+                category: 'Error',
+                disabled: true
+              }]);
+              return;
+            }
+
+            // Get status to see which model is loaded
+            const status = await LocalAI.getStatus();
+            const currentModel = status.currentModel || null;
+
+            // Get available models
+            const modelsResult = await LocalAI.getModels();
+            const modelFilenames = Object.keys(modelsResult || {}).filter(
+              name => modelsResult[name]?.downloaded
+            );
+
+            if (modelFilenames.length === 0) {
+              setCommandSuggestions([{
+                command: '/model',
+                title: 'No Models Downloaded',
+                description: 'Go to Settings → Local AI to download models',
+                icon: faRobot,
+                category: 'Info',
+                disabled: true
+              }]);
+              return;
+            }
+
+            // Build model cards
+            const modelCards = modelFilenames
+              .filter(name => name.toLowerCase().includes(query))
+              .map(name => {
+                const modelInfo = modelsResult[name];
+                const isLoaded = currentModel === name;
+                return {
+                  command: `/model ${name}`,
+                  title: modelInfo?.displayName || name,
+                  description: isLoaded ? '✓ Currently loaded' : `Click to load • ${modelInfo?.size || ''}`,
+                  icon: faRobot,
+                  category: 'Select Model',
+                  modelName: name,
+                  isLoaded
+                };
+              })
+              .sort((a, b) => {
+                // Put loaded model first
+                if (a.isLoaded && !b.isLoaded) return -1;
+                if (!a.isLoaded && b.isLoaded) return 1;
+                return 0;
+              });
+
+            setCommandSuggestions(modelCards);
+          } catch (error) {
+            console.error('[CoolSearch] Failed to fetch models:', error);
+            setCommandSuggestions([{
+              command: '/model',
+              title: 'Error Loading Models',
+              description: error.message || 'Failed to connect to AI service',
+              icon: faRobot,
+              category: 'Error',
+              disabled: true
+            }]);
+          }
+        };
+
+        fetchModels();
+        setSearchSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+        return;
+      }
+
       // Only AI pill is supported now - no suggestions needed for AI mode
       // User just types their prompt directly
       setCommandSuggestions([]);
@@ -376,6 +460,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
           // AI Commands
           { command: '/ai', title: 'Ask AI', description: 'Chat with local LLM', icon: faRobot, category: 'AI' },
+          { command: '/model', title: 'Select Model', description: 'Choose AI model to use', icon: faRobot, category: 'AI' },
         ];
 
         if (query === '') {
@@ -1099,6 +1184,64 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           return;
         }
 
+        // Handle Model Selection Command (/model or /model <modelname>)
+        if (query.startsWith('/model')) {
+          const modelName = query.slice(6).trim();
+
+          if (!modelName) {
+            // No model specified, enter model selection mode
+            setActivePill({ label: 'Model', prefix: '/model', stage: 'MODEL_SELECT' });
+            setSearchValue('');
+            setAutocompleteHint('');
+            setCommandSuggestions([]);
+            return;
+          }
+
+          // Model name specified, load it
+          try {
+            const isAvailable = await LocalAI.isAvailable();
+            if (!isAvailable) {
+              setCommandFeedback({
+                type: 'error',
+                message: 'Desktop app not running. Please start CoolDesk desktop app.'
+              });
+              return;
+            }
+
+            setIsModelLoading(true);
+            // Show loading state in suggestions panel
+            setCommandSuggestions([{
+              command: '/model',
+              title: `Loading ${modelName}...`,
+              description: 'Please wait while the model loads into memory',
+              icon: faRobot,
+              category: 'Loading',
+              disabled: true,
+              isLoading: true
+            }]);
+
+            await LocalAI.loadModel(modelName);
+
+            setIsModelLoading(false);
+            setCommandFeedback({
+              type: 'success',
+              message: `✓ Model loaded: ${modelName}`
+            });
+
+            handleClose();
+            setSearchValue('');
+            setActivePill(null);
+          } catch (error) {
+            console.error('[CoolSearch] Model load error:', error);
+            setIsModelLoading(false);
+            setCommandFeedback({
+              type: 'error',
+              message: error.message || 'Failed to load model'
+            });
+          }
+          return;
+        }
+
         // Handle AI Command (/ai <prompt>)
         if (query.startsWith('/ai')) {
           const prompt = query.slice(3).trim();
@@ -1308,6 +1451,71 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
         setAutocompleteHint('');
         setCommandSuggestions([]);
         setSelectedSuggestionIndex(-1);
+        return;
+      }
+
+      // /model triggers model selection mode
+      if (cmd === '/model') {
+        setActivePill({ label: 'Model', prefix: '/model', stage: 'MODEL_SELECT' });
+        setSearchValue('');
+        setAutocompleteHint('');
+        setCommandSuggestions([]);
+        setSelectedSuggestionIndex(-1);
+        return;
+      }
+
+      // Handle model selection from the model picker
+      if (item.modelName && item.category === 'Select Model') {
+        // Skip if disabled, already loaded, or currently loading
+        if (item.disabled || isModelLoading) {
+          return;
+        }
+
+        if (item.isLoaded) {
+          setCommandFeedback({
+            type: 'info',
+            message: `${item.title} is already loaded`
+          });
+          handleClose();
+          setActivePill(null);
+          return;
+        }
+
+        // Load the selected model
+        try {
+          setIsModelLoading(true);
+          // Update suggestions to show loading state
+          setCommandSuggestions([{
+            command: '/model',
+            title: `Loading ${item.title}...`,
+            description: 'Please wait while the model loads into memory',
+            icon: faRobot,
+            category: 'Loading',
+            disabled: true,
+            isLoading: true
+          }]);
+
+          await LocalAI.loadModel(item.modelName);
+
+          setIsModelLoading(false);
+          setCommandFeedback({
+            type: 'success',
+            message: `✓ ${item.title} loaded successfully!`
+          });
+
+          handleClose();
+          setSearchValue('');
+          setActivePill(null);
+        } catch (error) {
+          console.error('[CoolSearch] Model load error:', error);
+          setIsModelLoading(false);
+          setCommandFeedback({
+            type: 'error',
+            message: error.message || 'Failed to load model'
+          });
+          // Re-fetch models to show the list again
+          setActivePill({ label: 'Model', prefix: '/model', stage: 'MODEL_SELECT' });
+        }
         return;
       }
 

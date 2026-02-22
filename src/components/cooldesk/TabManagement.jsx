@@ -1,9 +1,9 @@
-import { faBrain, faClock, faDesktop, faSync, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
+import { faBrain, faClock, faDesktop, faSync, faTasks, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
-import { AppCard, TabCard, TabGroupCard } from './TabCard';
+import { AppCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
 
 // Debounce utility
 function debounce(func, wait) {
@@ -30,13 +30,83 @@ export function TabManagement() {
   const [isPending, startTransition] = useTransition();
   const [runningApps, setRunningApps] = useState([]);
 
-  // Load auto-group and smart sort state on mount
+  // Task-First Tab Modeling state
+  const [taskViewEnabled, setTaskViewEnabled] = useState(false);
+  const [tasks, setTasks] = useState([]);
+  const [activeTaskId, setActiveTaskId] = useState(null);
+
+  // Load auto-group, smart sort, and task view state on mount
   useEffect(() => {
-    chrome.storage.local.get(['autoGroupEnabled', 'smartSortEnabled', 'isFocusMode'], (result) => {
+    chrome.storage.local.get(['autoGroupEnabled', 'smartSortEnabled', 'isFocusMode', 'taskViewEnabled'], (result) => {
       setAutoGroupEnabled(result.autoGroupEnabled || false);
       setSmartSortEnabled(result.smartSortEnabled !== false); // Default to true
       setIsFocusMode(result.isFocusMode || false);
+      setTaskViewEnabled(result.taskViewEnabled || false);
     });
+  }, []);
+
+  // Subscribe to task updates (Task-First Tab Modeling)
+  useEffect(() => {
+    // Function to fetch tasks with retry
+    const fetchTasks = (retryCount = 0) => {
+      console.log('[TabManagement] Fetching tasks... (attempt', retryCount + 1, ')');
+      chrome.runtime.sendMessage({ type: 'GET_ALL_TASKS' })
+        .then(response => {
+          console.log('[TabManagement] GET_ALL_TASKS raw response:', JSON.stringify(response));
+          if (response?.success) {
+            console.log('[TabManagement] Setting', response.tasks?.length || 0, 'tasks');
+            setTasks(response.tasks || []);
+            setActiveTaskId(response.activeTaskId);
+            // If no tasks and we haven't retried much, try again after a delay
+            if (response.tasks?.length === 0 && retryCount < 3) {
+              console.log('[TabManagement] No tasks yet, retrying in 1s...');
+              setTimeout(() => fetchTasks(retryCount + 1), 1000);
+            }
+          } else if (response === undefined) {
+            console.log('[TabManagement] No response from background - service worker may not be ready');
+            if (retryCount < 5) {
+              setTimeout(() => fetchTasks(retryCount + 1), 1000);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('[TabManagement] GET_ALL_TASKS error:', err);
+          if (retryCount < 5) {
+            setTimeout(() => fetchTasks(retryCount + 1), 1000);
+          }
+        });
+    };
+
+    // Initial fetch with small delay to let background initialize
+    setTimeout(() => fetchTasks(), 500);
+
+    // Subscribe via BroadcastChannel for real-time updates
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('cooldesk_tasks');
+      bc.onmessage = (ev) => {
+        if (ev?.data?.type === 'tasksChanged') {
+          setTasks(ev.data.tasks || []);
+          setActiveTaskId(ev.data.activeTaskId);
+        }
+      };
+    } catch (e) {
+      console.debug('[TabManagement] BroadcastChannel not available');
+    }
+
+    // Also listen via runtime messages
+    const handleMessage = (msg) => {
+      if (msg?.type === 'TASKS_UPDATED') {
+        setTasks(msg.tasks || []);
+        setActiveTaskId(msg.activeTaskId);
+      }
+    };
+    chrome.runtime.onMessage.addListener(handleMessage);
+
+    return () => {
+      try { bc?.close(); } catch { }
+      chrome.runtime.onMessage.removeListener(handleMessage);
+    };
   }, []);
 
   // Track if initial load completed
@@ -345,6 +415,38 @@ export function TabManagement() {
     };
   }, [filteredTabs, tabActivity, autoGroupEnabled]);
 
+  // Partition tabs by task (when task view is enabled)
+  const partitionedByTask = useMemo(() => {
+    console.log('[TabManagement] partitionedByTask - taskViewEnabled:', taskViewEnabled, 'tasks:', tasks.length, 'filteredTabs:', filteredTabs.length);
+
+    if (!taskViewEnabled || tasks.length === 0) {
+      console.log('[TabManagement] partitionedByTask returning null (disabled or no tasks)');
+      return null;
+    }
+
+    const taskGroups = [];
+    const tabIdToTab = new Map(filteredTabs.map(t => [t.id, t]));
+
+    for (const task of tasks) {
+      const taskTabs = task.tabIds
+        .map(id => tabIdToTab.get(id))
+        .filter(Boolean);
+
+      console.log('[TabManagement] Task', task.name, 'has', task.tabIds.length, 'tabIds, matched', taskTabs.length, 'tabs');
+
+      if (taskTabs.length > 0) {
+        taskGroups.push({
+          task,
+          tabs: taskTabs
+        });
+      }
+    }
+
+    console.log('[TabManagement] partitionedByTask returning', taskGroups.length, 'task groups');
+    // Sort by lastUpdated (most recent first)
+    return taskGroups.sort((a, b) => b.task.lastUpdated - a.task.lastUpdated);
+  }, [taskViewEnabled, tasks, filteredTabs]);
+
   return (
     <div style={{
       display: 'flex',
@@ -497,6 +599,74 @@ export function TabManagement() {
             />
             <span style={{ pointerEvents: 'none' }}>Auto Group</span>
           </button>
+          <button
+            onClick={() => {
+              const newState = !taskViewEnabled;
+              setTaskViewEnabled(newState);
+              chrome.storage.local.set({ taskViewEnabled: newState });
+              // Refresh tasks when enabling
+              if (newState) {
+                chrome.runtime.sendMessage({ type: 'GET_ALL_TASKS' })
+                  .then(response => {
+                    if (response?.success) {
+                      setTasks(response.tasks || []);
+                      setActiveTaskId(response.activeTaskId);
+                    }
+                  })
+                  .catch(() => { });
+              }
+            }}
+            style={{
+              background: taskViewEnabled
+                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.15))'
+                : 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))',
+              border: taskViewEnabled
+                ? '1px solid rgba(59, 130, 246, 0.4)'
+                : '1px solid rgba(100, 116, 139, 0.3)',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              color: taskViewEnabled ? '#60A5FA' : '#94A3B8',
+              cursor: 'pointer',
+              fontSize: 'var(--font-sm, 12px)',
+              fontWeight: 600,
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+            onMouseEnter={(e) => {
+              if (taskViewEnabled) {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.25))';
+                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.6)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              } else {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.3), rgba(71, 85, 105, 0.25))';
+                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.5)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (taskViewEnabled) {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.15))';
+                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              } else {
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(100, 116, 139, 0.2), rgba(71, 85, 105, 0.15))';
+                e.currentTarget.style.borderColor = 'rgba(100, 116, 139, 0.3)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }
+            }}
+            title={taskViewEnabled
+              ? "Task View enabled - Showing tabs grouped by task/intent"
+              : "Task View disabled - Click to group tabs by browsing tasks"}
+          >
+            <FontAwesomeIcon
+              icon={faTasks}
+              size="lg"
+              style={{ pointerEvents: 'none' }}
+            />
+            <span style={{ pointerEvents: 'none' }}>Tasks</span>
+          </button>
         </div>
       </div>
 
@@ -583,8 +753,53 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 3. Grouped by Domain Section */}
-            {partitionedTabs.hasGroups && (
+            {/* 3. Grouped by Task Section (Task-First Tab Modeling) */}
+            {taskViewEnabled && partitionedByTask && partitionedByTask.length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-2xl, 20px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <FontAwesomeIcon icon={faTasks} style={{ opacity: 0.6 }} />
+                  Grouped by Task ({partitionedByTask.length})
+                </h3>
+                <div className="tabs-grid">
+                  {partitionedByTask.map(({ task, tabs: taskTabs }) => (
+                    <TaskGroupCard
+                      key={task.id}
+                      task={task}
+                      tabs={taskTabs}
+                      isActive={task.id === activeTaskId}
+                      onTabClick={handleTabClick}
+                      onTabClose={handleTabClose}
+                      onRename={(newName) => {
+                        chrome.runtime.sendMessage({
+                          type: 'RENAME_TASK',
+                          taskId: task.id,
+                          name: newName
+                        }).catch(() => { });
+                      }}
+                      onAIName={() => {
+                        chrome.runtime.sendMessage({
+                          type: 'AI_NAME_TASK',
+                          taskId: task.id
+                        }).catch(() => { });
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Grouped by Domain Section (only when task view is disabled) */}
+            {!taskViewEnabled && partitionedTabs.hasGroups && (
               <div>
                 <h3 style={{
                   fontSize: 'var(--font-2xl, 20px)',
@@ -614,8 +829,8 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 3. Recent (Ungrouped) Section */}
-            {partitionedTabs.recent.length > 0 && (
+            {/* 5. Recent (Ungrouped) Section - only when task view is disabled */}
+            {!taskViewEnabled && partitionedTabs.recent.length > 0 && (
               <div>
                 <h3 style={{
                   fontSize: 'var(--font-2xl, 20px)',
@@ -649,8 +864,8 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 4. Other Tabs Section */}
-            {partitionedTabs.others.length > 0 && (
+            {/* 6. Other Tabs Section - only when task view is disabled */}
+            {!taskViewEnabled && partitionedTabs.others.length > 0 && (
               <div>
                 <h3 style={{
                   fontSize: 'var(--font-2xl, 20px)',

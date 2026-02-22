@@ -3,6 +3,7 @@ import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComme
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
+import * as LocalAI from '../services/localAIService';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
 import { enrichRunningAppsWithIcons, getFaviconUrl } from '../utils/helpers';
 import './GlobalSpotlight.css';
@@ -136,6 +137,14 @@ export function GlobalSpotlight() {
     const containerRef = useRef(null);
 
     const [contextItems, setContextItems] = useState([]);
+
+    // AI/Model command states
+    const [commandMode, setCommandMode] = useState(null); // null, 'ai', 'model'
+    const [aiMessages, setAiMessages] = useState([]);
+    const [isAiLoading, setIsAiLoading] = useState(false);
+    const [isModelLoading, setIsModelLoading] = useState(false);
+    const [availableModels, setAvailableModels] = useState([]);
+    const [currentModel, setCurrentModel] = useState(null);
 
     // Track search request ID to handle race conditions
     const searchIdRef = useRef(0);
@@ -351,10 +360,175 @@ export function GlobalSpotlight() {
     };
 
     // ==========================================
+    // COMMAND MODE DETECTION (/ai, /model)
+    // ==========================================
+    useEffect(() => {
+        const trimmedQuery = query.trim().toLowerCase();
+
+        // Detect /ai command
+        if (trimmedQuery === '/ai' || trimmedQuery.startsWith('/ai ')) {
+            if (commandMode !== 'ai') {
+                setCommandMode('ai');
+                setResults([]);
+            }
+            return;
+        }
+
+        // Detect /model command
+        if (trimmedQuery === '/model' || trimmedQuery.startsWith('/model ')) {
+            if (commandMode !== 'model') {
+                setCommandMode('model');
+                setResults([]);
+                // Fetch available models
+                fetchAvailableModels();
+            }
+            return;
+        }
+
+        // Clear command mode if not a command
+        if (commandMode) {
+            setCommandMode(null);
+            setAiMessages([]);
+        }
+    }, [query]);
+
+    // Fetch available models for /model command
+    const fetchAvailableModels = async () => {
+        try {
+            const isAvailable = await LocalAI.isAvailable();
+            if (!isAvailable) {
+                setAvailableModels([{
+                    name: 'error',
+                    title: 'Desktop App Not Running',
+                    description: 'Please start the CoolDesk desktop app to use AI',
+                    disabled: true
+                }]);
+                return;
+            }
+
+            const status = await LocalAI.getStatus();
+            setCurrentModel(status.currentModel || null);
+
+            const modelsResult = await LocalAI.getModels();
+            const modelFilenames = Object.keys(modelsResult || {}).filter(
+                name => modelsResult[name]?.downloaded
+            );
+
+            if (modelFilenames.length === 0) {
+                setAvailableModels([{
+                    name: 'error',
+                    title: 'No Models Downloaded',
+                    description: 'Go to Settings → Local AI to download models',
+                    disabled: true
+                }]);
+                return;
+            }
+
+            const models = modelFilenames.map(name => {
+                const modelInfo = modelsResult[name];
+                const isLoaded = status.currentModel === name;
+                return {
+                    name,
+                    title: modelInfo?.displayName || name,
+                    description: isLoaded ? '✓ Currently loaded' : `Click to load • ${modelInfo?.size || ''}`,
+                    isLoaded,
+                    disabled: false
+                };
+            }).sort((a, b) => {
+                if (a.isLoaded && !b.isLoaded) return -1;
+                if (!a.isLoaded && b.isLoaded) return 1;
+                return 0;
+            });
+
+            setAvailableModels(models);
+        } catch (error) {
+            console.error('[Spotlight] Failed to fetch models:', error);
+            setAvailableModels([{
+                name: 'error',
+                title: 'Error Loading Models',
+                description: error.message || 'Failed to connect to AI service',
+                disabled: true
+            }]);
+        }
+    };
+
+    // Load a model
+    const loadModel = async (modelName) => {
+        if (isModelLoading) return;
+
+        try {
+            setIsModelLoading(true);
+            await LocalAI.loadModel(modelName);
+            setCurrentModel(modelName);
+            // Refresh the list
+            await fetchAvailableModels();
+            // Show success briefly then close
+            setTimeout(() => {
+                handleClose();
+            }, 500);
+        } catch (error) {
+            console.error('[Spotlight] Failed to load model:', error);
+        } finally {
+            setIsModelLoading(false);
+        }
+    };
+
+    // Send AI message
+    const sendAiMessage = async (prompt) => {
+        if (!prompt.trim() || isAiLoading) return;
+
+        const userMessage = { role: 'user', content: prompt };
+        setAiMessages(prev => [...prev, userMessage]);
+        setIsAiLoading(true);
+
+        try {
+            const isAvailable = await LocalAI.isAvailable();
+            if (!isAvailable) {
+                setAiMessages(prev => [...prev, {
+                    role: 'error',
+                    content: 'Local AI not available. Ensure the CoolDesk desktop app is running.'
+                }]);
+                setIsAiLoading(false);
+                return;
+            }
+
+            // Check if model is loaded
+            const status = await LocalAI.getStatus();
+            if (!status.modelLoaded) {
+                setAiMessages(prev => [...prev, {
+                    role: 'system',
+                    content: 'No model loaded. Use /model to select one first.'
+                }]);
+                setIsAiLoading(false);
+                return;
+            }
+
+            const response = await LocalAI.chat(prompt);
+            setAiMessages(prev => [...prev, {
+                role: 'assistant',
+                content: response || 'No response received'
+            }]);
+        } catch (error) {
+            console.error('[Spotlight] AI chat error:', error);
+            setAiMessages(prev => [...prev, {
+                role: 'error',
+                content: error.message || 'Failed to get response'
+            }]);
+        } finally {
+            setIsAiLoading(false);
+        }
+    };
+
+    // ==========================================
     // OPTIMIZED SEARCH with caching & race handling
     // ==========================================
     useEffect(() => {
         const trimmedQuery = query.trim();
+
+        // Skip search if in command mode
+        if (commandMode) {
+            return;
+        }
 
         if (!trimmedQuery) {
             setResults([]);
@@ -436,10 +610,66 @@ export function GlobalSpotlight() {
         }, debounceMs);
 
         return () => clearTimeout(timeoutId);
-    }, [query, deepSearch]);
+    }, [query, deepSearch, commandMode]);
 
     // Handle Keyboard Navigation
     const handleKeyDown = (e) => {
+        // Handle command modes first
+        if (commandMode === 'ai') {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const prompt = query.replace(/^\/ai\s*/i, '').trim();
+                if (prompt) {
+                    sendAiMessage(prompt);
+                    setQuery('/ai '); // Reset to just the command
+                }
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setCommandMode(null);
+                setAiMessages([]);
+                setQuery('');
+                return;
+            }
+            return; // Don't process other keys in AI mode
+        }
+
+        if (commandMode === 'model') {
+            const filterQuery = query.replace(/^\/model\s*/i, '').trim().toLowerCase();
+            const filteredModels = availableModels.filter(m =>
+                !m.disabled && m.title.toLowerCase().includes(filterQuery)
+            );
+
+            if (e.key === 'ArrowDown' && filteredModels.length > 0) {
+                e.preventDefault();
+                setSelectedIndex(prev => (prev + 1) % filteredModels.length);
+                return;
+            }
+            if (e.key === 'ArrowUp' && filteredModels.length > 0) {
+                e.preventDefault();
+                setSelectedIndex(prev => prev <= 0 ? filteredModels.length - 1 : prev - 1);
+                return;
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const modelToLoad = selectedIndex >= 0 ? filteredModels[selectedIndex] : filteredModels[0];
+                if (modelToLoad && !modelToLoad.disabled && !modelToLoad.isLoaded) {
+                    loadModel(modelToLoad.name);
+                } else if (modelToLoad?.isLoaded) {
+                    handleClose(); // Already loaded, just close
+                }
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setCommandMode(null);
+                setQuery('');
+                return;
+            }
+            return;
+        }
+
         const isSearching = !!query.trim();
 
         // Build complete navigable list depending on state
@@ -760,8 +990,93 @@ export function GlobalSpotlight() {
                     </button>
                 </div>
 
+                {/* AI Chat Mode */}
+                {commandMode === 'ai' && (
+                    <div className="spotlight-ai-mode">
+                        <div className="spotlight-ai-header">
+                            <FontAwesomeIcon icon={faRobot} style={{ color: '#A78BFA' }} />
+                            <span>AI Chat</span>
+                            {isAiLoading && (
+                                <div style={{ width: 14, height: 14, border: '2px solid rgba(139, 92, 246, 0.3)', borderTopColor: '#A78BFA', borderRadius: '50%', animation: 'spin 1s linear infinite', marginLeft: 'auto' }} />
+                            )}
+                        </div>
+                        <div className="spotlight-ai-messages">
+                            {aiMessages.length === 0 && (
+                                <div className="spotlight-ai-hint">
+                                    Type your message and press Enter to chat with AI
+                                </div>
+                            )}
+                            {aiMessages.map((msg, idx) => (
+                                <div key={idx} className={`spotlight-ai-message ${msg.role}`}>
+                                    <div className="message-avatar">
+                                        {msg.role === 'user' ? '👤' : msg.role === 'error' ? '⚠️' : '🤖'}
+                                    </div>
+                                    <div className="message-content">{msg.content}</div>
+                                </div>
+                            ))}
+                            {isAiLoading && (
+                                <div className="spotlight-ai-message assistant loading">
+                                    <div className="message-avatar">🤖</div>
+                                    <div className="message-content">
+                                        <span className="typing-indicator">
+                                            <span></span><span></span><span></span>
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Model Selection Mode */}
+                {commandMode === 'model' && (
+                    <div className="spotlight-model-mode">
+                        <div className="spotlight-model-header">
+                            <FontAwesomeIcon icon={faRobot} style={{ color: '#A78BFA' }} />
+                            <span>Select AI Model</span>
+                            {isModelLoading && (
+                                <div style={{ width: 14, height: 14, border: '2px solid rgba(139, 92, 246, 0.3)', borderTopColor: '#A78BFA', borderRadius: '50%', animation: 'spin 1s linear infinite', marginLeft: 'auto' }} />
+                            )}
+                        </div>
+                        <div className="spotlight-model-list">
+                            {availableModels.length === 0 && (
+                                <div className="spotlight-model-loading">
+                                    <div style={{ width: 20, height: 20, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                                    <span>Loading models...</span>
+                                </div>
+                            )}
+                            {availableModels
+                                .filter(m => {
+                                    const filterQuery = query.replace(/^\/model\s*/i, '').trim().toLowerCase();
+                                    return m.title.toLowerCase().includes(filterQuery);
+                                })
+                                .map((model, idx) => (
+                                    <div
+                                        key={model.name}
+                                        className={`spotlight-model-item ${idx === selectedIndex ? 'selected' : ''} ${model.isLoaded ? 'loaded' : ''} ${model.disabled ? 'disabled' : ''} ${isModelLoading ? 'loading' : ''}`}
+                                        onClick={() => !model.disabled && !model.isLoaded && !isModelLoading && loadModel(model.name)}
+                                        onMouseEnter={() => setSelectedIndex(idx)}
+                                    >
+                                        <div className="model-icon">
+                                            {isModelLoading && idx === selectedIndex ? (
+                                                <div style={{ width: 18, height: 18, border: '2px solid rgba(139, 92, 246, 0.3)', borderTopColor: '#A78BFA', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                                            ) : (
+                                                <FontAwesomeIcon icon={faRobot} />
+                                            )}
+                                        </div>
+                                        <div className="model-info">
+                                            <span className="model-title">{model.title}</span>
+                                            <span className="model-desc">{model.description}</span>
+                                        </div>
+                                        {model.isLoaded && <span className="model-badge">Active</span>}
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* Recommendations Section - Shows when query is empty */}
-                {!query.trim() && contextItems.length > 0 && (
+                {!query.trim() && !commandMode && contextItems.length > 0 && (
                     <div className="spotlight-context">
                         <div className="spotlight-pins-header">
                             <span className="spotlight-pins-title">Suggestions</span>
@@ -784,7 +1099,7 @@ export function GlobalSpotlight() {
                 )}
 
                 {/* Pinned Section - Only visible when NOT searching */}
-                {!query.trim() && (
+                {!query.trim() && !commandMode && (
                     <div className="spotlight-pins">
                         <div className="spotlight-pins-header">
                             <span className="spotlight-pins-title">Pinned Quick Access</span>
@@ -815,7 +1130,7 @@ export function GlobalSpotlight() {
                 )}
 
                 {/* Results - Limited to 10 visible for performance */}
-                {results.length > 0 && (
+                {results.length > 0 && !commandMode && (
                     <div className="spotlight-results">
                         {results.slice(0, 10).map((item, index) => (
                             <ResultItem

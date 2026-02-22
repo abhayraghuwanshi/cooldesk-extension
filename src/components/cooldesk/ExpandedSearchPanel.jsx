@@ -183,31 +183,76 @@ export const ExpandedSearchPanel = React.memo(function ExpandedSearchPanel({
                     }}>
                         {suggestions.map((suggestion, idx) => {
                             const isSelected = selectedIndex === idx;
+                            const isLoading = suggestion.isLoading;
+                            const isDisabled = suggestion.disabled;
+
                             return (
                                 <div
                                     key={idx}
-                                    onMouseEnter={() => onHover?.(idx)}
-                                    onClick={() => onSelect?.(suggestion, idx)}
+                                    onMouseEnter={() => !isDisabled && onHover?.(idx)}
+                                    onClick={() => !isDisabled && onSelect?.(suggestion, idx)}
                                     style={{
                                         padding: '12px',
                                         borderRadius: '8px',
-                                        cursor: 'pointer',
-                                        background: isSelected ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
-                                        border: isSelected ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid rgba(255,255,255,0.06)',
-                                        transition: 'all 0.1s ease'
+                                        cursor: isDisabled ? 'default' : 'pointer',
+                                        background: isLoading
+                                            ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%)'
+                                            : isSelected
+                                                ? 'rgba(139, 92, 246, 0.15)'
+                                                : 'rgba(255,255,255,0.03)',
+                                        border: isLoading
+                                            ? '1px solid rgba(139, 92, 246, 0.4)'
+                                            : isSelected
+                                                ? '1px solid rgba(139, 92, 246, 0.3)'
+                                                : '1px solid rgba(255,255,255,0.06)',
+                                        transition: 'all 0.1s ease',
+                                        opacity: isDisabled && !isLoading ? 0.6 : 1,
+                                        position: 'relative',
+                                        overflow: 'hidden'
                                     }}
                                 >
-                                    <div style={{ fontSize: '18px', marginBottom: '6px' }}>
-                                        {suggestion.icon ? (
+                                    {/* Loading shimmer effect */}
+                                    {isLoading && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: '-100%',
+                                            width: '100%',
+                                            height: '100%',
+                                            background: 'linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.1), transparent)',
+                                            animation: 'shimmer 1.5s ease-in-out infinite'
+                                        }} />
+                                    )}
+                                    <div style={{ fontSize: '18px', marginBottom: '6px', position: 'relative' }}>
+                                        {isLoading ? (
+                                            <div style={{
+                                                width: '24px',
+                                                height: '24px',
+                                                border: '2px solid rgba(139, 92, 246, 0.3)',
+                                                borderTopColor: '#A78BFA',
+                                                borderRadius: '50%',
+                                                animation: 'spin 1s linear infinite'
+                                            }} />
+                                        ) : suggestion.icon ? (
                                             typeof suggestion.icon === 'object' ?
                                                 <FontAwesomeIcon icon={suggestion.icon} style={{ fontSize: '18px', color: '#A78BFA' }} /> :
                                                 suggestion.icon
                                         ) : '✨'}
                                     </div>
-                                    <div style={{ fontSize: '12px', fontWeight: 500, color: '#E2E8F0', marginBottom: '2px' }}>
+                                    <div style={{
+                                        fontSize: '12px',
+                                        fontWeight: 500,
+                                        color: isLoading ? '#C4B5FD' : '#E2E8F0',
+                                        marginBottom: '2px',
+                                        position: 'relative'
+                                    }}>
                                         {suggestion.title || suggestion.command}
                                     </div>
-                                    <div style={{ fontSize: '10px', color: '#64748B' }}>
+                                    <div style={{
+                                        fontSize: '10px',
+                                        color: isLoading ? '#A78BFA' : '#64748B',
+                                        position: 'relative'
+                                    }}>
                                         {suggestion.description}
                                     </div>
                                 </div>
