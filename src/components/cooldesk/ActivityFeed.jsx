@@ -8,7 +8,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import scrapperConfig from '../../data/scrapper.json';
-import { getTimeSeriesDataRange, listScrapedChats } from '../../db/index.js';
+import { getTimeSeriesDataRange, listScrapedChats, listPins } from '../../db/index.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import '../../styles/cooldesk.css';
 import { enrichRunningAppsWithIcons, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
@@ -125,19 +125,19 @@ export function ActivityFeed() {
     // Load Most Visited (Quick Access) - memoized
     const loadQuickLinks = useCallback(async () => {
         try {
-            // Priority: UI State -> Chrome History
-            const { getUIState } = await import('../../db/index.js');
-            const ui = await getUIState();
+            // Priority: Pins (synced) -> Chrome History
+            const pins = await listPins({ limit: 12 });
 
             let urls = [];
 
-            if (ui?.quickUrls?.length > 0) {
-                urls = ui.quickUrls.map((url, idx) => ({
-                    id: `saved_${idx}`,
-                    title: new URL(url).hostname,
-                    url: url,
+            if (pins && pins.length > 0) {
+                urls = pins.map((pin) => ({
+                    id: pin.id || pin.url,
+                    title: pin.title || new URL(pin.url).hostname,
+                    url: pin.url,
                     type: 'link',
-                    hostname: new URL(url).hostname.replace('www.', '')
+                    favicon: pin.favicon,
+                    hostname: new URL(pin.url).hostname.replace('www.', '')
                 }));
             } else if (typeof chrome !== 'undefined' && chrome.history && chrome.history.search) {
                 const results = await chrome.history.search({
@@ -295,6 +295,23 @@ export function ActivityFeed() {
             bc.close();
         };
     }, [loadFeed]);
+
+    // Effect: Listen for pins DB changes (for favorites/quick links sync)
+    useEffect(() => {
+        const bc = new BroadcastChannel('ws_db_changes');
+        bc.onmessage = (event) => {
+            if (event.data && event.data.type === 'pinsChanged') {
+                // Refresh quick links when pins change
+                loadQuickLinks().then(links => {
+                    setQuickLinks(links);
+                });
+            }
+        };
+
+        return () => {
+            bc.close();
+        };
+    }, [loadQuickLinks]);
 
     // Throttled update handler (2000ms delay to reduce memory pressure from frequent tab events)
     // Use useRef to maintain a stable reference that won't cause listener leaks

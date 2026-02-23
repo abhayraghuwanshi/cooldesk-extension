@@ -145,8 +145,13 @@ pub struct UrlNote {
 pub struct Pin {
     pub id: String,
     pub url: String,
+    #[serde(default)]
     pub title: Option<String>,
+    #[serde(default)]
+    pub favicon: Option<String>,
+    #[serde(default)]
     pub created_at: Option<i64>,
+    #[serde(default)]
     pub updated_at: Option<i64>,
 }
 
