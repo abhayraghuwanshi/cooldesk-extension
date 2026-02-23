@@ -219,8 +219,9 @@ export function GlobalSpotlight() {
             const recommendations = [];
             const usedIds = new Set();
 
-            // System apps to filter out
-            const systemApps = ['svchost', 'csrss', 'system', 'registry', 'service', 'runtime', 'host', 'helper', 'background', 'agent'];
+            // System apps and browsers to filter out (tabs are shown separately)
+            const systemApps = ['svchost', 'csrss', 'system', 'registry', 'service', 'runtime', 'host', 'helper', 'background', 'agent',
+                'chrome', 'msedge', 'firefox', 'brave', 'opera', 'vivaldi', 'safari', 'iexplore', 'chromium'];
 
             // 1. Running Apps (top priority - what user is actively using)
             // Enrich with icons from installed apps, then filter
@@ -812,41 +813,23 @@ export function GlobalSpotlight() {
         // For tabs, switch to the existing tab instead of opening new
         if (item.type === 'tab') {
             try {
-                // For pinned tabs, the tabId might be stale - try to find by URL first
-                if (item.url && window.electronAPI?.sendMessage) {
-                    const tabsResponse = await window.electronAPI.sendMessage({
-                        type: 'SEARCH_TABS',
-                        query: ''  // Get all tabs
-                    });
-
-                    // Find a tab matching this URL
-                    const matchingTab = tabsResponse?.results?.find(tab =>
-                        tab.url === item.url ||
-                        tab.url?.replace(/\/$/, '') === item.url?.replace(/\/$/, '')
-                    );
-
-                    if (matchingTab && matchingTab.tabId) {
-                        // Found matching tab - jump to it
-                        if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-                            chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: matchingTab.tabId });
-                        } else if (window.electronAPI?.sendMessage) {
-                            await window.electronAPI.sendMessage({ type: 'JUMP_TO_TAB', tabId: matchingTab.tabId });
-                        }
-                        return;
-                    }
-                }
-
-                // Fallback: use stored tabId if available
-                if (item.tabId) {
+                const tabId = item.tabId || item.id;
+                if (tabId) {
+                    // Fire-and-forget — spotlight is already closing
                     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-                        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId });
+                        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId });
                     } else if (window.electronAPI?.sendMessage) {
-                        await window.electronAPI.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId });
+                        // Pass _deviceId so shim can focus the correct browser directly
+                        window.electronAPI.sendMessage({
+                            type: 'JUMP_TO_TAB',
+                            tabId,
+                            _deviceId: item._deviceId
+                        });
                     }
                     return;
                 }
 
-                // Tab not found - open URL in browser
+                // No tabId — open URL in browser as fallback
                 if (item.url) {
                     if (window.electronAPI?.openExternal) {
                         window.electronAPI.openExternal(item.url);

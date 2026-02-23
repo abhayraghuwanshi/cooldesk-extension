@@ -8,6 +8,7 @@ import categoryManager from '../data/categories.js';
 import { addUrlToWorkspace, getUrlRecord, listWorkspaces, saveWorkspace, upsertUrl } from '../db/index.js';
 import { NanoAIService } from '../services/nanoAIService.js';
 import GenericUrlParser from './GenericUrlParser.js';
+import { getBaseDomainFromUrl } from './helpers.js';
 
 // --- State Management ---
 // Cache of known workspace domains/IDs to avoid DB lookups
@@ -63,7 +64,24 @@ const SKIP_URL_PATTERNS = [
   // Local development
   /^https?:\/\/localhost/i,
   /^https?:\/\/127\.0\.0\.1/i,
-  /^https?:\/\/0\.0\.0\.0/i
+  /^https?:\/\/0\.0\.0\.0/i,
+  // Cloudflare challenge pages
+  /__cf_chl/i,
+  /\/cdn-cgi\//i,
+  // URL shorteners (redirect, not real content)
+  /^https?:\/\/(t\.co|bit\.ly|goo\.gl|tinyurl\.com|ow\.ly|is\.gd|buff\.ly)\//i,
+  // Auth success/callback pages
+  /\/auth-success/i,
+  /\/auth\/callback/i,
+  /\/sso\//i,
+  // Bare search engine homepages (no meaningful path)
+  /^https?:\/\/(www\.)?(google|bing)\.[a-z.]+\/?$/i,
+  /^https?:\/\/(www\.)?(google|bing)\.[a-z.]+\/\?[^/]*$/i,
+  // Session/token/state URLs
+  /[?&](state|code|token|nonce|session)=/i,
+  // Rewards/loyalty pages
+  /rewards\.bing\.com/i,
+  /rewards\.microsoft\.com/i
 ];
 
 /**
@@ -421,6 +439,24 @@ export function setupRealTimeCategorizor() {
 
       if (workspaceCache.has(workspaceKey)) {
         const existingId = workspaceCache.get(workspaceKey);
+
+        // Domain-level dedup: check if this base domain already exists
+        const baseDomain = getBaseDomainFromUrl(urlToStore);
+        try {
+          const { getWorkspace } = await import('../db/index.js');
+          const ws = await getWorkspace(existingId);
+          if (ws?.urls?.some(u => {
+            try { return getBaseDomainFromUrl(u.url) === baseDomain; }
+            catch { return false; }
+          })) {
+            // Domain already tracked in this workspace, skip
+            return;
+          }
+        } catch (e) {
+          // If workspace lookup fails, proceed with adding
+          console.warn('[RealTime] Dedup check failed, proceeding:', e);
+        }
+
         console.log(`[RealTime] ➕ Adding to existing workspace: "${workspaceName}" (${existingId})`);
 
         await addUrlToWorkspace(urlToStore, existingId, {

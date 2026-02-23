@@ -237,27 +237,28 @@ const electronAPI = {
         if (msg?.type === 'JUMP_TO_TAB') {
             console.log('[Shim] JUMP_TO_TAB requested:', msg.tabId);
             try {
-                await fetch(`${SIDECAR_URL}/cmd/jump-to-tab`, {
+                // Fire-and-forget: sidecar broadcasts to browser extensions for chrome.tabs.update
+                fetch(`${SIDECAR_URL}/cmd/jump-to-tab`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tabId: msg.tabId, windowId: msg.windowId })
-                });
+                }).catch(() => { });
 
-                // Hide spotlight first
-                try { await invoke('hide_spotlight'); } catch (e) { await invoke('toggle_spotlight'); }
+                // Hide spotlight immediately
+                invoke('hide_spotlight').catch(() => invoke('toggle_spotlight').catch(() => { }));
 
-                // Attempt to focus likely browser processes as a fallback
-                // Since we don't know the exact PID, we try common browsers
-                // The AppFocus tool (via focus_window) will try to find a window for these processes
-                // yielding focus to the first one it finds.
-                // It's a heuristic but better than no focus.
-                try {
-                    // Try generic browser names
-                    await invoke('focus_window', { pid: 0, name: 'chrome' });
-                    await invoke('focus_window', { pid: 0, name: 'msedge' });
-                    await invoke('focus_window', { pid: 0, name: 'brave' });
-                    await invoke('focus_window', { pid: 0, name: 'firefox' });
-                } catch (ignore) { }
+                // Focus the correct browser using _deviceId (e.g. "chrome-abc123" → "chrome")
+                if (msg._deviceId) {
+                    const browserKey = msg._deviceId.split('-')[0];
+                    const processMap = {
+                        chrome: 'chrome', edge: 'msedge', brave: 'brave',
+                        firefox: 'firefox', opera: 'opera', vivaldi: 'vivaldi'
+                    };
+                    const processName = processMap[browserKey];
+                    if (processName) {
+                        invoke('focus_window', { pid: 0, name: processName }).catch(() => { });
+                    }
+                }
 
                 return { success: true };
             } catch (e) {
