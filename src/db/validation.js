@@ -386,12 +386,12 @@ export const VALIDATION_SCHEMAS = {
             [ValidationRules.MAX_LENGTH]: 100
         },
         visitCountThreshold: {
-            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.TYPE]: ['number', 'string'], // Allow both - empty string or number
             [ValidationRules.MIN_VALUE]: 1,
             [ValidationRules.MAX_VALUE]: 1000
         },
         historyDays: {
-            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.TYPE]: ['number', 'string'], // Allow both - empty string or number
             [ValidationRules.MAX_VALUE]: 365
         },
         updatedAt: {
@@ -683,12 +683,14 @@ function validateField(fieldName, value, rules, context = {}) {
 
     // Type check
     if (rules[ValidationRules.TYPE]) {
-        const expectedType = rules[ValidationRules.TYPE]
+        const expectedTypes = Array.isArray(rules[ValidationRules.TYPE])
+            ? rules[ValidationRules.TYPE]
+            : [rules[ValidationRules.TYPE]]
         const actualType = Array.isArray(value) ? 'array' : typeof value
 
-        if (actualType !== expectedType) {
+        if (!expectedTypes.includes(actualType)) {
             errors.push(new ValidationError(
-                `Field '${fieldName}' must be of type '${expectedType}', got '${actualType}'`,
+                `Field '${fieldName}' must be of type '${expectedTypes.join(' or ')}', got '${actualType}'`,
                 fieldName,
                 value
             ))

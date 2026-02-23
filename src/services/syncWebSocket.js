@@ -14,6 +14,7 @@ class SyncWebSocket {
         this.listeners = new Map();
         this.connectionPromise = null;
         this.isConnecting = false;
+        this.clientId = null; // Set by server on connect
     }
 
     /**
@@ -106,9 +107,24 @@ class SyncWebSocket {
      * @param {object} data
      */
     handleMessage(data) {
-        const { type, payload, timestamp } = data;
+        const { type, payload, timestamp, clientId } = data;
 
-        console.log('[SyncWS] Message received:', type);
+        // Capture clientId from server's welcome/sync-state message
+        if (clientId && !clientId.startsWith('exclude:') && !this.clientId) {
+            this.clientId = clientId;
+            console.log('[SyncWS] Client ID assigned:', clientId);
+        }
+
+        // Check if this message should be excluded for this client (sender exclusion)
+        if (clientId && clientId.startsWith('exclude:')) {
+            const excludedClient = clientId.substring(8); // Remove "exclude:" prefix
+            if (excludedClient === this.clientId) {
+                // console.log('[SyncWS] Skipping message (sender exclusion):', type);
+                return; // Skip this message - we sent it
+            }
+        }
+
+        // console.log('[SyncWS] Message received:', type);
 
         switch (type) {
             case 'sync-state':
@@ -181,7 +197,13 @@ class SyncWebSocket {
         }
 
         try {
-            this.ws.send(JSON.stringify({ type, payload, timestamp: Date.now() }));
+            // Include clientId so server can exclude sender from broadcast
+            this.ws.send(JSON.stringify({
+                type,
+                payload,
+                timestamp: Date.now(),
+                clientId: this.clientId
+            }));
             return true;
         } catch (e) {
             console.error('[SyncWS] Send failed:', e);

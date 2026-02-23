@@ -5,6 +5,15 @@ import { memo, useState } from 'react';
 import { getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 const ICON_COLORS = ['blue', 'orange', 'brown', 'green', 'purple'];
 
+// Browser color scheme for visual distinction
+const BROWSER_COLORS = {
+  chrome: { color: '#4285F4', bg: 'rgba(66, 133, 244, 0.15)', border: 'rgba(66, 133, 244, 0.4)' },
+  edge: { color: '#0078D4', bg: 'rgba(0, 120, 212, 0.15)', border: 'rgba(0, 120, 212, 0.4)' },
+  firefox: { color: '#FF7139', bg: 'rgba(255, 113, 57, 0.15)', border: 'rgba(255, 113, 57, 0.4)' },
+  safari: { color: '#006CFF', bg: 'rgba(0, 108, 255, 0.15)', border: 'rgba(0, 108, 255, 0.4)' },
+  other: { color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.4)' }
+};
+
 /**
  * Format a timestamp as relative time (e.g., "2m ago", "1h ago", "3d ago")
  */
@@ -93,11 +102,12 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
 
   if (!tab) return null;
 
-  const { url, title, favIconUrl } = tab;
+  const { url, title, favIconUrl, browser } = tab;
   const hostname = url ? safeGetHostname(url) : 'Unknown';
   const colorClass = ICON_COLORS[Math.abs(hostname.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
   const faviconUrl = favIconUrl || getFaviconUrl(url, 16);
   const relativeTime = formatRelativeTime(lastAccessedAt);
+  const browserStyle = BROWSER_COLORS[browser] || BROWSER_COLORS.other;
 
   const handleCardClick = () => {
     onClick?.(tab);
@@ -154,7 +164,15 @@ export const TabCard = memo(function TabCard({ tab, onClick, onClose, onPin, isP
   };
 
   return (
-    <div className={`cooldesk-tab-card ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''} ${isLastActive ? 'last-active' : ''}`} onClick={handleCardClick}>
+    <div
+      className={`cooldesk-tab-card ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''} ${isLastActive ? 'last-active' : ''}`}
+      onClick={handleCardClick}
+      style={{
+        borderLeftWidth: browser ? '3px' : undefined,
+        borderLeftStyle: browser ? 'solid' : undefined,
+        borderLeftColor: browser ? browserStyle.color : undefined
+      }}
+    >
       {/* Last active indicator badge */}
       {isLastActive && !isActive && (
         <div className="tab-recent-badge" title="Most recently used">

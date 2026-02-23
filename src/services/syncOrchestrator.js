@@ -80,6 +80,9 @@ class SyncOrchestrator {
         this.lastSyncTime = {};
         this.lastPushTime = {}; // Track when we last pushed each data type
         this.lastPushHash = {}; // Track hash of last pushed data to skip unchanged
+        this.lastReceivedHash = {}; // Track hash of last received data to skip unchanged
+        this.lastFullSyncTime = 0; // Track when we last did a full sync
+        this.lastDeltaSyncTimestamp = {}; // Track last sync timestamp per data type for delta sync
         this.listeners = new Set();
         this.initialized = false;
         this.syncInterval = null;
@@ -88,6 +91,8 @@ class SyncOrchestrator {
         this.wsEventUnsubscribers = []; // Store WebSocket unsubscribe functions
         this.dbChannels = []; // Store BroadcastChannel references
         this.PUSH_DEBOUNCE_MS = 5000; // Minimum time between pushes of same type (5s to prevent sync loops)
+        this.FULL_SYNC_DEBOUNCE_MS = 30000; // Minimum 30s between full syncs
+        this.USE_DELTA_SYNC = true; // Enable delta sync for efficiency
     }
 
     /**
@@ -104,6 +109,77 @@ class SyncOrchestrator {
 
         this.lastPushHash[type] = currentHash;
         return true; // Changed
+    }
+
+    /**
+     * Check if received data has changed since last receive
+     * @returns {boolean} true if data changed, false if identical
+     */
+    hasReceivedDataChanged(type, data) {
+        const currentHash = simpleHash(data);
+        const lastHash = this.lastReceivedHash[type];
+
+        if (currentHash === lastHash) {
+            return false; // No change, skip processing
+        }
+
+        this.lastReceivedHash[type] = currentHash;
+        return true; // Changed
+    }
+
+    /**
+     * Filter items that changed since last sync (for delta sync)
+     * @param {Array} items - All items
+     * @param {string} type - Data type for timestamp tracking
+     * @returns {Array} Items that changed since last sync
+     */
+    getChangedItems(items, type) {
+        if (!this.USE_DELTA_SYNC || !Array.isArray(items)) {
+            return items; // Fall back to full sync
+        }
+
+        const lastSync = this.lastDeltaSyncTimestamp[type] || 0;
+        const changed = items.filter(item => {
+            const itemTime = item.updatedAt || item.createdAt || item.scrapedAt || 0;
+            return itemTime > lastSync;
+        });
+
+        // Update last sync timestamp to now
+        this.lastDeltaSyncTimestamp[type] = Date.now();
+
+        // If nothing changed, return empty array (skip sync)
+        // If more than 50% changed, send all (might as well do full sync)
+        if (changed.length === 0) {
+            return []; // Nothing to sync
+        }
+        if (changed.length > items.length * 0.5) {
+            return items; // Too many changes, send full
+        }
+
+        console.log(`[SyncOrchestrator] Delta sync ${type}: ${changed.length}/${items.length} changed`);
+        return changed;
+    }
+
+    /**
+     * Update local timestamp after receiving remote data
+     */
+    updateDeltaTimestamp(type, items) {
+        if (!Array.isArray(items) || items.length === 0) return;
+
+        // Find the most recent timestamp in received items
+        let maxTime = 0;
+        for (const item of items) {
+            const itemTime = item.updatedAt || item.createdAt || item.scrapedAt || 0;
+            if (itemTime > maxTime) maxTime = itemTime;
+        }
+
+        // Update our sync timestamp
+        if (maxTime > 0) {
+            this.lastDeltaSyncTimestamp[type] = Math.max(
+                this.lastDeltaSyncTimestamp[type] || 0,
+                maxTime
+            );
+        }
     }
 
     /**
@@ -279,16 +355,19 @@ class SyncOrchestrator {
             if (isExtension()) {
                 console.log('[SyncOrchestrator] Pushing tabs FIRST (highest priority)...');
                 this.syncLocalTabs(); // Tabs first!
-
-                // Retry tab sync after short delays to ensure it completes
-                // (service worker may suspend before first sync finishes)
-                setTimeout(() => this.syncLocalTabs(), 1000);
-                setTimeout(() => this.syncLocalTabs(), 3000);
+                // Removed redundant 1s/3s retries - they cause excessive sync traffic
             }
 
             // THEN: Full sync for other data (workspaces, notes, etc.) - runs in background
-            console.log('[SyncOrchestrator] Connection established, starting full sync...');
-            this.fullSync().catch(err => console.error('[SyncOrchestrator] Initial full sync failed:', err));
+            // But ONLY if we haven't synced recently (prevents sync storms on reconnect)
+            const now = Date.now();
+            const timeSinceLastFullSync = now - this.lastFullSyncTime;
+            if (timeSinceLastFullSync > this.FULL_SYNC_DEBOUNCE_MS) {
+                console.log('[SyncOrchestrator] Connection established, starting full sync...');
+                this.fullSync().catch(err => console.error('[SyncOrchestrator] Initial full sync failed:', err));
+            } else {
+                console.log(`[SyncOrchestrator] Skipping full sync (last sync ${Math.round(timeSinceLastFullSync/1000)}s ago)`);
+            }
         }
 
         // Periodic sync as fallback (every 60 seconds - reduced from 30s for performance)
@@ -411,11 +490,19 @@ class SyncOrchestrator {
             switch (type) {
                 case 'workspacesChanged':
                     const workspaces = await listWorkspaces();
-                    await this.pushChanges('workspaces', Array.isArray(workspaces) ? workspaces : []);
+                    const wsArray = Array.isArray(workspaces) ? workspaces : [];
+                    const changedWs = this.getChangedItems(wsArray, 'workspaces');
+                    if (changedWs.length > 0) {
+                        await this.pushChanges('workspaces', changedWs, { delta: true });
+                    }
                     break;
                 case 'pinsChanged':
                     const pins = await listPins();
-                    await this.pushChanges('pins', Array.isArray(pins) ? pins : []);
+                    const pinsArray = Array.isArray(pins) ? pins : [];
+                    const changedPins = this.getChangedItems(pinsArray, 'pins');
+                    if (changedPins.length > 0) {
+                        await this.pushChanges('pins', changedPins, { delta: true });
+                    }
                     break;
                 case 'settingsChanged':
                     const settings = await getSettingsDB();
@@ -427,25 +514,43 @@ class SyncOrchestrator {
                     break;
                 case 'scrapedChatsChanged':
                     const chats = await listScrapedChats();
-                    await this.pushChanges('scraped-chats', Array.isArray(chats) ? chats : []);
+                    const chatsArray = Array.isArray(chats) ? chats : [];
+                    const changedChats = this.getChangedItems(chatsArray, 'scraped-chats');
+                    if (changedChats.length > 0) {
+                        await this.pushChanges('scraped-chats', changedChats, { delta: true });
+                    }
                     break;
                 case 'scrapedConfigsChanged':
                     const configs = await listScrapingConfigs();
-                    await this.pushChanges('scraped-configs', Array.isArray(configs) ? configs : []);
+                    const configsArray = Array.isArray(configs) ? configs : [];
+                    const changedConfigs = this.getChangedItems(configsArray, 'scraped-configs');
+                    if (changedConfigs.length > 0) {
+                        await this.pushChanges('scraped-configs', changedConfigs, { delta: true });
+                    }
                     break;
                 case 'notesChanged':
                     const notes = await listNotes();
-                    await this.pushChanges('notes', Array.isArray(notes) ? notes : []);
+                    const notesArray = Array.isArray(notes) ? notes : [];
+                    const changedNotes = this.getChangedItems(notesArray, 'notes');
+                    if (changedNotes.length > 0) {
+                        await this.pushChanges('notes', changedNotes, { delta: true });
+                    }
                     break;
                 case 'urlNotesChanged':
                     const urlNotes = await listAllUrlNotes();
-                    await this.pushChanges('url-notes', Array.isArray(urlNotes) ? urlNotes : []);
+                    const urlNotesArray = Array.isArray(urlNotes) ? urlNotes : [];
+                    const changedUrlNotes = this.getChangedItems(urlNotesArray, 'url-notes');
+                    if (changedUrlNotes.length > 0) {
+                        await this.pushChanges('url-notes', changedUrlNotes, { delta: true });
+                    }
                     break;
                 case 'dailyMemoryChanged':
-                    // For daily memory, we might want to sync ALL or just the changed one.
-                    // Syncing all for simplicity and consistency
                     const memories = await listDailyMemory();
-                    await this.pushChanges('daily-memory', Array.isArray(memories) ? memories : []);
+                    const memoriesArray = Array.isArray(memories) ? memories : [];
+                    const changedMemories = this.getChangedItems(memoriesArray, 'daily-memory');
+                    if (changedMemories.length > 0) {
+                        await this.pushChanges('daily-memory', changedMemories, { delta: true });
+                    }
                     break;
                 case 'uiStateChanged':
                     const uiState = await getUIState();
@@ -455,6 +560,18 @@ class SyncOrchestrator {
         } catch (e) {
             console.warn(`[SyncOrchestrator] Failed to sync changes for ${type}:`, e);
         }
+    }
+
+    /**
+     * Detect browser type from user agent
+     */
+    detectBrowser() {
+        const ua = navigator.userAgent;
+        if (ua.includes('Edg/')) return 'edge';
+        if (ua.includes('Chrome/')) return 'chrome';
+        if (ua.includes('Firefox/')) return 'firefox';
+        if (ua.includes('Safari/') && !ua.includes('Chrome')) return 'safari';
+        return 'other';
     }
 
     /**
@@ -469,15 +586,18 @@ class SyncOrchestrator {
             const tabs = await chrome.tabs.query({});
             if (!Array.isArray(tabs)) return;
 
+            const browser = this.detectBrowser();
+
             const cleanTabs = tabs
-                .filter(t => t && t.url && !t.url.startsWith('chrome://'))
+                .filter(t => t && t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://'))
                 .map(t => ({
                     id: t.id,
                     url: t.url,
                     title: t.title || '',
                     active: t.active || false,
                     favIconUrl: '', // Skip favicons to reduce payload size
-                    windowId: t.windowId
+                    windowId: t.windowId,
+                    browser: browser
                 }));
 
             // Skip sync if no tabs changed (compare count as quick check)
@@ -500,6 +620,12 @@ class SyncOrchestrator {
      */
     async handleSyncState(data) {
         if (!data) return;
+
+        // Skip if we just processed a sync-state (prevents repeated processing)
+        if (!this.hasReceivedDataChanged('sync-state', data)) {
+            // console.log('[SyncOrchestrator] Skipping sync-state (unchanged)');
+            return;
+        }
 
         try {
             const handlers = {
@@ -529,24 +655,52 @@ class SyncOrchestrator {
 
     /**
      * Generic merge and save helper
+     * Supports delta sync - only saves items that are actually newer
      */
     async handleGenericUpdate(remoteData, listFn, saveFn, type) {
         if (!Array.isArray(remoteData)) return;
+
+        // Skip if we just received identical data (prevents sync loops)
+        if (!this.hasReceivedDataChanged(type, remoteData)) {
+            // console.log(`[SyncOrchestrator] Skipping ${type} update (unchanged)`);
+            return;
+        }
 
         try {
             // Mark this type as recently synced to prevent push-back loops
             this.lastPushTime[type] = Date.now();
 
+            // Update delta sync timestamp based on received data
+            this.updateDeltaTimestamp(type, remoteData);
+
             // Get local data
             const localResult = await listFn();
             const localData = Array.isArray(localResult) ? localResult : (localResult?.data || []);
 
-            // Merge
+            // Merge - only items that are newer will be updated
             const merged = this.mergeData(localData, remoteData, type);
 
-            // Save merged
-            for (const item of merged) {
-                await saveFn(item, { skipNotify: true });
+            // Optimization: Only save items that actually changed
+            // Compare merged count with local - if same and no newer items, skip saves
+            const localIds = new Set(localData.map(item => item.id || item.chatId || item.domain));
+            const newItems = merged.filter(item => {
+                const id = item.id || item.chatId || item.domain;
+                return !localIds.has(id);
+            });
+
+            // Save only new/updated items (not all merged)
+            const itemsToSave = newItems.length > 0 ? merged : [];
+            if (itemsToSave.length > 0 && itemsToSave.length < merged.length * 0.5) {
+                // Less than half changed - only save those
+                console.log(`[SyncOrchestrator] Delta save ${type}: ${newItems.length} new items`);
+                for (const item of newItems) {
+                    await saveFn(item, { skipNotify: true });
+                }
+            } else if (itemsToSave.length > 0) {
+                // Many changes - save all
+                for (const item of merged) {
+                    await saveFn(item, { skipNotify: true });
+                }
             }
 
             this.lastSyncTime[type] = Date.now();
@@ -926,7 +1080,16 @@ class SyncOrchestrator {
             return { ok: false, error: 'Sync in progress' };
         }
 
+        // Check debounce
+        const now = Date.now();
+        const timeSinceLastFullSync = now - this.lastFullSyncTime;
+        if (timeSinceLastFullSync < this.FULL_SYNC_DEBOUNCE_MS) {
+            console.log(`[SyncOrchestrator] Full sync debounced (${Math.round(timeSinceLastFullSync/1000)}s since last)`);
+            return { ok: false, error: 'Sync debounced' };
+        }
+
         this.syncInProgress = true;
+        this.lastFullSyncTime = now;
         this.notifyListeners('sync-start');
 
         try {

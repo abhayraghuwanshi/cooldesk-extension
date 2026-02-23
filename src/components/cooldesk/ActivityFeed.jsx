@@ -9,6 +9,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import scrapperConfig from '../../data/scrapper.json';
 import { getTimeSeriesDataRange, listScrapedChats } from '../../db/index.js';
+import { runningAppsService } from '../../services/runningAppsService.js';
 import '../../styles/cooldesk.css';
 import { enrichRunningAppsWithIcons, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 
@@ -80,37 +81,23 @@ export function ActivityFeed() {
         return () => clearInterval(timer);
     }, []);
 
-    // Fetch running apps and installed apps (Electron only)
+    // Subscribe to running apps (uses centralized service to avoid duplicate API calls)
     useEffect(() => {
         if (!window.electronAPI?.getRunningApps) return;
 
-        const fetchApps = async () => {
-            try {
-                const [running, installed] = await Promise.all([
-                    window.electronAPI.getRunningApps(),
-                    window.electronAPI.getInstalledApps?.() || []
-                ]);
-
-                if (Array.isArray(installed)) {
-                    setInstalledApps(installed);
-                }
-
-                if (Array.isArray(running)) {
-                    // Enrich running apps with icons
-                    const enriched = enrichRunningAppsWithIcons(running, installed);
-                    setRunningApps(enriched);
-                }
-            } catch (error) {
-                console.error('[ActivityFeed] Failed to fetch apps:', error);
+        const unsubscribe = runningAppsService.subscribe(({ runningApps: running, installedApps: installed }) => {
+            if (Array.isArray(installed)) {
+                setInstalledApps(installed);
             }
-        };
 
-        fetchApps();
+            if (Array.isArray(running)) {
+                // Enrich running apps with icons
+                const enriched = enrichRunningAppsWithIcons(running, installed);
+                setRunningApps(enriched);
+            }
+        });
 
-        // Refresh apps periodically (every 15 seconds)
-        const interval = setInterval(fetchApps, 15000);
-
-        return () => clearInterval(interval);
+        return unsubscribe;
     }, []);
 
     // Load calendar events

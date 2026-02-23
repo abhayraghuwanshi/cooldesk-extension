@@ -82,6 +82,8 @@ pub struct Tab {
     pub window_id: Option<i64>,
     #[serde(rename = "_deviceId")]
     pub device_id: Option<String>,
+    /// Browser type: "chrome", "edge", "firefox", "safari", "other"
+    pub browser: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -213,6 +215,9 @@ pub struct WsMessage {
     pub payload: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<i64>,
+    /// Client ID for sender exclusion from broadcasts
+    #[serde(skip_serializing_if = "Option::is_none", rename = "clientId")]
+    pub client_id: Option<String>,
 }
 
 impl WsMessage {
@@ -221,6 +226,7 @@ impl WsMessage {
             msg_type: msg_type.to_string(),
             payload: Some(payload),
             timestamp: Some(chrono::Utc::now().timestamp_millis()),
+            client_id: None,
         }
     }
 
@@ -229,6 +235,7 @@ impl WsMessage {
             msg_type: msg_type.to_string(),
             payload: None,
             timestamp: Some(chrono::Utc::now().timestamp_millis()),
+            client_id: None,
         }
     }
 }

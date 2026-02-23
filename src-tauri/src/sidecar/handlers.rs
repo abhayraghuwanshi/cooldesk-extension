@@ -36,8 +36,23 @@ impl AppState {
         }
     }
 
+    /// Broadcast message excluding a specific client (sender)
+    pub fn broadcast_excluding(&self, msg_type: &str, payload: serde_json::Value, exclude_client: &str) {
+        let mut msg = WsMessage::new(msg_type, payload);
+        // Include the client to exclude - clients will check this and skip if it matches their ID
+        msg.client_id = Some(format!("exclude:{}", exclude_client));
+        if let Ok(json) = serde_json::to_string(&msg) {
+            let _ = self.ws_broadcast.send(json);
+        }
+    }
+
     /// Save data and broadcast update
     pub async fn save_and_broadcast(&self, data_type: &str, payload: serde_json::Value) {
+        self.save_and_broadcast_excluding(data_type, payload, None).await;
+    }
+
+    /// Save data and broadcast update, optionally excluding a client
+    pub async fn save_and_broadcast_excluding(&self, data_type: &str, payload: serde_json::Value, exclude_client: Option<&str>) {
         // Save to disk
         {
             let data = self.sync_data.read().await;
@@ -53,7 +68,11 @@ impl AppState {
         };
 
         if should_broadcast {
-            self.broadcast(&format!("{}-updated", data_type), payload);
+            if let Some(client_id) = exclude_client {
+                self.broadcast_excluding(&format!("{}-updated", data_type), payload, client_id);
+            } else {
+                self.broadcast(&format!("{}-updated", data_type), payload);
+            }
         }
     }
 }

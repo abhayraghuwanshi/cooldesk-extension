@@ -1,9 +1,32 @@
 import { faBrain, faClock, faDesktop, faSync, faTasks, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { runningAppsService } from '../../services/runningAppsService.js';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
+
+// Browser colors matching TabCard.jsx
+const BROWSER_INFO = {
+  chrome: { name: 'Chrome', color: '#4285F4' },
+  edge: { name: 'Edge', color: '#0078D4' },
+  firefox: { name: 'Firefox', color: '#FF7139' },
+  safari: { name: 'Safari', color: '#006CFF' },
+  other: { name: 'Other', color: '#94A3B8' }
+};
+
+// Detect current browser from user agent
+function detectBrowser() {
+  const ua = navigator.userAgent;
+  if (ua.includes('Edg/')) return 'edge';
+  if (ua.includes('Chrome/')) return 'chrome';
+  if (ua.includes('Firefox/')) return 'firefox';
+  if (ua.includes('Safari/') && !ua.includes('Chrome')) return 'safari';
+  return 'other';
+}
+
+// Get current browser (cached)
+const CURRENT_BROWSER = detectBrowser();
 
 // Debounce utility
 function debounce(func, wait) {
@@ -117,13 +140,18 @@ export function TabManagement() {
     try {
       let allTabs = [];
 
-      // 1. Electron App Mode: Fetch from Main Process
+      // 1. Electron App Mode: Fetch from Main Process (tabs already have browser field from sync)
       if (window.electronAPI?.getTabs) {
         allTabs = await window.electronAPI.getTabs();
       }
       // 2. Extension Mode: Fetch from Chrome API
       else if (chrome?.tabs?.query) {
-        allTabs = await chrome.tabs.query({});
+        const rawTabs = await chrome.tabs.query({});
+        // Add browser field to each tab (current browser)
+        allTabs = rawTabs.map(tab => ({
+          ...tab,
+          browser: tab.browser || CURRENT_BROWSER
+        }));
       }
 
       // Always update loading state
@@ -164,7 +192,13 @@ export function TabManagement() {
       removeListener = window.electronAPI.subscribe('tabs-updated', (updatedTabs) => {
         console.log('[TabManagement] tabs-updated:', updatedTabs?.length);
         if (Array.isArray(updatedTabs)) {
-          setTabs(updatedTabs);
+          // Tabs from Electron should already have browser field from sync
+          // But ensure fallback for any tabs missing it
+          const tabsWithBrowser = updatedTabs.map(tab => ({
+            ...tab,
+            browser: tab.browser || 'other'
+          }));
+          setTabs(tabsWithBrowser);
           setTabsLoading(false);
         }
       });
@@ -177,7 +211,12 @@ export function TabManagement() {
       if (window.electronAPI?.getTabs) {
         allTabs = await window.electronAPI.getTabs();
       } else if (chrome?.tabs?.query) {
-        allTabs = await chrome.tabs.query({});
+        const rawTabs = await chrome.tabs.query({});
+        // Add browser field to each tab
+        allTabs = rawTabs.map(tab => ({
+          ...tab,
+          browser: tab.browser || CURRENT_BROWSER
+        }));
       }
 
       setTabsLoading(false);
@@ -193,40 +232,25 @@ export function TabManagement() {
     };
   }, []); // Empty deps - only run on mount
 
-  // Fetch running apps (Electron only)
+  // Subscribe to running apps (uses centralized service to avoid duplicate API calls)
   useEffect(() => {
     if (!window.electronAPI?.getRunningApps) return;
 
-    const fetchApps = async () => {
-      try {
-        // Fetch running apps and installed apps in parallel
-        const [apps, installedApps] = await Promise.all([
-          window.electronAPI.getRunningApps(),
-          window.electronAPI.getInstalledApps?.() || []
-        ]);
+    const unsubscribe = runningAppsService.subscribe(({ runningApps: apps, installedApps }) => {
+      if (Array.isArray(apps)) {
+        // Enrich running apps with icons from installed apps using utility
+        const enrichedApps = enrichRunningAppsWithIcons(apps, installedApps);
 
-        if (Array.isArray(apps)) {
-          // Enrich running apps with icons from installed apps using utility
-          const enrichedApps = enrichRunningAppsWithIcons(apps, installedApps);
-
-          const sortedApps = [...enrichedApps].sort((a, b) => {
-            const nameA = (a.name || '').toLowerCase();
-            const nameB = (b.name || '').toLowerCase();
-            return nameA.localeCompare(nameB);
-          });
-          setRunningApps(sortedApps);
-        }
-      } catch (error) {
-        console.error('[TabManagement] Failed to fetch running apps:', error);
+        const sortedApps = [...enrichedApps].sort((a, b) => {
+          const nameA = (a.name || '').toLowerCase();
+          const nameB = (b.name || '').toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+        setRunningApps(sortedApps);
       }
-    };
+    });
 
-    fetchApps();
-
-    // Refresh apps periodically (every 10 seconds)
-    const interval = setInterval(fetchApps, 10000);
-
-    return () => clearInterval(interval);
+    return unsubscribe;
   }, []);
 
   // Extension Mode (real browser extension, not Electron)
@@ -447,6 +471,22 @@ export function TabManagement() {
     return taskGroups.sort((a, b) => b.task.lastUpdated - a.task.lastUpdated);
   }, [taskViewEnabled, tasks, filteredTabs]);
 
+  // Compute browser statistics from tabs
+  const browserStats = useMemo(() => {
+    const stats = {};
+    for (const tab of tabs) {
+      const browser = tab.browser || 'other';
+      if (!stats[browser]) {
+        stats[browser] = 0;
+      }
+      stats[browser]++;
+    }
+    return stats;
+  }, [tabs]);
+
+  // Check if we have tabs from multiple browsers
+  const hasMultipleBrowsers = Object.keys(browserStats).length > 1;
+
   return (
     <div style={{
       display: 'flex',
@@ -456,20 +496,69 @@ export function TabManagement() {
       overflow: 'hidden',
       border: '1px solid transparent'
     }}>
+      {/* Browser Legend - show when tabs from multiple browsers */}
+      {hasMultipleBrowsers && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '12px',
+          padding: '8px 12px',
+          background: 'rgba(30, 41, 59, 0.6)',
+          borderRadius: '8px',
+          border: '1px solid rgba(71, 85, 105, 0.3)'
+        }}>
+          <span style={{
+            fontSize: 'var(--font-xs, 11px)',
+            color: 'var(--text-secondary, #94A3B8)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            fontWeight: 500
+          }}>
+            Browsers:
+          </span>
+          {Object.entries(browserStats).map(([browser, count]) => {
+            const info = BROWSER_INFO[browser] || BROWSER_INFO.other;
+            return (
+              <div
+                key={browser}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 10px',
+                  background: `${info.color}15`,
+                  borderRadius: '6px',
+                  borderLeft: `3px solid ${info.color}`
+                }}
+              >
+                <span style={{
+                  fontSize: 'var(--font-sm, 12px)',
+                  fontWeight: 600,
+                  color: info.color
+                }}>
+                  {info.name}
+                </span>
+                <span style={{
+                  fontSize: 'var(--font-xs, 11px)',
+                  color: 'var(--text-secondary, #94A3B8)',
+                  background: 'rgba(0, 0, 0, 0.2)',
+                  padding: '2px 6px',
+                  borderRadius: '4px'
+                }}>
+                  {count}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>
-        {/* <h3 style={{
-          fontSize: 'var(--font-2xl, 16px)',
-          fontWeight: 600,
-          color: 'var(--text-primary, #F1F5F9)',
-          margin: 0
-        }}>
-          Browser Tabs
-          {tabs.length > 0 && <span style={{ fontSize: '13px', color: 'var(--text-secondary)', marginLeft: '8px', fontWeight: 400 }}>({tabs.length})</span>}
-        </h3> */}
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             onClick={async () => {

@@ -111,77 +111,110 @@ body {
 
 /* Context / AI Section */
 .spotlight-context {
-  padding: 0 12px 12px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  margin-bottom: 8px;
 }
 
-.context-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  /* 2 items per row for more detail */
-  gap: 8px;
+.context-section {
+  margin-bottom: 6px;
+}
+
+.context-section:last-child {
+  margin-bottom: 0;
+}
+
+.context-section-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 4px;
+  padding-left: 2px;
+}
+
+.context-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .context-item {
   display: flex;
   align-items: center;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  /* Slightly distinct from pins */
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.2s ease;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
   cursor: pointer;
-  text-align: left;
-  height: auto;
-  /* Allow auto height for details */
-  min-height: 48px;
+  max-width: 140px;
 }
 
 .context-item:hover,
 .context-item.pin-selected {
   background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* App items - Blue theme */
+.context-item.context-app {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.15);
+}
+
+.context-item.context-app:hover,
+.context-item.context-app.pin-selected {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Tab items - Purple theme */
+.context-item.context-tab {
+  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(139, 92, 246, 0.15);
+}
+
+.context-item.context-tab:hover,
+.context-item.context-tab.pin-selected {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.3);
 }
 
 .context-item .pin-icon {
-  font-size: 20px;
-  width: 32px;
-  height: 32px;
-  margin-bottom: 0;
-  margin-right: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
+  font-size: 14px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
-.context-item-details {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  flex: 1;
+.context-item .pin-icon img {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
 }
 
 .context-item .pin-label {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
-  margin-top: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.85);
 }
 
-.context-item-desc {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Running indicator dot */
+.context-item .running-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4ade80;
+  flex-shrink: 0;
+  box-shadow: 0 0 4px #4ade80;
 }
 
 /* Pinned Section */

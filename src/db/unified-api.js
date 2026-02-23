@@ -787,6 +787,21 @@ export const listAllUrlNotes = withErrorHandling(async () => {
 // ===== SETTINGS & UI STATE =====
 
 /**
+ * Flatten any nested 'data' properties to fix corrupted state
+ */
+function flattenNestedData(obj) {
+    if (!obj || typeof obj !== 'object') return obj
+
+    let flattened = { ...obj }
+    while (flattened.data && typeof flattened.data === 'object' && !Array.isArray(flattened.data)) {
+        const { data, ...rest } = flattened
+        flattened = { ...rest, ...data }
+    }
+
+    return flattened
+}
+
+/**
  * Get settings
  */
 export const getSettings = withErrorHandling(async () => {
@@ -800,7 +815,10 @@ export const getSettings = withErrorHandling(async () => {
         request.onerror = () => reject(request.error)
     })
 
-    return result || {
+    // Flatten any nested 'data' properties from corrupted state
+    const flattened = result ? flattenNestedData(result) : null
+
+    return flattened || {
         id: 'default',
         geminiApiKey: '',
         modelName: '',
@@ -826,9 +844,17 @@ export const getSettings = withErrorHandling(async () => {
  * Save settings
  */
 export const saveSettings = withErrorHandling(async (settingsData, options = {}) => {
+    // Flatten any nested 'data' properties to prevent recursive nesting
+    const flatData = flattenNestedData(settingsData)
+
+    // Remove 'data' key if it somehow exists
+    if (flatData && flatData.data && typeof flatData.data === 'object') {
+        delete flatData.data
+    }
+
     const settings = validateAndSanitize({
         id: 'default',
-        ...settingsData,
+        ...flatData,
         updatedAt: Date.now()
     }, 'settings')
 
@@ -2000,7 +2026,10 @@ export const getDashboard = withErrorHandling(async () => {
         request.onerror = () => reject(request.error)
     })
 
-    return result || { id: 'default' }
+    // Flatten any nested 'data' properties from corrupted state
+    const flattened = result ? flattenNestedData(result) : null
+
+    return flattened || { id: 'default' }
 }, {
     operation: 'getDashboard',
     severity: ErrorSeverity.LOW,
@@ -2012,9 +2041,17 @@ export const getDashboard = withErrorHandling(async () => {
  * Save dashboard state
  */
 export const saveDashboard = withErrorHandling(async (dashboardData, options = {}) => {
+    // Flatten any nested 'data' properties to prevent recursive nesting
+    const flatData = flattenNestedData(dashboardData)
+
+    // Remove 'data' key if it somehow exists to prevent nesting
+    if (flatData && flatData.data && typeof flatData.data === 'object') {
+        delete flatData.data
+    }
+
     const dashboard = {
         id: 'default',
-        ...dashboardData,
+        ...flatData,
         updatedAt: Date.now()
     }
 

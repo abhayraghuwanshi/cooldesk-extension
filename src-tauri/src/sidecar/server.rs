@@ -105,7 +105,7 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     // Subscribe to broadcasts
     let mut broadcast_rx = state.ws_broadcast.subscribe();
 
-    // Send initial sync state
+    // Send initial sync state with client ID so client knows its identity
     {
         let data = state.sync_data.read().await;
         log::info!("[Sidecar] Sending initial sync-state to {}: {} notes, {} workspaces, {} tabs, {} urls, {} pins, {} urlNotes",
@@ -115,8 +115,14 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
         let sync_state = SyncStatePayload::from(&*data);
         log::info!("[Sidecar] SyncStatePayload notes count: {}", sync_state.notes.len());
 
-        let msg = WsMessage::new("sync-state", serde_json::to_value(&sync_state).unwrap_or_default());
-        if let Ok(json) = serde_json::to_string(&msg) {
+        // Include clientId in the message so client can identify itself
+        let mut msg = WsMessage::new("sync-state", serde_json::to_value(&sync_state).unwrap_or_default());
+        // Add clientId to the message
+        let mut msg_json = serde_json::to_value(&msg).unwrap_or_default();
+        if let Some(obj) = msg_json.as_object_mut() {
+            obj.insert("clientId".to_string(), serde_json::json!(client_id));
+        }
+        if let Ok(json) = serde_json::to_string(&msg_json) {
             log::debug!("[Sidecar] sync-state JSON length: {} bytes", json.len());
             let _ = sender.send(Message::Text(json.into())).await;
         }
@@ -189,7 +195,8 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.workspaces).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("workspaces", payload).await;
+                    // Exclude sender from broadcast to prevent sync loop
+                    state.save_and_broadcast_excluding("workspaces", payload, Some(client_id)).await;
                 }
             }
         }
@@ -203,7 +210,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.urls).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("urls", payload).await;
+                    state.save_and_broadcast_excluding("urls", payload, Some(client_id)).await;
                 }
             }
         }
@@ -226,7 +233,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                 let payload = serde_json::to_value(&data.tabs).unwrap_or_default();
                 drop(data);
-                state.save_and_broadcast("tabs", payload).await;
+                state.save_and_broadcast_excluding("tabs", payload, Some(client_id)).await;
             }
         }
 
@@ -239,7 +246,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.settings).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("settings", payload).await;
+                    state.save_and_broadcast_excluding("settings", payload, Some(client_id)).await;
                 }
             }
         }
@@ -249,16 +256,10 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
             if let Some(payload) = msg.payload {
                 log::info!("[Sidecar] WS push-notes payload type: {}",
                     if payload.is_array() { "array" } else if payload.is_object() { "object" } else { "other" });
-                log::debug!("[Sidecar] WS push-notes raw payload: {}",
-                    serde_json::to_string(&payload).unwrap_or_else(|_| "failed to serialize".to_string()));
 
                 match serde_json::from_value::<Vec<Note>>(payload.clone()) {
                     Ok(notes) => {
                         log::info!("[Sidecar] WS push-notes parsed {} notes", notes.len());
-                        for (i, note) in notes.iter().take(3).enumerate() {
-                            log::info!("[Sidecar] WS push-notes note[{}]: id={}, title={:?}",
-                                i, note.id, note.title);
-                        }
 
                         let mut data = state.sync_data.write().await;
                         let before_count = data.notes.len();
@@ -270,13 +271,11 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                         let payload = serde_json::to_value(&data.notes).unwrap_or_default();
                         drop(data);
-                        state.save_and_broadcast("notes", payload).await;
+                        state.save_and_broadcast_excluding("notes", payload, Some(client_id)).await;
                         log::info!("[Sidecar] WS push-notes broadcast complete");
                     }
                     Err(e) => {
                         log::error!("[Sidecar] WS push-notes failed to parse: {}", e);
-                        log::error!("[Sidecar] WS push-notes payload was: {}",
-                            serde_json::to_string(&payload).unwrap_or_else(|_| "failed".to_string()));
                     }
                 }
             } else {
@@ -293,7 +292,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.url_notes).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("url-notes", payload).await;
+                    state.save_and_broadcast_excluding("url-notes", payload, Some(client_id)).await;
                 }
             }
         }
@@ -307,7 +306,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.pins).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("pins", payload).await;
+                    state.save_and_broadcast_excluding("pins", payload, Some(client_id)).await;
                 }
             }
         }
@@ -321,7 +320,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.scraped_chats).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("scraped-chats", payload).await;
+                    state.save_and_broadcast_excluding("scraped-chats", payload, Some(client_id)).await;
                 }
             }
         }
@@ -335,7 +334,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.scraped_configs).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("scraped-configs", payload).await;
+                    state.save_and_broadcast_excluding("scraped-configs", payload, Some(client_id)).await;
                 }
             }
         }
@@ -349,7 +348,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.daily_memory).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("daily-memory", payload).await;
+                    state.save_and_broadcast_excluding("daily-memory", payload, Some(client_id)).await;
                 }
             }
         }
@@ -363,7 +362,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.ui_state).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("ui-state", payload).await;
+                    state.save_and_broadcast_excluding("ui-state", payload, Some(client_id)).await;
                 }
             }
         }
@@ -383,7 +382,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                     let payload = serde_json::to_value(&data.dashboard).unwrap_or_default();
                     drop(data);
-                    state.save_and_broadcast("dashboard", payload).await;
+                    state.save_and_broadcast_excluding("dashboard", payload, Some(client_id)).await;
                 }
             }
         }
@@ -402,7 +401,7 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
                 let payload = serde_json::to_value(&activities).unwrap_or_default();
                 drop(data);
-                state.save_and_broadcast("activity", payload).await;
+                state.save_and_broadcast_excluding("activity", payload, Some(client_id)).await;
             }
         }
 

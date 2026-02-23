@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
 import * as LocalAI from '../services/localAIService';
+import { runningAppsService } from '../services/runningAppsService';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
 import { enrichRunningAppsWithIcons, getFaviconUrl } from '../utils/helpers';
 import './GlobalSpotlight.css';
@@ -200,11 +201,10 @@ export function GlobalSpotlight() {
     const loadContextItems = useCallback(async () => {
         console.log('[Spotlight] loadContextItems called');
         try {
-            // Fetch all data in parallel
+            // Fetch all data in parallel (use cached running apps service)
             console.log('[Spotlight] Fetching data...');
-            const [runningApps, installedApps, tabs, frequentApps] = await Promise.all([
-                window.electronAPI?.getRunningApps?.().catch(e => { console.error('[Spotlight] getRunningApps error:', e); return []; }) || [],
-                window.electronAPI?.getInstalledApps?.().catch(e => { console.error('[Spotlight] getInstalledApps error:', e); return []; }) || [],
+            const [{ runningApps, installedApps }, tabs, frequentApps] = await Promise.all([
+                runningAppsService.getApps(),
                 window.electronAPI?.getTabs?.().catch(e => { console.error('[Spotlight] getTabs error:', e); return []; }) || [],
                 storageGet(['frequent_apps']).then(d => d.frequent_apps || {}).catch(() => ({}))
             ]);
@@ -867,9 +867,9 @@ export function GlobalSpotlight() {
                 trackAppUsage(item.name);
 
                 // For pinned apps, we need to find the current running instance
-                // because the stored PID might be stale
-                if (window.electronAPI?.getRunningApps) {
-                    const runningApps = await window.electronAPI.getRunningApps();
+                // because the stored PID might be stale (use cached service)
+                const { runningApps } = await runningAppsService.getApps();
+                if (runningApps?.length > 0) {
                     const runningInstance = runningApps.find(app =>
                         app.name?.toLowerCase() === item.name?.toLowerCase()
                     );
@@ -1076,27 +1076,61 @@ export function GlobalSpotlight() {
                 )}
 
                 {/* Recommendations Section - Shows when query is empty */}
-                {!query.trim() && !commandMode && contextItems.length > 0 && (
-                    <div className="spotlight-context">
-                        <div className="spotlight-pins-header">
-                            <span className="spotlight-pins-title">Suggestions</span>
+                {!query.trim() && !commandMode && contextItems.length > 0 && (() => {
+                    // Group items by type
+                    const apps = contextItems.filter(item => item.type === 'app');
+                    const tabs = contextItems.filter(item => item.type === 'tab');
+                    let flatIndex = pinnedItems.length; // Start after pinned items
+
+                    return (
+                        <div className="spotlight-context">
+                            {/* Apps Row */}
+                            {apps.length > 0 && (
+                                <div className="context-section">
+                                    <div className="context-section-label">Apps</div>
+                                    <div className="context-row">
+                                        {apps.map((item, i) => {
+                                            const itemIndex = flatIndex++;
+                                            return (
+                                                <ContextItem
+                                                    key={`app-${i}`}
+                                                    item={item}
+                                                    index={itemIndex}
+                                                    isSelected={itemIndex === selectedPinIndex}
+                                                    onSelect={handleSelect}
+                                                    onHover={setSelectedPinIndex}
+                                                    getAppIcon={getAppIcon}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                            {/* Tabs Row */}
+                            {tabs.length > 0 && (
+                                <div className="context-section">
+                                    <div className="context-section-label">Tabs</div>
+                                    <div className="context-row">
+                                        {tabs.map((item, i) => {
+                                            const itemIndex = flatIndex++;
+                                            return (
+                                                <ContextItem
+                                                    key={`tab-${i}`}
+                                                    item={item}
+                                                    index={itemIndex}
+                                                    isSelected={itemIndex === selectedPinIndex}
+                                                    onSelect={handleSelect}
+                                                    onHover={setSelectedPinIndex}
+                                                    getAppIcon={getAppIcon}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        <div className="spotlight-pins-grid context-grid">
-                            {contextItems.map((item, i) => (
-                                <ContextItem
-                                    key={`ctx-${i}`}
-                                    item={item}
-                                    index={i}
-                                    pinnedLength={pinnedItems.length}
-                                    isSelected={i + pinnedItems.length === selectedPinIndex}
-                                    onSelect={handleSelect}
-                                    onHover={setSelectedPinIndex}
-                                    getAppIcon={getAppIcon}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                )}
+                    );
+                })()}
 
                 {/* Pinned Section - Only visible when NOT searching */}
                 {!query.trim() && !commandMode && (
@@ -1283,45 +1317,44 @@ const PinItem = memo(function PinItem({ pin, index, isSelected, onSelect, onHove
     );
 });
 
-// Memoized Context Item to prevent unnecessary re-renders
-const ContextItem = memo(function ContextItem({ item, index, pinnedLength, isSelected, onSelect, onHover, getAppIcon }) {
+// Memoized Context Item - compact version for grouped display
+const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelect, onHover, getAppIcon }) {
     const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
-    const handleMouseEnter = useCallback(() => onHover(index + pinnedLength), [index, pinnedLength, onHover]);
+    const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
     const handleIconError = useCallback((e) => {
         e.target.style.display = 'none';
-        e.target.parentNode.innerHTML = '<span class="fa-icon-wrapper">💻</span>';
     }, []);
-    const handleFaviconError = useCallback((e) => {
-        e.target.style.display = 'none';
-        e.target.parentNode.innerHTML = '🔗';
-    }, []);
+
+    const isApp = item.type === 'app';
+    const isRunning = isApp && item.isRunning;
 
     return (
         <div
-            className={`pin-item context-item ${item.type === 'app' ? 'pin-app' : ''} ${isSelected ? 'pin-selected' : ''}`}
+            className={`context-item ${isApp ? 'context-app' : 'context-tab'} ${isSelected ? 'pin-selected' : ''}`}
             onClick={handleClick}
             onMouseEnter={handleMouseEnter}
+            title={isApp ? (item.name || item.title) : (item.title || item.url)}
         >
             <div className="pin-icon">
-                {item.type === 'app' ? (
+                {isApp ? (
                     item.icon ? (
                         <img src={item.icon} className="app-icon-img" alt="" onError={handleIconError} />
                     ) : (
-                        <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
+                        <FontAwesomeIcon icon={getAppIcon(item.name)} style={{ color: '#60a5fa' }} />
                     )
                 ) : (() => {
-                    const resolvedFavicon = item.favicon || (item.url ? getFaviconUrl(item.url, 32, null, true) : null);
+                    const resolvedFavicon = item.favicon || (item.url ? getFaviconUrl(item.url, 16, null, true) : null);
                     return resolvedFavicon ? (
-                        <img src={resolvedFavicon} onError={handleFaviconError} alt="" />
+                        <img src={resolvedFavicon} onError={handleIconError} alt="" />
                     ) : (
-                        <FontAwesomeIcon icon={item.type === 'workspace' ? getWorkspaceIcon(item.title || item.name) : faGlobe} />
+                        <FontAwesomeIcon icon={faGlobe} style={{ color: '#a78bfa' }} />
                     );
                 })()}
             </div>
-            <div className="context-item-details">
-                <span className="pin-label">{item.type === 'app' ? (item.name || item.title) : (item.title || item.name)}</span>
-                <span className="context-item-desc">{item.description || item.category || 'Suggested'}</span>
-            </div>
+            <span className="pin-label">
+                {isApp ? (item.name || item.title) : (item.title || 'Tab')}
+            </span>
+            {isRunning && <span className="running-dot" />}
         </div>
     );
 });

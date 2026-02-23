@@ -663,15 +663,15 @@ const TeamView = React.memo(function TeamView({ team: propTeam }) {
                         {/* Scrollable Content Area */}
                         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 32 }}>
 
-                            {/* Context Panel */}
-                            <div style={{ padding: '0 0 24px 0' }}>
+                            {/* Context Panel - Hidden for now, will activate later */}
+                            {/* <div style={{ padding: '0 0 24px 0' }}>
                                 <TeamContextPanel teamId={activeTeam.id} canWrite={hasWriteAccess} />
-                            </div>
+                            </div> */}
 
-                            {/* Notice Board */}
-                            <div style={{ paddingBottom: 0 }}>
+                            {/* Notice Board - Hidden for now, will activate later */}
+                            {/* <div style={{ paddingBottom: 0 }}>
                                 <NoticeBoard teamId={activeTeam.id} canWrite={hasWriteAccess} />
-                            </div>
+                            </div> */}
 
                             {/* Items Grid */}
                             <div style={{ padding: '0 20px' }}>
