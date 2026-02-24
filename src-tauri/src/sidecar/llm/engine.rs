@@ -158,7 +158,7 @@ fn run_inference(
 
     // Create context
     let ctx_params = LlamaContextParams::default()
-        .with_n_ctx(std::num::NonZeroU32::new(1024))
+        .with_n_ctx(std::num::NonZeroU32::new(4096))
         .with_n_threads(4)
         .with_n_threads_batch(4);
 
@@ -174,7 +174,7 @@ fn run_inference(
     log::info!("[LLM Engine] Prompt tokenized: {} tokens", tokens.len());
 
     // Create batch and add tokens
-    let mut batch = LlamaBatch::new(1024, 1);
+    let mut batch = LlamaBatch::new(4096, 1);
 
     let last_idx = tokens.len() as i32 - 1;
     for (i, token) in tokens.iter().enumerate() {

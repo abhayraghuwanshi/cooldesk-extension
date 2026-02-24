@@ -8,6 +8,7 @@ import { sortWorkspacesByActivity } from '../../utils/ranking.js';
 import { ResumeWorkWidget } from '../widgets/ResumeWorkWidget';
 import { NotesWidget } from './NotesWidget';
 import { PomodoroWidget } from './PomodoroWidget';
+import { SmartWorkspace } from './SmartWorkspace';
 import { WorkspaceCard } from './WorkspaceCard';
 
 // Lazy load ActivityFeed as it's not critical for LCP (Largest Contentful Paint)
@@ -69,6 +70,7 @@ const OverviewDashboard = memo(function OverviewDashboard({
         }
     });
     const [isLoading, setIsLoading] = useState(recentWorkspaces.length === 0);
+    const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('recent'); // 'recent' or 'smart'
 
     // Compute a stable hash of the input workspaces to detect changes
     const workspacesHash = useMemo(() => {
@@ -167,60 +169,115 @@ const OverviewDashboard = memo(function OverviewDashboard({
                 </div>
                 {/* Workspaces Section */}
                 <div>
-                    <h3 style={{
-                        fontSize: 'var(--font-2xl, 20px)',
-                        fontWeight: 600,
-                        color: 'var(--text-secondary, #94A3B8)',
-                        fontFamily: defaultFontFamily,
-                        marginBottom: '12px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
+                    <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px'
+                        justifyContent: 'space-between',
+                        marginBottom: '12px'
                     }}>
-                        Recent Workspaces
-                    </h3>
-                    <div className="cooldesk-list-view"
-                        data-onboarding="workspace-list"
-                        style={{
+                        <h3 style={{
+                            fontSize: 'var(--font-2xl, 20px)',
+                            fontWeight: 600,
+                            color: 'var(--text-secondary, #94A3B8)',
+                            fontFamily: defaultFontFamily,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
                             display: 'flex',
-                            flexDirection: 'column',
-                            gap: '2px',
-                            overflow: 'visible',
-                            minHeight: '160px' // Optimization: Reserve space to prevent layout shift
+                            alignItems: 'center',
+                            gap: '6px',
+                            margin: 0
                         }}>
-                        {isLoading && displayedWorkspaces.length === 0 ? (
-                            <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
-                                Loading recent activity...
-                            </div>
-                        ) : displayedWorkspaces.length > 0 ? (
-                            displayedWorkspaces.map(workspace => (
-                                <WorkspaceCard
-                                    key={workspace.id}
-                                    workspace={workspace}
-                                    onClick={onWorkspaceClick}
-                                    isExpanded={expandedWorkspaceId === workspace.id}
-                                    isActive={activeWorkspaceId === workspace.id}
-                                    compact={true}
-                                    isPinned={pinnedWorkspaces.includes(workspace.name)}
-                                    onAddUrl={onAddUrl}
-                                    data-onboarding="workspace-card"
-                                />
-                            ))
-                        ) : (
-                            <div style={{
-                                padding: '20px',
-                                background: 'rgba(30, 41, 59, 0.4)',
-                                borderRadius: '12px',
-                                color: '#64748B',
-                                textAlign: 'center',
-                                fontSize: '13px'
-                            }}>
-                                No workspaces found.
-                            </div>
-                        )}
+                            Workspaces
+                        </h3>
+                        {/* Tab Toggle */}
+                        <div style={{
+                            display: 'flex',
+                            background: 'rgba(30, 41, 59, 0.5)',
+                            padding: '4px',
+                            borderRadius: '8px',
+                            gap: '4px'
+                        }}>
+                            <button
+                                onClick={() => setActiveWorkspaceTab('recent')}
+                                style={{
+                                    background: activeWorkspaceTab === 'recent' ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                                    color: activeWorkspaceTab === 'recent' ? '#60A5FA' : '#64748B',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '4px 12px',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                }}
+                            >
+                                Recent
+                            </button>
+                            <button
+                                onClick={() => setActiveWorkspaceTab('smart')}
+                                style={{
+                                    background: activeWorkspaceTab === 'smart' ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
+                                    color: activeWorkspaceTab === 'smart' ? '#A78BFA' : '#64748B',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '4px 12px',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                }}
+                            >
+                                Smart AI ✨
+                            </button>
+                        </div>
                     </div>
+
+                    {activeWorkspaceTab === 'recent' ? (
+                        <div className="cooldesk-list-view"
+                            data-onboarding="workspace-list"
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '2px',
+                                overflow: 'visible',
+                                minHeight: '160px' // Optimization: Reserve space to prevent layout shift
+                            }}>
+                            {isLoading && displayedWorkspaces.length === 0 ? (
+                                <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
+                                    Loading recent activity...
+                                </div>
+                            ) : displayedWorkspaces.length > 0 ? (
+                                displayedWorkspaces.map(workspace => (
+                                    <WorkspaceCard
+                                        key={workspace.id}
+                                        workspace={workspace}
+                                        onClick={onWorkspaceClick}
+                                        isExpanded={expandedWorkspaceId === workspace.id}
+                                        isActive={activeWorkspaceId === workspace.id}
+                                        compact={true}
+                                        isPinned={pinnedWorkspaces.includes(workspace.name)}
+                                        onAddUrl={onAddUrl}
+                                        data-onboarding="workspace-card"
+                                    />
+                                ))
+                            ) : (
+                                <div style={{
+                                    padding: '20px',
+                                    background: 'rgba(30, 41, 59, 0.4)',
+                                    borderRadius: '12px',
+                                    color: '#64748B',
+                                    textAlign: 'center',
+                                    fontSize: '13px'
+                                }}>
+                                    No workspaces found.
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div style={{ height: '500px' }}>
+                            <SmartWorkspace />
+                        </div>
+                    )}
                 </div>
 
                 {/* Notes Widget Section */}
@@ -259,6 +316,7 @@ const OverviewDashboard = memo(function OverviewDashboard({
                             <NotesWidget maxNotes={5} compact={false} onAddNote={onAddNote} />
                         </div>
                     </div>
+                    {/* <SmartWorkspace /> */}
                 </div>
 
 

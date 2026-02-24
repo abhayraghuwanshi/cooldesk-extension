@@ -1,12 +1,14 @@
-import { faAngleRight, faArrowRight, faGear, faPlus, faSync, faTimes, faToggleOn, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faAngleRight, faArrowRight, faGear, faPaperPlane, faPlus, faRobot, faSync, faTimes, faToggleOff, faToggleOn, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useState } from 'react';
 
 import scrapperConfig from '../../data/scrapper.json';
 import { getScrapedChatStats, listScrapedChats } from '../../db/index.js';
 import { saveScrapingConfig } from '../../db/unified-api.js';
+import * as LocalAI from '../../services/localAIService.js';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { getFaviconUrl } from '../../utils/helpers.js';
+import { SmartWorkspace } from '../cooldesk/SmartWorkspace';
 
 /**
  * ChatContext - Project Links interface for workspace
@@ -48,6 +50,13 @@ const ChatContext = memo(function ChatContext({ workspaceId, workspaceName, maxI
   // const [autoScrapeEnabled, setAutoScrapeEnabled] = useState(true); // Removed as requested
   const [showSettings, setShowSettings] = useState(false);
   const [showPlatformConfig, setShowPlatformConfig] = useState(false);
+  const [activeTab, setActiveTab] = useState('links'); // 'links' or 'smart'
+
+  // AI Chat State
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiChatMessages, setAiChatMessages] = useState([]);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiAvailable, setAiAvailable] = useState(false);
 
   const [customSelectors, setCustomSelectors] = useState({});
   const [allowedDomains, setAllowedDomains] = useState([]);
@@ -282,6 +291,75 @@ const ChatContext = memo(function ChatContext({ workspaceId, workspaceName, maxI
     loadPlatformStats();
   }, [loadChats, loadSavedLinks, loadSettings, loadPlatformStats]);
 
+  // Check AI availability
+  useEffect(() => {
+    const checkAI = async () => {
+      try {
+        const available = await LocalAI.isAvailable();
+        setAiAvailable(available);
+      } catch {
+        setAiAvailable(false);
+      }
+    };
+    checkAI();
+  }, []);
+
+  // Handle AI Chat Submit
+  const handleAiSubmit = useCallback(async () => {
+    const prompt = aiPrompt.trim();
+    if (!prompt || isAiLoading) return;
+
+    setAiChatMessages(prev => [...prev, { role: 'user', content: prompt }]);
+    setAiPrompt('');
+    setIsAiLoading(true);
+
+    try {
+      const isAvailable = await LocalAI.isAvailable();
+      if (!isAvailable) {
+        setAiChatMessages(prev => [...prev, { role: 'error', content: 'Desktop app not running. Please start CoolDesk.' }]);
+        setIsAiLoading(false);
+        return;
+      }
+
+      // Check if model is loaded
+      const status = await LocalAI.getStatus();
+      if (!status.modelLoaded) {
+        setAiChatMessages(prev => [...prev, { role: 'system', content: '🔄 Loading AI model...' }]);
+
+        const modelsResult = await LocalAI.getModels();
+        const modelFilenames = Object.keys(modelsResult || {}).filter(name => modelsResult[name]?.downloaded);
+
+        const modelToLoad = modelFilenames.find(name => name.toLowerCase().includes('phi-3'))
+          || modelFilenames.find(name => name.toLowerCase().includes('llama'))
+          || modelFilenames[0];
+
+        if (!modelToLoad) {
+          setAiChatMessages(prev => [...prev, { role: 'error', content: 'No AI models available. Download one from Settings → Local AI.' }]);
+          setIsAiLoading(false);
+          return;
+        }
+
+        await LocalAI.loadModel(modelToLoad);
+        setAiChatMessages(prev => {
+          const msgs = [...prev];
+          const lastIdx = msgs.length - 1;
+          if (msgs[lastIdx]?.role === 'system') {
+            msgs[lastIdx] = { role: 'system', content: `✅ ${modelToLoad} loaded!` };
+          }
+          return msgs;
+        });
+      }
+
+      const response = await LocalAI.chat(prompt);
+      setAiChatMessages(prev => [...prev, { role: 'assistant', content: response || 'No response received' }]);
+    } catch (error) {
+      console.error('[ChatContext] AI error:', error);
+      setAiChatMessages(prev => [...prev, { role: 'error', content: error.message || 'AI request failed' }]);
+    } finally {
+      setIsAiLoading(false);
+    }
+  }, [aiPrompt, isAiLoading]);
+
 
 
   const handleLinkClick = (url) => {
@@ -358,11 +436,221 @@ const ChatContext = memo(function ChatContext({ workspaceId, workspaceName, maxI
       gap: '16px',
       overflow: 'hidden'
     }}>
-      {/* Main Links Panel */}
+      {/* Tab Toggle Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexShrink: 0
+      }}>
+        <h3 style={{
+          fontSize: 'var(--font-2xl, 20px)',
+          fontWeight: 600,
+          color: 'var(--text-secondary, #94A3B8)',
+          fontFamily: defaultFontFamily,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          margin: 0
+        }}>
+          {activeTab === 'links' ? 'Project Links' : 'Smart AI'}
+        </h3>
+        <div style={{
+          display: 'flex',
+          background: 'rgba(30, 41, 59, 0.5)',
+          padding: '4px',
+          borderRadius: '8px',
+          gap: '4px'
+        }}>
+          <button
+            onClick={() => setActiveTab('links')}
+            style={{
+              background: activeTab === 'links' ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+              color: activeTab === 'links' ? '#60A5FA' : '#64748B',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '4px 12px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            Links
+          </button>
+          <button
+            onClick={() => setActiveTab('smart')}
+            style={{
+              background: activeTab === 'smart' ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
+              color: activeTab === 'smart' ? '#A78BFA' : '#64748B',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '4px 12px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            Smart AI ✨
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'smart' ? (
+        /* Smart Workspace + AI Chat Section */
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'hidden' }}>
+          {/* AI Chat Panel */}
+          <div className="cooldesk-panel" style={{
+            flexShrink: 0,
+            padding: '0',
+          }}>
+            {/* AI Input */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '12px 16px',
+              background: aiAvailable
+                ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%)'
+                : 'rgba(30, 41, 59, 0.5)',
+              borderRadius: '12px',
+              border: aiAvailable
+                ? '1px solid rgba(139, 92, 246, 0.2)'
+                : '1px solid rgba(148, 163, 184, 0.1)',
+            }}>
+              <FontAwesomeIcon
+                icon={faRobot}
+                style={{
+                  color: aiAvailable ? '#A78BFA' : '#64748B',
+                  fontSize: '16px',
+                  flexShrink: 0,
+                }}
+              />
+              <input
+                type="text"
+                placeholder={aiAvailable ? 'Ask AI anything...' : 'AI not available — start desktop app'}
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && aiPrompt.trim()) handleAiSubmit();
+                }}
+                disabled={isAiLoading || !aiAvailable}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#F1F5F9',
+                  fontSize: '13px',
+                  fontFamily: defaultFontFamily,
+                  outline: 'none',
+                  padding: '4px 0',
+                }}
+              />
+              {aiPrompt.trim() && (
+                <button
+                  onClick={handleAiSubmit}
+                  disabled={isAiLoading}
+                  style={{
+                    background: 'rgba(139, 92, 246, 0.3)',
+                    border: '1px solid rgba(139, 92, 246, 0.5)',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    color: '#A78BFA',
+                    fontSize: '12px',
+                    cursor: isAiLoading ? 'wait' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    flexShrink: 0,
+                  }}
+                >
+                  <FontAwesomeIcon icon={isAiLoading ? faSync : faPaperPlane} spin={isAiLoading} />
+                </button>
+              )}
+            </div>
+
+            {/* AI Chat Messages */}
+            {aiChatMessages.length > 0 && (
+              <div style={{
+                maxHeight: '200px',
+                overflowY: 'auto',
+                padding: '12px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                borderTop: '1px solid rgba(148, 163, 184, 0.1)',
+              }}>
+                {aiChatMessages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{
+                      padding: '8px 12px',
+                      borderRadius: '12px',
+                      maxWidth: '85%',
+                      fontSize: '12px',
+                      lineHeight: '1.5',
+                      background: msg.role === 'user'
+                        ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(139, 92, 246, 0.3))'
+                        : msg.role === 'error'
+                          ? 'rgba(239, 68, 68, 0.15)'
+                          : msg.role === 'system'
+                            ? 'rgba(234, 179, 8, 0.15)'
+                            : 'rgba(30, 41, 59, 0.8)',
+                      color: msg.role === 'error'
+                        ? '#F87171'
+                        : msg.role === 'system'
+                          ? '#FBBF24'
+                          : '#E2E8F0',
+                      border: msg.role === 'user'
+                        ? '1px solid rgba(139, 92, 246, 0.3)'
+                        : '1px solid rgba(148, 163, 184, 0.1)',
+                    }}>
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+                {isAiLoading && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B', fontSize: '12px' }}>
+                    <FontAwesomeIcon icon={faSync} spin />
+                    <span>Thinking...</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Smart Workspace Component */}
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <SmartWorkspace
+              maxItems={20}
+              externalContext={allLinks.map(link => ({
+                url: link.url,
+                title: link.title,
+                platform: link.platform,
+                source: link.source
+              }))}
+              contextType="workspace"
+              onSuggestion={(suggestion) => {
+                // Handle AI suggestion - could add to chat or perform action
+                setAiChatMessages(prev => [...prev, {
+                  role: 'system',
+                  content: `💡 Suggestion: ${suggestion}`
+                }]);
+              }}
+            />
+          </div>
+        </div>
+      ) : (
+      /* Main Links Panel */
       <div className="cooldesk-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div className="panel-header">
           <div className="panel-title">
-            {/* <FontAwesomeIcon icon={faLink} style={{ marginRight: '8px' }} /> */}
             {activePlatformFilter ? (
               <>
                 {activePlatformFilter}
@@ -371,20 +659,9 @@ const ChatContext = memo(function ChatContext({ workspaceId, workspaceName, maxI
                 </span>
               </>
             ) : (
-              <h3 style={{
-                fontSize: 'var(--font-2xl, 20px)',
-                fontWeight: 600,
-                color: 'var(--text-secondary, #94A3B8)',
-                fontFamily: defaultFontFamily,
-                marginBottom: '12px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}>
-                Project Links
-              </h3>
+              <span style={{ fontSize: '14px', color: '#94A3B8' }}>
+                {allLinks.length} links
+              </span>
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -419,9 +696,6 @@ const ChatContext = memo(function ChatContext({ workspaceId, workspaceName, maxI
             >
               <FontAwesomeIcon icon={faGear} style={{ transform: showSettings ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }} />
             </div>
-            {/* <div className="panel-action" onClick={loadChats} title="Refresh">
-              <FontAwesomeIcon icon={faSync} />
-            </div> */}
           </div>
         </div>
 
@@ -1008,6 +1282,7 @@ const ChatContext = memo(function ChatContext({ workspaceId, workspaceName, maxI
           </div>
         )}
       </div>
+      )}
 
       {/* Footer hint */}
       <div style={{

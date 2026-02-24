@@ -16,7 +16,8 @@
       "Bash(./AppScanner.exe)",
       "Bash(ping:*)",
       "Bash(curl:*)",
-      "Bash(npm run tauri:*)"
+      "Bash(npm run tauri:*)",
+      "Bash(npx eslint:*)"
     ],
     "deny": [],
     "ask": [],

@@ -30,3 +30,76 @@ pub async fn answer_question(question: &str, content: &str) -> Result<String, St
     );
     super::inference::chat(&prompt).await
 }
+
+/// Group browsing items into smart workspace categories
+/// Returns JSON with groups and suggestions
+pub async fn group_workspaces(items: &str, context: &str, custom_prompt: Option<&str>) -> Result<String, String> {
+    let instruction = if let Some(prompt) = custom_prompt {
+        format!(
+            "{}\n\n{}\n\nHere are the user's browsing items:\n{}\n\nRespond with ONLY a valid JSON object. Do NOT wrap the JSON in markdown blocks (e.g. ```json).",
+            prompt, context, items
+        )
+    } else {
+        format!(
+            r#"You are organizing a user's browsing activity into smart workspace groups.
+{}
+
+Group these browsing items into 4-8 project/topic categories based on their relevance.
+If external context is provided, prioritize grouping items that relate to that context.
+Return ONLY ONE valid JSON object with the exact format below. Do NOT wrap the JSON in markdown blocks and do NOT return multiple objects.
+
+{{
+  "groups": [
+    {{
+      "name": "Group Name",
+      "items": [1, 2, 3]
+    }}
+  ],
+  "suggestions": [
+    "helpful suggestion 1"
+  ]
+}}
+
+Items:
+{}
+
+JSON:"#,
+            context, items
+        )
+    };
+
+    let response = super::inference::chat(&instruction).await?;
+    
+    // Clean up markdown wrapping if the LLM still includes it
+    let mut cleaned = response.trim();
+    if cleaned.starts_with("```json") {
+        cleaned = cleaned.trim_start_matches("```json").trim();
+    } else if cleaned.starts_with("```") {
+        cleaned = cleaned.trim_start_matches("```").trim();
+    }
+    if cleaned.ends_with("```") {
+        cleaned = cleaned.trim_end_matches("```").trim();
+    }
+
+    Ok(cleaned.to_string())
+}
+
+/// Suggest related URLs/resources based on current workspace context
+pub async fn suggest_related(workspace_urls: &str, history: &str) -> Result<String, String> {
+    let prompt = format!(
+        r#"Based on the user's current workspace URLs and browsing history, suggest 3-5 related resources they might find useful.
+
+Current Workspace URLs:
+{}
+
+Recent History:
+{}
+
+Return ONLY a JSON array of suggestions:
+[{{"title":"Suggested Resource","reason":"Why this is relevant"}}]
+
+JSON:"#,
+        workspace_urls, history
+    );
+    super::inference::chat(&prompt).await
+}

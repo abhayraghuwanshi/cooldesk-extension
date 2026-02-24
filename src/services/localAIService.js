@@ -335,6 +335,60 @@ export async function suggestWorkspaces(urls) {
 }
 
 /**
+ * Group browsing items into smart workspace categories
+ * @param {string} items - Formatted string of browsing items
+ * @param {string} context - External context (workspace URLs, etc.)
+ * @param {string} customPrompt - Optional custom AI prompt
+ * @returns {Promise<Object>} - { groups: [...], suggestions: [...] }
+ */
+export async function groupWorkspaces(items, context = '', customPrompt = null) {
+    const result = await request('llm-group-workspaces', {
+        items,
+        context,
+        customPrompt
+    }, 90000); // 90s timeout for complex grouping
+
+    // Parse the JSON response from LLM
+    if (result.result) {
+        try {
+            const jsonMatch = result.result.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.warn('[LocalAI] Failed to parse group response:', e);
+        }
+    }
+    return { groups: [], suggestions: [] };
+}
+
+/**
+ * Get related resource suggestions based on workspace context
+ * @param {string} workspaceUrls - Formatted string of workspace URLs
+ * @param {string} history - Recent browsing history
+ * @returns {Promise<Array>} - Array of { title, reason }
+ */
+export async function suggestRelated(workspaceUrls, history = '') {
+    const result = await request('llm-suggest-related', {
+        workspaceUrls,
+        history
+    }, 60000);
+
+    // Parse the JSON array response
+    if (result.suggestions) {
+        try {
+            const jsonMatch = result.suggestions.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.warn('[LocalAI] Failed to parse suggestions:', e);
+        }
+    }
+    return [];
+}
+
+/**
  * Generate a daily briefing
  * @param {Object} context
  * @returns {Promise<string>}

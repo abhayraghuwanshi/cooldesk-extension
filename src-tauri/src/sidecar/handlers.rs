@@ -567,7 +567,7 @@ pub async fn post_sync(
 
 use crate::sidecar::llm::models::{ModelInfo, LlmStatus, get_available_models, get_status, load_model, unload_model, download_model};
 use crate::sidecar::llm::inference::{chat};
-use crate::sidecar::llm::tasks::{summarize, categorize};
+use crate::sidecar::llm::tasks::{summarize, categorize, group_workspaces, suggest_related};
 
 pub async fn llm_models() -> Json<HashMap<String, ModelInfo>> {
     if let Ok(models) = get_available_models().await {
@@ -660,6 +660,57 @@ pub async fn llm_summarize(Json(req): Json<SummarizeRequest>) -> Json<ChatRespon
         Json(ChatResponse { response })
     } else {
         Json(ChatResponse { response: "".to_string() })
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupWorkspacesRequest {
+    pub items: String,
+    #[serde(default)]
+    pub context: Option<String>,
+    #[serde(default)]
+    pub custom_prompt: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct GroupWorkspacesResponse {
+    pub result: String,
+    pub ok: bool,
+}
+
+pub async fn llm_group_workspaces(Json(req): Json<GroupWorkspacesRequest>) -> Json<GroupWorkspacesResponse> {
+    let context = req.context.unwrap_or_default();
+    let custom_prompt = req.custom_prompt.as_deref();
+
+    if let Ok(result) = group_workspaces(&req.items, &context, custom_prompt).await {
+        Json(GroupWorkspacesResponse { result, ok: true })
+    } else {
+        Json(GroupWorkspacesResponse { result: "".to_string(), ok: false })
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestRelatedRequest {
+    pub workspace_urls: String,
+    #[serde(default)]
+    pub history: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct SuggestRelatedResponse {
+    pub suggestions: String,
+    pub ok: bool,
+}
+
+pub async fn llm_suggest_related(Json(req): Json<SuggestRelatedRequest>) -> Json<SuggestRelatedResponse> {
+    let history = req.history.unwrap_or_default();
+
+    if let Ok(suggestions) = suggest_related(&req.workspace_urls, &history).await {
+        Json(SuggestRelatedResponse { suggestions, ok: true })
+    } else {
+        Json(SuggestRelatedResponse { suggestions: "[]".to_string(), ok: false })
     }
 }
 

@@ -69,6 +69,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/llm/unload", post(llm_unload))
         .route("/llm/chat", post(llm_chat))
         .route("/llm/summarize", post(llm_summarize))
+        .route("/llm/group-workspaces", post(llm_group_workspaces))
+        .route("/llm/suggest-related", post(llm_suggest_related))
         .layer(cors)
         .with_state(state);
 
@@ -586,6 +588,85 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
                 }
                 Err(e) => {
                     state.broadcast("llm-chat-response", serde_json::json!({
+                        "ok": false,
+                        "requestId": request_id,
+                        "error": e
+                    }));
+                }
+            }
+        }
+
+        "llm-group-workspaces" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let items = msg.payload.as_ref()
+                .and_then(|p| p.get("items"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let context = msg.payload.as_ref()
+                .and_then(|p| p.get("context"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            let custom_prompt = msg.payload.as_ref()
+                .and_then(|p| p.get("customPrompt"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            match crate::sidecar::llm::tasks::group_workspaces(
+                &items,
+                context.as_deref().unwrap_or(""),
+                custom_prompt.as_deref()
+            ).await {
+                Ok(result) => {
+                    state.broadcast("llm-group-workspaces-response", serde_json::json!({
+                        "ok": true,
+                        "requestId": request_id,
+                        "result": result
+                    }));
+                }
+                Err(e) => {
+                    state.broadcast("llm-group-workspaces-response", serde_json::json!({
+                        "ok": false,
+                        "requestId": request_id,
+                        "error": e
+                    }));
+                }
+            }
+        }
+
+        "llm-suggest-related" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let workspace_urls = msg.payload.as_ref()
+                .and_then(|p| p.get("workspaceUrls"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let history = msg.payload.as_ref()
+                .and_then(|p| p.get("history"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            match crate::sidecar::llm::tasks::suggest_related(
+                &workspace_urls,
+                history.as_deref().unwrap_or("")
+            ).await {
+                Ok(suggestions) => {
+                    state.broadcast("llm-suggest-related-response", serde_json::json!({
+                        "ok": true,
+                        "requestId": request_id,
+                        "suggestions": suggestions
+                    }));
+                }
+                Err(e) => {
+                    state.broadcast("llm-suggest-related-response", serde_json::json!({
                         "ok": false,
                         "requestId": request_id,
                         "error": e
