@@ -2664,6 +2664,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   border: 1px solid rgba(148, 163, 184, 0.1);
   background: rgba(15, 23, 42, 0.3);
   min-width: 0;
+  /* Prevent content from overflowing horizontally */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Responsive for medium screens (1200px and below) */
@@ -2675,7 +2678,8 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .overview-activity-column {
     min-height: 300px;
-    max-height: 400px;
+    max-height: none; /* Remove max-height constraint on smaller screens */
+    flex: 1;
   }
 
   .overview-notes-section {
@@ -2709,7 +2713,8 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .overview-activity-column {
     min-height: 250px;
-    max-height: 350px;
+    max-height: none; /* Remove max-height constraint */
+    flex: 1;
   }
 }
 
@@ -2765,6 +2770,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   .overview-activity-column {
     display: flex;
     min-height: 300px;
+    max-height: none; /* Remove max-height constraint */
     margin-bottom: 20px;
   }
 
@@ -2851,7 +2857,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .overview-activity-column {
     min-height: 200px;
-    max-height: 300px;
+    max-height: none; /* Remove max-height constraint */
     border-radius: 12px;
   }
 }

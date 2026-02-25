@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { fontFamilies } from '../../utils/fontUtils';
 const ThemesTab = ({
   selectedTheme,
@@ -12,9 +12,60 @@ const ThemesTab = ({
   wallpaperOpacity = 0.3,
   onWallpaperEnabledChange = () => { },
   onWallpaperUrlChange = () => { },
-  onWallpaperOpacityChange = () => { }
+  onWallpaperOpacityChange = () => { },
+  unsplashApiKey = '',
+  onUnsplashApiKeyChange = () => { }
 }) => {
   const [showAllThemes, setShowAllThemes] = useState(false);
+  const [unsplashSearchQuery, setUnsplashSearchQuery] = useState('');
+  const [unsplashResults, setUnsplashResults] = useState([]);
+  const [unsplashLoading, setUnsplashLoading] = useState(false);
+  const [unsplashError, setUnsplashError] = useState('');
+
+  // Search Unsplash for wallpapers
+  const searchUnsplash = useCallback(async (query) => {
+    if (!unsplashApiKey) {
+      setUnsplashError('Please enter your Unsplash API key first');
+      return;
+    }
+    if (!query.trim()) {
+      setUnsplashError('Please enter a search term');
+      return;
+    }
+
+    setUnsplashLoading(true);
+    setUnsplashError('');
+
+    try {
+      const response = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=12&orientation=landscape`,
+        {
+          headers: {
+            'Authorization': `Client-ID ${unsplashApiKey}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Invalid API key. Please check your Unsplash API key.');
+        }
+        throw new Error(`Failed to fetch: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setUnsplashResults(data.results || []);
+
+      if (data.results?.length === 0) {
+        setUnsplashError('No results found. Try a different search term.');
+      }
+    } catch (err) {
+      console.error('Unsplash search error:', err);
+      setUnsplashError(err.message || 'Failed to search Unsplash');
+    } finally {
+      setUnsplashLoading(false);
+    }
+  }, [unsplashApiKey]);
 
 
 
@@ -821,6 +872,229 @@ const ThemesTab = ({
                 Try: source.unsplash.com/1920x1080/?nature or your own image URL
               </div>
             </div>
+
+            {/* Unsplash API Key */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                color: '#e5e7eb',
+                fontWeight: '500',
+                marginBottom: '8px',
+                fontSize: 'var(--font-base)'
+              }}>
+                Unsplash API Key (Optional)
+              </label>
+              <input
+                type="password"
+                value={unsplashApiKey}
+                onChange={(e) => onUnsplashApiKeyChange(e.target.value)}
+                placeholder="Enter your Unsplash API key"
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '10px',
+                  color: '#e5e7eb',
+                  fontSize: 'var(--font-base)',
+                  outline: 'none',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = 'rgba(52, 199, 89, 0.4)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                }}
+              />
+              <div style={{
+                fontSize: 'var(--font-xs)',
+                color: 'rgba(255, 255, 255, 0.4)',
+                marginTop: '6px'
+              }}>
+                Get your free API key at <a href="https://unsplash.com/developers" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>unsplash.com/developers</a>. Enables high-quality wallpaper search.
+              </div>
+            </div>
+
+            {/* Unsplash Search - Only show if API key is provided */}
+            {unsplashApiKey && (
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  color: '#e5e7eb',
+                  fontWeight: '500',
+                  marginBottom: '12px',
+                  fontSize: 'var(--font-base)'
+                }}>
+                  Search Unsplash Wallpapers
+                </label>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                  <input
+                    type="text"
+                    value={unsplashSearchQuery}
+                    onChange={(e) => setUnsplashSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        searchUnsplash(unsplashSearchQuery);
+                      }
+                    }}
+                    placeholder="Search for wallpapers (e.g., mountains, ocean, city)"
+                    style={{
+                      flex: 1,
+                      padding: '12px 14px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      color: '#e5e7eb',
+                      fontSize: 'var(--font-base)',
+                      outline: 'none',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = 'rgba(96, 165, 250, 0.4)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+                    }}
+                  />
+                  <button
+                    onClick={() => searchUnsplash(unsplashSearchQuery)}
+                    disabled={unsplashLoading}
+                    style={{
+                      padding: '12px 20px',
+                      background: unsplashLoading ? 'rgba(96, 165, 250, 0.3)' : 'rgba(96, 165, 250, 0.2)',
+                      border: '1px solid rgba(96, 165, 250, 0.4)',
+                      borderRadius: '10px',
+                      color: '#60a5fa',
+                      fontSize: 'var(--font-base)',
+                      fontWeight: '600',
+                      cursor: unsplashLoading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!unsplashLoading) {
+                        e.currentTarget.style.background = 'rgba(96, 165, 250, 0.3)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!unsplashLoading) {
+                        e.currentTarget.style.background = 'rgba(96, 165, 250, 0.2)';
+                      }
+                    }}
+                  >
+                    {unsplashLoading ? 'Searching...' : 'Search'}
+                  </button>
+                </div>
+
+                {/* Error Message */}
+                {unsplashError && (
+                  <div style={{
+                    padding: '10px 14px',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    borderRadius: '8px',
+                    color: '#f87171',
+                    fontSize: 'var(--font-sm)',
+                    marginBottom: '12px'
+                  }}>
+                    {unsplashError}
+                  </div>
+                )}
+
+                {/* Search Results Grid */}
+                {unsplashResults.length > 0 && (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '10px'
+                  }}>
+                    {unsplashResults.map(photo => (
+                      <div
+                        key={photo.id}
+                        onClick={() => {
+                          onWallpaperUrlChange(photo.urls.full);
+                          setUnsplashResults([]);
+                          setUnsplashSearchQuery('');
+                        }}
+                        style={{
+                          position: 'relative',
+                          aspectRatio: '16/9',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          border: wallpaperUrl === photo.urls.full ? '3px solid #34C759' : '2px solid rgba(255, 255, 255, 0.1)',
+                          transition: 'all 0.2s ease',
+                          backgroundImage: `url(${photo.urls.small})`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center'
+                        }}
+                        onMouseEnter={(e) => {
+                          if (wallpaperUrl !== photo.urls.full) {
+                            e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.5)';
+                            e.currentTarget.style.transform = 'scale(1.03)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (wallpaperUrl !== photo.urls.full) {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }
+                        }}
+                      >
+                        {wallpaperUrl === photo.urls.full && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            background: '#34C759',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 'var(--font-sm)',
+                            color: '#fff'
+                          }}>
+                            ✓
+                          </div>
+                        )}
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)',
+                          padding: '20px 8px 6px 8px',
+                          fontSize: 'var(--font-xs)',
+                          color: '#fff'
+                        }}>
+                          <div style={{ fontWeight: '500', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {photo.alt_description || 'Untitled'}
+                          </div>
+                          <div style={{ opacity: 0.7, fontSize: '10px' }}>
+                            by {photo.user?.name || 'Unknown'}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{
+                  fontSize: 'var(--font-xs)',
+                  color: 'rgba(255, 255, 255, 0.4)',
+                  marginTop: '8px'
+                }}>
+                  Press Enter or click Search to find wallpapers. Click any image to set as wallpaper.
+                </div>
+              </div>
+            )}
 
             {/* Opacity Slider */}
             <div style={{ marginBottom: '16px' }}>

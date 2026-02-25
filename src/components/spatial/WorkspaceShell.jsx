@@ -17,9 +17,9 @@ import '../../styles/spatial.css';
  * - Notes (far right) - deep focus writing
  */
 // Create context for face state management to avoid prop drilling
-const WorkspaceFaceContext = React.createContext({ currentFace: 'overview' });
+const WorkspaceFaceContext = React.createContext({ currentFace: 'overview', isDesktopApp: false });
 
-export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange, onSearch }) {
+export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange, onSearch, isDesktopApp = false }) {
   const [currentFace, setCurrentFace] = useState(activeFace);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [activeTeam, setActiveTeam] = useState(null);
@@ -118,6 +118,9 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
   }, [currentFace, onFaceChange]);
 
   useEffect(() => {
+    // Skip keyboard navigation in extension mode (only one face)
+    if (!isDesktopApp) return;
+
     const handleKeyboard = (e) => {
       const modifierPressed = e.ctrlKey || e.metaKey;
       const isInput = ['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable;
@@ -176,10 +179,13 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
 
     window.addEventListener('keydown', handleKeyboard);
     return () => window.removeEventListener('keydown', handleKeyboard);
-  }, [navigateToFace, currentFace]);
+  }, [navigateToFace, currentFace, isDesktopApp]);
 
   // Hyper-Spatial: Global Fluid Navigation (Two-finger scroll)
   useEffect(() => {
+    // Skip wheel navigation in extension mode (only one face)
+    if (!isDesktopApp) return;
+
     const GESTURE_TIMEOUT = 150; // Ms before considering gesture ended
     const MIN_SWITCH_COOLDOWN = 600; // Increased to 600ms to prevent double-skipping
 
@@ -262,9 +268,15 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
 
     window.addEventListener('wheel', handleWheel, { passive: false });
     return () => window.removeEventListener('wheel', handleWheel);
-  }, [navigateToFace, currentFace]);
+  }, [navigateToFace, currentFace, isDesktopApp]);
 
   const transform = useMemo(() => {
+    // In extension mode, only overview is shown - no transform needed
+    if (!isDesktopApp) {
+      return 'translateX(0)';
+    }
+
+    // Desktop app: 6 faces, each taking 16.666% width
     const transforms = {
       'chat': 'translateX(0)',
       'workspace': 'translateX(-16.666667%)',
@@ -274,78 +286,90 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       'notes': 'translateX(-83.333333%)'
     };
     return transforms[currentFace] || transforms.overview;
-  }, [currentFace]);
+  }, [currentFace, isDesktopApp]);
 
   return (
-    <WorkspaceFaceContext.Provider value={{ currentFace }}>
+    <WorkspaceFaceContext.Provider value={{ currentFace, isDesktopApp }}>
       <div className="workspace-shell">
-        <div
-          className="face-indicator"
-          data-face={currentFace}
-          onMouseLeave={() => setHoveredFace(null)}
-        >
-          <div className="face-label">
-            {hoveredFace
-              ? hoveredFace.charAt(0).toUpperCase() + hoveredFace.slice(1)
-              : (activeTabTitle || currentFace.charAt(0).toUpperCase() + currentFace.slice(1))}
+        {/* Navigation bar - Desktop App Only */}
+        {isDesktopApp && (
+          <div
+            className="face-indicator"
+            data-face={currentFace}
+            onMouseLeave={() => setHoveredFace(null)}
+          >
+            <div className="face-label">
+              {hoveredFace
+                ? hoveredFace.charAt(0).toUpperCase() + hoveredFace.slice(1)
+                : (activeTabTitle || currentFace.charAt(0).toUpperCase() + currentFace.slice(1))}
+            </div>
+            <button
+              className={`face-dot ${currentFace === 'chat' ? 'active' : ''}`}
+              onClick={() => navigateToFace('chat')}
+              onMouseEnter={() => setHoveredFace('chat')}
+              title="Chat (Ctrl + 1)"
+              data-onboarding="nav-chat"
+            >
+              <FontAwesomeIcon icon={faComments} className="face-icon" />
+            </button>
+            <button
+              className={`face-dot ${currentFace === 'workspace' ? 'active' : ''}`}
+              onClick={() => navigateToFace('workspace')}
+              onMouseEnter={() => setHoveredFace('workspace')}
+              title="Collections (Ctrl + 2)"
+              data-onboarding="nav-collections"
+            >
+              <FontAwesomeIcon icon={faFolder} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
+            </button>
+            <button
+              className={`face-dot ${currentFace === 'overview' ? 'active' : ''}`}
+              onClick={() => navigateToFace('overview')}
+              onMouseEnter={() => setHoveredFace('overview')}
+              title="Overview (Ctrl + 3)"
+              data-onboarding="nav-overview"
+            >
+              <FontAwesomeIcon icon={faHome} className="face-icon" />
+            </button>
+            <button
+              className={`face-dot ${currentFace === 'tabs' ? 'active' : ''}`}
+              onClick={() => navigateToFace('tabs')}
+              onMouseEnter={() => setHoveredFace('tabs')}
+              title="Tabs (Ctrl + 4)"
+              data-onboarding="nav-tabs"
+            >
+              <FontAwesomeIcon icon={faTh} className="face-icon" />
+            </button>
+            <button
+              className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
+              onClick={() => navigateToFace('team')}
+              onMouseEnter={() => setHoveredFace('team')}
+              title="Spaces (Ctrl + 5)"
+              data-onboarding="nav-team"
+            >
+              <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
+            </button>
+            <button
+              className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`}
+              onClick={() => navigateToFace('notes')}
+              onMouseEnter={() => setHoveredFace('notes')}
+              title="Notes (Ctrl + 6)"
+              data-onboarding="nav-notes"
+            >
+              <FontAwesomeIcon icon={faStickyNote} className="face-icon" />
+            </button>
           </div>
-          <button
-            className={`face-dot ${currentFace === 'chat' ? 'active' : ''}`}
-            onClick={() => navigateToFace('chat')}
-            onMouseEnter={() => setHoveredFace('chat')}
-            title="Chat (Ctrl + 1)"
-            data-onboarding="nav-chat"
-          >
-            <FontAwesomeIcon icon={faComments} className="face-icon" />
-          </button>
-          <button
-            className={`face-dot ${currentFace === 'workspace' ? 'active' : ''}`}
-            onClick={() => navigateToFace('workspace')}
-            onMouseEnter={() => setHoveredFace('workspace')}
-            title="Collections (Ctrl + 2)"
-            data-onboarding="nav-collections"
-          >
-            <FontAwesomeIcon icon={faFolder} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
-          </button>
-          <button
-            className={`face-dot ${currentFace === 'overview' ? 'active' : ''}`}
-            onClick={() => navigateToFace('overview')}
-            onMouseEnter={() => setHoveredFace('overview')}
-            title="Overview (Ctrl + 3)"
-            data-onboarding="nav-overview"
-          >
-            <FontAwesomeIcon icon={faHome} className="face-icon" />
-          </button>
-          <button
-            className={`face-dot ${currentFace === 'tabs' ? 'active' : ''}`}
-            onClick={() => navigateToFace('tabs')}
-            onMouseEnter={() => setHoveredFace('tabs')}
-            title="Tabs (Ctrl + 4)"
-            data-onboarding="nav-tabs"
-          >
-            <FontAwesomeIcon icon={faTh} className="face-icon" />
-          </button>
-          <button
-            className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
-            onClick={() => navigateToFace('team')}
-            onMouseEnter={() => setHoveredFace('team')}
-            title="Spaces (Ctrl + 5)"
-            data-onboarding="nav-team"
-          >
-            <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
-          </button>
-          <button
-            className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`}
-            onClick={() => navigateToFace('notes')}
-            onMouseEnter={() => setHoveredFace('notes')}
-            title="Notes (Ctrl + 6)"
-            data-onboarding="nav-notes"
-          >
-            <FontAwesomeIcon icon={faStickyNote} className="face-icon" />
-          </button>
-        </div>
+        )}
 
-        <div className={`workspace-faces ${isTransitioning ? 'transitioning' : ''}`} style={{ transform, willChange: 'transform' }}>
+        <div
+          className={`workspace-faces ${isTransitioning ? 'transitioning' : ''}`}
+          style={{
+            transform,
+            willChange: 'transform',
+            // In extension mode: single face takes 100% width
+            // In desktop mode: 6 faces at 600% total width (handled by CSS)
+            ...(isDesktopApp ? {} : { width: '100%' })
+          }}
+        >
           {children}
         </div>
       </div>
@@ -355,13 +379,14 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
 
 export function Face({ index, children, className = '' }) {
   // Consume context to check if this face is active
-  const { currentFace } = React.useContext(WorkspaceFaceContext);
+  const { currentFace, isDesktopApp } = React.useContext(WorkspaceFaceContext);
   const isActive = currentFace === index;
 
   return (
     <div
       className={`workspace-face ${className} ${isActive ? 'active' : 'inactive'}`}
       data-face={index}
+      style={isDesktopApp ? undefined : { flex: '0 0 100%', width: '100%' }}
     >
       {/* Optimization: While blurred/inactive, we can also hint browser to deprioritize hit testing */}
       <div style={{

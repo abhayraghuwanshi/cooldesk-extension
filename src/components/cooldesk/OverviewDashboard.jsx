@@ -1,14 +1,11 @@
-import { faStickyNote } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { lazy, memo, Suspense, useEffect, useMemo, useState } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
+import { isElectronApp } from '../../services/environmentDetector';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { sortWorkspacesByActivity } from '../../utils/ranking.js';
 import { ResumeWorkWidget } from '../widgets/ResumeWorkWidget';
-import { NotesWidget } from './NotesWidget';
 import { PomodoroWidget } from './PomodoroWidget';
-import { SmartWorkspace } from './SmartWorkspace';
 import { WorkspaceCard } from './WorkspaceCard';
 
 // Lazy load ActivityFeed as it's not critical for LCP (Largest Contentful Paint)
@@ -60,6 +57,9 @@ const OverviewDashboard = memo(function OverviewDashboard({
     pinnedWorkspaces = [],
     onAddUrl
 }) {
+    // Detect if running in Tauri/Electron app
+    const isDesktopApp = isElectronApp();
+
     const [recentWorkspaces, setRecentWorkspaces] = useState(() => {
         // Hydrate from local storage cache for instant render
         try {
@@ -70,7 +70,11 @@ const OverviewDashboard = memo(function OverviewDashboard({
         }
     });
     const [isLoading, setIsLoading] = useState(recentWorkspaces.length === 0);
-    const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('recent'); // 'recent' or 'smart'
+    const [showAllWorkspaces, setShowAllWorkspaces] = useState(false);
+
+    // In extension mode, allow showing more workspaces
+    const DEFAULT_WORKSPACE_COUNT = isDesktopApp ? 2 : 3;
+    const MAX_WORKSPACE_COUNT = isDesktopApp ? 2 : 10;
 
     // Compute a stable hash of the input workspaces to detect changes
     const workspacesHash = useMemo(() => {
@@ -103,19 +107,20 @@ const OverviewDashboard = memo(function OverviewDashboard({
                 // Use the Activity Score algorithm to sort
                 const sorted = await sortWorkspacesByActivity(savedWorkspaces, getAnalytics);
 
-                const top4 = sorted.slice(0, 2);
+                // In extension mode, cache more workspaces for "show more" feature
+                const topWorkspaces = sorted.slice(0, MAX_WORKSPACE_COUNT);
                 if (isMounted) {
-                    setRecentWorkspaces(top4);
+                    setRecentWorkspaces(topWorkspaces);
                     setIsLoading(false);
                     // Update cache
-                    localStorage.setItem(cacheKey, JSON.stringify(top4));
+                    localStorage.setItem(cacheKey, JSON.stringify(topWorkspaces));
                     localStorage.setItem(cacheHashKey, workspacesHash);
                 }
             } catch (error) {
                 console.error('Error sorting workspaces:', error);
                 if (isMounted) {
                     // Fallback to default order
-                    setRecentWorkspaces(savedWorkspaces.slice(0, 2));
+                    setRecentWorkspaces(savedWorkspaces.slice(0, MAX_WORKSPACE_COUNT));
                     setIsLoading(false);
                 }
             }
@@ -133,7 +138,25 @@ const OverviewDashboard = memo(function OverviewDashboard({
     }, [workspacesHash]); // Depend on hash, not array reference, to avoid loops if array is recreated but identical
 
     // Use recent workspaces if loaded, otherwise fallback or empty
-    const displayedWorkspaces = recentWorkspaces.length > 0 ? recentWorkspaces : (isLoading ? [] : savedWorkspaces.slice(0, 2));
+    const allWorkspaces = recentWorkspaces.length > 0 ? recentWorkspaces : (isLoading ? [] : savedWorkspaces.slice(0, MAX_WORKSPACE_COUNT));
+
+    // Show limited or all workspaces based on toggle state
+    // In extension mode when expanded, use savedWorkspaces directly (up to MAX) to show all available
+    const displayedWorkspaces = useMemo(() => {
+        if (!isDesktopApp && showAllWorkspaces) {
+            // When expanded in extension mode, show from savedWorkspaces up to MAX_WORKSPACE_COUNT
+            return savedWorkspaces.slice(0, MAX_WORKSPACE_COUNT);
+        }
+        return showAllWorkspaces ? allWorkspaces : allWorkspaces.slice(0, DEFAULT_WORKSPACE_COUNT);
+    }, [isDesktopApp, showAllWorkspaces, savedWorkspaces, allWorkspaces, MAX_WORKSPACE_COUNT, DEFAULT_WORKSPACE_COUNT]);
+    // For extension mode, check against total savedWorkspaces count to show "more" button
+    const hasMoreWorkspaces = !isDesktopApp
+        ? savedWorkspaces.length > DEFAULT_WORKSPACE_COUNT
+        : allWorkspaces.length > DEFAULT_WORKSPACE_COUNT;
+    // Calculate how many more workspaces are available (for the button text)
+    const moreWorkspacesCount = showAllWorkspaces
+        ? 0
+        : Math.min(savedWorkspaces.length, MAX_WORKSPACE_COUNT) - DEFAULT_WORKSPACE_COUNT;
 
     return (
         <div className="overview-dashboard-grid" style={{
@@ -149,24 +172,26 @@ const OverviewDashboard = memo(function OverviewDashboard({
                 {/* Resume Work Widget - Shows last active session */}
                 <ResumeWorkWidget />
 
-                {/* Pomodoro Widget Section */}
-                <div className="    " style={{ marginTop: '24px' }}>
-                    <h3 style={{
-                        fontSize: 'var(--font-2xl, 20px)',
-                        fontWeight: 600,
-                        color: 'var(--text-secondary, #94A3B8)',
-                        fontFamily: defaultFontFamily,
-                        marginBottom: '12px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                    }}>
-                        Focus Timer
-                    </h3>
-                    <PomodoroWidget />
-                </div>
+                {/* Pomodoro Widget Section - Desktop App Only */}
+                {isDesktopApp && (
+                    <div className="    " style={{ marginTop: '24px' }}>
+                        <h3 style={{
+                            fontSize: 'var(--font-2xl, 20px)',
+                            fontWeight: 600,
+                            color: 'var(--text-secondary, #94A3B8)',
+                            fontFamily: defaultFontFamily,
+                            marginBottom: '12px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}>
+                            Focus Timer
+                        </h3>
+                        <PomodoroWidget />
+                    </div>
+                )}
                 {/* Workspaces Section */}
                 <div>
                     <div style={{
@@ -188,137 +213,125 @@ const OverviewDashboard = memo(function OverviewDashboard({
                             margin: 0
                         }}>
                             Workspaces
+                            {/* Show count badge in extension mode - show total savedWorkspaces count */}
+                            {!isDesktopApp && savedWorkspaces.length > 0 && (
+                                <span style={{
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: '#64748B',
+                                    background: 'rgba(100, 116, 139, 0.2)',
+                                    padding: '2px 8px',
+                                    borderRadius: '10px',
+                                    textTransform: 'none',
+                                    letterSpacing: 'normal'
+                                }}>
+                                    {savedWorkspaces.length}
+                                </span>
+                            )}
                         </h3>
-                        {/* Tab Toggle */}
-                        <div style={{
-                            display: 'flex',
-                            background: 'rgba(30, 41, 59, 0.5)',
-                            padding: '4px',
-                            borderRadius: '8px',
-                            gap: '4px'
-                        }}>
+                        {/* Show more/less toggle - Extension mode only */}
+                        {!isDesktopApp && hasMoreWorkspaces && (
                             <button
-                                onClick={() => setActiveWorkspaceTab('recent')}
+                                onClick={() => setShowAllWorkspaces(!showAllWorkspaces)}
                                 style={{
-                                    background: activeWorkspaceTab === 'recent' ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                                    color: activeWorkspaceTab === 'recent' ? '#60A5FA' : '#64748B',
-                                    border: 'none',
+                                    background: 'rgba(59, 130, 246, 0.1)',
+                                    border: '1px solid rgba(59, 130, 246, 0.2)',
                                     borderRadius: '6px',
-                                    padding: '4px 12px',
-                                    fontSize: '12px',
+                                    padding: '4px 10px',
+                                    fontSize: '11px',
                                     fontWeight: 600,
+                                    color: '#60A5FA',
                                     cursor: 'pointer',
-                                    transition: 'all 0.2s',
+                                    transition: 'all 0.2s'
                                 }}
                             >
-                                Recent
+                                {showAllWorkspaces ? 'Show less' : `+${moreWorkspacesCount} more`}
                             </button>
-                            <button
-                                onClick={() => setActiveWorkspaceTab('smart')}
-                                style={{
-                                    background: activeWorkspaceTab === 'smart' ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
-                                    color: activeWorkspaceTab === 'smart' ? '#A78BFA' : '#64748B',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    padding: '4px 12px',
-                                    fontSize: '12px',
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s',
-                                }}
-                            >
-                                Smart AI ✨
-                            </button>
-                        </div>
+                        )}
                     </div>
 
-                    {activeWorkspaceTab === 'recent' ? (
-                        <div className="cooldesk-list-view"
-                            data-onboarding="workspace-list"
-                            style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '2px',
-                                overflow: 'visible',
-                                minHeight: '160px' // Optimization: Reserve space to prevent layout shift
-                            }}>
-                            {isLoading && displayedWorkspaces.length === 0 ? (
-                                <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
-                                    Loading recent activity...
-                                </div>
-                            ) : displayedWorkspaces.length > 0 ? (
-                                displayedWorkspaces.map(workspace => (
-                                    <WorkspaceCard
-                                        key={workspace.id}
-                                        workspace={workspace}
-                                        onClick={onWorkspaceClick}
-                                        isExpanded={expandedWorkspaceId === workspace.id}
-                                        isActive={activeWorkspaceId === workspace.id}
-                                        compact={true}
-                                        isPinned={pinnedWorkspaces.includes(workspace.name)}
-                                        onAddUrl={onAddUrl}
-                                        data-onboarding="workspace-card"
-                                    />
-                                ))
-                            ) : (
-                                <div style={{
-                                    padding: '20px',
-                                    background: 'rgba(30, 41, 59, 0.4)',
-                                    borderRadius: '12px',
-                                    color: '#64748B',
-                                    textAlign: 'center',
-                                    fontSize: '13px'
-                                }}>
-                                    No workspaces found.
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div style={{ height: '500px' }}>
-                            <SmartWorkspace />
-                        </div>
-                    )}
-                </div>
-
-                {/* Notes Widget Section */}
-                <div className="    ">
-                    <h3 style={{
-                        fontSize: 'var(--font-2xl, 20px)',
-                        fontWeight: 600,
-                        color: 'var(--text-secondary, #94A3B8)',
-                        fontFamily: defaultFontFamily,
-                        marginBottom: '12px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                    }}>
-                        Quick Notes
-                    </h3>
-                    <div className="cooldesk-workspace-card overview-notes-card" data-onboarding="notes-widget">
-                        <div className="workspace-card-header">
-                            <div className="workspace-icon purple">
-                                <FontAwesomeIcon icon={faStickyNote} />
-                            </div>
-                            <div className="workspace-info">
-                                <div className="workspace-name">Notes</div>
-                                <div className="workspace-count">Jot down a thought...</div>
-                            </div>
-                        </div>
-                        <div style={{
-                            flex: 1,
-                            overflow: 'hidden',
+                    <div className="cooldesk-list-view"
+                        data-onboarding="workspace-list"
+                        style={{
                             display: 'flex',
                             flexDirection: 'column',
-                            minHeight: 0
+                            gap: '2px',
+                            overflow: 'visible',
+                            minHeight: '160px' // Optimization: Reserve space to prevent layout shift
                         }}>
-                            <NotesWidget maxNotes={5} compact={false} onAddNote={onAddNote} />
-                        </div>
+                        {isLoading && displayedWorkspaces.length === 0 ? (
+                            <div style={{ padding: '20px', textAlign: 'center', color: '#64748B' }}>
+                                Loading recent activity...
+                            </div>
+                        ) : displayedWorkspaces.length > 0 ? (
+                            displayedWorkspaces.map(workspace => (
+                                <WorkspaceCard
+                                    key={workspace.id}
+                                    workspace={workspace}
+                                    onClick={onWorkspaceClick}
+                                    isExpanded={expandedWorkspaceId === workspace.id}
+                                    isActive={activeWorkspaceId === workspace.id}
+                                    compact={true}
+                                    isPinned={pinnedWorkspaces.includes(workspace.name)}
+                                    onAddUrl={onAddUrl}
+                                    data-onboarding="workspace-card"
+                                />
+                            ))
+                        ) : (
+                            <div style={{
+                                padding: '20px',
+                                background: 'rgba(30, 41, 59, 0.4)',
+                                borderRadius: '12px',
+                                color: '#64748B',
+                                textAlign: 'center',
+                                fontSize: '13px'
+                            }}>
+                                No workspaces found.
+                            </div>
+                        )}
                     </div>
-                    {/* <SmartWorkspace /> */}
                 </div>
 
+                {/* Notes Widget Section - Desktop App Only 
+                {isDesktopApp && (
+                    <div className="    ">
+                        <h3 style={{
+                            fontSize: 'var(--font-2xl, 20px)',
+                            fontWeight: 600,
+                            color: 'var(--text-secondary, #94A3B8)',
+                            fontFamily: defaultFontFamily,
+                            marginBottom: '12px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}>
+                            Quick Notes
+                        </h3>
+                        <div className="cooldesk-workspace-card overview-notes-card" data-onboarding="notes-widget">
+                            <div className="workspace-card-header">
+                                <div className="workspace-icon purple">
+                                    <FontAwesomeIcon icon={faStickyNote} />
+                                </div>
+                                <div className="workspace-info">
+                                    <div className="workspace-name">Notes</div>
+                                    <div className="workspace-count">Jot down a thought...</div>
+                                </div>
+                            </div>
+                            <div style={{
+                                flex: 1,
+                                overflow: 'hidden',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                minHeight: 0
+                            }}>
+                                <NotesWidget maxNotes={5} compact={false} onAddNote={onAddNote} />
+                            </div>
+                        </div>
+                    </div>
+                )}
+                */}
 
             </div>
 

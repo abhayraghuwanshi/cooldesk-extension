@@ -366,7 +366,7 @@ class SyncOrchestrator {
                 console.log('[SyncOrchestrator] Connection established, starting full sync...');
                 this.fullSync().catch(err => console.error('[SyncOrchestrator] Initial full sync failed:', err));
             } else {
-                console.log(`[SyncOrchestrator] Skipping full sync (last sync ${Math.round(timeSinceLastFullSync/1000)}s ago)`);
+                console.log(`[SyncOrchestrator] Skipping full sync (last sync ${Math.round(timeSinceLastFullSync / 1000)}s ago)`);
             }
         }
 
@@ -529,19 +529,23 @@ class SyncOrchestrator {
                     }
                     break;
                 case 'notesChanged':
-                    const notes = await listNotes();
-                    const notesArray = Array.isArray(notes) ? notes : [];
-                    const changedNotes = this.getChangedItems(notesArray, 'notes');
-                    if (changedNotes.length > 0) {
-                        await this.pushChanges('notes', changedNotes, { delta: true });
+                    if (!isExtension()) {
+                        const notes = await listNotes();
+                        const notesArray = Array.isArray(notes) ? notes : [];
+                        const changedNotes = this.getChangedItems(notesArray, 'notes');
+                        if (changedNotes.length > 0) {
+                            await this.pushChanges('notes', changedNotes, { delta: true });
+                        }
                     }
                     break;
                 case 'urlNotesChanged':
-                    const urlNotes = await listAllUrlNotes();
-                    const urlNotesArray = Array.isArray(urlNotes) ? urlNotes : [];
-                    const changedUrlNotes = this.getChangedItems(urlNotesArray, 'url-notes');
-                    if (changedUrlNotes.length > 0) {
-                        await this.pushChanges('url-notes', changedUrlNotes, { delta: true });
+                    if (!isExtension()) {
+                        const urlNotes = await listAllUrlNotes();
+                        const urlNotesArray = Array.isArray(urlNotes) ? urlNotes : [];
+                        const changedUrlNotes = this.getChangedItems(urlNotesArray, 'url-notes');
+                        if (changedUrlNotes.length > 0) {
+                            await this.pushChanges('url-notes', changedUrlNotes, { delta: true });
+                        }
                     }
                     break;
                 case 'dailyMemoryChanged':
@@ -820,6 +824,11 @@ class SyncOrchestrator {
      * @param {boolean} options.force - Force push even if data unchanged
      */
     async pushChanges(type, data, options = {}) {
+        // Disable notes sync from extension to app
+        if (isExtension() && (type === 'notes' || type === 'url-notes')) {
+            return { ok: true, skipped: true };
+        }
+
         // Skip push if data hasn't changed (unless forced)
         if (!options.force && !this.hasDataChanged(type, data)) {
             // console.log(`[SyncOrchestrator] Skipping ${type} push (unchanged)`);
@@ -1084,7 +1093,7 @@ class SyncOrchestrator {
         const now = Date.now();
         const timeSinceLastFullSync = now - this.lastFullSyncTime;
         if (timeSinceLastFullSync < this.FULL_SYNC_DEBOUNCE_MS) {
-            console.log(`[SyncOrchestrator] Full sync debounced (${Math.round(timeSinceLastFullSync/1000)}s since last)`);
+            console.log(`[SyncOrchestrator] Full sync debounced (${Math.round(timeSinceLastFullSync / 1000)}s since last)`);
             return { ok: false, error: 'Sync debounced' };
         }
 
@@ -1096,7 +1105,7 @@ class SyncOrchestrator {
             console.log('[SyncOrchestrator] Starting full sync');
 
             // Define sync steps
-            const syncSteps = [
+            let syncSteps = [
                 { type: 'workspaces', list: listWorkspaces, save: saveWorkspace },
                 { type: 'notes', list: listNotes, save: saveNote },
                 { type: 'url-notes', list: listAllUrlNotes, save: saveUrlNote },
@@ -1105,6 +1114,11 @@ class SyncOrchestrator {
                 { type: 'scraped-configs', list: listScrapingConfigs, save: saveScrapingConfig },
                 { type: 'daily-memory', list: listDailyMemory, save: saveDailyMemory }
             ];
+
+            // Disable notes sync from extension to app
+            if (isExtension()) {
+                syncSteps = syncSteps.filter(step => step.type !== 'notes' && step.type !== 'url-notes');
+            }
 
             // 1. Sync Lists
             for (const step of syncSteps) {
@@ -1242,6 +1256,7 @@ class SyncOrchestrator {
      * Sync notes - fetches current notes and pushes to remote
      */
     async syncNotes() {
+        if (isExtension()) return { ok: true, skipped: true };
         try {
             const notes = await listNotes();
             return this.pushChanges('notes', Array.isArray(notes) ? notes : []);
@@ -1255,6 +1270,7 @@ class SyncOrchestrator {
      * Sync URL notes - fetches current URL notes and pushes to remote
      */
     async syncUrlNotes() {
+        if (isExtension()) return { ok: true, skipped: true };
         try {
             const urlNotes = await listAllUrlNotes();
             return this.pushChanges('url-notes', Array.isArray(urlNotes) ? urlNotes : []);

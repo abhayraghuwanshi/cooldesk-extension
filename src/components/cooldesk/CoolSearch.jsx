@@ -21,7 +21,7 @@ import { ExpandedSearchPanel } from './ExpandedSearchPanel.jsx';
 // though component state is usually fine. Let's use component state but allow ref fetching.
 // Actually, let's keep it simple with refs inside component.
 
-export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placeholder = "Search or type / for commands..." }) {
+export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placeholder = "Search or type / for commands...", isDesktopApp = false }) {
   const [searchValue, setSearchValue] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -449,18 +449,22 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       const query = searchValue.slice(1).toLowerCase();
 
       const fetchFlattenedSuggestions = async () => {
-        // Simplified Command List - Navigation and AI only
+        // Build command list based on environment
+        // In extension mode: Only AI commands (search, /ai, /model)
+        // In desktop app: Full navigation + AI commands
         const commands = [
-          // Navigation
-          { command: '/notes', title: 'Notes', description: 'Go to Notes', icon: faBook, category: 'Nav' },
-          { command: '/chat', title: 'Chat', description: 'Go to AI Chat', icon: faComment, category: 'Nav' },
-          { command: '/tabs', title: 'Tabs', description: 'Manage Tabs', icon: faLayerGroup, category: 'Nav' },
-          { command: '/workspaces', title: 'Workspaces', description: 'Manage Workspaces', icon: faBriefcase, category: 'Nav' },
-          { command: '/overview', title: 'Dashboard', description: 'Go to Dashboard', icon: faHome, category: 'Nav' },
-
-          // AI Commands
+          // AI Commands - Always available
           { command: '/ai', title: 'Ask AI', description: 'Chat with local LLM', icon: faRobot, category: 'AI' },
           { command: '/model', title: 'Select Model', description: 'Choose AI model to use', icon: faRobot, category: 'AI' },
+
+          // Navigation - Desktop App Only
+          ...(isDesktopApp ? [
+            { command: '/notes', title: 'Notes', description: 'Go to Notes', icon: faBook, category: 'Nav' },
+            { command: '/chat', title: 'Chat', description: 'Go to AI Chat', icon: faComment, category: 'Nav' },
+            { command: '/tabs', title: 'Tabs', description: 'Manage Tabs', icon: faLayerGroup, category: 'Nav' },
+            { command: '/workspaces', title: 'Workspaces', description: 'Manage Workspaces', icon: faBriefcase, category: 'Nav' },
+            { command: '/overview', title: 'Dashboard', description: 'Go to Dashboard', icon: faHome, category: 'Nav' },
+          ] : []),
         ];
 
         if (query === '') {
@@ -658,7 +662,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     }, 250);
 
     return () => clearTimeout(timeoutId);
-  }, [searchValue, activePill, setCommandSuggestions, setSearchSuggestions, aiChatMessages, isAiLoading]);
+  }, [searchValue, activePill, setCommandSuggestions, setSearchSuggestions, aiChatMessages, isAiLoading, isDesktopApp]);
 
   useEffect(() => {
     // Global shortcuts
@@ -1156,32 +1160,35 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     if (CommandParser.isCommand(query) || query.startsWith('/')) {
       try {
         // Special handling for slash commands that are just navigation
-        const navigationMap = {
-          '/notes': 'notes',
-          '/workspace': 'workspace',
-          '/chat': 'chat',
-          '/tabs': 'tabs',
-          '/team': 'team',
-          '/overview': 'overview'
-        };
+        // Only available in desktop app mode
+        if (isDesktopApp) {
+          const navigationMap = {
+            '/notes': 'notes',
+            '/workspace': 'workspace',
+            '/chat': 'chat',
+            '/tabs': 'tabs',
+            '/team': 'team',
+            '/overview': 'overview'
+          };
 
-        const ALIAS_MAP = {
-          '/o': 'overview',
-          '/n': 'notes',
-          '/w': 'workspace',
-          '/c': 'chat',
-          '/t': 'tabs',
-          '/tm': 'team'
-        };
+          const ALIAS_MAP = {
+            '/o': 'overview',
+            '/n': 'notes',
+            '/w': 'workspace',
+            '/c': 'chat',
+            '/t': 'tabs',
+            '/tm': 'team'
+          };
 
-        const target = navigationMap[query] || ALIAS_MAP[query];
+          const target = navigationMap[query] || ALIAS_MAP[query];
 
-        if (target && onNavigate) {
-          onNavigate(target);
-          handleClose();
-          setSearchValue('');
-          setActivePill(null);
-          return;
+          if (target && onNavigate) {
+            onNavigate(target);
+            handleClose();
+            setSearchValue('');
+            setActivePill(null);
+            return;
+          }
         }
 
         // Handle Model Selection Command (/model or /model <modelname>)
@@ -1417,7 +1424,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
     handleClose();
     setSearchValue('');
-  }, [searchValue, activePill, onNavigate, commandExecutor, handleClose]);
+  }, [searchValue, activePill, onNavigate, commandExecutor, handleClose, isDesktopApp]);
 
   const onSelectSuggestion = React.useCallback(async (item) => {
     if (!item) return;
@@ -1426,22 +1433,24 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
     if (item.command || item.category === 'Command' || (item.command && (item.command.startsWith('/') || item.command.startsWith('!')))) {
       const cmd = item.command;
 
-      const navigationMap = {
-        '/notes': 'notes',
-        '/workspace': 'workspace',
-        '/chat': 'chat',
-        '/tabs': 'tabs',
-        '/team': 'team',
-        '/overview': 'overview'
-      };
+      // Navigation Priority: Check for core navigation matches first (Desktop App Only)
+      if (isDesktopApp) {
+        const navigationMap = {
+          '/notes': 'notes',
+          '/workspace': 'workspace',
+          '/chat': 'chat',
+          '/tabs': 'tabs',
+          '/team': 'team',
+          '/overview': 'overview'
+        };
 
-      // Navigation Priority: Check for core navigation matches first
-      if (navigationMap[cmd] && onNavigate) {
-        onNavigate(navigationMap[cmd]);
-        handleClose();
-        setSearchValue('');
-        setActivePill(null);
-        return;
+        if (navigationMap[cmd] && onNavigate) {
+          onNavigate(navigationMap[cmd]);
+          handleClose();
+          setSearchValue('');
+          setActivePill(null);
+          return;
+        }
       }
 
       // Only /ai converts to pill mode
@@ -1542,7 +1551,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       handleClose();
       setSearchValue('');
     }
-  }, [onNavigate, onWorkspaceNavigate, handleSubmit, handleClose]); // handleSubmit also needs to be stable or dependent.
+  }, [onNavigate, onWorkspaceNavigate, handleSubmit, handleClose, isDesktopApp]); // handleSubmit also needs to be stable or dependent.
   // This is getting deep. handleSubmit relies on state too.
 
 

@@ -8,7 +8,8 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import scrapperConfig from '../../data/scrapper.json';
-import { getTimeSeriesDataRange, listScrapedChats, listPins } from '../../db/index.js';
+import { getTimeSeriesDataRange, listPins, listScrapedChats } from '../../db/index.js';
+import { isElectronApp } from '../../services/environmentDetector';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import '../../styles/cooldesk.css';
 import { enrichRunningAppsWithIcons, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
@@ -53,6 +54,9 @@ const getPlatformInfo = (chat) => {
 };
 
 export function ActivityFeed() {
+    // Detect if running in Tauri/Electron app
+    const isDesktopApp = isElectronApp();
+
     const [quickLinks, setQuickLinks] = useState([]);
     const [feedItems, setFeedItems] = useState([]);
     const [calendarEvents, setCalendarEvents] = useState([]);
@@ -82,8 +86,9 @@ export function ActivityFeed() {
     }, []);
 
     // Subscribe to running apps (uses centralized service to avoid duplicate API calls)
+    // Only available in desktop app mode
     useEffect(() => {
-        if (!window.electronAPI?.getRunningApps) return;
+        if (!isDesktopApp || !window.electronAPI?.getRunningApps) return;
 
         const unsubscribe = runningAppsService.subscribe(({ runningApps: running, installedApps: installed }) => {
             if (Array.isArray(installed)) {
@@ -98,7 +103,7 @@ export function ActivityFeed() {
         });
 
         return unsubscribe;
-    }, []);
+    }, [isDesktopApp]);
 
     // Load calendar events
     const loadCalendarEvents = useCallback(async () => {
@@ -125,49 +130,87 @@ export function ActivityFeed() {
     // Load Most Visited (Quick Access) - memoized
     const loadQuickLinks = useCallback(async () => {
         try {
-            // Priority: Pins (synced) -> Chrome History
-            const pins = await listPins({ limit: 12 });
+            // Helper to identify and filter out search engine queries
+            const isSearchQuery = (url) => {
+                if (!url) return true;
+                try {
+                    const u = new URL(url);
+                    const host = u.hostname.toLowerCase();
+                    if (host.includes('google.') && u.pathname.startsWith('/search')) return true;
+                    if (host.includes('bing.com') && u.pathname.startsWith('/search')) return true;
+                    if (host.includes('duckduckgo.com') && u.searchParams.has('q')) return true;
+                    if (host.includes('search.yahoo.com')) return true;
+                    if (host.includes('ecosia.org') && u.pathname.startsWith('/search')) return true;
+                    if (host.includes('search.brave.com')) return true;
+                    return false;
+                } catch {
+                    return true; // Filter out invalid URLs
+                }
+            };
 
-            let urls = [];
+            const finalLinks = [];
+            const seenUrls = new Set();
 
+            // Priority 1: Explicitly pinned items
+            const pins = await listPins();
             if (pins && pins.length > 0) {
-                urls = pins.map((pin) => ({
-                    id: pin.id || pin.url,
-                    title: pin.title || new URL(pin.url).hostname,
-                    url: pin.url,
-                    type: 'link',
-                    favicon: pin.favicon,
-                    hostname: new URL(pin.url).hostname.replace('www.', '')
-                }));
-            } else if (typeof chrome !== 'undefined' && chrome.history && chrome.history.search) {
-                const results = await chrome.history.search({
-                    text: '',
-                    maxResults: 50,
-                    startTime: Date.now() - 30 * 24 * 60 * 60 * 1000
+                pins.forEach(pin => {
+                    if (!pin.url || isSearchQuery(pin.url)) return; // Exclude Google Searches from pins
+
+                    let hostname = 'link';
+                    try {
+                        const u = new URL(pin.url);
+                        hostname = u.hostname.replace('www.', '');
+                        seenUrls.add(pin.url);
+
+                        finalLinks.push({
+                            id: pin.id || pin.url,
+                            title: pin.title || hostname,
+                            url: pin.url,
+                            type: 'link',
+                            favicon: pin.favicon || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+                            hostname
+                        });
+                    } catch (e) {
+                        // ignore invalid
+                    }
                 });
-                urls = results
-                    .filter(i => i.url && !i.url.startsWith('chrome://'))
-                    .sort((a, b) => b.visitCount - a.visitCount)
-                    .map(item => ({
-                        id: item.id || `hist_${Math.random()}`,
-                        title: item.title || new URL(item.url).hostname,
-                        url: item.url,
-                        type: 'link',
-                        hostname: new URL(item.url).hostname.replace('www.', '')
-                    }));
             }
 
-            // Deduplicate by hostname - keep only the first occurrence of each domain
-            const seenHostnames = new Set();
-            const uniqueUrls = urls.filter(item => {
-                if (seenHostnames.has(item.hostname)) {
-                    return false;
-                }
-                seenHostnames.add(item.hostname);
-                return true;
-            });
+            // Priority 2: Fill remaining slots with Chrome Top Sites (Highly Accurate Browser Algorithm)
+            if (typeof chrome !== 'undefined' && chrome.topSites) {
+                const topSites = await new Promise(resolve => chrome.topSites.get(resolve));
 
-            return uniqueUrls.slice(0, 8);
+                for (const site of topSites) {
+                    if (finalLinks.length >= 10) break; // Limit to 10 Quick Links total
+
+                    if (!site.url || isSearchQuery(site.url) || seenUrls.has(site.url)) continue;
+
+                    try {
+                        const u = new URL(site.url);
+                        const hostname = u.hostname.replace('www.', '');
+
+                        // Prevent too many links from the exact same domain
+                        const domainCount = finalLinks.filter(l => l.hostname === hostname).length;
+                        if (domainCount < 2) {
+                            seenUrls.add(site.url);
+                            finalLinks.push({
+                                id: site.url,
+                                title: site.title || hostname,
+                                url: site.url,
+                                type: 'top_site',
+                                favicon: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+                                hostname
+                            });
+                        }
+                    } catch (e) {
+                        // ignore invalid
+                    }
+                }
+            }
+
+            return finalLinks;
+
         } catch (e) {
             console.error('Failed to load quick links', e);
         }
@@ -252,31 +295,34 @@ export function ActivityFeed() {
         */
 
         // 4. Fetch App Activity - LIMIT to last 2 hours to prevent memory bloat
-        try {
-            const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000; // Only 2 hours, not 24!
-            const activities = await getTimeSeriesDataRange(twoHoursAgo, Date.now());
-            // CRITICAL: Limit to 50 items max to prevent memory explosion
-            const appItems = activities
-                .filter(a => a.type === 'app')
-                .slice(0, 50)
-                .map(a => ({
-                    id: a.id,
-                    title: a.title || a.appName || 'Unknown App',
-                    url: a.url || '#',
-                    timestamp: a.timestamp,
-                    type: 'app',
-                    appName: a.appName || 'Application',
-                    duration: a.time,
-                    subtitle: a.appName // Show app name as subtitle
-                }));
-            items.push(...appItems);
-        } catch (e) {
-            console.error('Failed to load app activity', e);
+        // Only available in desktop app mode
+        if (isDesktopApp) {
+            try {
+                const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000; // Only 2 hours, not 24!
+                const activities = await getTimeSeriesDataRange(twoHoursAgo, Date.now());
+                // CRITICAL: Limit to 50 items max to prevent memory explosion
+                const appItems = activities
+                    .filter(a => a.type === 'app')
+                    .slice(0, 50)
+                    .map(a => ({
+                        id: a.id,
+                        title: a.title || a.appName || 'Unknown App',
+                        url: a.url || '#',
+                        timestamp: a.timestamp,
+                        type: 'app',
+                        appName: a.appName || 'Application',
+                        duration: a.time,
+                        subtitle: a.appName // Show app name as subtitle
+                    }));
+                items.push(...appItems);
+            } catch (e) {
+                console.error('Failed to load app activity', e);
+            }
         }
 
         // Sort combined feed by timestamp (newest first)
         return items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100); // CAP: Limit to 100 items
-    }, []);
+    }, [isDesktopApp]);
 
     // Effect: Listen for activity DB changes
     useEffect(() => {
@@ -403,18 +449,27 @@ export function ActivityFeed() {
         if (!favContainerRef.current) return;
 
         const container = favContainerRef.current;
-        const containerWidth = container.offsetWidth;
+        const styles = window.getComputedStyle(container);
+        const paddingLeft = parseFloat(styles.paddingLeft) || 0;
+        const paddingRight = parseFloat(styles.paddingRight) || 0;
 
-        // Each icon is ~52px (44px width + 8px gap), reserve ~50px for "+N more" button
+        // Use container width minus the horizontal padding to get true content area
+        const containerWidth = container.offsetWidth - paddingLeft - paddingRight;
+
+        // Each icon is ~52px (44px width + 8px gap)
         const iconWidth = 52;
-        const reservedWidth = 50;
-        const availableWidth = containerWidth - reservedWidth;
+        const moreButtonWidth = 52;
 
-        const count = Math.floor(availableWidth / iconWidth);
+        let count = Math.floor(containerWidth / iconWidth);
 
-        // Show at least 1 item, max 8
-        setVisibleFavCount(Math.max(1, Math.min(count, 8)));
-    }, []);
+        // If we can't fit all items, reserve space for the "+N more" button
+        if (quickLinks.length > count) {
+            count = Math.floor((containerWidth - moreButtonWidth) / iconWidth);
+        }
+
+        // Show at least 1 item
+        setVisibleFavCount(Math.max(1, count));
+    }, [quickLinks.length]);
 
     // Recalculate on mount and resize
     useEffect(() => {
@@ -475,7 +530,8 @@ export function ActivityFeed() {
         // Separate items by type
         const chats = filtered.filter(item => item.type === 'chat');
         const tabs = filtered.filter(item => item.type === 'tab');
-        const apps = filtered.filter(item => item.type === 'app');
+        // Apps only available in desktop mode
+        const apps = isDesktopApp ? filtered.filter(item => item.type === 'app') : [];
 
         // Group chats by platform
         const chatsByPlatform = {};
@@ -566,8 +622,8 @@ export function ActivityFeed() {
             }))
             .sort((a, b) => b.latestTimestamp - a.latestTimestamp);
 
-        // Create running apps list (apps currently running)
-        const runningAppItems = runningApps.map(app => ({
+        // Create running apps list (apps currently running) - Desktop only
+        const runningAppItems = isDesktopApp ? runningApps.map(app => ({
             id: `running-${app.pid || app.name}`,
             type: 'running-app',
             name: app.name,
@@ -577,11 +633,11 @@ export function ActivityFeed() {
             path: app.path,
             timestamp: Date.now(),
             isRunning: true
-        }));
+        })) : [];
 
-        // Create installed apps list (all available apps, excluding running ones)
+        // Create installed apps list (all available apps, excluding running ones) - Desktop only
         const runningNames = new Set(runningApps.map(a => (a.name || '').toLowerCase()));
-        const installedAppItems = installedApps
+        const installedAppItems = isDesktopApp ? installedApps
             .filter(app => !runningNames.has((app.name || '').toLowerCase()))
             .slice(0, 20) // Limit to 20 installed apps
             .map(app => ({
@@ -593,7 +649,7 @@ export function ActivityFeed() {
                 path: app.path,
                 timestamp: 0, // No timestamp for installed apps
                 isRunning: false
-            }));
+            })) : [];
 
         // Merge chat groups and tab groups
         const result = [];
@@ -664,7 +720,7 @@ export function ActivityFeed() {
                     b.type === 'app-group' ? b.latestTimestamp : b.timestamp;
             return tsB - tsA;
         });
-    }, [feedItems, activeTab, runningApps, installedApps]);
+    }, [feedItems, activeTab, runningApps, installedApps, isDesktopApp]);
 
     const toggleDomainExpand = useCallback((domain) => {
         startTransition(() => {
@@ -824,7 +880,7 @@ export function ActivityFeed() {
                         gap: '4px',
                         position: 'relative'
                     }}>
-                        {['all', 'chats', 'tabs', 'apps'].map(tab => (
+                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps'] : ['all', 'chats', 'tabs']).map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}

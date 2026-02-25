@@ -203,9 +203,46 @@ export function GlobalSpotlight() {
         try {
             // Fetch all data in parallel (use cached running apps service)
             console.log('[Spotlight] Fetching data...');
+
+            // Helper to get tabs from either Electron/Tauri or Chrome extension
+            const fetchTabs = async () => {
+                console.log('[Spotlight] fetchTabs called');
+                console.log('[Spotlight] window.electronAPI exists:', !!window.electronAPI);
+                console.log('[Spotlight] window.electronAPI.getTabs exists:', !!window.electronAPI?.getTabs);
+                console.log('[Spotlight] chrome exists:', typeof chrome !== 'undefined');
+                console.log('[Spotlight] chrome.tabs exists:', typeof chrome !== 'undefined' && !!chrome?.tabs);
+                console.log('[Spotlight] chrome.tabs.query exists:', typeof chrome !== 'undefined' && !!chrome?.tabs?.query);
+
+                try {
+                    // Try Electron/Tauri API first (desktop app)
+                    if (window.electronAPI?.getTabs) {
+                        console.log('[Spotlight] Using electronAPI.getTabs');
+                        const tabs = await window.electronAPI.getTabs();
+                        console.log('[Spotlight] electronAPI.getTabs returned:', tabs?.length, 'tabs', tabs);
+                        return tabs;
+                    }
+                    // Fallback to Chrome extension API
+                    if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
+                        console.log('[Spotlight] Using chrome.tabs.query fallback');
+                        const rawTabs = await chrome.tabs.query({});
+                        console.log('[Spotlight] chrome.tabs.query returned:', rawTabs?.length, 'tabs', rawTabs);
+                        return rawTabs.map(tab => ({
+                            ...tab,
+                            tabId: tab.id,
+                            favicon: tab.favIconUrl
+                        }));
+                    }
+                    console.log('[Spotlight] No tab API available, returning empty array');
+                    return [];
+                } catch (e) {
+                    console.error('[Spotlight] getTabs error:', e);
+                    return [];
+                }
+            };
+
             const [{ runningApps, installedApps }, tabs, frequentApps] = await Promise.all([
                 runningAppsService.getApps(),
-                window.electronAPI?.getTabs?.().catch(e => { console.error('[Spotlight] getTabs error:', e); return []; }) || [],
+                fetchTabs(),
                 storageGet(['frequent_apps']).then(d => d.frequent_apps || {}).catch(() => ({}))
             ]);
 
@@ -248,6 +285,9 @@ export function GlobalSpotlight() {
             for (const [appName] of sortedFrequent) {
                 if (usedIds.has(appName.toLowerCase())) continue;
 
+                // Skip browsers (they're shown as tabs instead)
+                if (systemApps.some(s => appName.toLowerCase().includes(s))) continue;
+
                 // Find app in installed apps with flexible matching
                 const frequentName = appName.toLowerCase();
                 const app = installedApps.find(a => {
@@ -270,8 +310,13 @@ export function GlobalSpotlight() {
             }
 
             // 3. Active Tabs (unique by domain)
-            const relevantTabs = tabs
-                .filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://') && !t.url.startsWith('about:'))
+            console.log('[Spotlight] Processing tabs, raw count:', tabs?.length);
+            console.log('[Spotlight] Raw tabs data:', JSON.stringify(tabs?.slice(0, 3), null, 2));
+
+            const afterUrlFilter = tabs.filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://') && !t.url.startsWith('about:'));
+            console.log('[Spotlight] After URL filter:', afterUrlFilter.length);
+
+            const relevantTabs = afterUrlFilter
                 .filter((t, index, self) =>
                     index === self.findIndex(s => {
                         try { return new URL(s.url).hostname === new URL(t.url).hostname; } catch { return s.url === t.url; }
@@ -285,7 +330,7 @@ export function GlobalSpotlight() {
                     favicon: t.favIconUrl || t.favicon  // Map favIconUrl to favicon
                 }));
 
-            console.log('[Spotlight] Relevant tabs:', relevantTabs.length);
+            console.log('[Spotlight] Relevant tabs after dedup:', relevantTabs.length, relevantTabs.map(t => ({ title: t.title, url: t.url, type: t.type })));
             recommendations.push(...relevantTabs);
 
             // Cap at 8 items
@@ -1064,6 +1109,9 @@ export function GlobalSpotlight() {
                     const apps = contextItems.filter(item => item.type === 'app');
                     const tabs = contextItems.filter(item => item.type === 'tab');
                     let flatIndex = pinnedItems.length; // Start after pinned items
+
+                    console.log('[Spotlight] Rendering context - contextItems:', contextItems.length, 'apps:', apps.length, 'tabs:', tabs.length);
+                    console.log('[Spotlight] Context items types:', contextItems.map(i => ({ type: i.type, title: i.title || i.name })));
 
                     return (
                         <div className="spotlight-context">

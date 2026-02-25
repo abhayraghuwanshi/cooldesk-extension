@@ -1,15 +1,15 @@
-import { faCog, faDatabase, faMicrochip, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
-import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveWorkspace } from '../../db';
+import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveWorkspace, saveSettings } from '../../db';
 import { useSync } from '../../hooks/useSync'; // Added hook
 import { getSyncStatus } from '../../services/conditionalSync';
+import { isElectronApp } from '../../services/environmentDetector';
 import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
 import { loadSyncConfig } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
+import AIModelsTab from '../settings/AIModelsTab';
 import ExportData from '../settings/ExportData';
-import LocalAITab from '../settings/LocalAITab';
-import SetupTab from '../settings/SetupTab';
 import TeamsTab from '../settings/TeamsTab';
 import ThemesTab from '../settings/ThemesTab';
 
@@ -56,16 +56,19 @@ export function SettingsModal({
   const [lastBackupTime, setLastBackupTime] = useState(null);
   const [backupInProgress, setBackupInProgress] = useState(false);
 
-  // Check if running in Electron desktop app
-  const isElectron = typeof window !== 'undefined' && window.electronAPI?.llm;
+  // Unsplash API Key State
+  const [unsplashApiKey, setUnsplashApiKey] = useState('');
+
+  // Check if running in Tauri/Electron app (for tab visibility)
+  const isDesktopApp = isElectronApp();
 
   // --- Constants & Config ---
   const TABS = [
     { id: 'general', label: 'General', icon: faCog, component: null },
-    // Local AI tab - only show in Electron desktop app
-    ...(isElectron ? [{ id: 'local-ai', label: 'Local AI', icon: faMicrochip, component: LocalAITab }] : []),
-    { id: 'ai-models', label: 'Cloud AI', icon: faRocket, component: SetupTab },
-    { id: 'teams', label: 'Teams (P2P)', icon: faUsers, component: TeamsTab },
+    // Unified AI Models tab - show in desktop app (combines Local + Cloud AI)
+    ...(isDesktopApp ? [{ id: 'ai-models', label: 'AI Models', icon: faRocket, component: AIModelsTab }] : []),
+    // Teams tab - only show in desktop app
+    ...(isDesktopApp ? [{ id: 'teams', label: 'Teams (P2P)', icon: faUsers, component: TeamsTab }] : []),
     { id: 'themes', label: 'Aesthetics', icon: faPalette, component: ThemesTab },
     { id: 'data', label: 'Data & Sync', icon: faDatabase, component: ExportData },
     { id: 'about', label: 'Getting Started', icon: faRocket, component: null }
@@ -145,6 +148,11 @@ export function SettingsModal({
         setAutoBackupEnabled(result?.autoBackupEnabled === true);
         setBackupFrequency(result?.backupFrequency || 'weekly');
         setLastBackupTime(result?.lastBackupTime || null);
+      });
+
+      // Load Unsplash API Key
+      storageGet(['unsplashApiKey']).then((result) => {
+        setUnsplashApiKey(result?.unsplashApiKey || '');
       });
 
     } catch (e) {
@@ -314,6 +322,15 @@ export function SettingsModal({
       }
     } catch (err) {
       setError('Failed to update backup frequency');
+    }
+  };
+
+  const handleUnsplashApiKeyChange = async (apiKey) => {
+    try {
+      await storageSet({ unsplashApiKey: apiKey });
+      setUnsplashApiKey(apiKey);
+    } catch (err) {
+      setError('Failed to save Unsplash API key');
     }
   };
 
@@ -940,28 +957,14 @@ export function SettingsModal({
               </div>
             )}
 
-            {activeTabId === 'local-ai' && isElectron && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-                <section>
-                  <div style={{ marginBottom: 20 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>On-Device AI Models</h3>
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>
-                      Download and run AI models locally on your device. 100% private, works offline.
-                    </p>
-                  </div>
-                  <LocalAITab />
-                </section>
-              </div>
-            )}
-
             {activeTabId === 'ai-models' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                 <section>
                   <div style={{ marginBottom: 20 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Cloud AI Configuration</h3>
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Configure cloud-based AI services (Gemini API).</p>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>AI Configuration</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Configure local on-device AI or cloud-based AI services.</p>
                   </div>
-                  <SetupTab
+                  <AIModelsTab
                     localSettings={localSettings}
                     setLocalSettings={setLocalSettings}
                     markEdited={markEdited}
@@ -971,8 +974,8 @@ export function SettingsModal({
                     error={error}
                     setError={setError}
                     handleSuggestCategories={handleSuggestCategories}
-                  // saveSettingsDB={saveSettingsDB} // Prop drilling needed if used in SetupTab
-                  // storageSet={storageSet}
+                    saveSettingsDB={saveSettings}
+                    storageSet={storageSet}
                   />
                 </section>
 
@@ -1025,6 +1028,8 @@ export function SettingsModal({
                 onWallpaperEnabledChange={onWallpaperEnabledChange}
                 onWallpaperUrlChange={onWallpaperUrlChange}
                 onWallpaperOpacityChange={onWallpaperOpacityChange}
+                unsplashApiKey={unsplashApiKey}
+                onUnsplashApiKeyChange={handleUnsplashApiKeyChange}
               />
             )}
 

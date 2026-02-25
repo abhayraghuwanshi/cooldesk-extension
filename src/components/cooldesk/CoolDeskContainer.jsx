@@ -2,6 +2,7 @@ import { faGear } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
+import { isElectronApp } from '../../services/environmentDetector';
 import '../../styles/cooldesk.css';
 import '../../styles/global-add.css';
 import '../../styles/spatial.css';
@@ -37,6 +38,9 @@ export function CoolDeskContainer({
   pinnedWorkspaces = [],
   onTogglePin,
 }) {
+  // Detect if running in Tauri/Electron app
+  const isDesktopApp = isElectronApp();
+
   const [expandedWorkspace, setExpandedWorkspace] = useState(null);
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
   const [workspacePage, setWorkspacePage] = useState(0);
@@ -404,6 +408,7 @@ export function CoolDeskContainer({
             onSearch={handleSearch}
             onWorkspaceNavigate={handleWorkspaceNavigate}
             onNavigate={handleNavigate}
+            isDesktopApp={isDesktopApp}
           />
         </div>
 
@@ -415,37 +420,43 @@ export function CoolDeskContainer({
       </div>
 
       {/* Spatial Workspace Shell - Takes remaining height */}
-      <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange}>
-        {/* Face 1: Chat (Far Left) */}
-        <Face index="chat">
-          {shouldRenderFace('chat') && (
-            <Suspense fallback={null}>
-              <ChatContext
-                workspaceId={currentWorkspace?.id}
-                workspaceName={currentWorkspace?.name || 'All Workspaces'}
-              />
-            </Suspense>
-          )}
-        </Face>
+      {/* In extension mode: Only show OverviewDashboard */}
+      {/* In desktop app (Tauri/Electron): Show all faces with navigation */}
+      <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange} isDesktopApp={isDesktopApp}>
+        {/* Face 1: Chat (Far Left) - Desktop App Only */}
+        {isDesktopApp && (
+          <Face index="chat">
+            {shouldRenderFace('chat') && (
+              <Suspense fallback={null}>
+                <ChatContext
+                  workspaceId={currentWorkspace?.id}
+                  workspaceName={currentWorkspace?.name || 'All Workspaces'}
+                />
+              </Suspense>
+            )}
+          </Face>
+        )}
 
-        {/* Face 2: Workspace Details (Left) - Shows ALL Workspaces */}
-        <Face index="workspace">
-          {shouldRenderFace('workspace') && (
-            <Suspense fallback={<div style={{ padding: 20, color: '#64748B', textAlign: 'center' }}>Loading...</div>}>
-              <WorkspaceList
-                savedWorkspaces={savedWorkspaces}
-                onWorkspaceClick={handleWorkspaceClick}
-                activeWorkspaceId={currentWorkspace?.id}
-                expandedWorkspaceId={expandedWorkspace?.id}
-                pinnedWorkspaces={pinnedWorkspaces}
-                onTogglePin={onTogglePin}
-                onAddUrl={handleOpenAddModal}
-              />
-            </Suspense>
-          )}
-        </Face>
+        {/* Face 2: Workspace Details (Left) - Desktop App Only */}
+        {isDesktopApp && (
+          <Face index="workspace">
+            {shouldRenderFace('workspace') && (
+              <Suspense fallback={<div style={{ padding: 20, color: '#64748B', textAlign: 'center' }}>Loading...</div>}>
+                <WorkspaceList
+                  savedWorkspaces={savedWorkspaces}
+                  onWorkspaceClick={handleWorkspaceClick}
+                  activeWorkspaceId={currentWorkspace?.id}
+                  expandedWorkspaceId={expandedWorkspace?.id}
+                  pinnedWorkspaces={pinnedWorkspaces}
+                  onTogglePin={onTogglePin}
+                  onAddUrl={handleOpenAddModal}
+                />
+              </Suspense>
+            )}
+          </Face>
+        )}
 
-        {/* Face 3: Overview (Center) */}
+        {/* Face 3: Overview (Center) - Always shown */}
         <Face index="overview">
           <OverviewDashboard
             savedWorkspaces={savedWorkspaces}
@@ -458,32 +469,38 @@ export function CoolDeskContainer({
           />
         </Face>
 
-        {/* Face 4: Tabs (Right) */}
-        <Face index="tabs">
-          {shouldRenderFace('tabs') && (
-            <Suspense fallback={null}>
-              <TabManagement />
-            </Suspense>
-          )}
-        </Face>
+        {/* Face 4: Tabs (Right) - Desktop App Only */}
+        {isDesktopApp && (
+          <Face index="tabs">
+            {shouldRenderFace('tabs') && (
+              <Suspense fallback={null}>
+                <TabManagement />
+              </Suspense>
+            )}
+          </Face>
+        )}
 
-        {/* Face 5: Team (Further Right) */}
-        <Face index="team">
-          {shouldRenderFace('team') && (
-            <Suspense fallback={null}>
-              <TeamView />
-            </Suspense>
-          )}
-        </Face>
+        {/* Face 5: Team (Further Right) - Desktop App Only */}
+        {isDesktopApp && (
+          <Face index="team">
+            {shouldRenderFace('team') && (
+              <Suspense fallback={null}>
+                <TeamView />
+              </Suspense>
+            )}
+          </Face>
+        )}
 
-        {/* Face 6: Notes (Far Right) */}
-        <Face index="notes">
-          {shouldRenderFace('notes') && (
-            <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-500">Loading Notes...</div>}>
-              <NotesCanvas workspaceId={currentWorkspace?.id} />
-            </Suspense>
-          )}
-        </Face>
+        {/* Face 6: Notes (Far Right) - Desktop App Only */}
+        {isDesktopApp && (
+          <Face index="notes">
+            {shouldRenderFace('notes') && (
+              <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-500">Loading Notes...</div>}>
+                <NotesCanvas workspaceId={currentWorkspace?.id} />
+              </Suspense>
+            )}
+          </Face>
+        )}
       </WorkspaceShell>
 
       {/* Global Add Button - Outside spatial shell */}

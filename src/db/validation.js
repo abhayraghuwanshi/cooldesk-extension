@@ -367,6 +367,14 @@ export const VALIDATION_SCHEMAS = {
         updatedAt: {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
+        },
+        createdAt: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        type: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.MAX_LENGTH]: 100
         }
     },
 
