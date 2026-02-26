@@ -737,7 +737,7 @@ export function ActivityFeed() {
     }, []);
 
     return (
-        <div className="cooldesk-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="cooldesk-panel" style={{ padding: 0, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {/* Header: Favorites */}
             <div style={{ borderBottom: '1px solid rgba(148, 163, 184, 0.1)' }}>
                 <div style={{
@@ -756,11 +756,12 @@ export function ActivityFeed() {
                 {/* Favorites Container */}
                 <div
                     ref={favContainerRef}
-                    className="favorites-scroll-container"
+                    className="favorites-scroll-container activity-feed-scroll"
                     style={{
                         display: 'flex',
                         gap: '8px',
-                        overflow: 'hidden',
+                        overflowX: 'auto',
+                        overflowY: 'hidden',
                         padding: '0 16px 12px 16px',
                         alignItems: 'center'
                     }}
@@ -925,12 +926,14 @@ export function ActivityFeed() {
                     </div>
                 </div>
 
-                <div style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    overflowX: 'hidden',
-                    minHeight: 0 // Important for flex children with overflow
-                }}>
+                <div
+                    className="activity-feed-scroll"
+                    style={{
+                        flex: 1,
+                        overflowY: 'auto',
+                        overflowX: 'hidden',
+                        minHeight: 0 // Important for flex children with overflow
+                    }}>
                     {/* Calendar Tab Content */}
                     {activeTab === 'calendar' ? (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>

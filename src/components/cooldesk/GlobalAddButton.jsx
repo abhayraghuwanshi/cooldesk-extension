@@ -14,6 +14,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
+import NanoAIService from '../../services/nanoAIService';
 import { safeGetHostname } from '../../utils/helpers';
 
 export function GlobalAddButton({
@@ -43,6 +44,20 @@ export function GlobalAddButton({
   const [noteText, setNoteText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // AI Workspace Suggestion States
+  const [isSuggestingLinks, setIsSuggestingLinks] = useState(false);
+  const [suggestedLinks, setSuggestedLinks] = useState([]);
+  const [selectedSuggestedLinks, setSelectedSuggestedLinks] = useState(new Set());
+  const [aiSuggestionError, setAiSuggestionError] = useState('');
+
+  // Multi-Select URL States
+  const [selectedUrls, setSelectedUrls] = useState(new Set());
+
+  // AI URL Command States
+  const [aiCommand, setAiCommand] = useState('');
+  const [isAiProcessingLinks, setIsAiProcessingLinks] = useState(false);
+  const [aiUrlError, setAiUrlError] = useState('');
+
   // Browser data
   const [openTabs, setOpenTabs] = useState([]);
   const [historyItems, setHistoryItems] = useState([]);
@@ -64,8 +79,8 @@ export function GlobalAddButton({
       // Fetch history
       chrome.history.search({
         text: '',
-        maxResults: 50,
-        startTime: Date.now() - 7 * 24 * 60 * 60 * 1000 // Last 7 days
+        maxResults: 1000,
+        startTime: Date.now() - 30 * 24 * 60 * 60 * 1000 // Last 30 days
       }, (results) => {
         setHistoryItems(results);
       });
@@ -113,6 +128,12 @@ export function GlobalAddButton({
     setSearchQuery('');
     setSelectedWorkspace(null);
     setBrowseMode('current');
+    setSuggestedLinks([]);
+    setSelectedSuggestedLinks(new Set());
+    setSelectedUrls(new Set());
+    setAiSuggestionError('');
+    setAiCommand('');
+    setAiUrlError('');
   };
 
   const handleOpen = () => {
@@ -134,24 +155,158 @@ export function GlobalAddButton({
     resetForm();
   };
 
-  const handleAddUrl = () => {
-    if (selectedWorkspace && urlInput.trim()) {
-      onAddUrlToWorkspace?.(selectedWorkspace.id, {
-        url: urlInput,
-        title: urlTitle || safeGetHostname(urlInput)
-      });
+  const handleAddUrl = async () => {
+    if (selectedWorkspace) {
+      // If we have multi-selected URLs, add them all
+      if (selectedUrls.size > 0) {
+        // Find matching items to get their full info (title, favicon)
+        const allItems = [...openTabs, ...historyItems, ...bookmarks]; // Use historyItems directly, filteredHistory is for UI
+        const itemsToAdd = allItems.filter(item => selectedUrls.has(item.url));
+
+        // Deduplicate
+        const uniqueItems = Array.from(new Map(itemsToAdd.map(item => [item.url, item])).values());
+
+        for (const item of uniqueItems) {
+          await onAddUrlToWorkspace?.(selectedWorkspace.id, item);
+        }
+      }
+      // Fallback for manual manual entry
+      else if (urlInput.trim()) {
+        await onAddUrlToWorkspace?.(selectedWorkspace.id, {
+          url: urlInput,
+          title: urlTitle || safeGetHostname(urlInput)
+        });
+      }
       handleClose();
     }
   };
 
-  const handleCreateWorkspace = () => {
+  const handleCreateWorkspace = async () => {
     if (workspaceName.trim()) {
-      onCreateWorkspace?.({
-        name: workspaceName,
-        icon: workspaceIcon,
-        urls: []
-      });
+      const urlsToAdd = suggestedLinks.filter(link => selectedSuggestedLinks.has(link.url));
+
+      try {
+        const newWorkspace = await onCreateWorkspace?.({
+          name: workspaceName,
+          icon: workspaceIcon,
+          urls: []
+        });
+
+        // If the parent component returns the new workspace (or its ID), we add the URLs
+        if (newWorkspace && newWorkspace.id && urlsToAdd.length > 0) {
+          for (const link of urlsToAdd) {
+            await onAddUrlToWorkspace?.(newWorkspace.id, link);
+          }
+        } else if (urlsToAdd.length > 0) {
+          console.warn("Could not add suggested links because workspace creation did not return the new workspace object/ID.");
+        }
+      } catch (err) {
+        console.error("Error creating workspace or adding suggested links:", err);
+      }
       handleClose();
+    }
+  };
+
+  const handleSuggestWorkspaceLinks = async () => {
+    if (!workspaceName.trim()) return;
+
+    setIsSuggestingLinks(true);
+    setAiSuggestionError('');
+    setSuggestedLinks([]);
+    setSelectedSuggestedLinks(new Set());
+
+    try {
+      // Combine open tabs, history, and bookmarks into a searchable pool
+      const searchPool = [];
+      const seenUrls = new Set();
+
+      const addToPool = (items) => {
+        items.forEach(item => {
+          if (item.url && !seenUrls.has(item.url) && !item.url.startsWith('chrome://')) {
+            seenUrls.add(item.url);
+            searchPool.push({
+              url: item.url,
+              title: item.title || safeGetHostname(item.url),
+              favicon: item.favicon
+            });
+          }
+        });
+      };
+
+      addToPool(openTabs);
+      addToPool(historyItems.slice(0, 10000)); // Limit history to recent
+
+      if (searchPool.length === 0) {
+        setAiSuggestionError('No browser history or tabs found to suggest from.');
+        setIsSuggestingLinks(false);
+        return;
+      }
+
+      // Use NanoAI to find relevant links
+      const prompt = `Find links related to the workspace category: "${workspaceName}"`;
+      const rankedResults = await NanoAIService.naturalLanguageSearch(prompt, searchPool, 10);
+
+      if (rankedResults && rankedResults.length > 0 && rankedResults[0]._aiMatched) {
+        setSuggestedLinks(rankedResults);
+        // Auto-select top 5 suggestions
+        const newSelection = new Set();
+        rankedResults.slice(0, 5).forEach(link => newSelection.add(link.url));
+        setSelectedSuggestedLinks(newSelection);
+      } else {
+        setAiSuggestionError(`Could not find links strongly related to "${workspaceName}".`);
+      }
+
+    } catch (err) {
+      console.error("Error suggesting workspace links:", err);
+      setAiSuggestionError('AI suggestion failed. ' + err.message);
+    } finally {
+      setIsSuggestingLinks(false);
+    }
+  };
+
+  const handleAiUrlCommand = async () => {
+    if (!aiCommand.trim()) return;
+
+    setIsAiProcessingLinks(true);
+    setAiUrlError('');
+
+    try {
+      // Determine which list we are filtering
+      let sourceList = [];
+      if (browseMode === 'tabs') sourceList = openTabs;
+      else if (browseMode === 'history') sourceList = filteredHistory.slice(0, 10000); // Limit context
+      else if (browseMode === 'bookmarks') sourceList = filteredBookmarks;
+
+      if (sourceList.length === 0) {
+        setAiUrlError('No items in the selected source to filter.');
+        setIsAiProcessingLinks(false);
+        return;
+      }
+
+      // Use NanoAI Search to rank items based on the command
+      const prompt = `Based on the user command: "${aiCommand}", find matching relevant links.`;
+      const rankedResults = await NanoAIService.naturalLanguageSearch(prompt, sourceList, 20);
+
+      if (rankedResults && rankedResults.length > 0) {
+        // Select items that NanoAI marked as a match (_aiMatched)
+        const matchedItems = rankedResults.filter(item => item._aiMatched);
+        if (matchedItems.length > 0) {
+          const nextSelected = new Set(selectedUrls);
+          matchedItems.forEach(item => {
+            nextSelected.add(item.url);
+          });
+          setSelectedUrls(nextSelected);
+        } else {
+          setAiUrlError('Could not find links matching your command.');
+        }
+      } else {
+        setAiUrlError('Could not find links matching your command.');
+      }
+    } catch (err) {
+      console.error("Error processing AI URL command:", err);
+      setAiUrlError('AI processing failed. ' + err.message);
+    } finally {
+      setIsAiProcessingLinks(false);
     }
   };
 
@@ -163,9 +318,24 @@ export function GlobalAddButton({
   };
 
   const handleSelectItem = (item) => {
-    setUrlInput(item.url);
-    setUrlTitle(item.title);
-    setBrowseMode('tabs');
+    // Toggle selection
+    const next = new Set(selectedUrls);
+    if (next.has(item.url)) {
+      next.delete(item.url);
+    } else {
+      next.add(item.url);
+    }
+    setSelectedUrls(next);
+
+    // Legacy support for manual input syncing (for single selection behavior)
+    // If only one item is selected, populate the manual input fields
+    if (next.size === 1) {
+      setUrlInput(item.url);
+      setUrlTitle(item.title || '');
+    } else if (next.size === 0) {
+      setUrlInput('');
+      setUrlTitle('');
+    }
   };
 
   // Filter history and bookmarks based on search
@@ -180,6 +350,148 @@ export function GlobalAddButton({
     item.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.url?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const renderBrowseSection = (itemsList, icon, browseModeKey) => {
+    return (
+      <div className="browse-section" style={{ marginBottom: '24px' }}>
+        {browseModeKey !== 'tabs' && ( // Only show search for history and bookmarks
+          <div style={{
+            position: 'relative',
+            marginBottom: '16px'
+          }}>
+            <FontAwesomeIcon
+              icon={faSearch}
+              style={{
+                position: 'absolute',
+                left: '16px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: '#64748b',
+                fontSize: '14px'
+              }}
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${browseModeKey}...`}
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '12px 16px 12px 44px',
+                borderRadius: '12px',
+                background: 'rgba(30, 41, 59, 0.6)',
+                border: '2px solid rgba(148, 163, 184, 0.2)',
+                color: '#f1f5f9',
+                fontSize: '14px',
+                outline: 'none',
+                transition: 'all 0.2s ease',
+                fontFamily: 'inherit'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#3b82f6';
+                e.target.style.background = 'rgba(30, 41, 59, 0.8)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+                e.target.style.background = 'rgba(30, 41, 59, 0.6)';
+              }}
+            />
+          </div>
+        )}
+
+        <div style={{
+          maxHeight: '300px',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          marginBottom: '20px'
+        }}>
+          {itemsList.map((item, idx) => {
+            const isSelected = selectedUrls.has(item.url);
+            return (
+              <button
+                key={idx}
+                onClick={() => handleSelectItem(item)}
+                style={{
+                  padding: '12px',
+                  borderRadius: '12px',
+                  background: isSelected ? 'rgba(168, 85, 247, 0.15)' : 'rgba(30, 41, 59, 0.6)',
+                  border: isSelected ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(148, 163, 184, 0.1)',
+                  color: isSelected ? '#f1f5f9' : '#cbd5e1',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  textAlign: 'left',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.border = '1px solid rgba(148, 163, 184, 0.3)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
+                    e.currentTarget.style.border = '1px solid rgba(148, 163, 184, 0.1)';
+                  }
+                }}
+              >
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: isSelected ? '#a855f7' : 'rgba(59, 130, 246, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  border: isSelected ? 'none' : '1px solid rgba(148, 163, 184, 0.2)'
+                }}>
+                  {isSelected ? (
+                    <FontAwesomeIcon icon={faCheck} style={{ color: 'white', fontSize: '14px' }} />
+                  ) : item.favicon ? (
+                    <img src={item.favicon} alt="" width="20" height="20" style={{ borderRadius: '4px' }} />
+                  ) : (
+                    <FontAwesomeIcon icon={icon} style={{ color: '#60a5fa', fontSize: '14px' }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: '#f1f5f9',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    marginBottom: '2px'
+                  }}>{item.title || item.url}</div>
+                  <div style={{
+                    fontSize: '11px',
+                    color: '#64748b',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>{safeGetHostname(item.url)}</div>
+                </div>
+              </button>
+            )
+          })}
+          {itemsList.length === 0 && (
+            <div style={{
+              padding: '32px',
+              textAlign: 'center',
+              color: '#64748b',
+              fontSize: '14px'
+            }}>No {browseModeKey} found matching your search</div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -374,6 +686,74 @@ export function GlobalAddButton({
               {/* Forms Content */}
               {mode === 'url' && (
                 <div className="add-form">
+                  {/* AI Smart Filter Input */}
+                  <div className="form-group" style={{ marginBottom: '24px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        value={aiCommand}
+                        onChange={(e) => setAiCommand(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAiUrlCommand();
+                          }
+                        }}
+                        placeholder="✨ AI Manager: e.g. 'find my github repos', 'keep text links'"
+                        style={{
+                          width: '100%',
+                          padding: '14px 16px 14px 44px',
+                          borderRadius: '12px',
+                          background: 'rgba(30, 41, 59, 0.4)',
+                          border: '2px solid rgba(168, 85, 247, 0.3)',
+                          color: '#f1f5f9',
+                          fontSize: '14px',
+                          outline: 'none',
+                          transition: 'all 0.2s ease',
+                          fontFamily: 'inherit'
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.borderColor = '#a855f7';
+                          e.target.style.background = 'rgba(30, 41, 59, 0.6)';
+                          e.target.style.boxShadow = '0 0 0 4px rgba(168, 85, 247, 0.1)';
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.borderColor = 'rgba(168, 85, 247, 0.3)';
+                          e.target.style.background = 'rgba(30, 41, 59, 0.4)';
+                          e.target.style.boxShadow = 'none';
+                        }}
+                      />
+                      <div style={{
+                        position: 'absolute',
+                        left: '16px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: '#a855f7',
+                        fontSize: '16px'
+                      }}>
+                        {isAiProcessingLinks ? (
+                          <div className="spinner" style={{ width: '16px', height: '16px', border: '2px solid rgba(168, 85, 247, 0.3)', borderTopColor: '#a855f7', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                        ) : (
+                          <FontAwesomeIcon icon={faStar} />
+                        )}
+                      </div>
+
+                      {aiUrlError && (
+                        <div style={{
+                          marginTop: '8px',
+                          padding: '8px 12px',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.2)',
+                          borderRadius: '8px',
+                          color: '#f87171',
+                          fontSize: '12px'
+                        }}>
+                          {aiUrlError}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Workspace Selector */}
                   <div className="form-group" style={{ marginBottom: '24px' }}>
                     <label style={{
@@ -498,93 +878,10 @@ export function GlobalAddButton({
                   </div>
 
                   {/* Open Tabs List */}
-                  {browseMode === 'tabs' && (
-                    <div className="browse-section" style={{ marginBottom: '24px' }}>
-                      <div style={{
-                        maxHeight: '300px',
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        marginBottom: '20px'
-                      }}>
-                        {openTabs.map((tab, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleSelectItem(tab)}
-                            style={{
-                              padding: '12px',
-                              borderRadius: '12px',
-                              background: 'rgba(30, 41, 59, 0.6)',
-                              border: '2px solid rgba(148, 163, 184, 0.1)',
-                              color: '#cbd5e1',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              textAlign: 'left',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
-                              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
-                              e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)';
-                            }}
-                          >
-                            <div style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '8px',
-                              background: 'rgba(59, 130, 246, 0.1)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0
-                            }}>
-                              {tab.favicon ? (
-                                <img src={tab.favicon} alt="" width="20" height="20" style={{ borderRadius: '4px' }} />
-                              ) : (
-                                <FontAwesomeIcon icon={faLink} style={{ color: '#60a5fa', fontSize: '14px' }} />
-                              )}
-                            </div>
-                            <div style={{ flex: 1, overflow: 'hidden' }}>
-                              <div style={{
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                color: '#f1f5f9',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                marginBottom: '2px'
-                              }}>{tab.title || tab.url}</div>
-                              <div style={{
-                                fontSize: '11px',
-                                color: '#64748b',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}>{safeGetHostname(tab.url)}</div>
-                            </div>
-                            <FontAwesomeIcon icon={faCheck} style={{ color: '#3b82f6', fontSize: '14px', opacity: 0 }} className="select-icon" />
-                          </button>
-                        ))}
-                        {openTabs.length === 0 && (
-                          <div style={{
-                            padding: '32px',
-                            textAlign: 'center',
-                            color: '#64748b',
-                            fontSize: '14px'
-                          }}>No open tabs found</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {browseMode === 'tabs' && renderBrowseSection(openTabs, faLink, 'tabs')}
 
                   {/* Manual Entry */}
-                  {browseMode === 'tabs' && (
+                  {(urlInput.trim() || selectedUrls.size === 0) && ( // Only show manual entry if no items are selected or if there's manual input
                     <>
 
                       <div className="form-group" style={{ marginBottom: '20px' }}>
@@ -701,294 +998,50 @@ export function GlobalAddButton({
                   )}
 
                   {/* History Browse */}
-                  {browseMode === 'history' && (
-                    <div className="browse-section" style={{ marginBottom: '24px' }}>
-                      <div style={{
-                        position: 'relative',
-                        marginBottom: '16px'
-                      }}>
-                        <FontAwesomeIcon
-                          icon={faSearch}
-                          style={{
-                            position: 'absolute',
-                            left: '16px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            color: '#64748b',
-                            fontSize: '14px'
-                          }}
-                        />
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Search history..."
-                          autoFocus
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px 12px 44px',
-                            borderRadius: '12px',
-                            background: 'rgba(30, 41, 59, 0.6)',
-                            border: '2px solid rgba(148, 163, 184, 0.2)',
-                            color: '#f1f5f9',
-                            fontSize: '14px',
-                            outline: 'none',
-                            transition: 'all 0.2s ease',
-                            fontFamily: 'inherit'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.borderColor = '#3b82f6';
-                            e.target.style.background = 'rgba(30, 41, 59, 0.8)';
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-                            e.target.style.background = 'rgba(30, 41, 59, 0.6)';
-                          }}
-                        />
-                      </div>
-
-                      <div style={{
-                        maxHeight: '300px',
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px'
-                      }}>
-                        {filteredHistory.slice(0, 15).map((item, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleSelectItem(item)}
-                            style={{
-                              padding: '12px',
-                              borderRadius: '12px',
-                              background: 'rgba(30, 41, 59, 0.6)',
-                              border: '2px solid rgba(148, 163, 184, 0.1)',
-                              color: '#cbd5e1',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              textAlign: 'left',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
-                              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
-                              e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)';
-                            }}
-                          >
-                            <div style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '8px',
-                              background: 'rgba(59, 130, 246, 0.1)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0
-                            }}>
-                              <FontAwesomeIcon icon={faClock} style={{ color: '#60a5fa', fontSize: '14px' }} />
-                            </div>
-                            <div style={{ flex: 1, overflow: 'hidden' }}>
-                              <div style={{
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                color: '#f1f5f9',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                marginBottom: '2px'
-                              }}>{item.title || item.url}</div>
-                              <div style={{
-                                fontSize: '11px',
-                                color: '#64748b',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}>{safeGetHostname(item.url)}</div>
-                            </div>
-                            <FontAwesomeIcon icon={faCheck} style={{ color: '#3b82f6', fontSize: '14px', opacity: 0 }} className="select-icon" />
-                          </button>
-                        ))}
-                        {filteredHistory.length === 0 && (
-                          <div style={{
-                            padding: '32px',
-                            textAlign: 'center',
-                            color: '#64748b',
-                            fontSize: '14px'
-                          }}>No history items found</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {browseMode === 'history' && renderBrowseSection(filteredHistory.slice(0, 15), faClock, 'history')}
 
                   {/* Bookmarks Browse */}
-                  {browseMode === 'bookmarks' && (
-                    <div className="browse-section" style={{ marginBottom: '24px' }}>
-                      <div style={{
-                        position: 'relative',
-                        marginBottom: '16px'
-                      }}>
-                        <FontAwesomeIcon
-                          icon={faSearch}
-                          style={{
-                            position: 'absolute',
-                            left: '16px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            color: '#64748b',
-                            fontSize: '14px'
-                          }}
-                        />
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Search bookmarks..."
-                          autoFocus
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px 12px 44px',
-                            borderRadius: '12px',
-                            background: 'rgba(30, 41, 59, 0.6)',
-                            border: '2px solid rgba(148, 163, 184, 0.2)',
-                            color: '#f1f5f9',
-                            fontSize: '14px',
-                            outline: 'none',
-                            transition: 'all 0.2s ease',
-                            fontFamily: 'inherit'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.borderColor = '#3b82f6';
-                            e.target.style.background = 'rgba(30, 41, 59, 0.8)';
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-                            e.target.style.background = 'rgba(30, 41, 59, 0.6)';
-                          }}
-                        />
-                      </div>
-
-                      <div style={{
-                        maxHeight: '300px',
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px'
-                      }}>
-                        {filteredBookmarks.slice(0, 15).map((item, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleSelectItem(item)}
-                            style={{
-                              padding: '12px',
-                              borderRadius: '12px',
-                              background: 'rgba(30, 41, 59, 0.6)',
-                              border: '2px solid rgba(148, 163, 184, 0.1)',
-                              color: '#cbd5e1',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              textAlign: 'left',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
-                              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
-                              e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)';
-                            }}
-                          >
-                            <div style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '8px',
-                              background: 'rgba(236, 72, 153, 0.1)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0
-                            }}>
-                              <FontAwesomeIcon icon={faBookmark} style={{ color: '#ec4899', fontSize: '14px' }} />
-                            </div>
-                            <div style={{ flex: 1, overflow: 'hidden' }}>
-                              <div style={{
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                color: '#f1f5f9',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                marginBottom: '2px'
-                              }}>{item.title || item.url}</div>
-                              <div style={{
-                                fontSize: '11px',
-                                color: '#64748b',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}>{safeGetHostname(item.url)}</div>
-                            </div>
-                            <FontAwesomeIcon icon={faCheck} style={{ color: '#ec4899', fontSize: '14px', opacity: 0 }} className="select-icon" />
-                          </button>
-                        ))}
-                        {filteredBookmarks.length === 0 && (
-                          <div style={{
-                            padding: '32px',
-                            textAlign: 'center',
-                            color: '#64748b',
-                            fontSize: '14px'
-                          }}>No bookmarks found</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {browseMode === 'bookmarks' && renderBrowseSection(filteredBookmarks.slice(0, 15), faBookmark, 'bookmarks')}
 
                   <button
                     onClick={handleAddUrl}
-                    disabled={!selectedWorkspace || !urlInput.trim()}
+                    disabled={(!urlInput.trim() && selectedUrls.size === 0) || !selectedWorkspace}
                     style={{
                       width: '100%',
                       padding: '14px 24px',
                       borderRadius: '14px',
-                      background: !selectedWorkspace || !urlInput.trim()
+                      background: (!urlInput.trim() && selectedUrls.size === 0) || !selectedWorkspace
                         ? 'rgba(71, 85, 105, 0.4)'
                         : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
                       border: 'none',
-                      color: !selectedWorkspace || !urlInput.trim() ? '#64748b' : 'white',
+                      color: (!urlInput.trim() && selectedUrls.size === 0) || !selectedWorkspace ? '#64748b' : 'white',
                       fontSize: '15px',
                       fontWeight: 600,
-                      cursor: !selectedWorkspace || !urlInput.trim() ? 'not-allowed' : 'pointer',
+                      cursor: (!urlInput.trim() && selectedUrls.size === 0) || !selectedWorkspace ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '10px',
                       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      boxShadow: !selectedWorkspace || !urlInput.trim()
+                      boxShadow: (!urlInput.trim() && selectedUrls.size === 0) || !selectedWorkspace
                         ? 'none'
                         : '0 4px 16px rgba(59, 130, 246, 0.4)'
                     }}
                     onMouseEnter={(e) => {
-                      if (selectedWorkspace && urlInput.trim()) {
+                      if ((urlInput.trim() || selectedUrls.size > 0) && selectedWorkspace) {
                         e.currentTarget.style.transform = 'translateY(-2px)';
                         e.currentTarget.style.boxShadow = '0 8px 24px rgba(59, 130, 246, 0.6)';
                       }
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = selectedWorkspace && urlInput.trim()
+                      e.currentTarget.style.boxShadow = selectedWorkspace && (urlInput.trim() || selectedUrls.size > 0)
                         ? '0 4px 16px rgba(59, 130, 246, 0.4)'
                         : 'none';
                     }}
                   >
                     <FontAwesomeIcon icon={faCheck} />
-                    Add to {selectedWorkspace?.name || 'Workspace'}
+                    {selectedUrls.size > 1 ? `Add ${selectedUrls.size} items to ${selectedWorkspace?.name || 'Workspace'}` : `Add to ${selectedWorkspace?.name || 'Workspace'}`}
                   </button>
                 </div>
               )}
@@ -1105,6 +1158,161 @@ export function GlobalAddButton({
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  {/* AI Link Suggestions */}
+                  <div className="form-group" style={{ marginBottom: '32px' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: '12px'
+                    }}>
+                      <label style={{
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#94a3b8',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <FontAwesomeIcon icon={faStar} style={{ fontSize: '11px', color: '#a855f7' }} />
+                        Smart Populate
+                      </label>
+
+                      <button
+                        onClick={handleSuggestWorkspaceLinks}
+                        disabled={isSuggestingLinks || !workspaceName.trim()}
+                        style={{
+                          background: isSuggestingLinks ? 'transparent' : 'rgba(168, 85, 247, 0.15)',
+                          border: '1px solid rgba(168, 85, 247, 0.3)',
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          color: '#d8b4fe',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          cursor: isSuggestingLinks || !workspaceName.trim() ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.2s',
+                          opacity: !workspaceName.trim() ? 0.5 : 1
+                        }}
+                        onMouseEnter={e => {
+                          if (!isSuggestingLinks && workspaceName.trim()) {
+                            e.currentTarget.style.background = 'rgba(168, 85, 247, 0.25)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (!isSuggestingLinks && workspaceName.trim()) {
+                            e.currentTarget.style.background = 'rgba(168, 85, 247, 0.15)';
+                          }
+                        }}
+                      >
+                        {isSuggestingLinks ? (
+                          <>
+                            <div className="spinner" style={{ width: '12px', height: '12px', border: '2px solid rgba(216, 180, 254, 0.3)', borderTopColor: '#d8b4fe', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                            Analyzing...
+                          </>
+                        ) : (
+                          <>✨ Suggest Links</>
+                        )}
+                      </button>
+                    </div>
+
+                    {aiSuggestionError && (
+                      <div style={{
+                        padding: '10px 14px',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        borderRadius: '8px',
+                        color: '#f87171',
+                        fontSize: '13px',
+                        marginBottom: '12px'
+                      }}>
+                        {aiSuggestionError}
+                      </div>
+                    )}
+
+                    {suggestedLinks.length > 0 && (
+                      <div style={{
+                        maxHeight: '220px',
+                        overflowY: 'auto',
+                        background: 'rgba(15, 23, 42, 0.4)',
+                        border: '1px solid rgba(148, 163, 184, 0.1)',
+                        borderRadius: '12px',
+                        padding: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        {suggestedLinks.map((link, idx) => {
+                          const isSelected = selectedSuggestedLinks.has(link.url);
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                const next = new Set(selectedSuggestedLinks);
+                                if (isSelected) next.delete(link.url);
+                                else next.add(link.url);
+                                setSelectedSuggestedLinks(next);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                padding: '10px',
+                                borderRadius: '8px',
+                                background: isSelected ? 'rgba(168, 85, 247, 0.1)' : 'transparent',
+                                border: isSelected ? '1px solid rgba(168, 85, 247, 0.3)' : '1px solid transparent',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={e => {
+                                if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                              }}
+                              onMouseLeave={e => {
+                                if (!isSelected) e.currentTarget.style.background = 'transparent';
+                              }}
+                            >
+                              <div style={{
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '4px',
+                                border: isSelected ? 'none' : '2px solid rgba(148, 163, 184, 0.4)',
+                                background: isSelected ? '#a855f7' : 'transparent',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0
+                              }}>
+                                {isSelected && <FontAwesomeIcon icon={faCheck} style={{ color: 'white', fontSize: '10px' }} />}
+                              </div>
+                              <div style={{ flex: 1, overflow: 'hidden' }}>
+                                <div style={{
+                                  fontSize: '13px',
+                                  color: isSelected ? '#f1f5f9' : '#cbd5e1',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  fontWeight: isSelected ? '500' : '400'
+                                }}>{link.title}</div>
+                                <div style={{
+                                  fontSize: '11px',
+                                  color: '#64748b',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}>{safeGetHostname(link.url)}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <button

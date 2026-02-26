@@ -1284,33 +1284,6 @@ const ChatContext = memo(function ChatContext({ workspaceId, workspaceName, maxI
       </div>
       )}
 
-      {/* Footer hint */}
-      <div style={{
-        padding: '12px 16px',
-        background: 'var(--glass-bg)',
-        backdropFilter: 'blur(16px)',
-        borderRadius: '12px',
-        border: '1px solid var(--border-primary)',
-        fontSize: 'var(--font-sm)',
-        color: 'var(--text-secondary)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        flexShrink: 0
-      }}>
-        <kbd style={{
-          padding: '2px 6px',
-          borderRadius: '4px',
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border-primary)',
-          fontSize: 'var(--font-sm)',
-          fontFamily: 'monospace'
-        }}>Esc</kbd>
-        <span>Back to overview</span>
-        <span style={{ opacity: 0.5 }}>•</span>
-        <span>Links are saved locally</span>
-      </div>
-
       <style jsx>{`
         .recent-chat-item:hover .chat-arrow {
           opacity: 1 !important;

@@ -423,35 +423,35 @@ export function CoolDeskContainer({
       {/* In extension mode: Only show OverviewDashboard */}
       {/* In desktop app (Tauri/Electron): Show all faces with navigation */}
       <WorkspaceShell activeFace={activeFace} onFaceChange={handleFaceChange} isDesktopApp={isDesktopApp}>
-        {/* Face 1: Chat (Far Left) - Desktop App Only */}
-        {isDesktopApp && (
-          <Face index="chat">
-            {shouldRenderFace('chat') && (
-              <Suspense fallback={null}>
-                <ChatContext
-                  workspaceId={currentWorkspace?.id}
-                  workspaceName={currentWorkspace?.name || 'All Workspaces'}
-                />
-              </Suspense>
-            )}
-          </Face>
-        )}
-
-        {/* Face 2: Workspace Details (Left) - Desktop App Only */}
+        {/* Face 1: Workspace Details + ChatContext (Left) - Desktop App Only */}
         {isDesktopApp && (
           <Face index="workspace">
             {shouldRenderFace('workspace') && (
-              <Suspense fallback={<div style={{ padding: 20, color: '#64748B', textAlign: 'center' }}>Loading...</div>}>
-                <WorkspaceList
-                  savedWorkspaces={savedWorkspaces}
-                  onWorkspaceClick={handleWorkspaceClick}
-                  activeWorkspaceId={currentWorkspace?.id}
-                  expandedWorkspaceId={expandedWorkspace?.id}
-                  pinnedWorkspaces={pinnedWorkspaces}
-                  onTogglePin={onTogglePin}
-                  onAddUrl={handleOpenAddModal}
-                />
-              </Suspense>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px', overflow: 'hidden', padding: '16px 0' }}>
+                {/* WorkspaceList - takes 55% of space */}
+                <div style={{ flex: '0 0 55%', minHeight: 0, overflow: 'auto' }}>
+                  <Suspense fallback={<div style={{ padding: 20, color: '#64748B', textAlign: 'center' }}>Loading...</div>}>
+                    <WorkspaceList
+                      savedWorkspaces={savedWorkspaces}
+                      onWorkspaceClick={handleWorkspaceClick}
+                      activeWorkspaceId={currentWorkspace?.id}
+                      expandedWorkspaceId={expandedWorkspace?.id}
+                      pinnedWorkspaces={pinnedWorkspaces}
+                      onTogglePin={onTogglePin}
+                      onAddUrl={handleOpenAddModal}
+                    />
+                  </Suspense>
+                </div>
+                {/* ChatContext - takes 45% of space */}
+                <div style={{ flex: '0 0 45%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <Suspense fallback={null}>
+                    <ChatContext
+                      workspaceId={currentWorkspace?.id}
+                      workspaceName={currentWorkspace?.name || 'All Workspaces'}
+                    />
+                  </Suspense>
+                </div>
+              </div>
             )}
           </Face>
         )}

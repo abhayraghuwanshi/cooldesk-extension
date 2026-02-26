@@ -1,7 +1,7 @@
 import { faCog, faDatabase, faPalette, faRocket, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
-import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveWorkspace, saveSettings } from '../../db';
+import { DB_CONFIG, getUnifiedDB, listWorkspaces, saveSettings, saveWorkspace } from '../../db';
 import { useSync } from '../../hooks/useSync'; // Added hook
 import { getSyncStatus } from '../../services/conditionalSync';
 import { isElectronApp } from '../../services/environmentDetector';
@@ -24,9 +24,11 @@ export function SettingsModal({
   wallpaperEnabled,
   wallpaperUrl,
   wallpaperOpacity,
+  wallpaperAutoRotate,
   onWallpaperEnabledChange,
   onWallpaperUrlChange,
-  onWallpaperOpacityChange
+  onWallpaperOpacityChange,
+  onWallpaperAutoRotateChange
 }) {
   const { syncStatus: globalSyncStatus, triggerSync, lastSyncTime: globalLastSyncTime } = useSync(); // Use sync hook
 
@@ -1025,9 +1027,11 @@ export function SettingsModal({
                 wallpaperEnabled={wallpaperEnabled}
                 wallpaperUrl={wallpaperUrl}
                 wallpaperOpacity={wallpaperOpacity}
+                wallpaperAutoRotate={wallpaperAutoRotate}
                 onWallpaperEnabledChange={onWallpaperEnabledChange}
                 onWallpaperUrlChange={onWallpaperUrlChange}
                 onWallpaperOpacityChange={onWallpaperOpacityChange}
+                onWallpaperAutoRotateChange={onWallpaperAutoRotateChange}
                 unsplashApiKey={unsplashApiKey}
                 onUnsplashApiKeyChange={handleUnsplashApiKeyChange}
               />

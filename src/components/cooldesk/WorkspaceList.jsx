@@ -76,7 +76,7 @@ export function WorkspaceList({
     const [bookmarks, setBookmarks] = useState([]);
     const [bookmarkSearch, setBookmarkSearch] = useState('');
     const [showBookmarks, setShowBookmarks] = useState(true);
-    const [workspaceLimit, setWorkspaceLimit] = useState(6); // Show 6 workspaces initially
+    const [workspaceLimit, setWorkspaceLimit] = useState(100); // Show all workspaces
     const [popoverState, setPopoverState] = useState({ id: null, rect: null });
     const [hoveredBookmark, setHoveredBookmark] = useState(null);
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
@@ -598,42 +598,6 @@ export function WorkspaceList({
                                     ))}
                                 </div>
 
-                                {/* Show More Button */}
-                                {/* Show More Button */}
-                                {filteredUnpinned.length > workspaceLimit && (
-                                    <button
-                                        onClick={() => setWorkspaceLimit(prev => prev + 6)}
-                                        style={{
-                                            width: '100%',
-                                            marginTop: '16px',
-                                            padding: '12px',
-                                            borderRadius: '10px',
-                                            background: 'rgba(59, 130, 246, 0.1)',
-                                            border: '1px solid rgba(59, 130, 246, 0.3)',
-                                            color: '#60a5fa',
-                                            fontSize: '13px',
-                                            fontWeight: 500,
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s ease',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '4px'
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.2)';
-                                            e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.5)';
-                                            e.currentTarget.style.transform = 'translateY(-2px)';
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)';
-                                            e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                                            e.currentTarget.style.transform = 'translateY(0)';
-                                        }}
-                                    >
-                                        Show More ({filteredUnpinned.length - workspaceLimit} remaining)
-                                    </button>
-                                )}
                             </div>
                         )}
 

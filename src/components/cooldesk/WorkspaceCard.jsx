@@ -3,6 +3,8 @@ import {
   faBook,
   faBriefcase,
   faChartLine,
+  faChevronDown,
+  faChevronUp,
   faCloud,
   faCode,
   faExternalLinkAlt,
@@ -37,7 +39,7 @@ import {
   faVrCardboard
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
 import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
@@ -491,31 +493,55 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     if (!iconsContainerRef.current || !compact) return;
 
     const container = iconsContainerRef.current;
-    const containerWidth = container.offsetWidth;
+    let containerWidth = container.offsetWidth;
 
-    // Approximate widths: single icon ~44px (38px + 6px gap), group ~86px (80px + 6px gap)
-    // Reserve ~45px for the "+N more" button
-    const reservedWidth = 45;
-    const availableWidth = containerWidth - reservedWidth;
+    // Account for padding
+    const computedStyle = window.getComputedStyle(container);
+    containerWidth -= (parseFloat(computedStyle.paddingLeft || '0') + parseFloat(computedStyle.paddingRight || '0'));
 
-    let usedWidth = 0;
-    let count = 0;
+    if (containerWidth <= 0) return;
 
-    for (let i = 0; i < groupedItems.length; i++) {
-      const item = groupedItems[i];
-      const itemWidth = item.type === 'group' ? 100 : 54;
+    // Use dynamic measurements if available to be 100% accurate across all screen resolutions
+    const sampleItem = container.querySelector('.compact-url-icon:not(.compact-more-btn), .compact-url-group');
+    const iconBaseWidth = sampleItem ? sampleItem.offsetWidth : 64;
+    const gap = parseFloat(computedStyle.columnGap || computedStyle.gap || '12');
+    const itemFullWidth = iconBaseWidth + gap;
 
-      if (usedWidth + itemWidth <= availableWidth) {
-        usedWidth += itemWidth;
-        count++;
-      } else {
-        break;
-      }
+    // Optional Add URL button needs space. It matches the width of standard icons.
+    const addBtnSpace = onAddUrl ? itemFullWidth : 0;
+
+    // Check if we can fit EVERYTHING including the Add button natively on one line
+    const maxAllowedItems = groupedItems.length;
+    let widthForEverything = maxAllowedItems * itemFullWidth - gap + addBtnSpace;
+
+    // Safety buffer to prevent rounding issues causing accidental overflow
+    const safeContainerWidth = containerWidth - 8;
+
+    if (maxAllowedItems > 0 && widthForEverything <= safeContainerWidth) {
+      // Everything fits perfectly, including the + Add button
+      setVisibleCount(groupedItems.length);
+      return;
     }
 
-    // Show at least 1 item, max 8
-    setVisibleCount(Math.max(1, Math.min(count, 8)));
-  }, [groupedItems, compact]);
+    if (maxAllowedItems === 0 && addBtnSpace <= safeContainerWidth) {
+      setVisibleCount(0);
+      return;
+    }
+
+    // We can't fit everything. We reserve space for the Expand button. 
+    // The Expand button takes the space of one icon.
+    // We drop the Add button if not expanded (per layout constraints and user req)
+    const reservedWidthForExpand = itemFullWidth;
+    const availableWidthForIcons = safeContainerWidth - reservedWidthForExpand;
+
+    let count = 0;
+    if (availableWidthForIcons >= iconBaseWidth) {
+      count = Math.floor((availableWidthForIcons + gap) / itemFullWidth);
+    }
+
+    // Never show more than length - 1, since if we show length, we'd have no overflow and wouldn't need expand btn
+    setVisibleCount(Math.max(0, Math.min(count, Math.max(0, groupedItems.length - 1))));
+  }, [groupedItems, compact, onAddUrl]);
 
   // Recalculate on mount and resize
   useEffect(() => {
@@ -552,14 +578,14 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     >
       {compact ? (
         /* macOS Dock-Style List View - Using CSS Classes */
-        <div className="compact-card-inner">
+        <div className="compact-card-inner" style={{ alignItems: showAll ? 'flex-start' : 'center' }}>
           {/* Workspace Icon on Left */}
           <div className={`compact-workspace-icon workspace-icon ${colorClass}`}>
             <FontAwesomeIcon icon={iconToUse} />
           </div>
 
           {/* Workspace Info */}
-          <div className="compact-workspace-info">
+          <div className="compact-workspace-info" style={{ marginTop: showAll ? '12px' : '0' }}>
             <div className="compact-workspace-name">{name}</div>
             <div className="compact-workspace-count">
               {urlCount} URL{urlCount !== 1 ? 's' : ''}
@@ -567,94 +593,98 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
           </div>
 
           {/* URL Favicons - Grouped */}
-          {groupedItems.length > 0 && (
-            <div ref={iconsContainerRef} className="compact-icons-container">
-              {groupedItems.slice(0, visibleCount).map((item, idx) => {
-                const isGroup = item.type === 'group';
-                const url = isGroup ? item.primaryUrl : item.url;
-                const faviconUrl = getFaviconUrl(url, 20);
+          <div ref={iconsContainerRef} className="compact-icons-container" style={{ flexWrap: showAll ? 'wrap' : 'nowrap' }}>
+            {groupedItems.slice(0, showAll ? groupedItems.length : visibleCount).map((item, idx) => {
+              const isGroup = item.type === 'group';
+              const url = isGroup ? item.primaryUrl : item.url;
+              const faviconUrl = getFaviconUrl(url, 20);
 
-                return (
-                  <div
-                    key={idx}
-                    className={isGroup ? 'compact-url-group' : 'compact-url-icon'}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isGroup) {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setGroupPopoverState({ group: item, rect });
-                      } else {
-                        window.open(item.url, '_blank');
-                      }
-                    }}
-                    title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : (item.title || formatDomainName(item.url))}
-                  >
-                    {(() => {
-                      const avatar = getLetterAvatar(url);
-                      return (
-                        <>
-                          {faviconUrl ? (
-                            <img
-                              src={faviconUrl}
-                              alt=""
-                              className="compact-item-img"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          <div
-                            className="letter-avatar"
-                            style={{
-                              display: faviconUrl ? 'none' : 'flex',
-                              background: avatar.color
-                            }}
-                          >
-                            {avatar.letter}
-                          </div>
-                        </>
-                      );
-                    })()}
-
-                    {/* Pill Text Content */}
-                    {isGroup && (
-                      <div className="compact-group-text">
-                        <div className="compact-group-label">{item.label}</div>
-                        <div className="compact-group-count">{item.urls.length}</div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* +N More Indicator */}
-              {groupedItems.length > visibleCount && (
+              return (
                 <div
-                  className="compact-more-btn"
+                  key={idx}
+                  className={isGroup ? 'compact-url-group' : 'compact-url-icon'}
                   onClick={(e) => {
                     e.stopPropagation();
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const remainingItems = groupedItems.slice(visibleCount);
-                    const flatUrls = [];
-                    remainingItems.forEach(item => {
-                      if (item.type === 'group') {
-                        item.urls.forEach(u => flatUrls.push(u));
-                      } else {
-                        flatUrls.push(item);
-                      }
-                    });
-                    setGroupPopoverState({
-                      group: { domain: 'More Links', urls: flatUrls },
-                      rect
-                    });
+                    if (isGroup) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setGroupPopoverState({ group: item, rect });
+                    } else {
+                      window.open(item.url, '_blank');
+                    }
                   }}
+                  title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : (item.title || formatDomainName(item.url))}
                 >
-                  +{groupedItems.length - visibleCount}
+                  {(() => {
+                    const avatar = getLetterAvatar(url);
+                    return (
+                      <>
+                        {faviconUrl ? (
+                          <img
+                            src={faviconUrl}
+                            alt=""
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className="letter-avatar"
+                          style={{
+                            display: faviconUrl ? 'none' : 'flex',
+                            background: avatar.color
+                          }}
+                        >
+                          {avatar.letter}
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  {/* Pill Text Content */}
+                  {isGroup && (
+                    <div className="compact-group-text">
+                      <div className="compact-group-label">{item.label}</div>
+                      <div className="compact-group-count">{item.urls.length}</div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
+              );
+            })}
+
+            {/* Inline Add URL Button */}
+            {onAddUrl && (showAll || (groupedItems.length <= visibleCount)) && (
+              <div
+                className="compact-url-icon"
+                style={{
+                  border: '1px dashed rgba(148, 163, 184, 0.4)',
+                  background: 'transparent',
+                  color: 'rgba(148, 163, 184, 0.8)'
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddUrl(workspace);
+                }}
+                title="Add Link"
+              >
+                <FontAwesomeIcon icon={faPlus} style={{ fontSize: '18px' }} />
+              </div>
+            )}
+
+            {/* Expand/Collapse Button */}
+            {groupedItems.length > visibleCount && (
+              <div
+                className="compact-more-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAll(!showAll);
+                }}
+                title={showAll ? "Collapse" : "Expand"}
+              >
+                <FontAwesomeIcon icon={showAll ? faChevronUp : faChevronDown} style={{ fontSize: '16px' }} />
+              </div>
+            )}
+          </div>
 
           {/* Render Group Popover if Active */}
           {groupPopoverState.group && (
@@ -663,21 +693,6 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               triggerRect={groupPopoverState.rect}
               onClose={() => setGroupPopoverState({ group: null, rect: null })}
             />
-          )}
-
-          {/* Add URL Button */}
-          {onAddUrl && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddUrl(workspace);
-              }}
-              className="compact-action-btn workspace-add-btn"
-              title="Add URL"
-              data-onboarding="add-link-btn"
-            >
-              <FontAwesomeIcon icon={faPlus} />
-            </button>
           )}
 
           {/* Pin Button */}

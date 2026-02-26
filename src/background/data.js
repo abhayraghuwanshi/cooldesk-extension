@@ -72,8 +72,14 @@ async function autoPopulateWorkspaces(historyData) {
     const existingWorkspaces = wsResult?.success ? wsResult.data : [];
     console.log(`[Onboarding] Found ${existingWorkspaces.length} existing workspaces`);
 
-    // 2. Extract URLs
-    const historyUrls = historyData.map(h => h.url);
+    // 2. Pre-filter history by Chrome's visitCount (proxy for qualification)
+    // This handles the chicken-egg problem - no activity data yet on first install
+    // visitCount >= 3 indicates recurring use, not one-time visits
+    const qualifiedHistory = historyData.filter(h => (h.visitCount || 0) >= 3);
+    console.log(`[Onboarding] Qualified ${qualifiedHistory.length}/${historyData.length} history items (visitCount >= 3)`);
+
+    // 3. Extract URLs from QUALIFIED history only
+    const historyUrls = qualifiedHistory.map(h => h.url);
 
     // 3. Generate Workspace Suggestions
     console.log('[Onboarding] 🔍 Analyzing URLs for workspace suggestions...');

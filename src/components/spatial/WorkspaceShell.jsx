@@ -1,4 +1,4 @@
-import { faComments, faFolder, faHome, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faFolder, faHome, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { teamManager } from '../../services/p2p/teamManager';
@@ -9,8 +9,7 @@ import '../../styles/spatial.css';
  * WorkspaceShell - Spatial container for workspace faces (cube metaphor)
  *
  * Manages navigation between:
- * - Chat (far left) - AI context and conversation
- * - Workspace (left) - workspace details and management
+ * - Workspace (left) - workspace details, management, and ChatContext
  * - Overview (center) - main workspace grid
  * - Tabs (right) - tab management
  * - Team (further right) - P2P shared items
@@ -88,7 +87,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     if (face === currentFace) return;
 
     // Smart Travel: Dynamic duration based on distance
-    const faces = ['chat', 'workspace', 'overview', 'tabs', 'team', 'notes'];
+    const faces = ['workspace', 'overview', 'tabs', 'team', 'notes'];
     const currentIndex = faces.indexOf(currentFace);
     const targetIndex = faces.indexOf(face);
     const distance = Math.abs(targetIndex - currentIndex);
@@ -135,7 +134,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         console.log('[WorkspaceShell] Spatial Nav triggered:', e.key);
         e.preventDefault();
 
-        const faces = ['chat', 'workspace', 'overview', 'tabs', 'team', 'notes'];
+        const faces = ['workspace', 'overview', 'tabs', 'team', 'notes'];
         const currentIndex = faces.indexOf(currentFace);
 
         if (currentIndex === -1) {
@@ -154,10 +153,10 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         }
       }
 
-      if (modifierPressed && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+      if (modifierPressed && ['1', '2', '3', '4', '5'].includes(e.key)) {
         e.preventDefault();
         const faceMap = {
-          '1': 'chat', '2': 'workspace', '3': 'overview', '4': 'tabs', '5': 'team', '6': 'notes'
+          '1': 'workspace', '2': 'overview', '3': 'tabs', '4': 'team', '5': 'notes'
         };
         navigateToFace(faceMap[e.key]);
       }
@@ -246,7 +245,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       if (Math.abs(state.accumulator) > THRESHOLD) {
         if (e.cancelable) e.preventDefault();
 
-        const faces = ['chat', 'workspace', 'overview', 'tabs', 'team', 'notes'];
+        const faces = ['workspace', 'overview', 'tabs', 'team', 'notes'];
         const currentIndex = faces.indexOf(currentFace);
 
         let switched = false;
@@ -276,14 +275,13 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       return 'translateX(0)';
     }
 
-    // Desktop app: 6 faces, each taking 16.666% width
+    // Desktop app: 5 faces, each taking 20% width
     const transforms = {
-      'chat': 'translateX(0)',
-      'workspace': 'translateX(-16.666667%)',
-      'overview': 'translateX(-33.333333%)',
-      'tabs': 'translateX(-50%)',
-      'team': 'translateX(-66.666667%)',
-      'notes': 'translateX(-83.333333%)'
+      'workspace': 'translateX(0)',
+      'overview': 'translateX(-20%)',
+      'tabs': 'translateX(-40%)',
+      'team': 'translateX(-60%)',
+      'notes': 'translateX(-80%)'
     };
     return transforms[currentFace] || transforms.overview;
   }, [currentFace, isDesktopApp]);
@@ -304,19 +302,10 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
                 : (activeTabTitle || currentFace.charAt(0).toUpperCase() + currentFace.slice(1))}
             </div>
             <button
-              className={`face-dot ${currentFace === 'chat' ? 'active' : ''}`}
-              onClick={() => navigateToFace('chat')}
-              onMouseEnter={() => setHoveredFace('chat')}
-              title="Chat (Ctrl + 1)"
-              data-onboarding="nav-chat"
-            >
-              <FontAwesomeIcon icon={faComments} className="face-icon" />
-            </button>
-            <button
               className={`face-dot ${currentFace === 'workspace' ? 'active' : ''}`}
               onClick={() => navigateToFace('workspace')}
               onMouseEnter={() => setHoveredFace('workspace')}
-              title="Collections (Ctrl + 2)"
+              title="Collections (Ctrl + 1)"
               data-onboarding="nav-collections"
             >
               <FontAwesomeIcon icon={faFolder} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
@@ -325,7 +314,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
               className={`face-dot ${currentFace === 'overview' ? 'active' : ''}`}
               onClick={() => navigateToFace('overview')}
               onMouseEnter={() => setHoveredFace('overview')}
-              title="Overview (Ctrl + 3)"
+              title="Overview (Ctrl + 2)"
               data-onboarding="nav-overview"
             >
               <FontAwesomeIcon icon={faHome} className="face-icon" />
@@ -334,7 +323,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
               className={`face-dot ${currentFace === 'tabs' ? 'active' : ''}`}
               onClick={() => navigateToFace('tabs')}
               onMouseEnter={() => setHoveredFace('tabs')}
-              title="Tabs (Ctrl + 4)"
+              title="Tabs (Ctrl + 3)"
               data-onboarding="nav-tabs"
             >
               <FontAwesomeIcon icon={faTh} className="face-icon" />
@@ -343,7 +332,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
               className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
               onClick={() => navigateToFace('team')}
               onMouseEnter={() => setHoveredFace('team')}
-              title="Spaces (Ctrl + 5)"
+              title="Spaces (Ctrl + 4)"
               data-onboarding="nav-team"
             >
               <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
@@ -352,7 +341,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
               className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`}
               onClick={() => navigateToFace('notes')}
               onMouseEnter={() => setHoveredFace('notes')}
-              title="Notes (Ctrl + 6)"
+              title="Notes (Ctrl + 5)"
               data-onboarding="nav-notes"
             >
               <FontAwesomeIcon icon={faStickyNote} className="face-icon" />

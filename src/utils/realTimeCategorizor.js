@@ -9,6 +9,7 @@ import { addUrlToWorkspace, getUrlRecord, listWorkspaces, saveWorkspace, upsertU
 import { NanoAIService } from '../services/nanoAIService.js';
 import GenericUrlParser from './GenericUrlParser.js';
 import { getBaseDomainFromUrl } from './helpers.js';
+import { isUrlQualified, normalizeUrlForCategory } from './urlQualification.js';
 
 // --- State Management ---
 // Cache of known workspace domains/IDs to avoid DB lookups
@@ -440,8 +441,19 @@ export function setupRealTimeCategorizor() {
       if (workspaceCache.has(workspaceKey)) {
         const existingId = workspaceCache.get(workspaceKey);
 
+        // Normalize URL for category-based workspaces (strip paths/queries)
+        const isCategoryBased = category !== 'uncategorized';
+        const normalizedUrl = normalizeUrlForCategory(urlToStore, isCategoryBased);
+
+        // Check if URL is qualified based on activity data
+        const qualified = await isUrlQualified(normalizedUrl, category);
+        if (!qualified) {
+          // console.log(`[RealTime] ⏳ URL not yet qualified: ${normalizedUrl} (category: ${category})`);
+          return; // Activity tracking continues, will re-check on next visit
+        }
+
         // Domain-level dedup: check if this base domain already exists
-        const baseDomain = getBaseDomainFromUrl(urlToStore);
+        const baseDomain = getBaseDomainFromUrl(normalizedUrl);
         try {
           const { getWorkspace } = await import('../db/index.js');
           const ws = await getWorkspace(existingId);
@@ -457,10 +469,10 @@ export function setupRealTimeCategorizor() {
           console.warn('[RealTime] Dedup check failed, proceeding:', e);
         }
 
-        console.log(`[RealTime] ➕ Adding to existing workspace: "${workspaceName}" (${existingId})`);
+        console.log(`[RealTime] ➕ Adding qualified URL to existing workspace: "${workspaceName}" (${existingId})`);
 
-        await addUrlToWorkspace(urlToStore, existingId, {
-          title: enhancedTitle || parsed.title || new URL(urlToStore).hostname,
+        await addUrlToWorkspace(normalizedUrl, existingId, {
+          title: enhancedTitle || parsed.title || new URL(normalizedUrl).hostname,
           favicon: parsed.favicon,
           addedAt: Date.now()
         });
@@ -475,8 +487,19 @@ export function setupRealTimeCategorizor() {
         return;
       }
 
-      // 6. Create New Workspace
-      console.log(`[RealTime] 🆕 Creating new workspace: "${workspaceName}" from ${urlToStore}`);
+      // 6. Create New Workspace - only if URL is qualified
+      // Normalize URL for category-based workspaces
+      const isCategoryBased = category !== 'uncategorized';
+      const normalizedUrl = normalizeUrlForCategory(urlToStore, isCategoryBased);
+
+      // Check qualification before creating workspace
+      const qualified = await isUrlQualified(normalizedUrl, category);
+      if (!qualified) {
+        // console.log(`[RealTime] ⏳ Skipping workspace creation - URL not qualified: ${normalizedUrl}`);
+        return;
+      }
+
+      console.log(`[RealTime] 🆕 Creating new workspace: "${workspaceName}" from ${normalizedUrl}`);
 
       const newId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       cacheWorkspace(workspaceName, newId); // Update cache immediately
@@ -487,8 +510,8 @@ export function setupRealTimeCategorizor() {
         description: `${parsed.platform.name} workspace`,
         createdAt: Date.now(),
         urls: [{
-          url: urlToStore,
-          title: enhancedTitle || parsed.title || new URL(urlToStore).hostname,
+          url: normalizedUrl,
+          title: enhancedTitle || parsed.title || new URL(normalizedUrl).hostname,
           addedAt: Date.now(),
           favicon: parsed.favicon
         }],
@@ -502,7 +525,7 @@ export function setupRealTimeCategorizor() {
       };
 
       await saveWorkspace(workspace);
-      await addUrlToWorkspace(url, workspace.id, {
+      await addUrlToWorkspace(normalizedUrl, workspace.id, {
         title: enhancedTitle || parsed.title || 'Untitled',
         favicon: parsed.favicon,
         addedAt: Date.now()

@@ -138,6 +138,73 @@ export default function App() {
     }
   });
 
+  const [wallpaperAutoRotate, setWallpaperAutoRotate] = useState(() => {
+    try {
+      return localStorage.getItem('wallpaperAutoRotate') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Intelligent auto-rotate on new tab / mount
+  useEffect(() => {
+    if (wallpaperEnabled && wallpaperAutoRotate) {
+      // Check if we already rotated in this specific tab session.
+      // sessionStorage persists across reloads of the same tab, but is empty for new tabs.
+      if (sessionStorage.getItem('wallpaperSessionActive')) {
+        return; // Skip rotation on refresh
+      }
+      sessionStorage.setItem('wallpaperSessionActive', 'true');
+
+      storageGet(['unsplashApiKey']).then(({ unsplashApiKey }) => {
+        if (unsplashApiKey) {
+          fetch(`https://api.unsplash.com/photos/random?orientation=landscape&query=nature`, {
+            headers: {
+              'Authorization': `Client-ID ${unsplashApiKey}`
+            }
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data && data.urls && data.urls.full) {
+                setWallpaperUrl(data.urls.full);
+                console.log('Successfully fetched new Auto-Wallpaper from Unsplash API');
+              } else {
+                console.warn('Unsplash API returned invalid data, falling back. Data:', data);
+                fallbackToCurated();
+              }
+            })
+            .catch(err => {
+              console.error('Failed to auto-rotate wallpaper from Unsplash API:', err);
+              fallbackToCurated();
+            });
+        } else {
+          fallbackToCurated();
+        }
+      });
+
+      const fallbackToCurated = () => {
+        const curatedWallpapers = [
+          'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&q=90&fm=jpg',
+          'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=3840&q=90&fm=jpg',
+          'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=3840&q=90&fm=jpg',
+          'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=3840&q=90&fm=jpg',
+          'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=3840&q=90&fm=jpg',
+          'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg',
+          'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=3840&q=90&fm=jpg',
+          'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=3840&q=90&fm=jpg',
+          'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=3840&q=90&fm=jpg',
+          'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&q=90&fm=jpg'
+        ];
+        // Pick a random wallpaper different from the current one if possible
+        let nextWallpaper = curatedWallpapers[Math.floor(Math.random() * curatedWallpapers.length)];
+        if (nextWallpaper === wallpaperUrl && curatedWallpapers.length > 1) {
+          nextWallpaper = curatedWallpapers[(curatedWallpapers.indexOf(wallpaperUrl) + 1) % curatedWallpapers.length];
+        }
+        setWallpaperUrl(nextWallpaper);
+      };
+    }
+  }, []); // Run once on component mount (New Tab instance)
+
   // Pinned workspaces
   const [pinnedWorkspaces, setPinnedWorkspaces] = useState([])
   const [activePinnedWorkspace, setActivePinnedWorkspace] = useState(() => {
@@ -674,6 +741,12 @@ export default function App() {
       }
     } catch { }
   }, [wallpaperOpacity, wallpaperEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('wallpaperAutoRotate', String(wallpaperAutoRotate));
+    } catch { }
+  }, [wallpaperAutoRotate]);
 
   useEffect(() => {
     if (!activePinnedWorkspace) return;
@@ -1285,133 +1358,133 @@ export default function App() {
     }}>
       {/* Cooldesk UI */}
       <CoolDeskContainer
-            savedWorkspaces={savedWorkspaces}
-            onOpenWorkspace={(ws) => {
-              setWorkspace(ws.name);
-              console.log('[CoolDesk] Opening workspace:', ws.name);
-            }}
-            onOpenAllWorkspace={(ws) => {
-              // Open all URLs in workspace
-              if (ws.urls && Array.isArray(ws.urls)) {
-                ws.urls.forEach((urlObj) => {
-                  if (urlObj.url) {
-                    window.open(urlObj.url, '_blank');
-                  }
-                });
+        savedWorkspaces={savedWorkspaces}
+        onOpenWorkspace={(ws) => {
+          setWorkspace(ws.name);
+          console.log('[CoolDesk] Opening workspace:', ws.name);
+        }}
+        onOpenAllWorkspace={(ws) => {
+          // Open all URLs in workspace
+          if (ws.urls && Array.isArray(ws.urls)) {
+            ws.urls.forEach((urlObj) => {
+              if (urlObj.url) {
+                window.open(urlObj.url, '_blank');
               }
-            }}
-            onCreateWorkspace={async (workspaceData) => {
-              if (workspaceData && workspaceData.name) {
-                const newId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-                const newWorkspace = {
-                  id: newId,
-                  name: workspaceData.name,
-                  icon: workspaceData.icon || 'globe',
-                  description: '',
-                  createdAt: Date.now(),
-                  updatedAt: Date.now(),
-                  urls: workspaceData.urls || [],
-                  gridType: 'ItemGrid'
-                };
+            });
+          }
+        }}
+        onCreateWorkspace={async (workspaceData) => {
+          if (workspaceData && workspaceData.name) {
+            const newId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const newWorkspace = {
+              id: newId,
+              name: workspaceData.name,
+              icon: workspaceData.icon || 'globe',
+              description: '',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              urls: workspaceData.urls || [],
+              gridType: 'ItemGrid'
+            };
 
-                try {
-                  await saveWorkspace(newWorkspace);
-                  console.log('[App] Created workspace via GlobalAddButton:', newWorkspace);
+            try {
+              await saveWorkspace(newWorkspace);
+              console.log('[App] Created workspace via GlobalAddButton:', newWorkspace);
 
-                  // Refresh list
-                  const refreshedResult = await listWorkspaces({ limit: 1000 });
-                  if (refreshedResult?.success) {
-                    setSavedWorkspaces(refreshedResult.data);
-                    // Sync to Electron app
-                    if (syncWorkspaces) {
-                      syncWorkspaces(refreshedResult.data).catch(err => console.warn('[App] Sync failed:', err));
-                    }
-                    // Optionally switch to it
-                    // setWorkspace(newWorkspace.name);
-                  }
-                } catch (err) {
-                  console.error('Failed to create workspace:', err);
-                  alert('Failed to create workspace');
+              // Refresh list
+              const refreshedResult = await listWorkspaces({ limit: 1000 });
+              if (refreshedResult?.success) {
+                setSavedWorkspaces(refreshedResult.data);
+                // Sync to Electron app
+                if (syncWorkspaces) {
+                  syncWorkspaces(refreshedResult.data).catch(err => console.warn('[App] Sync failed:', err));
                 }
-              } else {
-                // Legacy or fallback behavior
-                setShowCreateWorkspace(true);
+                // Optionally switch to it
+                // setWorkspace(newWorkspace.name);
               }
-            }}
-            onAddUrlToWorkspace={async (workspaceId, urlData) => {
-              try {
-                // Find workspace by ID
-                const workspace = savedWorkspaces.find(ws => ws.id === workspaceId);
-                if (!workspace) {
-                  console.error('Workspace not found:', workspaceId);
-                  return;
-                }
+            } catch (err) {
+              console.error('Failed to create workspace:', err);
+              alert('Failed to create workspace');
+            }
+          } else {
+            // Legacy or fallback behavior
+            setShowCreateWorkspace(true);
+          }
+        }}
+        onAddUrlToWorkspace={async (workspaceId, urlData) => {
+          try {
+            // Find workspace by ID
+            const workspace = savedWorkspaces.find(ws => ws.id === workspaceId);
+            if (!workspace) {
+              console.error('Workspace not found:', workspaceId);
+              return;
+            }
 
-                // Add URL using existing handler
-                await handleAddSavedUrlToWorkspace(urlData.url, workspace.name);
-                // console.log('[CoolDesk] Added URL to workspace:', { workspace: workspace.name, url: urlData.url });
-              } catch (error) {
-                console.error('[CoolDesk] Failed to add URL:', error);
-              }
-            }}
-            onAddNote={async (noteText) => {
-              // Note: Integrate with your notes system
-              // For now, just log it
-              console.log('[CoolDesk] Adding note:', noteText);
-              // You can add this to SimpleNotes or NotesWidget
-            }}
-            onSearch={(query) => {
-              setSearch(query);
-              console.log('[CoolDesk] Search:', query);
-            }}
-            onOpenSettings={() => {
-              setShowSettings(true);
-            }}
-            themeClass={themeClass}
-            wallpaperEnabled={wallpaperEnabled}
-            wallpaperUrl={wallpaperUrl}
-            wallpaperOpacity={wallpaperOpacity}
-            pinnedWorkspaces={pinnedWorkspaces}
-            onTogglePin={togglePinWorkspace}
-            // Note: passing all state/handlers
-            workspace={workspace}
-            setWorkspace={setWorkspace}
-            setThemeClass={setThemeClass}
-            search={search}
-            setSearch={setSearch}
-            focusSearchTick={focusSearchTick}
-            setFocusSearchTick={setFocusSearchTick}
-            settings={settings}
-            setSettings={setSettings}
-            showCreateWorkspace={showCreateWorkspace}
-            setShowCreateWorkspace={setShowCreateWorkspace}
-            addingToWorkspace={addingToWorkspace}
-            setAddingToWorkspace={setAddingToWorkspace}
-            showSettings={showSettings}
-            setShowSettings={setShowSettings}
-            setSavedWorkspaces={setSavedWorkspaces}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            activeSection={activeSection}
-            setActiveSection={setActiveSection}
-            activeSectionTimeoutRef={activeSectionTimeoutRef}
-            setPinnedWorkspaces={setPinnedWorkspaces}
-            activePinnedWorkspace={activePinnedWorkspace}
-            setActivePinnedWorkspace={setActivePinnedWorkspace}
-            unpinWorkspace={unpinWorkspace}
-            showPingsSection={showPingsSection}
-            setShowPingsSection={setShowPingsSection}
-            showFeedSection={showFeedSection}
-            setShowFeedSection={setShowFeedSection}
-            setWallpaperEnabled={setWallpaperEnabled}
-            setWallpaperUrl={setWallpaperUrl}
-            setWallpaperOpacity={setWallpaperOpacity}
-            windowWidth={windowWidth}
-            startOnboarding={startOnboarding}
-            fontSize={fontSize}
-            handleFontSizeChange={handleFontSizeChange}
-            handleShareWorkspaceUrl={handleShareWorkspaceUrl}
-          />
+            // Add URL using existing handler
+            await handleAddSavedUrlToWorkspace(urlData.url, workspace.name);
+            // console.log('[CoolDesk] Added URL to workspace:', { workspace: workspace.name, url: urlData.url });
+          } catch (error) {
+            console.error('[CoolDesk] Failed to add URL:', error);
+          }
+        }}
+        onAddNote={async (noteText) => {
+          // Note: Integrate with your notes system
+          // For now, just log it
+          console.log('[CoolDesk] Adding note:', noteText);
+          // You can add this to SimpleNotes or NotesWidget
+        }}
+        onSearch={(query) => {
+          setSearch(query);
+          console.log('[CoolDesk] Search:', query);
+        }}
+        onOpenSettings={() => {
+          setShowSettings(true);
+        }}
+        themeClass={themeClass}
+        wallpaperEnabled={wallpaperEnabled}
+        wallpaperUrl={wallpaperUrl}
+        wallpaperOpacity={wallpaperOpacity}
+        pinnedWorkspaces={pinnedWorkspaces}
+        onTogglePin={togglePinWorkspace}
+        // Note: passing all state/handlers
+        workspace={workspace}
+        setWorkspace={setWorkspace}
+        setThemeClass={setThemeClass}
+        search={search}
+        setSearch={setSearch}
+        focusSearchTick={focusSearchTick}
+        setFocusSearchTick={setFocusSearchTick}
+        settings={settings}
+        setSettings={setSettings}
+        showCreateWorkspace={showCreateWorkspace}
+        setShowCreateWorkspace={setShowCreateWorkspace}
+        addingToWorkspace={addingToWorkspace}
+        setAddingToWorkspace={setAddingToWorkspace}
+        showSettings={showSettings}
+        setShowSettings={setShowSettings}
+        setSavedWorkspaces={setSavedWorkspaces}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        activeSection={activeSection}
+        setActiveSection={setActiveSection}
+        activeSectionTimeoutRef={activeSectionTimeoutRef}
+        setPinnedWorkspaces={setPinnedWorkspaces}
+        activePinnedWorkspace={activePinnedWorkspace}
+        setActivePinnedWorkspace={setActivePinnedWorkspace}
+        unpinWorkspace={unpinWorkspace}
+        showPingsSection={showPingsSection}
+        setShowPingsSection={setShowPingsSection}
+        showFeedSection={showFeedSection}
+        setShowFeedSection={setShowFeedSection}
+        setWallpaperEnabled={setWallpaperEnabled}
+        setWallpaperUrl={setWallpaperUrl}
+        setWallpaperOpacity={setWallpaperOpacity}
+        windowWidth={windowWidth}
+        startOnboarding={startOnboarding}
+        fontSize={fontSize}
+        handleFontSizeChange={handleFontSizeChange}
+        handleShareWorkspaceUrl={handleShareWorkspaceUrl}
+      />
 
       {/* Settings Modal */}
       {showSettings && (
@@ -1434,9 +1507,11 @@ export default function App() {
             wallpaperEnabled={wallpaperEnabled}
             wallpaperUrl={wallpaperUrl}
             wallpaperOpacity={wallpaperOpacity}
+            wallpaperAutoRotate={wallpaperAutoRotate}
             onWallpaperEnabledChange={setWallpaperEnabled}
             onWallpaperUrlChange={setWallpaperUrl}
             onWallpaperOpacityChange={setWallpaperOpacity}
+            onWallpaperAutoRotateChange={setWallpaperAutoRotate}
           />
         </React.Suspense>
       )}

@@ -270,6 +270,7 @@ import {
 } from './activity.js';
 import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
+import { runWorkspaceCleanup } from '../utils/urlQualification.js';
 import { CommandParser } from '../services/commandParser.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
 import { scheduleDailySummary } from '../services/memory/dailySummaryGenerator.js';
@@ -661,6 +662,17 @@ async function main() {
         }
       } catch (e) {
         console.warn('[Background] Time series cleanup failed:', e);
+      }
+
+      // One-time cleanup of existing workspaces to remove unqualified URLs
+      // (e.g., one-time Google Maps visits that shouldn't be in Utilities)
+      try {
+        const cleanupResult = await runWorkspaceCleanup();
+        if (!cleanupResult.skipped) {
+          console.log(`[Background] Workspace cleanup: removed ${cleanupResult.totalRemoved} URLs from ${cleanupResult.workspacesModified} workspaces`);
+        }
+      } catch (e) {
+        console.warn('[Background] Workspace cleanup failed:', e);
       }
 
     } catch (e) {

@@ -1,29 +1,51 @@
 /**
- * Resume Work Widget
- * Shows the last active browsing session with option to continue
- * Now with category detection and optional AI summary
+ * Resume Work Widget V2
+ * Shows the last active browsing session with rich context
+ * Features: Activity-based scoring, workspace associations, time tracking
  */
 
+import {
+    faBolt,
+    faComments,
+    faFilm,
+    faFolder,
+    faFutbol,
+    faGraduationCap,
+    faHeartPulse,
+    faMagic,
+    faNewspaper,
+    faPalette,
+    faPlane,
+    faRobot,
+    faShoppingCart,
+    faStar,
+    faTasks,
+    faUtensils,
+    faWallet,
+    faWrench
+} from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
-import { getActiveSessions } from '../../services/memory/sessionBuilder.js';
 import appstoreData from '../../data/appstore.json';
+import { getUrlAnalytics, listWorkspaces } from '../../db/unified-api.js';
+import { getActiveSessions } from '../../services/memory/sessionBuilder.js';
 
-// Category config with emojis and colors
+// Category config with icons and colors
 const CATEGORY_CONFIG = {
-    finance: { emoji: '💰', label: 'Finance', color: '#10B981' },
-    health: { emoji: '🏥', label: 'Health', color: '#EC4899' },
-    education: { emoji: '📚', label: 'Education', color: '#8B5CF6' },
-    sports: { emoji: '⚽', label: 'Sports', color: '#F59E0B' },
-    social: { emoji: '💬', label: 'Social', color: '#3B82F6' },
-    travel: { emoji: '✈️', label: 'Travel', color: '#06B6D4' },
-    entertainment: { emoji: '🎬', label: 'Entertainment', color: '#EF4444' },
-    shopping: { emoji: '🛒', label: 'Shopping', color: '#F97316' },
-    food: { emoji: '🍕', label: 'Food', color: '#84CC16' },
-    utilities: { emoji: '🔧', label: 'Utilities', color: '#6B7280' },
-    creativity: { emoji: '🎨', label: 'Creativity', color: '#A855F7' },
-    information: { emoji: '📰', label: 'News', color: '#64748B' },
-    productivity: { emoji: '📋', label: 'Productivity', color: '#0EA5E9' },
-    ai: { emoji: '🤖', label: 'AI', color: '#8B5CF6' }
+    finance: { icon: faWallet, label: 'Finance', color: '#10B981', gradient: 'linear-gradient(135deg, #10B981 0%, #059669 100%)' },
+    health: { icon: faHeartPulse, label: 'Health', color: '#EC4899', gradient: 'linear-gradient(135deg, #EC4899 0%, #DB2777 100%)' },
+    education: { icon: faGraduationCap, label: 'Education', color: '#8B5CF6', gradient: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)' },
+    sports: { icon: faFutbol, label: 'Sports', color: '#F59E0B', gradient: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)' },
+    social: { icon: faComments, label: 'Social', color: '#3B82F6', gradient: 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)' },
+    travel: { icon: faPlane, label: 'Travel', color: '#06B6D4', gradient: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 100%)' },
+    entertainment: { icon: faFilm, label: 'Entertainment', color: '#EF4444', gradient: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' },
+    shopping: { icon: faShoppingCart, label: 'Shopping', color: '#F97316', gradient: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)' },
+    food: { icon: faUtensils, label: 'Food', color: '#84CC16', gradient: 'linear-gradient(135deg, #84CC16 0%, #65A30D 100%)' },
+    utilities: { icon: faWrench, label: 'Utilities', color: '#6B7280', gradient: 'linear-gradient(135deg, #6B7280 0%, #4B5563 100%)' },
+    creativity: { icon: faPalette, label: 'Creativity', color: '#A855F7', gradient: 'linear-gradient(135deg, #A855F7 0%, #9333EA 100%)' },
+    information: { icon: faNewspaper, label: 'News', color: '#64748B', gradient: 'linear-gradient(135deg, #64748B 0%, #475569 100%)' },
+    productivity: { icon: faTasks, label: 'Productivity', color: '#0EA5E9', gradient: 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)' },
+    ai: { icon: faRobot, label: 'AI', color: '#8B5CF6', gradient: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)' }
 };
 
 // Build a domain -> category lookup map
@@ -68,32 +90,69 @@ export function ResumeWorkWidget() {
     const [expanded, setExpanded] = useState(false);
     const [aiSummary, setAiSummary] = useState(null);
     const [aiLoading, setAiLoading] = useState(false);
+    const [workspaceMap, setWorkspaceMap] = useState(new Map()); // URL -> workspace associations
+    const [hoveredUrl, setHoveredUrl] = useState(null);
 
     useEffect(() => {
         loadLastSession();
     }, []);
 
+    // Format duration for display
+    function formatDuration(ms) {
+        if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+        if (ms < 3600000) return `${Math.round(ms / 60000)}m`;
+        return `${Math.round(ms / 3600000)}h ${Math.round((ms % 3600000) / 60000)}m`;
+    }
+
+    // Load workspace associations for URLs
+    async function loadWorkspaceAssociations() {
+        try {
+            const wsResult = await listWorkspaces();
+            const workspaces = wsResult?.success ? wsResult.data : (Array.isArray(wsResult) ? wsResult : []);
+
+            const urlToWorkspace = new Map();
+            for (const ws of workspaces) {
+                if (!ws.urls) continue;
+                for (const urlEntry of ws.urls) {
+                    const url = typeof urlEntry === 'string' ? urlEntry : urlEntry.url;
+                    if (!urlToWorkspace.has(url)) {
+                        urlToWorkspace.set(url, []);
+                    }
+                    urlToWorkspace.get(url).push({
+                        id: ws.id,
+                        name: ws.name,
+                        category: ws.context?.category,
+                        icon: ws.icon
+                    });
+                }
+            }
+            setWorkspaceMap(urlToWorkspace);
+        } catch (e) {
+            console.warn('[ResumeWorkWidget] Failed to load workspace associations:', e);
+        }
+    }
+
     async function loadLastSession() {
         try {
-            // Look back 6 hours to capture more context if recent activity was monomaniacal
+            // Look back 6 hours to capture more context
             const sessions = await getActiveSessions(6 * 60 * 60 * 1000);
 
             if (sessions.length > 0) {
-                // Merge ALL recent sessions into one view (each URL gets its own sessionId)
-                // so we need to combine them to show all recent activity
+                // Merge ALL recent sessions into one view
                 const allActivities = sessions.flatMap(s => s.activities);
                 const latestEndTime = Math.max(...sessions.map(s => s.endTime));
+                const earliestStartTime = Math.min(...sessions.map(s => s.startTime));
 
-                // Create a combined session object
                 const session = {
                     ...sessions[0],
                     activities: allActivities,
                     endTime: latestEndTime,
+                    startTime: earliestStartTime,
                     metadata: sessions[0]?.metadata || {}
                 };
                 const activities = session.activities;
 
-                // 1. Filter Noise
+                // 1. Enhanced Noise Filtering
                 const noisePatterns = [
                     /google\.com\/search/,
                     /bing\.com\/search/,
@@ -101,13 +160,17 @@ export function ResumeWorkWidget() {
                     /localhost/,
                     /127\.0\.0\.1/,
                     /newtab/,
-                    /chrome:\/\/*/,
+                    /chrome:\/\//,
+                    /edge:\/\//,
                     /about:blank/,
                     /accounts\.google\.com/,
-                    /signin/,
-                    /login/,
-                    /signup/,
-                    /youtube\.com\/watch/ // Often distracting, maybe exclude unless deep work?
+                    /signin/i,
+                    /login/i,
+                    /signup/i,
+                    /auth\./,
+                    /oauth/,
+                    /\/callback/,
+                    /maps\.google\.com\/maps\/search/, // One-off map searches
                 ];
 
                 const relevantActivities = activities.filter(a => {
@@ -116,15 +179,17 @@ export function ResumeWorkWidget() {
                         if (noisePatterns.some(p => p.test(a.url))) return false;
                         if (url.hostname === 'www.google.com' && url.pathname === '/') return false;
                         return true;
-                    } catch (e) { return false; }
-                });
+                    } catch { return false; }
+                }).sort((a, b) => a.timestamp - b.timestamp);
 
-                // 2. Calculate Stats
+                // 2. Calculate Stats with Enhanced Metrics
                 const urlStats = {};
                 relevantActivities.forEach((act, idx) => {
                     const nextAct = relevantActivities[idx + 1];
-                    // If last item, assume 30s or use current time if very recent
-                    const duration = nextAct ? nextAct.timestamp - act.timestamp : (Date.now() - act.timestamp > 300000 ? 30000 : Date.now() - act.timestamp);
+                    let duration = nextAct
+                        ? nextAct.timestamp - act.timestamp
+                        : (Date.now() - act.timestamp > 300000 ? 30000 : Date.now() - act.timestamp);
+                    duration = Math.max(0, duration);
 
                     if (!urlStats[act.url]) {
                         urlStats[act.url] = {
@@ -132,32 +197,59 @@ export function ResumeWorkWidget() {
                             duration: 0,
                             visits: 0,
                             lastVisit: act.timestamp,
-                            title: act.title || new URL(act.url).hostname
+                            firstVisit: act.timestamp,
+                            title: act.title || new URL(act.url).hostname,
+                            interactions: 0
                         };
                     }
-                    urlStats[act.url].duration += duration;
-                    urlStats[act.url].visits++;
-                    // Keep the LATEST visit timestamp
-                    if (act.timestamp > urlStats[act.url].lastVisit) {
-                        urlStats[act.url].lastVisit = act.timestamp;
+                    const stat = urlStats[act.url];
+                    stat.duration += Math.min(duration, 600000); // Cap at 10 min per visit
+                    stat.visits++;
+                    if (act.timestamp > stat.lastVisit) stat.lastVisit = act.timestamp;
+                    if (act.timestamp < stat.firstVisit) stat.firstVisit = act.timestamp;
+                    // Count interactions from metrics if available
+                    if (act.metrics) {
+                        stat.interactions += (act.metrics.clicks || 0) + (act.metrics.forms || 0);
                     }
                 });
 
-                // 3. Score & Rank
-                // Score = (Duration in minutes * 10) + (100 / Hours Since Visit)
-                // This balances "spent a lot of time" with "just was there"
+                // 3. Enhanced Scoring with Activity Data
                 const now = Date.now();
-                const scoredUrls = Object.values(urlStats).map(stat => {
-                    const durationMins = stat.duration / 60000;
+                const scoredUrlsPromises = Object.values(urlStats).map(async stat => {
+                    // Get historical analytics for better scoring
+                    let historicalBonus = 0;
+                    try {
+                        const analytics = await getUrlAnalytics(stat.url);
+                        if (analytics) {
+                            // Bonus for recurring sites (qualified in our system)
+                            const uniqueDays = analytics.dailyStats?.filter(d => d.time > 0).length || 0;
+                            if (uniqueDays >= 2) historicalBonus += 20;
+                            if (analytics.totalVisits >= 5) historicalBonus += 10;
+                        }
+                    } catch { /* ignore */ }
+
                     const hoursSince = Math.max(0.1, (now - stat.lastVisit) / 3600000);
-                    const recencyScore = 10 / hoursSince; // Higher if recent
-                    const durationScore = Math.min(stat.duration / 10000, 50); // Cap duration impact
+                    const recencyScore = 15 / hoursSince;
+                    const durationScore = Math.min(stat.duration / 10000, 40);
+                    const visitScore = Math.min(stat.visits * 5, 20);
+                    const interactionScore = Math.min(stat.interactions * 2, 15);
                     const category = getCategoryForUrl(stat.url);
 
-                    return { ...stat, score: recencyScore + durationScore, category };
-                }).sort((a, b) => b.score - a.score);
+                    const totalScore = recencyScore + durationScore + visitScore + interactionScore + historicalBonus;
 
-                // 4. Stricter Deduplication
+                    return {
+                        ...stat,
+                        score: totalScore,
+                        category,
+                        historicalBonus,
+                        isRecurring: historicalBonus >= 20
+                    };
+                });
+
+                const scoredUrls = (await Promise.all(scoredUrlsPromises))
+                    .sort((a, b) => b.score - a.score);
+
+                // 4. Smart Deduplication with Domain Variety
                 const domainCounts = {};
                 const allUrls = [];
 
@@ -165,41 +257,41 @@ export function ResumeWorkWidget() {
                     if (allUrls.length >= 8) break;
                     try {
                         const domain = new URL(stat.url).hostname;
-
-                        // Strict Caps:
-                        // Normal domains: Max 1
-                        // High engagement domains ( > 10 mins): Max 2
-                        // Never more than 2 per domain to ensure variety
                         const currentCount = domainCounts[domain] || 0;
-                        const maxAllowed = stat.duration > 600000 ? 2 : 1;
+                        // Allow 2 per domain for high engagement/recurring, else 1
+                        const maxAllowed = (stat.duration > 600000 || stat.isRecurring) ? 2 : 1;
 
                         if (currentCount < maxAllowed) {
                             // Extract meaningful context from title
                             let context = '';
                             if (stat.title && stat.title !== domain) {
-                                // Clean up common suffixes and extract meaningful part
                                 context = stat.title
-                                    .replace(/\s*[-|·–—]\s*(ChatGPT|Claude|Gemini|Google|YouTube|GitHub|Reddit|Twitter|X|LinkedIn|Facebook|Amazon|eBay).*$/i, '')
-                                    .replace(/\s*[-|·–—]\s*[^-|·–—]+$/, '') // Remove site name suffix
+                                    .replace(/\s*[-|·–—]\s*(ChatGPT|Claude|Gemini|Google|YouTube|GitHub|Reddit|Twitter|X|LinkedIn|Facebook|Amazon|eBay|Stack Overflow).*$/i, '')
+                                    .replace(/\s*[-|·–—]\s*[^-|·–—]+$/, '')
                                     .trim();
-                                // Truncate if too long
-                                if (context.length > 40) {
-                                    context = context.substring(0, 37) + '...';
+                                if (context.length > 50) {
+                                    context = context.substring(0, 47) + '...';
                                 }
                             }
-                            allUrls.push({ url: stat.url, category: stat.category, duration: stat.duration, title: stat.title, context });
+                            allUrls.push({
+                                ...stat,
+                                context,
+                                formattedDuration: formatDuration(stat.duration)
+                            });
                             domainCounts[domain] = currentCount + 1;
                         }
-                    } catch (e) { }
+                    } catch { /* ignore */ }
                 }
 
-                // If no relevant URLs found
                 if (allUrls.length === 0) {
                     setLastSession(null);
                     return;
                 }
 
-                // Detect categories from URLs
+                // Load workspace associations
+                loadWorkspaceAssociations();
+
+                // Detect categories
                 const categoryCounts = {};
                 allUrls.forEach(item => {
                     if (item.category) {
@@ -207,13 +299,13 @@ export function ResumeWorkWidget() {
                     }
                 });
 
-                // Get top categories (max 3)
                 const topCategories = Object.entries(categoryCounts)
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, 3)
                     .map(([cat]) => cat);
 
-                // Get note and highlight counts
+                // Calculate total session stats
+                const totalDuration = allUrls.reduce((sum, u) => sum + u.duration, 0);
                 const noteCount = session.metadata?.noteIds?.length || 0;
                 const highlightCount = session.metadata?.highlightIds?.length || 0;
 
@@ -223,10 +315,13 @@ export function ResumeWorkWidget() {
                     topCategories,
                     noteCount,
                     highlightCount,
-                    timeAgo: formatTimeAgo(session.endTime)
+                    totalDuration,
+                    formattedTotalDuration: formatDuration(totalDuration),
+                    timeAgo: formatTimeAgo(session.endTime),
+                    sessionDuration: latestEndTime - earliestStartTime
                 });
 
-                // Try to get AI summary if available
+                // Try to get AI summary
                 fetchAiSummary(allUrls, topCategories);
             } else {
                 setLastSession(null);
@@ -332,420 +427,358 @@ export function ResumeWorkWidget() {
         return null;
     }
 
-    const visibleUrls = expanded ? lastSession.allUrls : lastSession.allUrls.slice(0, 3);
-    const remainingCount = Math.max(0, lastSession.allUrls.length - 3);
+    const visibleUrls = expanded ? lastSession.allUrls : lastSession.allUrls.slice(0, 6);
+    const remainingCount = Math.max(0, lastSession.allUrls.length - 6);
+
+    // Get primary category for theming
+    const primaryCategory = lastSession.topCategories?.[0];
+    const primaryConfig = primaryCategory ? CATEGORY_CONFIG[primaryCategory] : null;
+    const themeColor = primaryConfig?.color || '#8B5CF6';
 
     return (
-        <div className={`resume-work-widget ${expanded ? 'expanded' : ''}`}>
-            <div className="widget-header">
-                <div className="header-left">
-                    <div className="icon-badge">
-                        <span role="img" aria-label="resume">⚡</span>
-                    </div>
-                    <div>
-                        <h3>Resume Work</h3>
-                        <span className="time-ago">Active {lastSession.timeAgo}</span>
-                    </div>
-                </div>
-                <button className="close-btn" onClick={handleDismiss} aria-label="Dismiss">
-                    ×
-                </button>
-            </div>
-
-            {/* Category Tags */}
-            {lastSession.topCategories && lastSession.topCategories.length > 0 && (
-                <div className="category-tags">
-                    {lastSession.topCategories.map(cat => {
+        <div
+            className={`resume-widget ${expanded ? 'expanded' : ''}`}
+            style={{ '--theme-color': themeColor }}
+        >
+            {/* Compact Header Row */}
+            <div className="rw-header">
+                <div className="rw-title-row">
+                    <span className="rw-icon" style={{ background: primaryConfig?.gradient || 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)' }}>
+                        <FontAwesomeIcon icon={faBolt} />
+                    </span>
+                    <span className="rw-title">Resume</span>
+                    <span className="rw-time">{lastSession.timeAgo}</span>
+                    {lastSession.formattedTotalDuration && (
+                        <span className="rw-duration">{lastSession.formattedTotalDuration}</span>
+                    )}
+                    {/* Inline category pills */}
+                    {lastSession.topCategories?.slice(0, 2).map(cat => {
                         const config = CATEGORY_CONFIG[cat];
                         if (!config) return null;
                         return (
-                            <span
-                                key={cat}
-                                className="category-tag"
-                                style={{
-                                    background: `${config.color}20`,
-                                    borderColor: `${config.color}40`,
-                                    color: config.color
-                                }}
-                            >
-                                {config.emoji} {config.label}
+                            <span key={cat} className="rw-cat" style={{ color: config.color }}>
+                                <FontAwesomeIcon icon={config.icon} />
                             </span>
                         );
                     })}
                 </div>
-            )}
-
-            {/* AI Summary (if available) */}
-            {aiSummary && (
-                <div className="ai-summary">
-                    <span className="ai-badge">✨ AI</span>
-                    <span className="summary-text">{aiSummary}</span>
-                </div>
-            )}
-            {aiLoading && (
-                <div className="ai-summary loading">
-                    <span className="ai-badge">✨</span>
-                    <span className="summary-text">Generating summary...</span>
-                </div>
-            )}
-
-            <div className="widget-content">
-                <div className="session-urls">
-                    {visibleUrls.map((item, index) => {
-                        let domain = '';
-                        try { domain = new URL(item.url).hostname; } catch (e) { }
-                        const catConfig = item.category ? CATEGORY_CONFIG[item.category] : null;
-
-                        // Use AI description or fallback to extracted context from title
-                        const description = item.aiDescription || item.context || null;
-
-                        return (
-                            <div
-                                key={index}
-                                className={`url-item ${description ? 'has-description' : ''}`}
-                                onClick={() => chrome.tabs.create({ url: item.url, active: false })}
-                                style={catConfig ? { borderColor: `${catConfig.color}30` } : {}}
-                            >
-                                <img
-                                    src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
-                                    alt=""
-                                    className="favicon"
-                                    onError={(e) => e.target.style.display = 'none'}
-                                />
-                                <div className="url-content">
-                                    <span className="url-text" title={item.url}>
-                                        {domain.replace(/^www\./, '')}
-                                    </span>
-                                    {description && (
-                                        <span className="url-description">{description}</span>
-                                    )}
-                                </div>
-                                {catConfig && (
-                                    <span
-                                        className="url-category"
-                                        title={catConfig.label}
-                                        style={{ color: catConfig.color }}
-                                    >
-                                        {catConfig.emoji}
-                                    </span>
-                                )}
-                            </div>
-                        );
-                    })}
-
-                    {!expanded && remainingCount > 0 && (
-                        <div className="url-item more" onClick={() => setExpanded(true)}>
-                            <span className="more-badge">+{remainingCount}</span>
-                            <span className="url-text">more pages</span>
-                        </div>
-                    )}
-
-                    {expanded && (
-                        <div className="url-item more" onClick={() => setExpanded(false)}>
-                            <span className="url-text">Show less</span>
-                        </div>
-                    )}
+                <div className="rw-actions">
+                    <button className="rw-btn-continue" onClick={handleContinue}>
+                        Continue
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                    </button>
+                    <button className="rw-btn-close" onClick={handleDismiss} aria-label="Dismiss">×</button>
                 </div>
             </div>
 
-            <div className="widget-actions">
-                <button className="btn-secondary" onClick={handleDismiss}>
-                    Dismiss
-                </button>
-                <button className="btn-primary" onClick={handleContinue}>
-                    Continue Session <span className="arrow">→</span>
-                </button>
+            {/* AI Summary - Compact */}
+            {aiSummary && (
+                <div className="rw-ai">
+                    <span className="rw-ai-icon"><FontAwesomeIcon icon={faMagic} /></span>
+                    <span className="rw-ai-text">{aiSummary}</span>
+                </div>
+            )}
+
+            {/* Compact URL Grid */}
+            <div className="rw-urls">
+                {visibleUrls.map((item, index) => {
+                    let domain = '';
+                    try { domain = new URL(item.url).hostname.replace(/^www\./, ''); } catch { }
+                    const catConfig = item.category ? CATEGORY_CONFIG[item.category] : null;
+                    const context = item.aiDescription || item.context || null;
+                    const workspaces = workspaceMap.get(item.url) || [];
+
+                    return (
+                        <div
+                            key={index}
+                            className="rw-url"
+                            onClick={() => chrome.tabs.create({ url: item.url, active: false })}
+                            title={`${domain}${context ? ` - ${context}` : ''}`}
+                        >
+                            <img
+                                src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
+                                alt=""
+                                className="rw-favicon"
+                                onError={(e) => { e.target.style.opacity = '0.3'; }}
+                            />
+                            <div className="rw-url-info">
+                                <span className="rw-domain">{domain}</span>
+                                {context && <span className="rw-context">{context}</span>}
+                            </div>
+                            <div className="rw-url-meta">
+                                {item.formattedDuration && (
+                                    <span className="rw-url-time">{item.formattedDuration}</span>
+                                )}
+                                {catConfig && <span className="rw-url-cat"><FontAwesomeIcon icon={catConfig.icon} /></span>}
+                                {item.isRecurring && <span className="rw-star"><FontAwesomeIcon icon={faStar} /></span>}
+                            </div>
+                            {workspaces.length > 0 && (
+                                <span className="rw-ws" title={workspaces[0].name}><FontAwesomeIcon icon={faFolder} /></span>
+                            )}
+                        </div>
+                    );
+                })}
+
+                {!expanded && remainingCount > 0 && (
+                    <button className="rw-more" onClick={() => setExpanded(true)}>
+                        +{remainingCount} more
+                    </button>
+                )}
+
+                {expanded && lastSession.allUrls.length > 6 && (
+                    <button className="rw-more" onClick={() => setExpanded(false)}>
+                        Show less
+                    </button>
+                )}
             </div>
 
             <style jsx>{`
-                .resume-work-widget {
-                    background: rgba(30, 30, 35, 0.6);
-                    backdrop-filter: blur(20px);
-                    -webkit-backdrop-filter: blur(20px);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 16px;
-                    padding: 20px;
-                    color: var(--text-primary, #fff);
-                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-                    margin-bottom: 24px;
-                    animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-                    position: relative;
-                    overflow: hidden;
-                    transition: all 0.3s ease;
-                }
-
-                /* Subtle gradient overlay */
-                .resume-work-widget::before {
-                    content: '';
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    height: 100%;
-                    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
-                    pointer-events: none;
-                }
-
-                @keyframes slideIn {
-                    from { opacity: 0; transform: translateY(-10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-
-                .widget-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: flex-start;
-                    margin-bottom: 12px;
-                    position: relative;
-                    z-index: 1;
-                }
-
-                .header-left {
-                    display: flex;
-                    gap: 12px;
-                    align-items: center;
-                }
-
-                .icon-badge {
-                    width: 40px;
-                    height: 40px;
-                    border-radius: 12px;
-                    background: linear-gradient(135deg, var(--accent-primary, #6366f1), var(--accent-secondary, #8b5cf6));
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 20px;
-                    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-                }
-
-                .widget-header h3 {
-                    margin: 0 0 2px 0;
-                    font-size: 16px;
-                    font-weight: 600;
-                    letter-spacing: -0.01em;
-                }
-
-                .time-ago {
-                    font-size: 13px;
-                    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
-                }
-
-                .close-btn {
-                    background: rgba(255, 255, 255, 0.05);
+                .resume-widget {
+                    --theme-color: #8B5CF6;
+                    background: rgba(20, 20, 28, 0.6);
+                    backdrop-filter: blur(16px);
                     border: 1px solid rgba(255, 255, 255, 0.05);
-                    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
-                    border-radius: 8px;
-                    width: 28px;
-                    height: 28px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    font-size: 18px;
-                    line-height: 1;
-                }
-
-                .close-btn:hover {
-                    background: rgba(255, 255, 255, 0.1);
+                    border-radius: 14px;
+                    padding: 12px 14px;
                     color: #fff;
-                }
-
-                .category-tags {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 8px;
-                    margin-bottom: 12px;
-                    position: relative;
-                    z-index: 1;
-                }
-
-                .category-tag {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 4px;
-                    padding: 4px 10px;
-                    border-radius: 6px;
-                    font-size: 12px;
-                    font-weight: 500;
-                    border: 1px solid;
-                }
-
-                .ai-summary {
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 8px;
-                    padding: 10px 12px;
-                    background: rgba(139, 92, 246, 0.1);
-                    border: 1px solid rgba(139, 92, 246, 0.2);
-                    border-radius: 10px;
-                    margin-bottom: 12px;
-                    position: relative;
-                    z-index: 1;
-                }
-
-                .ai-summary.loading {
-                    opacity: 0.6;
-                }
-
-                .ai-badge {
-                    font-size: 11px;
-                    font-weight: 600;
-                    color: #8B5CF6;
-                    background: rgba(139, 92, 246, 0.2);
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                    flex-shrink: 0;
-                }
-
-                .summary-text {
-                    font-size: 13px;
-                    color: var(--text-secondary, rgba(255, 255, 255, 0.8));
-                    line-height: 1.4;
-                }
-
-                .widget-content {
                     margin-bottom: 20px;
-                    position: relative;
-                    z-index: 1;
-                }
-
-                .session-urls {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 12px;
-                }
-
-                .url-item {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    background: rgba(0, 0, 0, 0.2);
-                    border: 1px solid rgba(255, 255, 255, 0.05);
-                    padding: 8px 12px;
-                    border-radius: 10px;
-                    font-size: 13px;
-                    color: var(--text-primary, #fff);
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    max-width: 200px;
-                }
-
-                .url-item.has-description {
-                    flex-direction: row;
-                    align-items: flex-start;
-                    max-width: 280px;
-                }
-
-                .url-content {
                     display: flex;
                     flex-direction: column;
-                    gap: 2px;
-                    flex: 1;
-                    min-width: 0;
-                }
-
-                .url-description {
-                    font-size: 11px;
-                    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    line-height: 1.3;
-                }
-
-                .url-item:hover {
-                    background: rgba(255, 255, 255, 0.05);
-                    border-color: rgba(255, 255, 255, 0.1);
-                    transform: translateY(-1px);
-                    background: rgba(255, 255, 255, 0.1);
-                }
-
-                .url-item.more {
-                    background: rgba(255, 255, 255, 0.1);
-                    border: 1px dashed rgba(255, 255, 255, 0.2);
-                }
-
-                .url-item.more:hover {
-                     background: rgba(255, 255, 255, 0.2);
-                     border-color: rgba(255, 255, 255, 0.3);
-                }
-
-                .favicon {
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 3px;
-                }
-
-                .url-text {
-                    white-space: nowrap;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    flex: 1;
-                }
-
-                .url-category {
-                    font-size: 12px;
-                    flex-shrink: 0;
-                }
-
-                .more-badge {
-                    background: rgba(255, 255, 255, 0.1);
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                    font-size: 11px;
-                    font-weight: 600;
-                }
-
-                .widget-actions {
-                    display: flex;
                     gap: 12px;
-                    justify-content: flex-end;
-                    position: relative;
-                    z-index: 1;
+                    transition: all 0.2s ease;
                 }
 
-                .btn-primary,
-                .btn-secondary {
-                    padding: 10px 18px;
-                    border-radius: 10px;
-                    font-size: 14px;
-                    font-weight: 500;
-                    cursor: pointer;
-                    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-                    border: none;
+                .rw-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 8px;
                 }
 
-                .btn-secondary {
-                    background: transparent;
-                    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
-                }
-
-                .btn-secondary:hover {
-                    color: #fff;
-                    background: rgba(255, 255, 255, 0.05);
-                }
-
-                .btn-primary {
-                    background: var(--text-primary, #fff);
-                    color: #000;
+                .rw-title-row {
                     display: flex;
                     align-items: center;
                     gap: 6px;
-                    font-weight: 600;
+                    flex-wrap: wrap;
                 }
 
-                .btn-primary:hover {
+                .rw-icon {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 6px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 13px;
+                    flex-shrink: 0;
+                    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+                }
+
+                .rw-title {
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #fff;
+                }
+
+                .rw-time, .rw-duration {
+                    font-size: 12px;
+                    color: rgba(255, 255, 255, 0.5);
+                    font-weight: 500;
+                }
+
+                .rw-cat {
+                    font-size: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: rgba(255, 255, 255, 0.05);
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    border: 1px solid rgba(255,255,255,0.05);
+                }
+
+                .rw-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    flex-shrink: 0;
+                }
+
+                .rw-btn-continue {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    padding: 5px 12px;
+                    background: #fff;
+                    color: #000;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 12px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                }
+                
+                .rw-btn-continue:hover {
+                    background: #f0f0f0;
                     transform: translateY(-1px);
                     box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
                 }
-
-                .arrow {
-                    transition: transform 0.2s;
+                
+                .rw-btn-close {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 6px;
+                    background: rgba(255,255,255,0.05);
+                    border: 1px solid rgba(255,255,255,0.05);
+                    color: rgba(255,255,255,0.6);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    font-size: 16px;
+                    transition: all 0.2s;
+                }
+                
+                .rw-btn-close:hover {
+                    background: rgba(255,255,255,0.1);
+                    color: #fff;
                 }
 
-                .btn-primary:hover .arrow {
+                .rw-ai {
+                    font-size: 12px;
+                    color: rgba(255,255,255,0.7);
+                    background: rgba(139, 92, 246, 0.08);
+                    border: 1px dashed rgba(139, 92, 246, 0.2);
+                    padding: 8px 12px;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 8px;
+                    line-height: 1.4;
+                }
+
+                .rw-urls {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                }
+
+                .rw-url {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 6px 10px;
+                    background: rgba(255, 255, 255, 0.02);
+                    border: 1px solid rgba(255, 255, 255, 0.03);
+                    border-radius: 8px;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                }
+                
+                .rw-url:hover {
+                    background: rgba(255, 255, 255, 0.06);
+                    border-color: rgba(255, 255, 255, 0.08);
                     transform: translateX(2px);
+                }
+
+                .rw-favicon {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 4px;
+                }
+
+                .rw-url-info {
+                    flex: 1;
+                    min-width: 0;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .rw-domain {
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: #e2e8f0;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
+                .rw-context {
+                    font-size: 12px;
+                    color: rgba(255, 255, 255, 0.4);
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
+                .rw-url-meta {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    flex-shrink: 0;
+                    font-size: 12px;
+                }
+
+                .rw-url-time {
+                    color: rgba(255,255,255,0.4);
+                    font-size: 11px;
+                    background: rgba(255,255,255,0.05);
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                }
+
+                .rw-url-cat {
+                    font-size: 12px;
+                }
+
+                .rw-ws {
+                    font-size: 12px;
+                    opacity: 0.8;
+                }
+
+                .rw-star {
+                    color: #FBBF24;
+                    font-size: 12px;
+                }
+
+                .rw-more {
+                    background: transparent;
+                    border: 1px dashed rgba(255, 255, 255, 0.1);
+                    color: rgba(255, 255, 255, 0.5);
+                    padding: 6px;
+                    border-radius: 8px;
+                    font-size: 11px;
+                    cursor: pointer;
+                    margin-top: 2px;
+                    transition: all 0.2s;
+                }
+                
+                .rw-more:hover {
+                    background: rgba(255, 255, 255, 0.05);
+                    color: #fff;
+                }
+                
+                .resume-work-widget.loading {
+                    min-height: 80px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+
+                .spinner {
+                    width: 20px;
+                    height: 20px;
+                    border: 2px solid rgba(255, 255, 255, 0.1);
+                    border-top-color: var(--theme-color);
+                    border-radius: 50%;
+                    animation: spin 0.8s linear infinite;
+                }
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
                 }
             `}</style>
         </div>

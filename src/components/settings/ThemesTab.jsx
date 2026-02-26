@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { fontFamilies } from '../../utils/fontUtils';
 const ThemesTab = ({
   selectedTheme,
@@ -10,9 +10,11 @@ const ThemesTab = ({
   wallpaperEnabled = false,
   wallpaperUrl = 'https://source.unsplash.com/1920x1080/?nature',
   wallpaperOpacity = 0.3,
+  wallpaperAutoRotate = false,
   onWallpaperEnabledChange = () => { },
   onWallpaperUrlChange = () => { },
   onWallpaperOpacityChange = () => { },
+  onWallpaperAutoRotateChange = () => { },
   unsplashApiKey = '',
   onUnsplashApiKeyChange = () => { }
 }) => {
@@ -871,6 +873,40 @@ const ThemesTab = ({
               }}>
                 Try: source.unsplash.com/1920x1080/?nature or your own image URL
               </div>
+            </div>
+
+            {/* Intelligent Auto-Change Toggle */}
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 16px',
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                border: '1px solid rgba(255,255,255,0.04)',
+                transition: 'all 0.2s',
+                color: '#e5e7eb'
+              }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(52, 199, 89, 0.4)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'}
+              >
+                <input
+                  type="checkbox"
+                  checked={wallpaperAutoRotate}
+                  onChange={(e) => onWallpaperAutoRotateChange(e.target.checked)}
+                  style={{ width: '18px', height: '18px', accentColor: '#34C759' }}
+                />
+                <div>
+                  <div style={{ fontWeight: '500', fontSize: 'var(--font-base)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>✨ Intelligent Auto-Change</span>
+                  </div>
+                  <div style={{ fontSize: 'var(--font-xs)', opacity: 0.6, marginTop: '2px' }}>
+                    Discover a new beautiful, curated wallpaper every time you open a new tab.
+                  </div>
+                </div>
+              </label>
             </div>
 
             {/* Unsplash API Key */}
