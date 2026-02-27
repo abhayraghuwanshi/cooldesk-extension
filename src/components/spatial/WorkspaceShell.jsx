@@ -1,4 +1,4 @@
-import { faFolder, faHome, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faFolder, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { teamManager } from '../../services/p2p/teamManager';
@@ -87,7 +87,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
     if (face === currentFace) return;
 
     // Smart Travel: Dynamic duration based on distance
-    const faces = ['workspace', 'overview', 'tabs', 'team', 'notes'];
+    const faces = isDesktopApp ? ['workspace', 'tabs', 'team', 'notes'] : ['overview'];
     const currentIndex = faces.indexOf(currentFace);
     const targetIndex = faces.indexOf(face);
     const distance = Math.abs(targetIndex - currentIndex);
@@ -134,13 +134,13 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         console.log('[WorkspaceShell] Spatial Nav triggered:', e.key);
         e.preventDefault();
 
-        const faces = ['workspace', 'overview', 'tabs', 'team', 'notes'];
+        const faces = isDesktopApp ? ['workspace', 'tabs', 'team', 'notes'] : ['overview'];
         const currentIndex = faces.indexOf(currentFace);
 
         if (currentIndex === -1) {
           console.warn('[WorkspaceShell] Invalid currentFace:', currentFace);
-          // Fallback to overview if state is corrupted
-          navigateToFace('overview');
+          // Fallback to first face if state is corrupted
+          navigateToFace(faces[0]);
           return;
         }
 
@@ -149,14 +149,14 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         } else if (e.key === 'ArrowRight') {
           if (currentIndex < faces.length - 1) navigateToFace(faces[currentIndex + 1]);
         } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          navigateToFace('overview');
+          navigateToFace(faces[0]);
         }
       }
 
-      if (modifierPressed && ['1', '2', '3', '4', '5'].includes(e.key)) {
+      if (modifierPressed && ['1', '2', '3', '4'].includes(e.key)) {
         e.preventDefault();
         const faceMap = {
-          '1': 'workspace', '2': 'overview', '3': 'tabs', '4': 'team', '5': 'notes'
+          '1': 'workspace', '2': 'tabs', '3': 'team', '4': 'notes'
         };
         navigateToFace(faceMap[e.key]);
       }
@@ -172,7 +172,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
         }
 
         e.preventDefault();
-        navigateToFace('overview');
+        navigateToFace('workspace');
       }
     };
 
@@ -245,7 +245,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       if (Math.abs(state.accumulator) > THRESHOLD) {
         if (e.cancelable) e.preventDefault();
 
-        const faces = ['workspace', 'overview', 'tabs', 'team', 'notes'];
+        const faces = isDesktopApp ? ['workspace', 'tabs', 'team', 'notes'] : ['overview'];
         const currentIndex = faces.indexOf(currentFace);
 
         let switched = false;
@@ -275,15 +275,14 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       return 'translateX(0)';
     }
 
-    // Desktop app: 5 faces, each taking 20% width
+    // Desktop app: 4 faces, each taking 20% of the 500% container
     const transforms = {
       'workspace': 'translateX(0)',
-      'overview': 'translateX(-20%)',
-      'tabs': 'translateX(-40%)',
-      'team': 'translateX(-60%)',
-      'notes': 'translateX(-80%)'
+      'tabs': 'translateX(-20%)',
+      'team': 'translateX(-40%)',
+      'notes': 'translateX(-60%)'
     };
-    return transforms[currentFace] || transforms.overview;
+    return transforms[currentFace] || transforms.workspace;
   }, [currentFace, isDesktopApp]);
 
   return (
@@ -311,19 +310,10 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
               <FontAwesomeIcon icon={faFolder} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
             </button>
             <button
-              className={`face-dot ${currentFace === 'overview' ? 'active' : ''}`}
-              onClick={() => navigateToFace('overview')}
-              onMouseEnter={() => setHoveredFace('overview')}
-              title="Overview (Ctrl + 2)"
-              data-onboarding="nav-overview"
-            >
-              <FontAwesomeIcon icon={faHome} className="face-icon" />
-            </button>
-            <button
               className={`face-dot ${currentFace === 'tabs' ? 'active' : ''}`}
               onClick={() => navigateToFace('tabs')}
               onMouseEnter={() => setHoveredFace('tabs')}
-              title="Tabs (Ctrl + 3)"
+              title="Tabs (Ctrl + 2)"
               data-onboarding="nav-tabs"
             >
               <FontAwesomeIcon icon={faTh} className="face-icon" />
@@ -332,7 +322,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
               className={`face-dot ${currentFace === 'team' ? 'active' : ''}`}
               onClick={() => navigateToFace('team')}
               onMouseEnter={() => setHoveredFace('team')}
-              title="Spaces (Ctrl + 4)"
+              title="Spaces (Ctrl + 3)"
               data-onboarding="nav-team"
             >
               <FontAwesomeIcon icon={faUsers} className="face-icon" style={{ transform: 'translateY(-1px)' }} />
@@ -341,7 +331,7 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
               className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`}
               onClick={() => navigateToFace('notes')}
               onMouseEnter={() => setHoveredFace('notes')}
-              title="Notes (Ctrl + 5)"
+              title="Notes (Ctrl + 4)"
               data-onboarding="nav-notes"
             >
               <FontAwesomeIcon icon={faStickyNote} className="face-icon" />

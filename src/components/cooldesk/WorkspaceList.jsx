@@ -1,9 +1,12 @@
-import { faBriefcase, faGamepad, faGraduationCap } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faDesktop, faGamepad, faGraduationCap } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
+import { isElectronApp } from '../../services/environmentDetector.js';
+import { runningAppsService } from '../../services/runningAppsService.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
+import { enrichRunningAppsWithIcons } from '../../utils/helpers.js';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import { WorkspaceCard } from './WorkspaceCard';
 
@@ -53,6 +56,17 @@ const modeConfigs = {
             autoHideDock: false,
             greeting: "Knowledge Mode"
         }
+    },
+    apps: {
+        label: 'Apps',
+        icon: faDesktop,
+        theme: '#ec4899', // Pink
+        activeCategories: [],
+        behavior: {
+            allowNotifications: true,
+            autoHideDock: false,
+            greeting: "Your Desktop Apps"
+        }
     }
 };
 
@@ -73,6 +87,27 @@ export function WorkspaceList({
             return 'list';
         }
     });
+
+    const isDesktopApp = isElectronApp();
+    const [runningApps, setRunningApps] = useState([]);
+    const [installedApps, setInstalledApps] = useState([]);
+
+    useEffect(() => {
+        if (!isDesktopApp || !window.electronAPI?.getRunningApps) return;
+
+        const unsubscribe = runningAppsService.subscribe(({ runningApps: running, installedApps: installed }) => {
+            if (Array.isArray(installed)) {
+                setInstalledApps(installed);
+            }
+
+            if (Array.isArray(running)) {
+                const enriched = enrichRunningAppsWithIcons(running, installed);
+                setRunningApps(enriched);
+            }
+        });
+
+        return unsubscribe;
+    }, [isDesktopApp]);
     const [bookmarks, setBookmarks] = useState([]);
     const [bookmarkSearch, setBookmarkSearch] = useState('');
     const [showBookmarks, setShowBookmarks] = useState(true);
@@ -333,6 +368,97 @@ export function WorkspaceList({
         }
     };
 
+    const renderAppCard = (app, isRunning) => {
+        return (
+            <div
+                key={app.id || app.name}
+                className="workspace-card"
+                style={{
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: viewMode === 'list' ? 'row' : 'column',
+                    alignItems: viewMode === 'list' ? 'center' : 'flex-start',
+                    padding: '16px',
+                    gap: '12px',
+                    background: 'rgba(30, 41, 59, 0.4)',
+                    border: '1px solid rgba(148, 163, 184, 0.1)',
+                    borderRadius: '16px',
+                    transition: 'all 0.2s',
+                    position: 'relative',
+                    overflow: 'hidden'
+                }}
+                onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(30, 41, 59, 0.8)';
+                    e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+                }}
+                onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(30, 41, 59, 0.4)';
+                    e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)';
+                }}
+                onClick={async () => {
+                    if (isRunning && window.electronAPI?.focusApp && app.pid) {
+                        await window.electronAPI.focusApp(app.pid, app.name);
+                    } else if (!isRunning && window.electronAPI?.launchApp && app.path) {
+                        await window.electronAPI.launchApp(app.path);
+                    }
+                }}
+            >
+                <div style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '12px',
+                    background: isRunning ? 'rgba(34, 197, 94, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                    border: `1px solid ${isRunning ? 'rgba(34, 197, 94, 0.2)' : 'rgba(100, 116, 139, 0.2)'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                }}>
+                    {app.icon ? (
+                        <img src={app.icon} alt="" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+                    ) : (
+                        <span style={{ fontSize: '24px' }}>{isRunning ? '🖥️' : '📦'}</span>
+                    )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{
+                        fontSize: '15px',
+                        fontWeight: 600,
+                        color: '#F1F5F9',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        marginBottom: '4px'
+                    }}>
+                        {app.name}
+                    </div>
+                    <div style={{
+                        fontSize: '12px',
+                        color: '#94A3B8',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}>
+                        {isRunning ? (
+                            <>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22C55E' }}></div>
+                                <span style={{ color: '#22C55E' }}>Running</span>
+                                {app.title && app.title !== app.name && (
+                                    <>
+                                        <span>•</span>
+                                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{app.title}</span>
+                                    </>
+                                )}
+                            </>
+                        ) : (
+                            <span>Installed</span>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div style={{
             display: 'flex',
@@ -482,8 +608,9 @@ export function WorkspaceList({
                                         alignItems: 'center',
                                         gap: '8px'
                                     }}>
-                                        {activeMode === 'all' ? 'All Urls' : modeConfigs[activeMode].label} ({filteredUnpinned.length})
-                                        {isSortingByActivity && isCalculatingScores && (
+                                        {activeMode === 'all' ? 'All Urls' : modeConfigs[activeMode].label}
+                                        ({activeMode === 'apps' ? runningApps.length + installedApps.length : filteredUnpinned.length})
+                                        {isSortingByActivity && isCalculatingScores && activeMode !== 'apps' && (
                                             <span style={{
                                                 fontSize: '11px',
                                                 color: '#60a5fa',
@@ -517,6 +644,7 @@ export function WorkspaceList({
                                         </button>
 
                                         {Object.entries(modeConfigs).map(([key, config]) => {
+                                            if (key === 'apps' && !isDesktopApp) return null;
                                             const isActive = activeMode === key;
                                             return (
                                                 <button
@@ -569,34 +697,72 @@ export function WorkspaceList({
                                     </div>
                                 </div>
 
-                                <div
-                                    className={viewMode === 'list' ? 'cooldesk-list-view' : ''}
-                                    style={viewMode === 'grid' ? {
-                                        display: 'grid',
-                                        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                                        gap: '16px'
-                                    } : {
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '4px'
-                                    }}
-                                >
-                                    {filteredUnpinned.slice(0, workspaceLimit).map((workspace, index) => (
-                                        <WorkspaceCard
-                                            key={workspace.id}
-                                            workspace={workspace}
-                                            onClick={onWorkspaceClick}
-                                            isExpanded={expandedWorkspaceId === workspace.id}
-                                            isActive={activeWorkspaceId === workspace.id}
-                                            compact={viewMode === 'list'}
-                                            isPinned={false}
-                                            onPin={() => onTogglePin && onTogglePin(workspace.name)}
-                                            onDelete={handleDeleteWorkspace}
-                                            onAddUrl={onAddUrl}
-                                            deferAnalytics={index > 3}
-                                        />
-                                    ))}
-                                </div>
+                                {activeMode === 'apps' ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
+                                        {runningApps.length > 0 && (
+                                            <div>
+                                                <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#94A3B8', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Running Apps</h4>
+                                                <div
+                                                    className={viewMode === 'list' ? 'cooldesk-list-view' : ''}
+                                                    style={viewMode === 'grid' ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' } : { display: 'flex', flexDirection: 'column', gap: '4px' }}
+                                                >
+                                                    {runningApps.map(app => renderAppCard(app, true))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#94A3B8', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Installed Apps</h4>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '12px' }}>
+                                                {installedApps.filter(app => !runningApps.find(r => r.name === app.name)).slice(0, 50).map(app => (
+                                                    <div
+                                                        key={app.id || app.name}
+                                                        onClick={async () => { if (window.electronAPI?.launchApp && app.path) await window.electronAPI.launchApp(app.path); }}
+                                                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '16px 12px', borderRadius: '16px', transition: 'all 0.2s', background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(148, 163, 184, 0.1)' }}
+                                                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.8)'; e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.3)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                                                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.4)'; e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                                                    >
+                                                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(100, 116, 139, 0.1)', border: '1px solid rgba(100, 116, 139, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                            {app.icon ? <img src={app.icon} style={{ width: '32px', height: '32px', objectFit: 'contain' }} alt="" onError={e => e.target.style.display = 'none'} /> : <span style={{ fontSize: '24px' }}>📦</span>}
+                                                        </div>
+                                                        <div style={{ fontSize: '12px', fontWeight: 500, color: '#F1F5F9', textAlign: 'center', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {app.name}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div
+                                        className={viewMode === 'list' ? 'cooldesk-list-view' : ''}
+                                        style={viewMode === 'grid' ? {
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                                            gap: '16px'
+                                        } : {
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '4px'
+                                        }}
+                                    >
+                                        {filteredUnpinned.slice(0, workspaceLimit).map((workspace, index) => (
+                                            <WorkspaceCard
+                                                key={workspace.id}
+                                                workspace={workspace}
+                                                onClick={onWorkspaceClick}
+                                                isExpanded={expandedWorkspaceId === workspace.id}
+                                                isActive={activeWorkspaceId === workspace.id}
+                                                compact={viewMode === 'list'}
+                                                isPinned={false}
+                                                onPin={() => onTogglePin && onTogglePin(workspace.name)}
+                                                onDelete={handleDeleteWorkspace}
+                                                onAddUrl={onAddUrl}
+                                                deferAnalytics={index > 3}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
 
                             </div>
                         )}

@@ -567,7 +567,7 @@ pub async fn post_sync(
 
 use crate::sidecar::llm::models::{ModelInfo, LlmStatus, get_available_models, get_status, load_model, unload_model, download_model};
 use crate::sidecar::llm::inference::{chat};
-use crate::sidecar::llm::tasks::{summarize, categorize, group_workspaces, suggest_related};
+use crate::sidecar::llm::tasks::{summarize, categorize, group_workspaces, suggest_related, enhance_url, suggest_workspaces, parse_command};
 
 pub async fn llm_models() -> Json<HashMap<String, ModelInfo>> {
     if let Ok(models) = get_available_models().await {
@@ -712,5 +712,331 @@ pub async fn llm_suggest_related(Json(req): Json<SuggestRelatedRequest>) -> Json
     } else {
         Json(SuggestRelatedResponse { suggestions: "[]".to_string(), ok: false })
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnhanceUrlRequest {
+    pub title: String,
+    pub url: String,
+    #[serde(default)]
+    pub content_hint: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct EnhanceUrlResponse {
+    pub result: String,
+    pub ok: bool,
+}
+
+pub async fn llm_enhance_url(Json(req): Json<EnhanceUrlRequest>) -> Json<EnhanceUrlResponse> {
+    if let Ok(result) = enhance_url(&req.title, &req.url, req.content_hint.as_deref()).await {
+        Json(EnhanceUrlResponse { result, ok: true })
+    } else {
+        Json(EnhanceUrlResponse { result: "".to_string(), ok: false })
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SuggestWorkspacesRequest {
+    pub urls: serde_json::Value,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct SuggestWorkspacesResponse {
+    pub suggestions: Vec<String>,
+    pub ok: bool,
+}
+
+pub async fn llm_suggest_workspaces(Json(req): Json<SuggestWorkspacesRequest>) -> Json<SuggestWorkspacesResponse> {
+    let urls_json = serde_json::to_string(&req.urls).unwrap_or_default();
+    if let Ok(res) = suggest_workspaces(&urls_json).await {
+        // Try to parse as JSON array
+        let suggestions: Vec<String> = serde_json::from_str(&res).unwrap_or_else(|_| vec![res]);
+        Json(SuggestWorkspacesResponse { suggestions, ok: true })
+    } else {
+        Json(SuggestWorkspacesResponse { suggestions: Vec::new(), ok: false })
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ParseCommandRequest {
+    pub command: String,
+    #[serde(default)]
+    pub context: Option<serde_json::Value>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ParseCommandResponse {
+    pub parsed: serde_json::Value,
+    pub ok: bool,
+}
+
+pub async fn llm_parse_command(Json(req): Json<ParseCommandRequest>) -> Json<ParseCommandResponse> {
+    let context_str = req.context.map(|c| c.to_string()).unwrap_or_default();
+    if let Ok(res) = parse_command(&req.command, &context_str).await {
+        let parsed: serde_json::Value = serde_json::from_str(&res).unwrap_or_else(|_| serde_json::json!({ "error": "parse_failed", "raw": res }));
+        Json(ParseCommandResponse { parsed, ok: true })
+    } else {
+        Json(ParseCommandResponse { parsed: serde_json::json!({}), ok: false })
+    }
+}
+
+// ==========================================
+// LLM v2 Handlers (Agent with Memory)
+// ==========================================
+
+use crate::sidecar::llm_v2::CoolDeskAgent;
+use crate::sidecar::llm_v2::memory::MemoryManager;
+use crate::sidecar::storage::{load_agent_state, save_agent_state, SavedAgentState};
+use crate::sidecar::data::{
+    V2CreateSessionRequest, V2SessionResponse, V2ChatRequest, V2ChatResponse,
+    V2AddMemoryRequest, V2SessionSummary,
+};
+use lazy_static::lazy_static;
+use tokio::sync::Mutex;
+
+lazy_static! {
+    /// Global agent instance (created lazily)
+    static ref GLOBAL_AGENT: Mutex<Option<CoolDeskAgent>> = Mutex::new(None);
+}
+
+/// Initialize or get the global agent, loading persisted state
+async fn get_or_init_agent(sync_data: Arc<RwLock<SyncData>>) -> &'static Mutex<Option<CoolDeskAgent>> {
+    let mut agent_guard = GLOBAL_AGENT.lock().await;
+    if agent_guard.is_none() {
+        log::info!("[LLM v2] Initializing global agent");
+
+        // Create the agent
+        let agent = CoolDeskAgent::new(sync_data);
+
+        // Load persisted state
+        let saved_state = load_agent_state();
+        if !saved_state.long_term_memory.facts.is_empty() || !saved_state.conversations.is_empty() {
+            log::info!(
+                "[LLM v2] Restoring {} facts and {} conversations from disk",
+                saved_state.long_term_memory.facts.len(),
+                saved_state.conversations.len()
+            );
+
+            let memory = agent.memory();
+            let mut mem = memory.write().await;
+            mem.set_long_term(saved_state.long_term_memory);
+            mem.import_sessions(saved_state.conversations);
+        }
+
+        *agent_guard = Some(agent);
+    }
+    drop(agent_guard);
+    &GLOBAL_AGENT
+}
+
+/// Save agent state to disk
+async fn save_agent_to_disk(agent: &CoolDeskAgent) {
+    let memory = agent.memory();
+    let mem = memory.read().await;
+
+    let state = SavedAgentState {
+        long_term_memory: mem.export_long_term().clone(),
+        conversations: mem.export_sessions(),
+        saved_at: chrono::Utc::now().timestamp_millis(),
+    };
+
+    if let Err(e) = save_agent_state(&state) {
+        log::warn!("[LLM v2] Failed to save agent state: {}", e);
+    }
+}
+
+/// Create a new session
+pub async fn v2_create_session(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<V2CreateSessionRequest>,
+) -> Json<V2SessionResponse> {
+    let agent_mutex = get_or_init_agent(state.sync_data.clone()).await;
+    let agent_guard = agent_mutex.lock().await;
+
+    if let Some(agent) = agent_guard.as_ref() {
+        let session_id = if let Some(id) = req.session_id {
+            // Use provided session ID
+            let memory = agent.memory();
+            let mut mem = memory.write().await;
+            mem.get_or_create_session(&id);
+            id
+        } else {
+            agent.create_session().await
+        };
+
+        Json(V2SessionResponse {
+            session_id,
+            created_at: chrono::Utc::now().timestamp_millis(),
+        })
+    } else {
+        Json(V2SessionResponse {
+            session_id: String::new(),
+            created_at: 0,
+        })
+    }
+}
+
+/// List all sessions
+pub async fn v2_list_sessions(
+    State(state): State<Arc<AppState>>,
+) -> Json<Vec<V2SessionSummary>> {
+    let agent_mutex = get_or_init_agent(state.sync_data.clone()).await;
+    let agent_guard = agent_mutex.lock().await;
+
+    if let Some(agent) = agent_guard.as_ref() {
+        let memory = agent.memory();
+        let mem = memory.read().await;
+        let sessions: Vec<V2SessionSummary> = mem
+            .list_sessions()
+            .iter()
+            .map(|s| V2SessionSummary {
+                id: s.id.clone(),
+                title: s.title.clone(),
+                message_count: s.messages.len(),
+                created_at: s.created_at,
+                updated_at: s.updated_at,
+            })
+            .collect();
+        Json(sessions)
+    } else {
+        Json(Vec::new())
+    }
+}
+
+/// Get a specific session's history
+pub async fn v2_get_session(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    let agent_mutex = get_or_init_agent(state.sync_data.clone()).await;
+    let agent_guard = agent_mutex.lock().await;
+
+    if let Some(agent) = agent_guard.as_ref() {
+        let history = agent.get_session_history(&session_id).await;
+        Json(serde_json::json!({
+            "sessionId": session_id,
+            "messages": history,
+        }))
+    } else {
+        Json(serde_json::json!({
+            "sessionId": session_id,
+            "messages": [],
+            "error": "Agent not initialized"
+        }))
+    }
+}
+
+/// Delete a session
+pub async fn v2_delete_session(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+) -> StatusCode {
+    let agent_mutex = get_or_init_agent(state.sync_data.clone()).await;
+    let agent_guard = agent_mutex.lock().await;
+
+    if let Some(agent) = agent_guard.as_ref() {
+        agent.delete_session(&session_id).await;
+    }
+
+    StatusCode::NO_CONTENT
+}
+
+/// Chat with the agent
+pub async fn v2_chat(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<V2ChatRequest>,
+) -> Json<V2ChatResponse> {
+    let agent_mutex = get_or_init_agent(state.sync_data.clone()).await;
+    let agent_guard = agent_mutex.lock().await;
+
+    if let Some(agent) = agent_guard.as_ref() {
+        match agent.chat(&req.session_id, &req.message).await {
+            Ok(response) => {
+                // Save state after successful chat
+                save_agent_to_disk(agent).await;
+
+                Json(V2ChatResponse {
+                    ok: true,
+                    session_id: response.session_id,
+                    response: response.content,
+                    tools_used: response.tools_used,
+                    request_id: req.request_id,
+                    error: None,
+                })
+            }
+            Err(e) => {
+                Json(V2ChatResponse {
+                    ok: false,
+                    session_id: req.session_id,
+                    response: String::new(),
+                    tools_used: Vec::new(),
+                    request_id: req.request_id,
+                    error: Some(e),
+                })
+            }
+        }
+    } else {
+        Json(V2ChatResponse {
+            ok: false,
+            session_id: req.session_id,
+            response: String::new(),
+            tools_used: Vec::new(),
+            request_id: req.request_id,
+            error: Some("Agent not initialized".to_string()),
+        })
+    }
+}
+
+/// Get memory facts
+pub async fn v2_get_memory(
+    State(state): State<Arc<AppState>>,
+) -> Json<serde_json::Value> {
+    let agent_mutex = get_or_init_agent(state.sync_data.clone()).await;
+    let agent_guard = agent_mutex.lock().await;
+
+    if let Some(agent) = agent_guard.as_ref() {
+        let facts = agent.get_memory_facts().await;
+        Json(serde_json::json!({
+            "facts": facts,
+        }))
+    } else {
+        Json(serde_json::json!({
+            "facts": [],
+        }))
+    }
+}
+
+/// Add a memory fact
+pub async fn v2_add_memory(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<V2AddMemoryRequest>,
+) -> Json<SuccessResponse> {
+    let agent_mutex = get_or_init_agent(state.sync_data.clone()).await;
+    let agent_guard = agent_mutex.lock().await;
+
+    if let Some(agent) = agent_guard.as_ref() {
+        agent.add_memory_fact(&req.content, req.category.as_deref()).await;
+        // Save after adding memory
+        save_agent_to_disk(agent).await;
+        Json(SuccessResponse { success: true })
+    } else {
+        Json(SuccessResponse { success: false })
+    }
+}
+
+/// Clear all memory
+pub async fn v2_clear_memory(
+    State(state): State<Arc<AppState>>,
+) -> StatusCode {
+    let agent_mutex = get_or_init_agent(state.sync_data.clone()).await;
+    let agent_guard = agent_mutex.lock().await;
+
+    if let Some(agent) = agent_guard.as_ref() {
+        agent.clear_long_term_memory().await;
+    }
+
+    StatusCode::NO_CONTENT
 }
 

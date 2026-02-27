@@ -791,8 +791,6 @@ export const NOTE_TEMPLATES = {
  */
 export function getTemplatesByCategory() {
   const categories = {
-    productivity: { name: 'Productivity', templates: [] },
-    development: { name: 'Development', templates: [] },
     basic: { name: 'Basic', templates: [] }
   };
 

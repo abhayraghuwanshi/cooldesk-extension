@@ -170,8 +170,8 @@ export async function scoreAndSortTabs(tabs) {
         return (a.id || 0) - (b.id || 0); // fallback tie-breaker
     });
 
-    // Remove score property before returning
-    return sorted.map(({ _score, ...tab }) => tab);
+    // Keep _score property for Focus mode filtering
+    return sorted;
 }
 
 // Export individual scoring functions for testing

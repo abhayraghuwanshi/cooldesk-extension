@@ -49,9 +49,10 @@ export const NanoAIService = {
             try {
                 const model = getModelEntryPoint();
                 if (!model) {
-                    this._availability = 'no';
-                    console.log('[NanoAI] API not available in this browser');
-                    return { available: false, reason: 'api-missing' };
+                    console.log('[NanoAI] API not available, checking LocalAI...');
+                    const localAvailable = await LocalAIService.isAvailable();
+                    this._availability = localAvailable ? 'local' : 'no';
+                    return { available: localAvailable, source: localAvailable ? 'local' : 'none' };
                 }
 
                 // Check availability
@@ -61,23 +62,37 @@ export const NanoAIService = {
                         expectedOutputs: [{ type: 'text', languages: ['en'] }]
                     });
                     this._availability = avail;
-                    console.log('[NanoAI] Availability:', avail);
-                    return { available: avail === 'available', status: avail };
+
+                    // If Nano is not readily available, check Local AI as a better alternative than 'no'
+                    if (avail !== 'available' && avail !== 'readily') {
+                        const localAvailable = await LocalAIService.isAvailable();
+                        if (localAvailable) this._availability = 'local';
+                    }
+
+                    console.log('[NanoAI] Availability:', this._availability);
+                    return { available: this._availability === 'available' || this._availability === 'local', status: this._availability };
                 }
 
                 // Fallback for older API
                 if (model.capabilities) {
                     const caps = await model.capabilities();
                     this._availability = caps.available;
-                    return { available: caps.available === 'readily', status: caps.available };
+                    if (this._availability !== 'readily') {
+                        const localAvailable = await LocalAIService.isAvailable();
+                        if (localAvailable) this._availability = 'local';
+                    }
+                    return { available: this._availability === 'readily' || this._availability === 'local', status: this._availability };
                 }
 
-                this._availability = 'no';
-                return { available: false, reason: 'api-outdated' };
+                // Final fallback
+                const localAvailable = await LocalAIService.isAvailable();
+                this._availability = localAvailable ? 'local' : 'no';
+                return { available: localAvailable, source: localAvailable ? 'local' : 'none' };
             } catch (e) {
-                console.warn('[NanoAI] Init failed:', e);
-                this._availability = 'error';
-                return { available: false, reason: 'error', error: e.message };
+                console.warn('[NanoAI] Init failed, checking LocalAI fallback:', e);
+                const localAvailable = await LocalAIService.isAvailable();
+                this._availability = localAvailable ? 'local' : 'error';
+                return { available: localAvailable, reason: 'error', error: e.message };
             }
         })();
 
@@ -88,13 +103,25 @@ export const NanoAIService = {
      * Check if Nano is ready to use
      */
     isAvailable() {
-        return this._availability === 'available' || this._availability === 'readily';
+        return this._availability === 'available' || this._availability === 'readily' || this._availability === 'local';
+    },
+
+    /**
+     * Check which AI source is being used
+     */
+    getSource() {
+        if (this._availability === 'available' || this._availability === 'readily') return 'nano';
+        if (this._availability === 'local') return 'local';
+        return 'none';
     },
 
     /**
      * Get or create a session (lazy, cached)
      */
     async getSession() {
+        // If we are in local fallback mode, we don't need a Nano session
+        if (this._availability === 'local') return null;
+
         // Check if session is stale
         if (this._session && this._sessionCreatedAt) {
             const age = Date.now() - this._sessionCreatedAt;
@@ -108,7 +135,13 @@ export const NanoAIService = {
 
         const model = getModelEntryPoint();
         if (!model) {
-            throw new Error('Nano AI not available');
+            // Check if we can use local
+            const available = await LocalAIService.isAvailable();
+            if (available) {
+                this._availability = 'local';
+                return null;
+            }
+            throw new Error('No AI available (Nano missing and LocalAI not reachable)');
         }
 
         // Check availability first
@@ -137,6 +170,10 @@ export const NanoAIService = {
      * Run a prompt with timeout
      */
     async prompt(text, timeout = 30000) {
+        if (this._availability === 'local') {
+            return LocalAIService.chat(text, { timeout });
+        }
+
         const session = await this.getSession();
         const startTime = Date.now();
         console.log(`[NanoAI] Starting prompt (timeout: ${timeout}ms, text length: ${text.length})`);
@@ -171,6 +208,10 @@ export const NanoAIService = {
             return text?.trim() || '';
         }
 
+        if (this._availability === 'local') {
+            return LocalAIService.summarize(text, maxLength);
+        }
+
         // Truncate very long text to avoid token limits
         const truncated = text.length > 8000 ? text.slice(0, 8000) + '...' : text;
 
@@ -199,6 +240,16 @@ Summary:`;
      */
     async classifyUrl(url, context = {}) {
         const { workspaces = [], title = '' } = context;
+
+        if (this._availability === 'local') {
+            const category = await LocalAIService.categorize(title, url, workspaces);
+            return {
+                category,
+                isNew: !workspaces.includes(category),
+                confidence: 'high',
+                source: 'local'
+            };
+        }
 
         // Build workspace list for context
         const workspaceList = workspaces.length > 0
@@ -289,6 +340,15 @@ Category:`;
     async naturalLanguageSearch(query, items, limit = 10) {
         if (!items || items.length === 0) return [];
         if (!query || query.trim().length < 3) return items.slice(0, limit);
+
+        if (this._availability === 'local') {
+            const results = await LocalAIService.smartSearch(query, items, limit);
+            return (results || []).map(item => ({
+                ...item,
+                _aiMatched: true,
+                _aiRank: item._aiRank || 1
+            }));
+        }
 
         // Take top candidates for AI ranking (limit to avoid token limits)
         const candidates = items.slice(0, 30);

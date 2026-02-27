@@ -9,7 +9,7 @@ class SyncWebSocket {
     constructor() {
         this.ws = null;
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
+        this.maxReconnectAttempts = 1000000; // Practically endless retries
         this.reconnectDelay = 500; // Faster initial reconnect (was 1000ms)
         this.listeners = new Map();
         this.connectionPromise = null;
@@ -62,6 +62,21 @@ class SyncWebSocket {
                     console.log('[SyncWS] Connected');
                     this.reconnectAttempts = 0;
                     this.isConnecting = false;
+
+                    // Keep the Service Worker alive and the WebSocket open
+                    if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
+                    this.keepAliveInterval = setInterval(() => {
+                        if (this.ws?.readyState === WebSocket.OPEN) {
+                            try {
+                                this.ws.send(JSON.stringify({
+                                    type: 'ping',
+                                    timestamp: Date.now(),
+                                    clientId: this.clientId
+                                }));
+                            } catch (e) { }
+                        }
+                    }, 25000); // 25 seconds ping
+
                     this.emit('connected');
                     resolve(true);
                 };
@@ -69,6 +84,7 @@ class SyncWebSocket {
                 this.ws.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
+                        if (data.type === 'pong' || data.type === 'ping') return; // Ignore raw keep-alives internally
                         this.handleMessage(data);
                     } catch (e) {
                         console.warn('[SyncWS] Invalid message:', e);
@@ -77,6 +93,7 @@ class SyncWebSocket {
 
                 this.ws.onclose = (event) => {
                     clearTimeout(connectionTimeout);
+                    if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
                     console.log('[SyncWS] Disconnected:', event.code, event.reason);
                     this.isConnecting = false;
                     this.emit('disconnected', { code: event.code, reason: event.reason });
@@ -86,6 +103,7 @@ class SyncWebSocket {
 
                 this.ws.onerror = (error) => {
                     clearTimeout(connectionTimeout);
+                    if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
                     console.warn('[SyncWS] Error:', error);
                     this.isConnecting = false;
                     this.emit('error', error);
@@ -320,7 +338,7 @@ class SyncWebSocket {
         const { tabId, windowId } = payload;
         const isEdge = navigator.userAgent.includes('Edg');
         const browserName = isEdge ? 'Edge' :
-                           navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser';
+            navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser';
         const browserExeName = isEdge ? 'msedge' : 'chrome';
 
         console.log(`[SyncWS][${browserName}] Jump-to-tab:`, tabId);
@@ -351,7 +369,7 @@ class SyncWebSocket {
                     chrome.scripting.executeScript({
                         target: { tabId },
                         func: () => window.focus()
-                    }).catch(() => {});
+                    }).catch(() => { });
                 }
 
                 console.log(`[SyncWS][${browserName}] Jumped to tab:`, tabId);
@@ -426,10 +444,15 @@ class SyncWebSocket {
             return;
         }
 
-        const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
+        // Cap delay at 30 seconds for long-term retrying
+        const calculatedDelay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts);
+        const delay = Math.min(calculatedDelay, 30000);
         this.reconnectAttempts++;
 
-        console.log(`[SyncWS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+        // Less noisy logging for long-running disconnected states
+        if (this.reconnectAttempts % 10 === 0 || this.reconnectAttempts < 5) {
+            console.log(`[SyncWS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+        }
         setTimeout(() => this.connect(), delay);
     }
 
@@ -440,6 +463,10 @@ class SyncWebSocket {
         if (this.ws) {
             this.ws.close();
             this.ws = null;
+        }
+        if (this.keepAliveInterval) {
+            clearInterval(this.keepAliveInterval);
+            this.keepAliveInterval = null;
         }
         this.isConnecting = false;
         this.connectionPromise = null;

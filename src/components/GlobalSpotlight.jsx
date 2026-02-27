@@ -258,7 +258,7 @@ export function GlobalSpotlight() {
 
             // System apps and browsers to filter out (tabs are shown separately)
             const systemApps = ['svchost', 'csrss', 'system', 'registry', 'service', 'runtime', 'host', 'helper', 'background', 'agent',
-                'chrome', 'msedge', 'firefox', 'brave', 'opera', 'vivaldi', 'safari', 'iexplore', 'chromium'];
+                'chrome', 'msedge', 'edge', 'firefox', 'brave', 'opera', 'vivaldi', 'safari', 'iexplore', 'chromium'];
 
             // 1. Running Apps (top priority - what user is actively using)
             // Enrich with icons from installed apps, then filter
@@ -266,8 +266,9 @@ export function GlobalSpotlight() {
             const activeApps = enrichedRunning
                 .filter(a => {
                     const name = (a.name || '').toLowerCase();
+                    const path = (a.path || '').toLowerCase();
                     if (usedIds.has(name)) return false;
-                    if (systemApps.some(s => name.includes(s))) return false;
+                    if (systemApps.some(s => name.includes(s) || path.includes(s))) return false;
                     usedIds.add(name);
                     return true;
                 })
@@ -299,6 +300,9 @@ export function GlobalSpotlight() {
                     return false;
                 });
                 if (app) {
+                    const path = (app.path || '').toLowerCase();
+                    if (systemApps.some(s => path.includes(s))) continue;
+
                     usedIds.add(appName.toLowerCase());
                     recommendations.push({
                         ...app,

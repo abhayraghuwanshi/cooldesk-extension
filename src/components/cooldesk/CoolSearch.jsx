@@ -1249,14 +1249,14 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           return;
         }
 
-        // Handle AI Command (/ai <prompt>)
+        // Handle AI Command (/ai <prompt>) - Uses v2 Agent API with tools
         if (query.startsWith('/ai')) {
           const prompt = query.slice(3).trim();
 
           if (!prompt) {
             setCommandFeedback({
               type: 'info',
-              message: 'Usage: /ai <your prompt here>\nExample: /ai What is 2+2?'
+              message: 'Usage: /ai <your prompt here>\nExample: /ai Search the web for React tutorials'
             });
             return;
           }
@@ -1271,7 +1271,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             setCommandSuggestions([]);
             setSearchSuggestions([]);
 
-            // Check if Local AI is available (connects to sidecar WebSocket)
+            // Check if Local AI is available (connects to sidecar)
             const isAvailable = await LocalAI.isAvailable();
             if (!isAvailable) {
               setIsAiLoading(false);
@@ -1284,7 +1284,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
             // Check if model is loaded, if not, load it automatically
             const status = await LocalAI.getStatus();
-            console.log('[AI Chat] Status:', status);
+            console.log('[AI Agent] Status:', status);
 
             if (!status.modelLoaded) {
               // Show loading message
@@ -1295,23 +1295,17 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
 
               // Get available models
               const modelsResult = await LocalAI.getModels();
-              console.log('[AI Chat] Models result:', modelsResult);
+              console.log('[AI Agent] Models result:', modelsResult);
 
-              // Models is an object: {filename: {status, displayName, ...}}
-              // Get just the filenames (keys) of downloaded models
               const modelFilenames = Object.keys(modelsResult || {}).filter(
                 name => modelsResult[name]?.downloaded
               );
-
-              console.log('[AI Chat] Downloaded model filenames:', modelFilenames);
 
               // Find best available model: Phi-3 > Llama 3.2 > any other
               const modelToLoad = modelFilenames.find(name => name.toLowerCase().includes('phi-3'))
                 || modelFilenames.find(name => name.toLowerCase().includes('llama-3.2'))
                 || modelFilenames.find(name => name.toLowerCase().includes('llama'))
                 || modelFilenames[0];
-
-              console.log('[AI Chat] Model to load:', modelToLoad);
 
               if (!modelToLoad) {
                 setIsAiLoading(false);
@@ -1325,7 +1319,6 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               // Load the model
               try {
                 await LocalAI.loadModel(modelToLoad);
-                // Update message to show model loaded
                 setAiChatMessages(prev => {
                   const newMessages = [...prev];
                   const lastIdx = newMessages.length - 1;
@@ -1344,20 +1337,44 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               }
             }
 
-            // Chat with the model using LocalAI service
-            console.log('[AI Chat] Sending prompt:', prompt);
-            const responseText = await LocalAI.chat(prompt);
-            console.log('[AI Chat] Response:', responseText);
+            // Chat with the v2 Agent API (supports tools like web search, workspace search, etc.)
+            console.log('[AI Agent] Sending prompt:', prompt);
+            const result = await LocalAI.agentChat(prompt);
+            console.log('[AI Agent] Response:', result);
 
-            // Add AI response to chat
-            setAiChatMessages(prev => [...prev, { role: 'assistant', content: responseText || 'No response received' }]);
+            if (result.ok) {
+              // Build response with tool usage info
+              let responseContent = result.response || 'No response received';
+
+              // Show which tools were used (if any)
+              if (result.toolsUsed && result.toolsUsed.length > 0) {
+                const uniqueTools = [...new Set(result.toolsUsed)];
+                const toolLabels = uniqueTools.map(t => {
+                  switch (t) {
+                    case 'web_search': return '🌐 Web Search';
+                    case 'search_workspaces': return '📁 Workspaces';
+                    case 'search_notes': return '📝 Notes';
+                    case 'get_recent_activity': return '🕐 Activity';
+                    case 'get_pinned_items': return '📌 Pins';
+                    default: return t;
+                  }
+                });
+                responseContent = `*Tools used: ${toolLabels.join(', ')}*\n\n${responseContent}`;
+              }
+
+              setAiChatMessages(prev => [...prev, { role: 'assistant', content: responseContent }]);
+            } else {
+              setAiChatMessages(prev => [
+                ...prev,
+                { role: 'error', content: result.error || 'Failed to get response from AI agent' }
+              ]);
+            }
+
             setIsAiLoading(false);
-
-            // Clear input but keep pill active for follow-up questions
             setSearchValue('');
 
           } catch (error) {
-            console.error('[AI Chat] Error:', error);
+            console.error('[AI Agent] Error:', error);
             setIsAiLoading(false);
             setAiChatMessages(prev => [
               ...prev,
@@ -2217,7 +2234,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             gap: '6px',
             padding: '4px 10px',
             marginRight: '8px',
-            marginTop: '8px',
+            marginTop: '7px',
             alignSelf: 'flex-start',
             background: 'rgba(139, 92, 246, 0.2)',
             border: '1px solid rgba(139, 92, 246, 0.4)',
@@ -2236,20 +2253,20 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
           fontWeight: '700',
           fontSize: '18px',
           color: isAISearch ? '#A78BFA' : 'var(--accent-color, #34C759)',
-          marginRight: '4px',
-          marginTop: '8px',
+          marginRight: '6px',
+          marginTop: '6px',
           userSelect: 'none',
           display: 'flex',
           alignItems: 'center',
           alignSelf: 'flex-start',
-          height: '24px',
+          height: '28px',
           transition: 'color 0.2s ease'
         }}>
           {isAISearch ? (
             <FontAwesomeIcon icon={faRobot} style={{ fontSize: '14px' }} title="AI-powered search" />
           ) : '>'}
         </span>
-        <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'flex-start', marginTop: '4px' }}>
+        <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'flex-start', marginTop: '6px' }}>
           <textarea
             ref={inputRef}
             className="cooldesk-search-input cooldesk-search-textarea"
@@ -2269,7 +2286,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             onInput={(e) => {
               // Auto-resize textarea
               e.target.style.height = 'auto';
-              const newHeight = Math.min(e.target.scrollHeight, 200); // Max 200px (~5-6 lines)
+              const newHeight = Math.min(e.target.scrollHeight, 300); // Increased max height
               e.target.style.height = `${newHeight}px`;
             }}
             rows={1}
@@ -2280,11 +2297,13 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               caretColor: 'var(--text-primary, #F8FAFC)',
               resize: 'none',
               overflow: 'hidden',
-              minHeight: '24px',
-              maxHeight: '200px',
-              lineHeight: '24px',
+              minHeight: '28px',
+              maxHeight: '300px',
+              lineHeight: '28px',
               paddingTop: '0',
-              paddingBottom: '8px'
+              paddingBottom: '6px',
+              width: '100%',
+              display: 'block'
             }}
           />
           {/* Ghost text for autocomplete hint */}
@@ -2293,7 +2312,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               position: 'absolute',
               left: '0',
               top: '0',
-              fontSize: 'var(--font-lg)',
+              fontSize: '18px', // Match the input font size
               fontWeight: 500,
               letterSpacing: '-0.01em',
               pointerEvents: 'none',
@@ -2301,7 +2320,7 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               whiteSpace: 'pre',
               fontFamily: 'inherit',
               display: 'flex',
-              lineHeight: '24px',
+              lineHeight: '28px',
               color: 'transparent'
             }}>
               {/* Invisible spacer matching typed text */}

@@ -7,5 +7,6 @@ pub mod sync;
 pub mod server;
 pub mod handlers;
 pub mod llm;
+pub mod llm_v2;
 
 pub use server::start_server;

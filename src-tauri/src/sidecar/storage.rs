@@ -99,6 +99,97 @@ pub struct ChangeTracker {
     last_hashes: std::collections::HashMap<String, String>,
 }
 
+// ==========================================
+// Agent Memory Persistence
+// ==========================================
+
+use crate::sidecar::llm_v2::memory::{ConversationSession, LongTermMemory};
+
+/// Agent memory file path
+fn get_agent_memory_file() -> PathBuf {
+    get_data_dir().join("agent-memory.json")
+}
+
+/// Agent conversations file path
+fn get_agent_conversations_file() -> PathBuf {
+    get_data_dir().join("agent-conversations.json")
+}
+
+/// Saved agent memory state
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedAgentState {
+    pub long_term_memory: LongTermMemory,
+    pub conversations: Vec<ConversationSession>,
+    pub saved_at: i64,
+}
+
+/// Load agent state from disk
+pub fn load_agent_state() -> SavedAgentState {
+    let memory_file = get_agent_memory_file();
+
+    if !memory_file.exists() {
+        log::info!("[Agent Storage] No existing agent memory, starting fresh");
+        return SavedAgentState::default();
+    }
+
+    match fs::read_to_string(&memory_file) {
+        Ok(content) => {
+            match serde_json::from_str::<SavedAgentState>(&content) {
+                Ok(state) => {
+                    log::info!(
+                        "[Agent Storage] Loaded agent state: {} facts, {} conversations",
+                        state.long_term_memory.facts.len(),
+                        state.conversations.len()
+                    );
+                    state
+                }
+                Err(e) => {
+                    log::warn!("[Agent Storage] Failed to parse agent state: {}", e);
+                    SavedAgentState::default()
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("[Agent Storage] Failed to read agent state: {}", e);
+            SavedAgentState::default()
+        }
+    }
+}
+
+/// Save agent state to disk
+pub fn save_agent_state(state: &SavedAgentState) -> std::io::Result<()> {
+    ensure_data_dir()?;
+    let file_path = get_agent_memory_file();
+
+    log::debug!(
+        "[Agent Storage] Saving agent state: {} facts, {} conversations",
+        state.long_term_memory.facts.len(),
+        state.conversations.len()
+    );
+
+    let content = serde_json::to_string_pretty(state)?;
+    fs::write(&file_path, content)?;
+
+    Ok(())
+}
+
+/// Save just the long-term memory
+pub fn save_long_term_memory(memory: &LongTermMemory) -> std::io::Result<()> {
+    let mut state = load_agent_state();
+    state.long_term_memory = memory.clone();
+    state.saved_at = chrono::Utc::now().timestamp_millis();
+    save_agent_state(&state)
+}
+
+/// Save just the conversations
+pub fn save_conversations(conversations: &[ConversationSession]) -> std::io::Result<()> {
+    let mut state = load_agent_state();
+    state.conversations = conversations.to_vec();
+    state.saved_at = chrono::Utc::now().timestamp_millis();
+    save_agent_state(&state)
+}
+
 impl ChangeTracker {
     pub fn new() -> Self {
         Self::default()

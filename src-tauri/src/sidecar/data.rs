@@ -325,3 +325,116 @@ pub struct PushTabsPayload {
     pub tabs: Vec<Tab>,
     pub device_id: Option<String>,
 }
+
+// ==========================================
+// LLM v2 Agent Data Types
+// ==========================================
+
+/// Persistent conversation for the agent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentConversation {
+    pub id: String,
+    pub title: Option<String>,
+    pub messages: Vec<AgentMessage>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A message in an agent conversation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentMessage {
+    pub id: String,
+    pub role: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<serde_json::Value>,
+    pub timestamp: i64,
+}
+
+/// Long-term memory storage for the agent
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentMemory {
+    pub facts: Vec<AgentMemoryFact>,
+    pub updated_at: i64,
+}
+
+/// A fact stored in agent memory
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentMemoryFact {
+    pub id: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    pub created_at: i64,
+}
+
+// ==========================================
+// LLM v2 Request/Response Types
+// ==========================================
+
+/// Request to create a new agent session
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2CreateSessionRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+/// Response after creating a session
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2SessionResponse {
+    pub session_id: String,
+    pub created_at: i64,
+}
+
+/// Request for v2 chat
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2ChatRequest {
+    pub session_id: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}
+
+/// Response from v2 chat
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2ChatResponse {
+    pub ok: bool,
+    pub session_id: String,
+    pub response: String,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub tools_used: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Request to add memory
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2AddMemoryRequest {
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+}
+
+/// Session summary for listing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2SessionSummary {
+    pub id: String,
+    pub title: Option<String>,
+    pub message_count: usize,
+    pub created_at: i64,
+    pub updated_at: i64,
+}

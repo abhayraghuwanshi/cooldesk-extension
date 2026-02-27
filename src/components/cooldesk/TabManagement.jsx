@@ -241,7 +241,19 @@ export function TabManagement() {
         // Enrich running apps with icons from installed apps using utility
         const enrichedApps = enrichRunningAppsWithIcons(apps, installedApps);
 
-        const sortedApps = [...enrichedApps].sort((a, b) => {
+        // Filter out browsers since we show their tabs directly
+        const filteredApps = enrichedApps.filter(app => {
+          const appName = (app.name || '').toLowerCase();
+          const isBrowser = appName.includes('chrome') ||
+            appName === 'msedge' ||
+            appName === 'microsoft edge' ||
+            appName === 'edge' ||
+            appName.includes('brave') ||
+            appName.includes('firefox');
+          return !isBrowser;
+        });
+
+        const sortedApps = [...filteredApps].sort((a, b) => {
           const nameA = (a.name || '').toLowerCase();
           const nameB = (b.name || '').toLowerCase();
           return nameA.localeCompare(nameB);
@@ -334,23 +346,26 @@ export function TabManagement() {
 
   const handleAppClick = useCallback(async (app) => {
     try {
-      if (window.electronAPI?.focusApp) {
+      if (window.electronAPI?.focusApp && app.pid) {
         console.log('[TabManagement] Focusing app:', app.name, app.pid);
-        await window.electronAPI.focusApp(app.pid);
+        await window.electronAPI.focusApp(app.pid, app.name);
       }
     } catch (error) {
       console.error('[TabManagement] Failed to focus app:', error);
     }
   }, []);
 
-  // Filter tabs based on search and focus mode
   const filteredTabs = useMemo(() => {
     let result = tabs;
 
     if (isFocusMode) {
-      // Focus mode: show pinned, active, and top 20% scored tabs
-      // For now, let's just show top 15 tabs if focus mode is on
-      result = result.slice(0, 15);
+      // Focus mode: Get the top 10 most relevant tabs
+      const topTabs = result.slice(0, 10);
+
+      // Preserve group integrity by keeping all tabs from these relevant domains
+      const focusedDomains = new Set(topTabs.map(t => getBaseDomainFromUrl(t.url)));
+
+      result = result.filter(t => t.pinned || t.active || focusedDomains.has(getBaseDomainFromUrl(t.url)));
     }
 
     return result;
@@ -532,11 +547,20 @@ export function TabManagement() {
                   borderLeft: `3px solid ${info.color}`
                 }}
               >
+                <div style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: '#22C55E', // Green dot for connected
+                  boxShadow: '0 0 6px #22C55E', // Glow effect
+                  // A CSS animation class can make it pulse, but static glow is clean
+                  marginRight: '2px'
+                }} title="Connected" />
                 <span style={{
                   fontSize: 'var(--font-sm, 12px)',
                   fontWeight: 600,
                   color: info.color
-                }}>
+                }} title={`${info.name} is Connected and Syncing`}>
                   {info.name}
                 </span>
                 <span style={{
@@ -545,7 +569,7 @@ export function TabManagement() {
                   background: 'rgba(0, 0, 0, 0.2)',
                   padding: '2px 6px',
                   borderRadius: '4px'
-                }}>
+                }} title={`${count} open tabs`}>
                   {count}
                 </span>
               </div>
@@ -571,6 +595,8 @@ export function TabManagement() {
               } else {
                 chrome.storage.local.set({ isFocusMode: newState });
               }
+              // Immediately trigger a refetch/resort so the UI updates
+              debouncedRefresh();
             }}
             style={{
               background: isFocusMode

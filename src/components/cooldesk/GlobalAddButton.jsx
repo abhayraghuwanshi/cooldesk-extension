@@ -6,6 +6,7 @@ import {
   faFolderOpen,
   faHistory,
   faLink,
+  faMagicWandSparkles,
   faPlus,
   faSearch,
   faStar,
@@ -49,6 +50,8 @@ export function GlobalAddButton({
   const [suggestedLinks, setSuggestedLinks] = useState([]);
   const [selectedSuggestedLinks, setSelectedSuggestedLinks] = useState(new Set());
   const [aiSuggestionError, setAiSuggestionError] = useState('');
+  const [suggestedWorkspaceNames, setSuggestedWorkspaceNames] = useState([]);
+  const [isSuggestingName, setIsSuggestingName] = useState(false);
 
   // Multi-Select URL States
   const [selectedUrls, setSelectedUrls] = useState(new Set());
@@ -134,6 +137,7 @@ export function GlobalAddButton({
     setAiSuggestionError('');
     setAiCommand('');
     setAiUrlError('');
+    setSuggestedWorkspaceNames([]);
   };
 
   const handleOpen = () => {
@@ -261,6 +265,39 @@ export function GlobalAddButton({
       setAiSuggestionError('AI suggestion failed. ' + err.message);
     } finally {
       setIsSuggestingLinks(false);
+    }
+  };
+
+  const handleAutoSuggestWorkspaceName = async () => {
+    if (openTabs.length === 0) {
+      setAiSuggestionError('Open some tabs first to get workspace suggestions.');
+      return;
+    }
+
+    setIsSuggestingName(true);
+    setAiSuggestionError('');
+
+    try {
+      const suggestions = await LocalAIService.suggestWorkspaces(openTabs.slice(0, 10));
+      if (suggestions && suggestions.length > 0) {
+        setSuggestedWorkspaceNames(suggestions);
+      } else {
+        setAiSuggestionError('Could not find a cohesive workspace name for these tabs.');
+      }
+    } catch (err) {
+      console.error("Error suggesting workspace name:", err);
+      // Fallback to legacy NanoAI prompt if LocalAI fails
+      try {
+        const text = openTabs.slice(0, 5).map(t => t.title).join(', ');
+        const prompt = `Based on these tabs: ${text}, suggest 3 short (2-3 word) workspace names as a JSON array ["Name 1", "Name 2", "Name 3"]`;
+        const result = await NanoAIService.prompt(prompt);
+        const match = result.match(/\[.*\]/);
+        if (match) setSuggestedWorkspaceNames(JSON.parse(match[0]));
+      } catch (e) {
+        setAiSuggestionError('AI suggestion failed.');
+      }
+    } finally {
+      setIsSuggestingName(false);
     }
   };
 
@@ -1066,15 +1103,57 @@ export function GlobalAddButton({
                   </h2>
 
                   <div className="form-group" style={{ marginBottom: '20px' }}>
-                    <label style={{
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: '#94a3b8',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                      marginBottom: '8px',
-                      display: 'block'
-                    }}>Workspace Name</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#94a3b8',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                      }}>Workspace Name</label>
+
+                      <button
+                        onClick={handleAutoSuggestWorkspaceName}
+                        disabled={isSuggestingName}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#a855f7',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faMagicWandSparkles} spin={isSuggestingName} />
+                        {isSuggestingName ? 'Magic...' : 'Auto-Suggest'}
+                      </button>
+                    </div>
+
+                    {suggestedWorkspaceNames.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                        {suggestedWorkspaceNames.map((name, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setWorkspaceName(name)}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              background: 'rgba(168, 85, 247, 0.1)',
+                              border: '1px solid rgba(168, 85, 247, 0.2)',
+                              color: '#d8b4fe',
+                              fontSize: '11px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     <input
                       type="text"
                       value={workspaceName}

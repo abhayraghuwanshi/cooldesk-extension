@@ -31,36 +31,39 @@ pub async fn answer_question(question: &str, content: &str) -> Result<String, St
     super::inference::chat(&prompt).await
 }
 
-/// Group browsing items into smart workspace categories
+/// Group browsing items or project ideas into smart workspace categories
 /// Returns JSON with groups and suggestions
 pub async fn group_workspaces(items: &str, context: &str, custom_prompt: Option<&str>) -> Result<String, String> {
     let instruction = if let Some(prompt) = custom_prompt {
         format!(
-            "{}\n\n{}\n\nHere are the user's browsing items:\n{}\n\nRespond with ONLY a valid JSON object. Do NOT wrap the JSON in markdown blocks (e.g. ```json).",
+            "{}\n\n{}\n\nHere are the items to organize:\n{}\n\nRespond with ONLY a valid JSON object. Do NOT wrap the JSON in markdown blocks (e.g. ```json).",
             prompt, context, items
         )
     } else {
         format!(
-            r#"You are organizing a user's browsing activity into smart workspace groups.
-{}
+            r#"You are an expert project manager and researcher.
+Your goal is to organize a list of items (URLs, notes, or project ideas) into logical, focused project workspaces.
 
-Group these browsing items into 4-8 project/topic categories based on their relevance.
-If external context is provided, prioritize grouping items that relate to that context.
-Return ONLY ONE valid JSON object with the exact format below. Do NOT wrap the JSON in markdown blocks and do NOT return multiple objects.
+Context: {}
 
+Organize these items into 3-6 distinct project categories. Think deeply about the relationship between items.
+If an item doesn't fit a clear group, create an "Inbox" or "Misc" group.
+
+Return ONLY a valid JSON object with the exact format below:
 {{
   "groups": [
     {{
-      "name": "Group Name",
-      "items": [1, 2, 3]
+      "name": "Project Name (Concise, e.g., 'Web Design Research')",
+      "description": "Short 1-sentence description of the project goal",
+      "items": [1, 5, 8] // The 1-based indices from the input list
     }}
   ],
   "suggestions": [
-    "helpful suggestion 1"
+    "A helpful recommendation for the user (e.g., 'Check GitHub for similar repos', 'Read more about X')"
   ]
 }}
 
-Items:
+Items to organize:
 {}
 
 JSON:"#,
@@ -84,6 +87,43 @@ JSON:"#,
     Ok(cleaned.to_string())
 }
 
+/// Enhance a URL with a better title, description, and tags
+pub async fn enhance_url(title: &str, url: &str, content_hint: Option<&str>) -> Result<String, String> {
+    let context = content_hint.unwrap_or("No content provided");
+    let prompt = format!(
+        r#"Enhance the following URL information for a productivity dashboard.
+URL: {}
+Current Title: {}
+Page Content/Hint: {}
+
+Generate a professional, concise title, a 1-sentence description, and 3-5 relevant tags.
+Return ONLY a valid JSON object:
+{{
+  "title": "Cleaned & Better Title",
+  "description": "What this page is actually about in 1 sentence.",
+  "tags": ["productivity", "tools", "design"],
+  "category": "One optimal category name"
+}}
+
+JSON:"#,
+        url, title, context
+    );
+    
+    let response = super::inference::chat(&prompt).await?;
+    
+    let mut cleaned = response.trim();
+    if cleaned.starts_with("```json") {
+        cleaned = cleaned.trim_start_matches("```json").trim();
+    } else if cleaned.starts_with("```") {
+        cleaned = cleaned.trim_start_matches("```").trim();
+    }
+    if cleaned.ends_with("```") {
+        cleaned = cleaned.trim_end_matches("```").trim();
+    }
+    
+    Ok(cleaned.to_string())
+}
+
 /// Suggest related URLs/resources based on current workspace context
 pub async fn suggest_related(workspace_urls: &str, history: &str) -> Result<String, String> {
     let prompt = format!(
@@ -100,6 +140,43 @@ Return ONLY a JSON array of suggestions:
 
 JSON:"#,
         workspace_urls, history
+    );
+    super::inference::chat(&prompt).await
+}
+
+/// Suggest workspace names based on a list of URLs
+pub async fn suggest_workspaces(urls_json: &str) -> Result<String, String> {
+    let prompt = format!(
+        r#"Analyze these browser tabs and suggest 3-5 cohesive workspace/project names.
+Tabs:
+{}
+
+Return ONLY a JSON array of names:
+["Project Alpha", "Researching X", "Personal Portfolio"]
+
+JSON:"#,
+        urls_json
+    );
+    super::inference::chat(&prompt).await
+}
+
+/// Parse a natural language command into structured action
+pub async fn parse_command(command: &str, context: &str) -> Result<String, String> {
+    let prompt = format!(
+        r#"Parse the following user command for a productivity assistant.
+Context: {}
+Command: "{}"
+
+Determine the intent and parameters. 
+Return ONLY a valid JSON object:
+{{
+  "intent": "create_workspace|add_url|search|summarize|other",
+  "params": {{}},
+  "thought": "Short explanation of your reasoning"
+}}
+
+JSON:"#,
+        context, command
     );
     super::inference::chat(&prompt).await
 }

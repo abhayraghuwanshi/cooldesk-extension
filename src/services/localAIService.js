@@ -389,6 +389,29 @@ export async function suggestRelated(workspaceUrls, history = '') {
 }
 
 /**
+ * Enhance a URL with better title, description and tags
+ * @param {string} title - Current title
+ * @param {string} url - Current URL
+ * @param {string} contentHint - Optional context or page snippet
+ * @returns {Promise<Object>} - { title, description, tags, category }
+ */
+export async function enhanceUrl(title, url, contentHint = '') {
+    const result = await request('llm-enhance-url', { title, url, contentHint }, 30000);
+
+    if (result.result) {
+        try {
+            const jsonMatch = result.result.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.warn('[LocalAI] Failed to parse enhance response:', e);
+        }
+    }
+    return { title, description: '', tags: [], category: 'Other' };
+}
+
+/**
  * Generate a daily briefing
  * @param {Object} context
  * @returns {Promise<string>}
@@ -503,4 +526,173 @@ export function getConnectionState() {
         isConnected,
         reconnectAttempts
     };
+}
+
+// ==========================================
+// V2 AGENT API (with Memory & Tools)
+// ==========================================
+
+// Store the current session ID for agent chat
+let currentAgentSessionId = null;
+
+/**
+ * Create a new agent session
+ * @param {string} [sessionId] - Optional custom session ID
+ * @returns {Promise<{sessionId: string, createdAt: number}>}
+ */
+export async function createAgentSession(sessionId = null) {
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v2/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to create session: ${response.status}`);
+    }
+
+    const result = await response.json();
+    currentAgentSessionId = result.sessionId;
+    return result;
+}
+
+/**
+ * Get or create current agent session
+ * @returns {Promise<string>} Session ID
+ */
+export async function getOrCreateAgentSession() {
+    if (currentAgentSessionId) {
+        return currentAgentSessionId;
+    }
+    const session = await createAgentSession();
+    return session.sessionId;
+}
+
+/**
+ * List all agent sessions
+ * @returns {Promise<Array<{id: string, title: string, messageCount: number, createdAt: number, updatedAt: number}>>}
+ */
+export async function listAgentSessions() {
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v2/sessions`);
+    if (!response.ok) {
+        throw new Error(`Failed to list sessions: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Get session history
+ * @param {string} sessionId
+ * @returns {Promise<{sessionId: string, messages: Array}>}
+ */
+export async function getAgentSessionHistory(sessionId) {
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v2/sessions/${sessionId}`);
+    if (!response.ok) {
+        throw new Error(`Failed to get session: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Delete an agent session
+ * @param {string} sessionId
+ * @returns {Promise<void>}
+ */
+export async function deleteAgentSession(sessionId) {
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v2/sessions/${sessionId}`, {
+        method: 'DELETE'
+    });
+    if (!response.ok && response.status !== 204) {
+        throw new Error(`Failed to delete session: ${response.status}`);
+    }
+    if (currentAgentSessionId === sessionId) {
+        currentAgentSessionId = null;
+    }
+}
+
+/**
+ * Chat with the v2 agent (supports tools like web search)
+ * @param {string} message - User message
+ * @param {string} [sessionId] - Optional session ID (will create/use current if not provided)
+ * @returns {Promise<{ok: boolean, response: string, toolsUsed: string[], sessionId: string, error?: string}>}
+ */
+export async function agentChat(message, sessionId = null) {
+    const sid = sessionId || await getOrCreateAgentSession();
+    const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v2/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            sessionId: sid,
+            message,
+            requestId
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Chat request failed: ${response.status}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * Get agent memory facts
+ * @returns {Promise<{facts: Array<{id: string, content: string, category?: string, createdAt: number}>}>}
+ */
+export async function getAgentMemory() {
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v2/memory`);
+    if (!response.ok) {
+        throw new Error(`Failed to get memory: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Add a fact to agent memory
+ * @param {string} content - The fact content
+ * @param {string} [category] - Optional category
+ * @returns {Promise<{success: boolean}>}
+ */
+export async function addAgentMemory(content, category = null) {
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v2/memory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, category })
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to add memory: ${response.status}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * Clear all agent memory
+ * @returns {Promise<void>}
+ */
+export async function clearAgentMemory() {
+    const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v2/memory/clear`, {
+        method: 'POST'
+    });
+    if (!response.ok && response.status !== 204) {
+        throw new Error(`Failed to clear memory: ${response.status}`);
+    }
+}
+
+/**
+ * Reset current agent session (start fresh conversation)
+ */
+export function resetAgentSession() {
+    currentAgentSessionId = null;
+}
+
+/**
+ * Get the current agent session ID
+ * @returns {string|null}
+ */
+export function getCurrentAgentSessionId() {
+    return currentAgentSessionId;
 }

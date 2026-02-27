@@ -138,8 +138,8 @@ ul[data-type="taskList"] li::marker,
 
 /* Task Items - Flexbox Layout for checkbox + text on same line */
 /* Target li elements inside taskList (they have data-checked attribute) */
-ul[data-type="taskList"] > li,
-.ProseMirror ul[data-type="taskList"] > li {
+ul[data-type="taskList"]>li,
+.ProseMirror ul[data-type="taskList"]>li {
     list-style: none !important;
     list-style-type: none !important;
     display: flex !important;
@@ -152,7 +152,7 @@ ul[data-type="taskList"] > li,
 }
 
 /* Label wrapping the checkbox */
-ul[data-type="taskList"] > li > label {
+ul[data-type="taskList"]>li>label {
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -212,12 +212,12 @@ ul[data-type="taskList"] li input[type="checkbox"]:checked::after {
 }
 
 /* Content div - text area next to checkbox */
-ul[data-type="taskList"] > li > div {
+ul[data-type="taskList"]>li>div {
     flex: 1;
     min-width: 0;
 }
 
-ul[data-type="taskList"] > li > div p {
+ul[data-type="taskList"]>li>div p {
     margin: 0 !important;
     line-height: 1.6;
 }
@@ -329,8 +329,8 @@ ul[data-type="taskList"] > li > div p {
     line-height: 1.5;
 }
 
-.ProseMirror td > *,
-.ProseMirror th > * {
+.ProseMirror td>*,
+.ProseMirror th>* {
     margin-bottom: 0;
 }
 
@@ -462,69 +462,81 @@ ul[data-type="taskList"] > li > div p {
 .tiptap-floating-menu,
 .tiptap-bubble-menu {
     display: flex;
-    background: var(--surface-1);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    padding: 0.25rem;
-    border-radius: 8px;
-    border: 1px solid var(--border-primary);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.05);
-    gap: 0.2rem;
-    animation: fadeIn 0.15s ease-out;
-    z-index: 50;
-    /* Ensure it stays on top */
-}
-
-
-
-/* We will style the floating menu buttons to look like a sidebar menu in the next step or keep as bar but cleaner */
-.tiptap-floating-menu {
-    background: var(--surface-1);
-    border: 1px solid var(--border-primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    padding: 4px;
-    border-radius: 8px;
+    align-items: center;
+    background: rgba(20, 20, 25, 0.85);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
     gap: 4px;
+    animation: menuFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 50;
+    font-family: 'Inter', sans-serif;
 }
 
 .tiptap-floating-menu button,
 .tiptap-bubble-menu button {
-    border: none;
+    border: 1px solid transparent;
     background: transparent;
-    color: var(--text-secondary);
-    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
     padding: 6px 8px;
-    font-size: var(--font-sm, 13px);
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    height: 28px;
+    min-width: 32px;
+    height: 32px;
 }
 
 .tiptap-floating-menu button:hover,
 .tiptap-bubble-menu button:hover {
-    background: var(--surface-3);
-    color: var(--text);
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.tiptap-floating-menu button:active,
+.tiptap-bubble-menu button:active {
+    transform: translateY(0);
 }
 
 .tiptap-floating-menu button.is-active,
 .tiptap-bubble-menu button.is-active {
-    background: var(--accent-blue-soft);
-    color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.3);
 }
 
-@keyframes fadeIn {
+.tiptap-floating-menu .divider,
+.tiptap-bubble-menu .divider {
+    width: 1px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 0 4px;
+    border-radius: 1px;
+}
+
+.tiptap-floating-menu button svg,
+.tiptap-bubble-menu button svg {
+    font-size: 14px;
+}
+
+@keyframes menuFadeIn {
     from {
         opacity: 0;
-        transform: translateY(8px);
+        transform: translateY(12px) scale(0.96);
     }
 
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
     }
 }

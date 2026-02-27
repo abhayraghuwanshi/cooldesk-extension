@@ -17,7 +17,8 @@
       "Bash(ping:*)",
       "Bash(curl:*)",
       "Bash(npm run tauri:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(cargo build:*)"
     ],
     "deny": [],
     "ask": [],

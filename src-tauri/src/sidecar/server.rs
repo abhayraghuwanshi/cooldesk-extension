@@ -10,7 +10,7 @@ use axum::{
     },
     http::{header, Method},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -71,6 +71,15 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/llm/summarize", post(llm_summarize))
         .route("/llm/group-workspaces", post(llm_group_workspaces))
         .route("/llm/suggest-related", post(llm_suggest_related))
+        .route("/llm/enhance-url", post(llm_enhance_url))
+        .route("/llm/suggest-workspaces", post(llm_suggest_workspaces))
+        .route("/llm/parse-command", post(llm_parse_command))
+        // LLM v2 Agent endpoints
+        .route("/llm/v2/sessions", get(v2_list_sessions).post(v2_create_session))
+        .route("/llm/v2/sessions/:id", get(v2_get_session).delete(v2_delete_session))
+        .route("/llm/v2/chat", post(v2_chat))
+        .route("/llm/v2/memory", get(v2_get_memory).post(v2_add_memory))
+        .route("/llm/v2/memory/clear", post(v2_clear_memory))
         .layer(cors)
         .with_state(state);
 
@@ -158,6 +167,17 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     }
 
     log::info!("[Sidecar] WebSocket client disconnected: {}", client_id);
+
+    // Automatically purge the disconnected client's tabs to display accurate live-connected counts
+    let mut data = state.sync_data.write().await;
+    let ws_device_id = format!("ws-{}", client_id);
+    if data.device_tabs_map.remove(&ws_device_id).is_some() {
+        data.tabs = recompute_aggregated_tabs(&data.device_tabs_map);
+        data.last_updated.insert("tabs".to_string(), chrono::Utc::now().timestamp_millis());
+        let tabs_payload = serde_json::to_value(&data.tabs).unwrap_or_default();
+        drop(data);
+        state.save_and_broadcast("tabs", tabs_payload).await;
+    }
 }
 
 /// Handle incoming WebSocket message
@@ -219,14 +239,15 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
         "push-tabs" => {
             if let Some(payload) = msg.payload {
-                let (tabs, device_id) = if payload.is_array() {
-                    let tabs: Vec<Tab> = serde_json::from_value(payload).unwrap_or_default();
-                    (tabs, format!("ws-{}", client_id))
+                let tabs: Vec<Tab> = if payload.is_array() {
+                    serde_json::from_value(payload).unwrap_or_default()
                 } else if let Ok(push_payload) = serde_json::from_value::<PushTabsPayload>(payload) {
-                    (push_payload.tabs, push_payload.device_id.unwrap_or_else(|| format!("ws-{}", client_id)))
+                    push_payload.tabs
                 } else {
                     return;
                 };
+
+                let device_id = format!("ws-{}", client_id);
 
                 let mut data = state.sync_data.write().await;
                 data.device_tabs_map.insert(device_id, tabs);
@@ -596,6 +617,71 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
             }
         }
 
+        "llm-suggest-workspaces" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let urls = msg.payload.as_ref()
+                .and_then(|p| p.get("urls"))
+                .unwrap_or(&serde_json::Value::Null);
+
+            let urls_json = serde_json::to_string(urls).unwrap_or_default();
+            match crate::sidecar::llm::tasks::suggest_workspaces(&urls_json).await {
+                Ok(res) => {
+                    let suggestions: Vec<String> = serde_json::from_str(&res).unwrap_or_else(|_| vec![res]);
+                    state.broadcast("llm-suggest-workspaces-response", serde_json::json!({
+                        "ok": true,
+                        "requestId": request_id,
+                        "suggestions": suggestions
+                    }));
+                }
+                Err(e) => {
+                    state.broadcast("llm-suggest-workspaces-response", serde_json::json!({
+                        "ok": false,
+                        "requestId": request_id,
+                        "error": e
+                    }));
+                }
+            }
+        }
+
+        "llm-parse-command" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let command = msg.payload.as_ref()
+                .and_then(|p| p.get("command"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let context = msg.payload.as_ref()
+                .and_then(|p| p.get("context"))
+                .unwrap_or(&serde_json::Value::Null);
+
+            let context_str = context.to_string();
+            match crate::sidecar::llm::tasks::parse_command(&command, &context_str).await {
+                Ok(res) => {
+                    let parsed: serde_json::Value = serde_json::from_str(&res).unwrap_or_else(|_| serde_json::json!({ "error": "parse_failed", "raw": res }));
+                    state.broadcast("llm-parse-command-response", serde_json::json!({
+                        "ok": true,
+                        "requestId": request_id,
+                        "parsed": parsed
+                    }));
+                }
+                Err(e) => {
+                    state.broadcast("llm-parse-command-response", serde_json::json!({
+                        "ok": false,
+                        "requestId": request_id,
+                        "error": e
+                    }));
+                }
+            }
+        }
+
         "llm-group-workspaces" => {
             let request_id = msg.payload.as_ref()
                 .and_then(|p| p.get("requestId"))
@@ -667,6 +753,49 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
                 }
                 Err(e) => {
                     state.broadcast("llm-suggest-related-response", serde_json::json!({
+                        "ok": false,
+                        "requestId": request_id,
+                        "error": e
+                    }));
+                }
+            }
+        }
+
+        "llm-enhance-url" => {
+            let request_id = msg.payload.as_ref()
+                .and_then(|p| p.get("requestId"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let title = msg.payload.as_ref()
+                .and_then(|p| p.get("title"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let url = msg.payload.as_ref()
+                .and_then(|p| p.get("url"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content_hint = msg.payload.as_ref()
+                .and_then(|p| p.get("contentHint"))
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            match crate::sidecar::llm::tasks::enhance_url(
+                &title,
+                &url,
+                content_hint.as_deref()
+            ).await {
+                Ok(result) => {
+                    state.broadcast("llm-enhance-url-response", serde_json::json!({
+                        "ok": true,
+                        "requestId": request_id,
+                        "result": result
+                    }));
+                }
+                Err(e) => {
+                    state.broadcast("llm-enhance-url-response", serde_json::json!({
                         "ok": false,
                         "requestId": request_id,
                         "error": e

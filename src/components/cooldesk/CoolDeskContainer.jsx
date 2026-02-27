@@ -45,7 +45,7 @@ export function CoolDeskContainer({
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
   const [workspacePage, setWorkspacePage] = useState(0);
   const [activeFace, setActiveFace] = useState(() => {
-    return localStorage.getItem('cooldesk-active-face') || 'overview';
+    return localStorage.getItem('cooldesk-active-face') || (isDesktopApp ? 'workspace' : 'overview');
   });
 
   // Add Modal State
@@ -456,18 +456,20 @@ export function CoolDeskContainer({
           </Face>
         )}
 
-        {/* Face 3: Overview (Center) - Always shown */}
-        <Face index="overview">
-          <OverviewDashboard
-            savedWorkspaces={savedWorkspaces}
-            onWorkspaceClick={handleOverviewClick}
-            activeWorkspaceId={currentWorkspace?.id}
-            expandedWorkspaceId={expandedWorkspace?.id}
-            onAddNote={onAddNote}
-            pinnedWorkspaces={pinnedWorkspaces}
-            onAddUrl={handleOpenAddModal}
-          />
-        </Face>
+        {/* Face 3: Overview (Center) - Extension Only */}
+        {!isDesktopApp && (
+          <Face index="overview">
+            <OverviewDashboard
+              savedWorkspaces={savedWorkspaces}
+              onWorkspaceClick={handleOverviewClick}
+              activeWorkspaceId={currentWorkspace?.id}
+              expandedWorkspaceId={expandedWorkspace?.id}
+              onAddNote={onAddNote}
+              pinnedWorkspaces={pinnedWorkspaces}
+              onAddUrl={handleOpenAddModal}
+            />
+          </Face>
+        )}
 
         {/* Face 4: Tabs (Right) - Desktop App Only */}
         {isDesktopApp && (

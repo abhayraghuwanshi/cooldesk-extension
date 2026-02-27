@@ -690,8 +690,13 @@ export function ActivityFeed() {
 
             // Add installed apps section (only in 'apps' tab to avoid clutter)
             if (activeTab === 'apps' && installedAppItems.length > 0) {
-                installedAppItems.forEach(app => {
-                    result.push(app);
+                // Pre-sort installed apps by name here
+                const sortedApps = [...installedAppItems].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                result.push({
+                    id: 'installed-apps-grid',
+                    type: 'installed-apps-grid',
+                    apps: sortedApps,
+                    timestamp: 0 // Keep at bottom
                 });
             }
         }
@@ -702,11 +707,11 @@ export function ActivityFeed() {
             if (a.type === 'running-app' && b.type !== 'running-app') return -1;
             if (b.type === 'running-app' && a.type !== 'running-app') return 1;
 
-            // Installed apps always last
-            if (a.type === 'installed-app' && b.type !== 'installed-app') return 1;
-            if (b.type === 'installed-app' && a.type !== 'installed-app') return -1;
+            // Installed apps grid always last
+            if ((a.type === 'installed-app' || a.type === 'installed-apps-grid') && (b.type !== 'installed-app' && b.type !== 'installed-apps-grid')) return 1;
+            if ((b.type === 'installed-app' || b.type === 'installed-apps-grid') && (a.type !== 'installed-app' && a.type !== 'installed-apps-grid')) return -1;
 
-            // Sort by name for installed apps
+            // Sort by name for individual installed apps if any sneak through
             if (a.type === 'installed-app' && b.type === 'installed-app') {
                 return (a.name || '').localeCompare(b.name || '');
             }
@@ -1710,6 +1715,34 @@ export function ActivityFeed() {
                                             }}>
                                                 <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22C55E' }}></div>
                                                 Running
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
+                                // Handle installed apps grid
+                                if (item.type === 'installed-apps-grid') {
+                                    return (
+                                        <div key="installed-apps" style={{ padding: '16px', borderBottom: '1px solid rgba(148, 163, 184, 0.05)' }}>
+                                            <div style={{ fontSize: '13px', fontWeight: 600, color: '#94A3B8', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                Installed Apps
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '12px' }}>
+                                                {item.apps.map(app => (
+                                                    <div key={app.id}
+                                                        onClick={async () => { if (window.electronAPI?.launchApp && app.path) await window.electronAPI.launchApp(app.path); }}
+                                                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '12px 8px', borderRadius: '12px', transition: 'all 0.2s', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)' }}
+                                                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'; }}
+                                                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)'; }}
+                                                    >
+                                                        <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(100, 116, 139, 0.15)', border: '1px solid rgba(100, 116, 139, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                            {app.icon ? <img src={app.icon} style={{ width: '24px', height: '24px', objectFit: 'contain' }} alt="" onError={e => e.target.style.display = 'none'} /> : '📦'}
+                                                        </div>
+                                                        <div style={{ fontSize: '11px', color: '#E2E8F0', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                                                            {app.name}
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
                                     );

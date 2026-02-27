@@ -1,13 +1,11 @@
 ﻿import {
   faBug,
-  faCalendarAlt,
   faCalendarCheck,
   faChevronRight,
   faClipboardList,
   faComments,
   faFile,
   faFolder,
-  faHighlighter,
   faLink,
   faListUl,
   faMicrophone,
@@ -27,9 +25,9 @@ import {
   deleteUrlNote,
   getSettings,
   listAllUrlNotes,
+  saveSettings,
   saveUrlNote
 } from '../../db/index.js';
-import { generateDailyStory } from '../../services/memory/dailyStoryService';
 import { NOTE_TEMPLATES, getTemplatesByCategory } from '../../services/noteTemplates';
 import { p2pStorage } from '../../services/p2p/storageService';
 import { teamManager } from '../../services/p2p/teamManager';
@@ -264,14 +262,41 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
       const allRegularNotes = Array.isArray(rawRegularNotes) ? rawRegularNotes : [];
       const allUrlNotes = Array.isArray(rawUrlNotes) ? rawUrlNotes : [];
 
-      // 1. Handle Default Notes (Removed - moved to Team Manager)
-      /*
-      if (allRegularNotes.length === 0 && !settings?.defaultNotesCreated) {
-        console.log('[NotesCanvas] Creating default notes...');
-        // await createDefaultNotes();
+      // 1. Handle Default Templates initialization
+      if (allRegularNotes.filter(n => n.folder === 'Templates').length === 0 && !settings?.defaultNotesCreated) {
+        console.log('[NotesCanvas] Creating default templates...');
+
+        let newNotesCount = 0;
+        for (const [key, template] of Object.entries(NOTE_TEMPLATES)) {
+          // Skip blank note
+          if (key === 'blank') continue;
+
+          try {
+            const defaultTemplateNote = {
+              id: `template_default_${key}_${Date.now()}`,
+              title: template.name,
+              text: template.getContent(),
+              folder: 'Templates',
+              type: 'richtext',
+              createdAt: Date.now(),
+              updatedAt: Date.now()
+            };
+            await dbUpsertNote(defaultTemplateNote);
+            allRegularNotes.push(defaultTemplateNote);
+            newNotesCount++;
+          } catch (e) {
+            console.error('[NotesCanvas] failed to save default template', key, e);
+          }
+        }
+
+        // Mark as created so we don't do this again
         await saveSettings({ ...settings, defaultNotesCreated: true });
+
+        // Trigger a sync if we created notes
+        if (newNotesCount > 0) {
+          syncOrchestrator.syncNotes().catch(() => { });
+        }
       }
-      */
 
       // 2. Process Regular Notes (Desktop/Workspace notes)
       const workspaceNotes = allRegularNotes.filter(note => {
@@ -394,22 +419,37 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
 
           let newNotesCount = 0;
 
+          // Get the current notes to check against for duplicates
+          const currentNotes = notes;
+
           for (const item of newItems) {
             if (item.type === 'NOTE_SHARE' && item.payload) {
               try {
                 const note = item.payload;
-                // Import shared note as a new copy
-                const importedNote = {
-                  ...note,
-                  id: `${Date.now()}_shared_${Math.random().toString(36).slice(2, 6)}`,
-                  title: `(Shared) ${note.title || 'Untitled'}`,
-                  folder: 'Shared with Me', // Put in a specific folder
-                  createdAt: Date.now(),
-                  updatedAt: Date.now()
-                };
 
-                await dbUpsertNote(importedNote);
-                newNotesCount++;
+                // Create a deterministic deterministic ID for the shared note
+                const sharedNoteId = `shared_${note.id || Math.random().toString(36).slice(2, 6)}`;
+
+                // Check if we already have this shared note imported
+                const alreadyImported = currentNotes.some(n =>
+                  n.id === sharedNoteId ||
+                  (n.folder === 'Shared with Me' && n.title === `(Shared) ${note.title || 'Untitled'}`)
+                );
+
+                if (!alreadyImported) {
+                  // Import shared note as a new copy
+                  const importedNote = {
+                    ...note,
+                    id: sharedNoteId,
+                    title: `(Shared) ${note.title || 'Untitled'}`,
+                    folder: 'Shared with Me', // Put in a specific folder
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                  };
+
+                  await dbUpsertNote(importedNote);
+                  newNotesCount++;
+                }
               } catch (e) {
                 console.error('[NotesCanvas] Error saving shared note:', e);
               }
@@ -476,25 +516,23 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
 
   // Consolidated data loading logic moved up to avoid TDZ issues
 
-  // Derived folders list with URL Notes, Highlights, and Daily Stories special folders
+  // Derived folders list with Special folders first
   const folders = useMemo(() => [
     'All Notes',
-    'Daily Stories',
-    ...new Set(notes.map(n => n.folder).filter(Boolean).filter(f => f.trim() !== '' && f !== 'Daily Stories')),
-    'Highlights',
-    'URL Notes'
+    'Templates',
+    ...new Set(notes.map(n => n.folder).filter(Boolean).filter(f => f.trim() !== '' && f !== 'Templates')),
   ].sort((a, b) => {
     // Keep "All Notes" first
     if (a === 'All Notes') return -1;
     if (b === 'All Notes') return 1;
 
-    // Keep "Highlights" and "URL Notes" at the bottom
-    const specialFolders = ['Highlights', 'URL Notes'];
+    // Keep Special folders at top
+    const specialFolders = ['Templates'];
     const aSpecial = specialFolders.includes(a);
     const bSpecial = specialFolders.includes(b);
 
-    if (aSpecial && !bSpecial) return 1;
-    if (!aSpecial && bSpecial) return -1;
+    if (aSpecial && !bSpecial) return -1;
+    if (!aSpecial && bSpecial) return 1;
 
     if (aSpecial && bSpecial) {
       // Sort special folders among themselves
@@ -509,7 +547,7 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
     // Get unique folders from regular notes, excluding empty/null
     const workspaceFolders = [...new Set(notes.map(n => n.folder || 'Uncategorized'))].sort();
     // Ensure Uncategorized is last
-    const sortedFolders = workspaceFolders.filter(f => f !== 'Uncategorized' && f !== 'Daily Stories');
+    const sortedFolders = workspaceFolders.filter(f => f !== 'Uncategorized' && f !== 'Templates');
     if (workspaceFolders.includes('Uncategorized')) sortedFolders.push('Uncategorized');
     return sortedFolders;
   }, [notes]);
@@ -1233,11 +1271,11 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
             </div>
 
             <div className="notes-list custom-scrollbar" style={{ padding: '0 12px 12px' }}>
-              {/* Special Folder: Highlights */}
+              {/* Special Folder: Templates */}
               <div className="folder-group">
                 <div
-                  className={`folder-header ${expandedFolders.has('Highlights') ? 'expanded' : ''}`}
-                  onClick={() => toggleFolder('Highlights')}
+                  className={`folder-header ${expandedFolders.has('Templates') ? 'expanded' : ''}`}
+                  onClick={() => toggleFolder('Templates')}
                   style={{
                     padding: '8px 10px',
                     display: 'flex',
@@ -1245,145 +1283,52 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
                     gap: '8px',
                     cursor: 'pointer',
                     borderRadius: '8px',
-                    color: activeFolder === 'Highlights' ? 'var(--accent-blue)' : '#e2e8f0',
+                    color: activeFolder === 'Templates' ? 'var(--accent-blue)' : '#e2e8f0',
                     fontWeight: 600,
                     fontSize: 'var(--font-sm)',
                     userSelect: 'none'
                   }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
                   <FontAwesomeIcon
                     icon={faChevronRight}
                     style={{
                       fontSize: 'var(--font-xs)',
                       transition: 'transform 0.2s',
-                      transform: expandedFolders.has('Highlights') ? 'rotate(90deg)' : 'rotate(0deg)',
+                      transform: expandedFolders.has('Templates') ? 'rotate(90deg)' : 'rotate(0deg)',
                       opacity: 0.7
                     }}
                   />
-                  <FontAwesomeIcon icon={faHighlighter} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
-                  <span style={{ flex: 1 }}>Highlights</span>
-                  <span className="note-count">{groupedHighlights.length}</span>
-                </div>
-                {expandedFolders.has('Highlights') && (
-                  <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    {groupedHighlights.length === 0 ? (
-                      <div style={{ padding: '8px', fontSize: 'var(--font-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>No highlights</div>
-                    ) : (
-                      groupedHighlights.map(group => (
-                        <SidebarNoteItem
-                          key={group.id}
-                          note={{
-                            ...group,
-                            text: `${group.count} highlights`, // Preview text
-                            type: 'group' // Special type for styling if needed
-                          }}
-                          isActive={activeNote?.id === group.id}
-                          onSelect={() => handleGroupSelect(group)}
-                          onDelete={() => { /* No-op for group delete for now */ }}
-                        />
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
+                  <FontAwesomeIcon icon={faClipboardList} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
+                  <span style={{ flex: 1 }}>Templates</span>
 
-              {/* Special Folder: Daily Stories */}
-              <div className="folder-group">
-                <div
-                  className={`folder-header ${expandedFolders.has('Daily Stories') ? 'expanded' : ''}`}
-                  onClick={() => toggleFolder('Daily Stories')}
-                  style={{
-                    padding: '8px 10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    cursor: 'pointer',
-                    borderRadius: '8px',
-                    color: activeFolder === 'Daily Stories' ? 'var(--accent-blue)' : '#e2e8f0',
-                    fontWeight: 600,
-                    fontSize: 'var(--font-sm)',
-                    userSelect: 'none'
-                  }}
-                >
-                  <FontAwesomeIcon
-                    icon={faChevronRight}
+                  {/* Add Template Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      createNewNoteInFolder('Templates');
+                    }}
+                    className="folder-add-btn"
                     style={{
-                      fontSize: 'var(--font-xs)',
-                      transition: 'transform 0.2s',
-                      transform: expandedFolders.has('Daily Stories') ? 'rotate(90deg)' : 'rotate(0deg)',
-                      opacity: 0.7
+                      background: 'none',
+                      border: 'none',
+                      color: 'inherit',
+                      padding: '4px',
+                      cursor: 'pointer',
+                      opacity: 0,
+                      transition: 'opacity 0.2s',
+                      marginRight: '4px'
                     }}
-                  />
-                  <FontAwesomeIcon icon={faCalendarAlt} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
-                  <span style={{ flex: 1 }}>Daily Stories</span>
+                    title="Create New Template"
+                  >
+                    <FontAwesomeIcon icon={faPlus} style={{ fontSize: 'var(--font-xs)' }} />
+                  </button>
+                  <span className="note-count">{notes.filter(n => n.folder === 'Templates').length}</span>
                 </div>
-                {expandedFolders.has('Daily Stories') && (
+                {expandedFolders.has('Templates') && (
                   <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    {getAvailableStoryDates().map(dateStr => {
-                      // Check if a note already exists for this date to show checkmark or difference?
-                      // For now just list dates
-                      const hasNote = notes.some(n => n.folder === 'Daily Stories' && n.title.includes(dateStr));
-                      const displayDate = new Date(dateStr).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-                      const label = (new Date(dateStr).toDateString() === new Date().toDateString()) ? 'Today' :
-                        (new Date(dateStr).toDateString() === new Date(Date.now() - 86400000).toDateString()) ? 'Yesterday' : displayDate;
-
-                      return (
-                        <div
-                          key={dateStr}
-                          className={`notes-list-item ${activeNote?.title?.includes(dateStr) ? 'active' : ''}`}
-                          onClick={() => handleDaySelect(dateStr)}
-                          style={{ cursor: 'pointer', opacity: hasNote ? 1 : 0.7 }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <FontAwesomeIcon icon={faCalendarAlt} style={{ fontSize: '12px', opacity: 0.5 }} />
-                            <span>{label}</span>
-                            {!hasNote && <span style={{ fontSize: '9px', opacity: 0.5, border: '1px solid currentColor', borderRadius: '4px', padding: '0 2px' }}>GENERATE</span>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Special Folder: URL Notes */}
-              <div className="folder-group">
-                <div
-                  className={`folder-header ${expandedFolders.has('URL Notes') ? 'expanded' : ''}`}
-                  onClick={() => toggleFolder('URL Notes')}
-                  style={{
-                    padding: '8px 10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    cursor: 'pointer',
-                    borderRadius: '8px',
-                    color: activeFolder === 'URL Notes' ? 'var(--accent-blue)' : '#e2e8f0',
-                    fontWeight: 600,
-                    fontSize: 'var(--font-sm)',
-                    userSelect: 'none'
-                  }}
-                >
-                  <FontAwesomeIcon
-                    icon={faChevronRight}
-                    style={{
-                      fontSize: 'var(--font-xs)',
-                      transition: 'transform 0.2s',
-                      transform: expandedFolders.has('URL Notes') ? 'rotate(90deg)' : 'rotate(0deg)',
-                      opacity: 0.7
-                    }}
-                  />
-                  <FontAwesomeIcon icon={faLink} style={{ fontSize: 'var(--font-base)', opacity: 0.8 }} />
-                  <span style={{ flex: 1 }}>URL Notes</span>
-                  <span className="note-count">{urlNotes.length}</span>
-                </div>
-                {expandedFolders.has('URL Notes') && (
-                  <div className="folder-notes" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    {urlNotes.length === 0 ? (
-                      <div style={{ padding: '8px', fontSize: 'var(--font-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>No URL notes</div>
-                    ) : (
-                      urlNotes.map(note => renderSidebarNoteItem(note))
-                    )}
+                    {notes.filter(n => n.folder === 'Templates').map(note => renderSidebarNoteItem(note))}
                   </div>
                 )}
               </div>
@@ -1702,68 +1647,6 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.05)',
                 overflow: 'hidden'
               }}>
-                {/* Regenerate Story Button (Only for Daily Stories) */}
-                {activeNote?.folder === 'Daily Stories' && (
-                  <button
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={async () => {
-                      if (confirm('Regenerate this daily story with AI insights? Any manual edits will be lost.')) {
-                        // Extract date from title "Story - YYYY-MM-DD"
-                        const dateMatch = activeNote.title.match(/Story - (.*)/);
-                        if (dateMatch) {
-                          const dateStr = dateMatch[1];
-                          setLoading(true);
-                          try {
-                            const newHtml = await generateDailyStory(dateStr);
-                            if (newHtml) {
-                              handleContentChange(newHtml);
-                              setNoteContent(newHtml);
-                              // Update the note in DB
-                              await dbUpsertNote({
-                                ...activeNote,
-                                text: newHtml,
-                                updatedAt: Date.now()
-                              });
-                            }
-                          } finally {
-                            setLoading(false);
-                          }
-                        }
-                      }
-                    }}
-                    title="Regenerate Story with AI"
-                    style={{
-                      position: 'absolute',
-                      top: '12px',
-                      right: '52px', // Left of mic button
-                      zIndex: 10,
-                      padding: '8px',
-                      borderRadius: '50%',
-                      background: 'var(--surface-3)',
-                      border: '1px solid var(--border-primary)',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      width: '32px',
-                      height: '32px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = 'var(--accent-blue)';
-                      e.currentTarget.style.borderColor = 'var(--accent-blue)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = 'var(--text-secondary)';
-                      e.currentTarget.style.borderColor = 'var(--border-primary)';
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faSync} />
-                  </button>
-                )}
-
                 {/* Voice Mic Button (Floating or Integrated) */}
                 <button
                   onMouseDown={(e) => e.preventDefault()}
@@ -1989,6 +1872,57 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
 
             {/* Template Grid */}
             <div className="template-picker-content">
+              {/* Custom Templates */}
+              {notes.filter(n => n.folder === 'Templates').length > 0 && (
+                <div className="template-category">
+                  <div className="template-category-header">
+                    <span className="template-category-name">My Custom Templates</span>
+                    <span className="template-category-count">{notes.filter(n => n.folder === 'Templates').length}</span>
+                  </div>
+                  <div className="template-grid">
+                    {notes.filter(n => n.folder === 'Templates').map(template => (
+                      <button
+                        key={template.id}
+                        className="template-card"
+                        onClick={() => {
+                          // Apply custom template content
+                          setActiveNote(null);
+                          setNoteContent(template.text || '');
+                          setNoteTitle(template.title || 'Untitled');
+                          setNoteUrl('');
+                          setNoteFolder(pendingTemplateFolder || '');
+                          setAutoSaveStatus('idle');
+                          setIsEditing(true);
+                          setShowTemplatePicker(false);
+                          setPendingTemplateFolder(null);
+
+                          setTimeout(() => {
+                            editorRef.current?.focus();
+                          }, 100);
+                        }}
+                      >
+                        <div className="template-card-icon" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
+                          <FontAwesomeIcon icon={faStickyNote} />
+                        </div>
+                        <div className="template-card-content">
+                          <span className="template-card-name">
+                            {template.title || 'Untitled Template'}
+                          </span>
+                          <span className="template-card-desc">
+                            Custom workspace template
+                          </span>
+                        </div>
+                        <div className="template-card-arrow">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M9 18l6-6-6-6" />
+                          </svg>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {Object.entries(getTemplatesByCategory()).map(([catId, category]) => (
                 <div key={catId} className="template-category">
                   <div className="template-category-header">
