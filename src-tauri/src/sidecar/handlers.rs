@@ -3,6 +3,7 @@
 use crate::sidecar::data::*;
 use crate::sidecar::storage::{save_data, ChangeTracker};
 use crate::sidecar::sync::*;
+use crate::system::RunningApp;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -175,6 +176,18 @@ pub async fn get_activity(
         data.activity.clone()
     };
     Json(activity)
+}
+
+pub async fn get_focused_app() -> Json<serde_json::Value> {
+    if let Some(app) = crate::system::get_focused_app_info().await {
+        Json(serde_json::to_value(app).unwrap_or(serde_json::Value::Null))
+    } else {
+        Json(serde_json::Value::Null)
+    }
+}
+
+pub async fn get_visible_apps() -> Json<Vec<RunningApp>> {
+    Json(crate::system::get_visible_apps_info().await)
 }
 
 // ==========================================

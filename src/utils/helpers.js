@@ -66,11 +66,25 @@ export const safeGetHostname = (url) => {
 };
 
 export const getBaseDomainFromUrl = (url) => {
+  if (!url) return 'Unknown';
   try {
-    const hostname = new URL(url).hostname;
-    return getBaseDomain(hostname);
+    const u = new URL(url);
+    if (u.protocol === 'file:') return 'Local Files';
+    if (u.protocol === 'chrome:' || u.protocol === 'edge:' || u.protocol === 'about:') return 'System';
+
+    // Handle IP addresses and localhost
+    const hostname = u.hostname;
+    if (!hostname) return 'Local';
+
+    const base = getBaseDomain(hostname);
+    return base || hostname || 'Other';
   } catch {
-    return 'unknown';
+    // Try safe extraction
+    const hostname = safeGetHostname(url);
+    if (hostname && hostname !== 'unknown') {
+      return getBaseDomain(hostname) || hostname;
+    }
+    return 'Other';
   }
 };
 

@@ -384,7 +384,7 @@ export const TabGroupCard = memo(function TabGroupCard({ domain, tabs = [], onTo
         </div>
         <div className="tab-group-info">
           <div className="tab-group-domain">
-            {domain}
+            {domain || 'Other'}
           </div>
           <div className="tab-group-subtitle">
             {topTab.title || 'Untitled'}

@@ -4,192 +4,20 @@ use serde::Serialize;
 use tauri::Manager; // Import Manager trait
 use std::collections::HashMap;
 
-// Rust sidecar server module
 mod sidecar;
+mod system;
 
-#[derive(Serialize, Clone)]
-struct RunningApp {
-    id: String,
-    name: String,
-    title: String,
-    path: String,
-    pid: u32,
-    icon: Option<String>,
-}
+use system::RunningApp;
 
-#[cfg(target_os = "windows")]
-mod windows_taskbar {
-    use std::collections::HashMap;
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindow, GetWindowLongW, GetWindowTextLengthW, GetWindowTextW,
-        GetWindowThreadProcessId, IsWindowVisible, GWL_EXSTYLE, GW_OWNER,
-        WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
-    };
 
-    pub struct TaskbarWindow {
-        pub pid: u32,
-        pub title: String,
-    }
-
-    struct EnumData {
-        windows: Vec<TaskbarWindow>,
-    }
-
-    unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
-        let data = &mut *(lparam.0 as *mut EnumData);
-
-        // Check if window is visible
-        if !IsWindowVisible(hwnd).as_bool() {
-            return BOOL(1);
-        }
-
-        let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
-
-        // Skip tool windows unless they have APPWINDOW style
-        if (ex_style & WS_EX_TOOLWINDOW.0) != 0 && (ex_style & WS_EX_APPWINDOW.0) == 0 {
-            return BOOL(1);
-        }
-
-        // Skip owned windows unless they have APPWINDOW style
-        if let Ok(owner) = GetWindow(hwnd, GW_OWNER) {
-            if owner.0 != std::ptr::null_mut() && (ex_style & WS_EX_APPWINDOW.0) == 0 {
-                return BOOL(1);
-            }
-        }
-
-        // Skip windows with empty titles
-        let title_len = GetWindowTextLengthW(hwnd);
-        if title_len == 0 {
-            return BOOL(1);
-        }
-
-        // Get window title
-        let mut buffer: Vec<u16> = vec![0; (title_len + 1) as usize];
-        let len = GetWindowTextW(hwnd, &mut buffer);
-        let title = OsString::from_wide(&buffer[..len as usize])
-            .to_string_lossy()
-            .to_string();
-
-        // Get process ID
-        let mut pid: u32 = 0;
-        GetWindowThreadProcessId(hwnd, Some(&mut pid));
-
-        if pid > 0 {
-            data.windows.push(TaskbarWindow { pid, title });
-        }
-
-        BOOL(1)
-    }
-
-    pub fn get_taskbar_windows() -> HashMap<u32, String> {
-        let mut data = EnumData { windows: Vec::new() };
-
-        unsafe {
-            let _ = EnumWindows(
-                Some(enum_callback),
-                LPARAM(&mut data as *mut EnumData as isize),
-            );
-        }
-
-        // Deduplicate by PID, keeping the longest title
-        let mut result: HashMap<u32, String> = HashMap::new();
-        for win in data.windows {
-            result
-                .entry(win.pid)
-                .and_modify(|existing| {
-                    if win.title.len() > existing.len() {
-                        *existing = win.title.clone();
-                    }
-                })
-                .or_insert(win.title);
-        }
-        result
-    }
+#[tauri::command]
+async fn get_focused_app() -> Option<RunningApp> {
+    system::get_focused_app_info().await
 }
 
 #[tauri::command]
 async fn get_running_apps() -> Vec<RunningApp> {
-    #[cfg(target_os = "windows")]
-    {
-        // Get taskbar-visible window PIDs
-        let taskbar_windows = windows_taskbar::get_taskbar_windows();
-
-        if taskbar_windows.is_empty() {
-            return Vec::new();
-        }
-
-        let mut sys = System::new_all();
-        sys.refresh_all();
-
-        // Filter processes to only those with taskbar windows
-        let mut apps: HashMap<String, RunningApp> = HashMap::new();
-
-        for (pid, process) in sys.processes() {
-            let pid_u32 = pid.as_u32();
-            if let Some(window_title) = taskbar_windows.get(&pid_u32) {
-                let name = process.name().to_string();
-                let name_lower = name.to_lowercase();
-
-                // Normalize name by removing .exe suffix for comparison
-                let name_normalized = name_lower.trim_end_matches(".exe");
-
-                // Skip known system/helper processes
-                if name_normalized.contains("helper") || name_normalized.contains("renderer") ||
-                   name_normalized.contains("broker") || name_normalized.contains("crashpad") ||
-                   name_normalized == "applicationframehost" || name_normalized == "textinputhost" ||
-                   name_normalized == "shellexperiencehost" || name_normalized == "searchhost" ||
-                   name_normalized == "systemsettings" || name_normalized == "lockapp" ||
-                   name_normalized == "startmenuexperiencehost" || name_normalized == "runtimebroker" ||
-                   name_normalized == "smartscreen" || name_normalized == "securityhealthsystray" ||
-                   name_normalized == "ctfmon" || name_normalized == "conhost" ||
-                   name_normalized == "searchui" || name_normalized == "sihost" ||
-                   name_normalized == "taskhostw" || name_normalized == "dwm" ||
-                   name_normalized.starts_with("msedgewebview2") {
-                    continue;
-                }
-
-                // Deduplicate by app name, keep the one with better title
-                let entry = apps.entry(name_lower.clone()).or_insert_with(|| RunningApp {
-                    id: format!("app-{}", pid_u32),
-                    name: name.clone(),
-                    title: window_title.clone(),
-                    path: process.exe().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
-                    pid: pid_u32,
-                    icon: None,
-                });
-
-                // Update if this instance has a longer title
-                if window_title.len() > entry.title.len() {
-                    entry.title = window_title.clone();
-                    entry.pid = pid_u32;
-                    entry.id = format!("app-{}", pid_u32);
-                }
-            }
-        }
-
-        apps.into_values().collect()
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // Fallback for non-Windows: return all processes (original behavior)
-        let mut sys = System::new_all();
-        sys.refresh_all();
-
-        sys.processes().iter().map(|(pid, process)| {
-            RunningApp {
-                id: pid.to_string(),
-                name: process.name().to_string(),
-                title: process.name().to_string(),
-                path: process.exe().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
-                pid: pid.as_u32(),
-                icon: None,
-            }
-        }).collect()
-    }
+    system::get_visible_apps_info().await
 }
 
 #[tauri::command]
@@ -285,7 +113,8 @@ pub fn run() {
         focus_window,
         toggle_spotlight,
         hide_spotlight,
-        launch_app
+        launch_app,
+        get_focused_app
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

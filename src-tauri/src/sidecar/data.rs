@@ -39,6 +39,10 @@ pub struct SyncData {
     /// Device tabs map - NOT persisted (transient)
     #[serde(skip)]
     pub device_tabs_map: HashMap<String, Vec<Tab>>,
+
+    /// Map of WebSocket client_id to the device_id they are using
+    #[serde(skip)]
+    pub client_to_device: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

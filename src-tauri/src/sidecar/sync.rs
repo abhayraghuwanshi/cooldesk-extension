@@ -164,17 +164,43 @@ pub fn merge_workspaces_by_name(local: Vec<Workspace>, remote: Vec<Workspace>) -
 /// Recompute aggregated tabs from device tabs map
 pub fn recompute_aggregated_tabs(device_tabs_map: &HashMap<String, Vec<Tab>>) -> Vec<Tab> {
     let mut all_tabs = Vec::new();
+    let mut seen = std::collections::HashSet::new();
 
-    for (device_id, tabs) in device_tabs_map {
-        for tab in tabs {
-            let mut tab_with_device = tab.clone();
-            tab_with_device.device_id = Some(device_id.clone());
-            all_tabs.push(tab_with_device);
+    // Sort device IDs to ensure deterministic aggregation
+    // Prioritize persistent device IDs (e.g., "chrome-xxx") over transient ones ("ws-client-xxx")
+    let mut device_ids: Vec<_> = device_tabs_map.keys().collect();
+    device_ids.sort_by(|a, b| {
+        let a_transient = a.starts_with("ws-client-");
+        let b_transient = b.starts_with("ws-client-");
+        if a_transient != b_transient {
+            return a_transient.cmp(&b_transient); // false (persistent) before true (transient)
+        }
+        a.cmp(b)
+    });
+
+    for device_id in device_ids {
+        if let Some(tabs) = device_tabs_map.get(device_id) {
+            for tab in tabs {
+                // Deduplication key: browser + tab_id + url
+                // This handles cases where the same logical session is reported by multiple connections
+                let key = (
+                    tab.browser.as_deref().unwrap_or(""),
+                    tab.id,
+                    &tab.url
+                );
+
+                if !seen.contains(&key) {
+                    let mut tab_with_device = tab.clone();
+                    tab_with_device.device_id = Some(device_id.clone());
+                    all_tabs.push(tab_with_device);
+                    seen.insert(key);
+                }
+            }
         }
     }
 
     log::info!(
-        "[Sidecar] Recomputed tabs: {} total from {} devices",
+        "[Sidecar] Recomputed tabs: {} total (after dedupe) from {} devices",
         all_tabs.len(),
         device_tabs_map.len()
     );

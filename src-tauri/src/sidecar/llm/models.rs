@@ -180,7 +180,6 @@ pub async fn download_model(name: &str) -> Result<String, String> {
     // Download using reqwest
     match reqwest::get(&url).await {
         Ok(response) => {
-            let total_size = response.content_length().unwrap_or(0);
             let bytes = response.bytes().await
                 .map_err(|e| format!("Download failed: {}", e))?;
 

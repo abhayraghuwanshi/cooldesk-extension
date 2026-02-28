@@ -29,6 +29,67 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     // Create shared state
     let state = Arc::new(AppState::new(ws_tx.clone()));
 
+    // Start background app activity tracking
+    let tracker_state = state.clone();
+    tokio::spawn(async move {
+        let mut last_visible_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+        
+        loop {
+            interval.tick().await;
+            
+            let visible_apps = crate::system::get_visible_apps_info().await;
+            let mut current_visible_set = std::collections::HashSet::new();
+            let mut newly_visible = Vec::new();
+            
+            for app in visible_apps {
+                if crate::system::is_browser(&app.name) { continue; }
+                
+                let app_identity = format!("{}:{}", app.name, app.title);
+                current_visible_set.insert(app_identity.clone());
+                
+                if !last_visible_set.contains(&app_identity) {
+                    newly_visible.push(app);
+                }
+            }
+
+            if !newly_visible.is_empty() {
+                let now = chrono::Utc::now().timestamp_millis();
+                let mut activities = Vec::new();
+
+                for app in newly_visible {
+                    let activity = Activity {
+                        id: Some(format!("activity-{}", now)),
+                        timestamp: Some(now),
+                        activity_type: Some("app".to_string()),
+                        url: Some(app.path.clone()),
+                        title: Some(app.title.clone()),
+                        created_at: Some(now),
+                        updated_at: Some(now),
+                    };
+                    activities.push(activity);
+                }
+
+                // Update state and broadcast
+                {
+                    let mut data = tracker_state.sync_data.write().await;
+                    for act in &activities {
+                        data.activity.push(act.clone());
+                    }
+                    // Keep last 1000
+                    if data.activity.len() > 1000 {
+                        let to_remove = data.activity.len() - 1000;
+                        data.activity.drain(0..to_remove);
+                    }
+                }
+
+                tracker_state.broadcast("activity-updated", serde_json::to_value(activities).unwrap_or_default());
+            }
+
+            last_visible_set = current_visible_set;
+        }
+    });
+
     // CORS configuration
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -45,6 +106,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/tabs", get(get_tabs).post(post_tabs))
         .route("/settings", get(get_settings).post(post_settings))
         .route("/activity", get(get_activity).post(post_activity))
+        .route("/activity/focused", get(get_focused_app))
+        .route("/activity/visible", get(get_visible_apps))
         .route("/notes", get(get_notes).post(post_notes))
         .route("/url-notes", get(get_url_notes).post(post_url_notes))
         .route("/pins", get(get_pins).post(post_pins))
@@ -140,7 +203,6 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     }
 
     // Spawn task to forward broadcasts to this client
-    let client_id_clone = client_id.clone();
     let mut send_task = tokio::spawn(async move {
         while let Ok(msg) = broadcast_rx.recv().await {
             if sender.send(Message::Text(msg.into())).await.is_err() {
@@ -171,7 +233,16 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
     // Automatically purge the disconnected client's tabs to display accurate live-connected counts
     let mut data = state.sync_data.write().await;
     let ws_device_id = format!("ws-{}", client_id);
-    if data.device_tabs_map.remove(&ws_device_id).is_some() {
+    let mut removed = data.device_tabs_map.remove(&ws_device_id).is_some();
+    
+    // Also remove via persistent device_id if we have a mapping
+    if let Some(p_id) = data.client_to_device.remove(&client_id) {
+        if data.device_tabs_map.remove(&p_id).is_some() {
+            removed = true;
+        }
+    }
+
+    if removed {
         data.tabs = recompute_aggregated_tabs(&data.device_tabs_map);
         data.last_updated.insert("tabs".to_string(), chrono::Utc::now().timestamp_millis());
         let tabs_payload = serde_json::to_value(&data.tabs).unwrap_or_default();
@@ -239,17 +310,19 @@ async fn handle_ws_message(state: &Arc<AppState>, client_id: &str, text: &str) {
 
         "push-tabs" => {
             if let Some(payload) = msg.payload {
-                let tabs: Vec<Tab> = if payload.is_array() {
-                    serde_json::from_value(payload).unwrap_or_default()
-                } else if let Ok(push_payload) = serde_json::from_value::<PushTabsPayload>(payload) {
-                    push_payload.tabs
+                let (tabs, device_id) = if payload.is_array() {
+                    (serde_json::from_value::<Vec<Tab>>(payload.clone()).unwrap_or_default(), format!("ws-{}", client_id))
+                } else if let Ok(push_payload) = serde_json::from_value::<PushTabsPayload>(payload.clone()) {
+                    let d_id = push_payload.device_id.unwrap_or_else(|| format!("ws-{}", client_id));
+                    (push_payload.tabs, d_id)
                 } else {
                     return;
                 };
 
-                let device_id = format!("ws-{}", client_id);
-
                 let mut data = state.sync_data.write().await;
+                // Track this client's device association for reliable cleanup on disconnect
+                data.client_to_device.insert(client_id.to_string(), device_id.clone());
+                
                 data.device_tabs_map.insert(device_id, tabs);
                 data.tabs = recompute_aggregated_tabs(&data.device_tabs_map);
                 data.last_updated.insert("tabs".to_string(), chrono::Utc::now().timestamp_millis());

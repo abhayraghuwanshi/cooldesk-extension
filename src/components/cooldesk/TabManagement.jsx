@@ -147,7 +147,6 @@ export function TabManagement() {
       // 2. Extension Mode: Fetch from Chrome API
       else if (chrome?.tabs?.query) {
         const rawTabs = await chrome.tabs.query({});
-        // Add browser field to each tab (current browser)
         allTabs = rawTabs.map(tab => ({
           ...tab,
           browser: tab.browser || CURRENT_BROWSER
@@ -158,17 +157,38 @@ export function TabManagement() {
       setTabsLoading(false);
       initialLoadDone.current = true;
 
-      if (!allTabs?.length) {
+      // Deduplicate by browser+id+url to handle any sidecar sync artifacts
+      // Also filter out common placeholder/empty tabs to reduce noise
+      const seen = new Set();
+      const uniqueTabs = allTabs.filter(tab => {
+        if (!tab || !tab.url) return false;
+
+        // Filter out empty system tabs
+        const url = tab.url.toLowerCase();
+        if (url === 'about:blank' ||
+          url === 'chrome://newtab/' ||
+          url === 'edge://newtab/' ||
+          url.startsWith('chrome-extension://') && url.includes('index.html')) {
+          return false;
+        }
+
+        const key = `${tab.browser || 'other'}-${tab.id}-${tab.url}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      if (!uniqueTabs?.length) {
         setTabs([]);
         return;
       }
 
-      // Show tabs IMMEDIATELY
-      setTabs(allTabs);
+      // Show UNIQUE tabs IMMEDIATELY
+      setTabs(uniqueTabs);
 
       // Then sort in background if smart sort enabled
       if (smartSortEnabled) {
-        const sorted = await scoreAndSortTabs(allTabs);
+        const sorted = await scoreAndSortTabs(uniqueTabs);
         setTabs(sorted);
       }
     } catch (error) {

@@ -97,7 +97,15 @@ export function WorkspaceList({
 
         const unsubscribe = runningAppsService.subscribe(({ runningApps: running, installedApps: installed }) => {
             if (Array.isArray(installed)) {
-                setInstalledApps(installed);
+                // Deduplicate by name and path to ensure clean list
+                const seen = new Set();
+                const uniqueApps = installed.filter(app => {
+                    const key = `${app.name || ''}-${app.path || ''}`;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+                setInstalledApps(uniqueApps);
             }
 
             if (Array.isArray(running)) {
@@ -609,7 +617,7 @@ export function WorkspaceList({
                                         gap: '8px'
                                     }}>
                                         {activeMode === 'all' ? 'All Urls' : modeConfigs[activeMode].label}
-                                        ({activeMode === 'apps' ? runningApps.length + installedApps.length : filteredUnpinned.length})
+                                        ({activeMode === 'apps' ? installedApps.length : filteredUnpinned.length})
                                         {isSortingByActivity && isCalculatingScores && activeMode !== 'apps' && (
                                             <span style={{
                                                 fontSize: '11px',
@@ -699,22 +707,10 @@ export function WorkspaceList({
 
                                 {activeMode === 'apps' ? (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
-                                        {runningApps.length > 0 && (
-                                            <div>
-                                                <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#94A3B8', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Running Apps</h4>
-                                                <div
-                                                    className={viewMode === 'list' ? 'cooldesk-list-view' : ''}
-                                                    style={viewMode === 'grid' ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' } : { display: 'flex', flexDirection: 'column', gap: '4px' }}
-                                                >
-                                                    {runningApps.map(app => renderAppCard(app, true))}
-                                                </div>
-                                            </div>
-                                        )}
-
                                         <div>
                                             <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#94A3B8', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Installed Apps</h4>
                                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '12px' }}>
-                                                {installedApps.filter(app => !runningApps.find(r => r.name === app.name)).slice(0, 50).map(app => (
+                                                {installedApps.slice(0, 50).map(app => (
                                                     <div
                                                         key={app.id || app.name}
                                                         onClick={async () => { if (window.electronAPI?.launchApp && app.path) await window.electronAPI.launchApp(app.path); }}
