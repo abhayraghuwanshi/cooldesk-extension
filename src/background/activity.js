@@ -526,10 +526,9 @@ async function accumulateTime(url, now = Date.now(), forcedDelta = null) {
 
     if (!sessionEvent) return;
 
-    // Apply time weight for session tracking too
-    const timeWeight = isCurrentlyActive ? 1.0 : 0.3;
-    const weightedDelta = Math.floor(delta * timeWeight);
-
+    // FIXED: Use the SAME weightedDelta from above (line 480) - don't apply weight twice!
+    // Previously this was applying 0.3x weight AGAIN after 0.5x was already applied above,
+    // resulting in background audio getting only 15% of actual time (0.5 * 0.3 = 0.15)
     sessionEvent.timeSpent += weightedDelta;
     sessionEvent.lastSeen = now;
 
@@ -944,10 +943,16 @@ export async function handleActivityMessage(msg, sender) {
                 // because accumulateTime() normally only runs for currentActive.url unless triggered here
                 if (sessionEvent.hasAudio && currentActive.url !== sender.tab.url) {
                     // Force accumulation for this background tab with a fixed delta (heartbeat interval)
-                    // timeWeight will be determined by activity logic (0.5 for background)
-                    const fakeNow = Date.now();
-                    const heartbeatInterval = 5000; // Standard heartbeat
-                    accumulateTime(sender.tab.url, fakeNow, heartbeatInterval);
+                    // timeWeight of 0.5 will be applied for background audio (see line ~479)
+                    // After fix: this is the ONLY place weight is applied (removed double-weighting)
+                    const heartbeatInterval = 5000; // Standard heartbeat = 5 seconds
+                    accumulateTime(sender.tab.url, Date.now(), heartbeatInterval);
+                }
+
+                // Also update activityData directly to ensure hasAudio state is tracked
+                if (activityData[cleaned]) {
+                    activityData[cleaned].hasAudio = sessionEvent.hasAudio;
+                    activityData[cleaned].lastVisit = Date.now();
                 }
                 break;
             case 'navigation':

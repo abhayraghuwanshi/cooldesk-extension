@@ -29,6 +29,7 @@ class ActivityTracker {
         this.visibilityStartTime = this.isVisible ? Date.now() : null;
         this.scrollObserver = null;
         this.eventListeners = [];
+        this.hasActiveMedia = false;  // Track if media is playing
 
         this.init();
     }
@@ -37,7 +38,55 @@ class ActivityTracker {
         this.setupVisibilityTracking();
         this.setupScrollTracking();
         this.setupInteractionTracking();
+        this.setupMediaTracking();  // Add media tracking
         this.startTimeTracking();
+    }
+
+    setupMediaTracking() {
+        // Track media play/pause to keep session alive during passive video watching
+        const handlePlay = (e) => {
+            if (e.target instanceof HTMLMediaElement) {
+                this.hasActiveMedia = true;
+                this.lastActivityTime = Date.now();  // Reset activity timer
+                console.log('[ActivityTracker] Media started playing');
+            }
+        };
+
+        const handlePause = (e) => {
+            if (e.target instanceof HTMLMediaElement) {
+                // Check if any other media is still playing
+                const allMedia = document.querySelectorAll('video, audio');
+                this.hasActiveMedia = Array.from(allMedia).some(m => !m.paused);
+                console.log('[ActivityTracker] Media paused, hasActiveMedia:', this.hasActiveMedia);
+            }
+        };
+
+        const handleEnded = (e) => {
+            if (e.target instanceof HTMLMediaElement) {
+                const allMedia = document.querySelectorAll('video, audio');
+                this.hasActiveMedia = Array.from(allMedia).some(m => !m.paused);
+            }
+        };
+
+        // Use capture phase to catch all media events
+        window.addEventListener('play', handlePlay, true);
+        window.addEventListener('pause', handlePause, true);
+        window.addEventListener('ended', handleEnded, true);
+
+        this.eventListeners.push(
+            { type: 'play', handler: handlePlay, target: window, capture: true },
+            { type: 'pause', handler: handlePause, target: window, capture: true },
+            { type: 'ended', handler: handleEnded, target: window, capture: true }
+        );
+
+        // Check if media is already playing on page load
+        setTimeout(() => {
+            const allMedia = document.querySelectorAll('video, audio');
+            this.hasActiveMedia = Array.from(allMedia).some(m => !m.paused);
+            if (this.hasActiveMedia) {
+                console.log('[ActivityTracker] Media already playing on page load');
+            }
+        }, 1000);
     }
 
     setupVisibilityTracking() {
@@ -244,7 +293,11 @@ class ActivityTracker {
     }
 
     isActivelyEngaged() {
-        return (Date.now() - this.lastActivityTime) < 30000;
+        // Consider engaged if:
+        // 1. User interacted within last 30 seconds, OR
+        // 2. Media is currently playing (passive video watching like Netflix)
+        const recentActivity = (Date.now() - this.lastActivityTime) < 30000;
+        return recentActivity || this.hasActiveMedia;
     }
 
     destroy() {
@@ -256,8 +309,8 @@ class ActivityTracker {
             this.scrollObserver.disconnect();
         }
 
-        this.eventListeners.forEach(({ type, handler, target = document }) => {
-            target.removeEventListener(type, handler);
+        this.eventListeners.forEach(({ type, handler, target = document, capture = false }) => {
+            target.removeEventListener(type, handler, capture);
         });
 
         this.eventListeners = [];

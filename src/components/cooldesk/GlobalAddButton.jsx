@@ -1,20 +1,24 @@
 import {
+  faBolt,
   faBookmark,
   faCheck,
   faClock,
   faFolder,
   faFolderOpen,
   faHistory,
+  faKeyboard,
+  faLayerGroup,
   faLink,
   faMagicWandSparkles,
   faPlus,
   faSearch,
   faStar,
   faStickyNote,
-  faTimes
+  faTimes,
+  faWandMagicSparkles
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import NanoAIService from '../../services/nanoAIService';
 import { safeGetHostname } from '../../utils/helpers';
 
@@ -66,6 +70,35 @@ export function GlobalAddButton({
   const [historyItems, setHistoryItems] = useState([]);
   const [bookmarks, setBookmarks] = useState([]);
 
+  // Cursor-like Smart Mode States
+  const [smartMode, setSmartMode] = useState(true); // Default to smart/auto mode
+  const [isAutoCategorizingUrl, setIsAutoCategorizingUrl] = useState(false);
+  const [autoCategorizedWorkspace, setAutoCategorizedWorkspace] = useState(null);
+  const [autoGroupPreview, setAutoGroupPreview] = useState(null); // { groups: [], suggestions: [] }
+  const [isGeneratingGroups, setIsGeneratingGroups] = useState(false);
+  const [confidenceScore, setConfidenceScore] = useState(null);
+  const urlInputRef = useRef(null);
+  const autoCategorizationTimeoutRef = useRef(null);
+
+  // Global keyboard shortcut (Cmd/Ctrl+K to open)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        if (!isOpen) {
+          handleOpen();
+        }
+      }
+      // Escape to close
+      if (e.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen && mode === 'url') {
       // Fetch all open tabs
@@ -77,6 +110,11 @@ export function GlobalAddButton({
           id: tab.id
         }));
         setOpenTabs(tabsList);
+
+        // Auto-generate group preview in smart mode
+        if (smartMode && tabsList.length >= 3) {
+          generateAutoGroupPreview(tabsList);
+        }
       });
 
       // Fetch history
@@ -109,7 +147,7 @@ export function GlobalAddButton({
         setBookmarks(flatBookmarks);
       });
     }
-  }, [isOpen, mode]);
+  }, [isOpen, mode, smartMode]);
 
   // Auto-select workspace logic
   useEffect(() => {
@@ -122,6 +160,115 @@ export function GlobalAddButton({
     }
   }, [isOpen, mode, workspaces, initialWorkspace]);
 
+  // Auto-categorize URL when pasted or entered
+  const autoCategorizeUrl = useCallback(async (url, title = '') => {
+    if (!smartMode || !url || !url.startsWith('http')) return;
+
+    setIsAutoCategorizingUrl(true);
+    setAutoCategorizedWorkspace(null);
+    setConfidenceScore(null);
+
+    try {
+      // First try pattern-based suggestion from feedback system
+      const feedbackResponse = await fetch('http://127.0.0.1:4000/feedback/suggest-workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, title, limit: 3 })
+      }).catch(() => null);
+
+      if (feedbackResponse?.ok) {
+        const data = await feedbackResponse.json();
+        if (data.suggestions?.length > 0) {
+          const topSuggestion = data.suggestions[0];
+          const matchedWs = workspaces.find(ws =>
+            ws.name.toLowerCase() === topSuggestion.workspace.toLowerCase()
+          );
+          if (matchedWs && topSuggestion.score > 0.5) {
+            setAutoCategorizedWorkspace(matchedWs);
+            setSelectedWorkspace(matchedWs);
+            setConfidenceScore(topSuggestion.score);
+            setIsAutoCategorizingUrl(false);
+            return;
+          }
+        }
+      }
+
+      // Fall back to AI categorization
+      const workspaceNames = workspaces.map(ws => ws.name);
+      const result = await NanoAIService.classifyUrl(url, { workspaces: workspaceNames, title });
+
+      if (result?.category) {
+        const matchedWs = workspaces.find(ws =>
+          ws.name.toLowerCase() === result.category.toLowerCase() ||
+          ws.name.toLowerCase().includes(result.category.toLowerCase())
+        );
+        if (matchedWs) {
+          setAutoCategorizedWorkspace(matchedWs);
+          setSelectedWorkspace(matchedWs);
+          setConfidenceScore(result.confidence === 'high' ? 0.9 : result.confidence === 'medium' ? 0.7 : 0.5);
+        } else if (result.isNew) {
+          // Suggest creating a new workspace
+          setAutoCategorizedWorkspace({ name: result.category, isNew: true });
+        }
+      }
+    } catch (err) {
+      console.error('[SmartMode] Auto-categorization failed:', err);
+    } finally {
+      setIsAutoCategorizingUrl(false);
+    }
+  }, [smartMode, workspaces]);
+
+  // Generate auto-group preview for open tabs
+  const generateAutoGroupPreview = useCallback(async (tabs) => {
+    if (!smartMode || tabs.length < 3) return;
+
+    setIsGeneratingGroups(true);
+    setAutoGroupPreview(null);
+
+    try {
+      const tabsForGrouping = tabs
+        .filter(t => t.url && !t.url.startsWith('chrome://'))
+        .slice(0, 20)
+        .map((t, i) => `${i + 1}. ${t.title || safeGetHostname(t.url)} (${safeGetHostname(t.url)})`)
+        .join('\n');
+
+      const result = await NanoAIService.groupWorkspaces(tabsForGrouping, 'Current browser tabs');
+
+      if (result?.groups?.length > 0) {
+        setAutoGroupPreview(result);
+      }
+    } catch (err) {
+      console.error('[SmartMode] Auto-group preview failed:', err);
+    } finally {
+      setIsGeneratingGroups(false);
+    }
+  }, [smartMode]);
+
+  // Debounced URL auto-categorization
+  const handleUrlInputChange = useCallback((value) => {
+    setUrlInput(value);
+
+    // Clear previous timeout
+    if (autoCategorizationTimeoutRef.current) {
+      clearTimeout(autoCategorizationTimeoutRef.current);
+    }
+
+    // Debounce auto-categorization
+    if (smartMode && value.startsWith('http')) {
+      autoCategorizationTimeoutRef.current = setTimeout(() => {
+        autoCategorizeUrl(value, urlTitle);
+      }, 800);
+    }
+  }, [smartMode, urlTitle, autoCategorizeUrl]);
+
+  // Handle paste event for instant categorization
+  const handleUrlPaste = useCallback((e) => {
+    const pastedText = e.clipboardData?.getData('text') || '';
+    if (pastedText.startsWith('http')) {
+      setTimeout(() => autoCategorizeUrl(pastedText, ''), 100);
+    }
+  }, [autoCategorizeUrl]);
+
   const resetForm = () => {
     setUrlInput('');
     setUrlTitle('');
@@ -130,7 +277,7 @@ export function GlobalAddButton({
     setNoteText('');
     setSearchQuery('');
     setSelectedWorkspace(null);
-    setBrowseMode('current');
+    setBrowseMode('tabs');
     setSuggestedLinks([]);
     setSelectedSuggestedLinks(new Set());
     setSelectedUrls(new Set());
@@ -138,6 +285,9 @@ export function GlobalAddButton({
     setAiCommand('');
     setAiUrlError('');
     setSuggestedWorkspaceNames([]);
+    setAutoCategorizedWorkspace(null);
+    setAutoGroupPreview(null);
+    setConfidenceScore(null);
   };
 
   const handleOpen = () => {
@@ -351,6 +501,58 @@ export function GlobalAddButton({
     if (noteText.trim()) {
       onAddNote?.(noteText);
       handleClose();
+    }
+  };
+
+  // Apply an auto-generated group as a new workspace
+  const handleApplyAutoGroup = async (group) => {
+    if (!group?.name) return;
+
+    try {
+      const newWorkspace = await onCreateWorkspace?.({
+        name: group.name,
+        icon: 'folder',
+        urls: []
+      });
+
+      if (newWorkspace?.id && group.items?.length > 0) {
+        // Map item indices back to actual tabs
+        for (const idx of group.items) {
+          const tab = openTabs[idx - 1]; // 1-based index
+          if (tab) {
+            await onAddUrlToWorkspace?.(newWorkspace.id, {
+              url: tab.url,
+              title: tab.title,
+              favicon: tab.favicon
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error applying auto group:', err);
+    }
+  };
+
+  // Quick action: Create workspace from auto-categorized suggestion
+  const handleCreateSuggestedWorkspace = async () => {
+    if (!autoCategorizedWorkspace?.isNew) return;
+
+    try {
+      const newWorkspace = await onCreateWorkspace?.({
+        name: autoCategorizedWorkspace.name,
+        icon: 'folder',
+        urls: []
+      });
+
+      if (newWorkspace?.id && urlInput) {
+        await onAddUrlToWorkspace?.(newWorkspace.id, {
+          url: urlInput,
+          title: urlTitle || safeGetHostname(urlInput)
+        });
+        handleClose();
+      }
+    } catch (err) {
+      console.error('Error creating suggested workspace:', err);
     }
   };
 
@@ -624,9 +826,47 @@ export function GlobalAddButton({
                 alignItems: 'center',
                 gap: '10px'
               }}>
-                <FontAwesomeIcon icon={faPlus} style={{ color: '#60a5fa' }} />
-                Quick Add
+                <FontAwesomeIcon icon={smartMode ? faWandMagicSparkles : faPlus} style={{ color: smartMode ? '#a855f7' : '#60a5fa' }} />
+                {smartMode ? 'Smart Add' : 'Quick Add'}
+                <span style={{
+                  fontSize: '10px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  background: 'rgba(148, 163, 184, 0.2)',
+                  color: '#94a3b8',
+                  fontWeight: 500
+                }}>
+                  <FontAwesomeIcon icon={faKeyboard} style={{ marginRight: '4px' }} />
+                  ⌘K
+                </span>
               </h2>
+
+              {/* Smart Mode Toggle */}
+              <button
+                onClick={() => setSmartMode(!smartMode)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  background: smartMode
+                    ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(236, 72, 153, 0.2) 100%)'
+                    : 'rgba(30, 41, 59, 0.6)',
+                  border: smartMode
+                    ? '1px solid rgba(168, 85, 247, 0.4)'
+                    : '1px solid rgba(148, 163, 184, 0.2)',
+                  color: smartMode ? '#d8b4fe' : '#94a3b8',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  transition: 'all 0.2s ease',
+                  marginRight: '48px'
+                }}
+              >
+                <FontAwesomeIcon icon={faBolt} style={{ color: smartMode ? '#fbbf24' : '#64748b' }} />
+                {smartMode ? 'Smart Mode ON' : 'Smart Mode'}
+              </button>
             </div>
 
             <button
@@ -723,6 +963,121 @@ export function GlobalAddButton({
               {/* Forms Content */}
               {mode === 'url' && (
                 <div className="add-form">
+                  {/* Smart Mode: Auto-Group Preview */}
+                  {smartMode && autoGroupPreview?.groups?.length > 0 && (
+                    <div style={{
+                      marginBottom: '24px',
+                      padding: '16px',
+                      background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%)',
+                      border: '1px solid rgba(168, 85, 247, 0.2)',
+                      borderRadius: '16px'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: '12px'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: '#d8b4fe'
+                        }}>
+                          <FontAwesomeIcon icon={faLayerGroup} />
+                          AI detected {autoGroupPreview.groups.length} workspace groups
+                        </div>
+                        <span style={{
+                          fontSize: '10px',
+                          color: '#64748b',
+                          background: 'rgba(30, 41, 59, 0.6)',
+                          padding: '4px 8px',
+                          borderRadius: '6px'
+                        }}>
+                          Click to create
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {autoGroupPreview.groups.map((group, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleApplyAutoGroup(group)}
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: '10px',
+                              background: 'rgba(30, 41, 59, 0.8)',
+                              border: '1px solid rgba(168, 85, 247, 0.3)',
+                              color: '#f1f5f9',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: '4px',
+                              transition: 'all 0.2s ease',
+                              minWidth: '140px'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'rgba(168, 85, 247, 0.2)';
+                              e.currentTarget.style.borderColor = '#a855f7';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.8)';
+                              e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.3)';
+                            }}
+                          >
+                            <span style={{ fontWeight: 600, fontSize: '13px' }}>{group.name}</span>
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+                              {group.items?.length || 0} tabs
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {autoGroupPreview.suggestions?.length > 0 && (
+                        <div style={{
+                          marginTop: '12px',
+                          padding: '10px',
+                          background: 'rgba(59, 130, 246, 0.1)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          color: '#93c5fd'
+                        }}>
+                          <strong>Tip:</strong> {autoGroupPreview.suggestions[0]}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Loading state for auto-grouping */}
+                  {smartMode && isGeneratingGroups && (
+                    <div style={{
+                      marginBottom: '24px',
+                      padding: '20px',
+                      background: 'rgba(168, 85, 247, 0.05)',
+                      border: '1px dashed rgba(168, 85, 247, 0.3)',
+                      borderRadius: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '12px'
+                    }}>
+                      <div className="spinner" style={{
+                        width: '20px',
+                        height: '20px',
+                        border: '2px solid rgba(168, 85, 247, 0.3)',
+                        borderTopColor: '#a855f7',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite'
+                      }} />
+                      <span style={{ color: '#d8b4fe', fontSize: '13px' }}>
+                        Analyzing tabs for smart grouping...
+                      </span>
+                    </div>
+                  )}
+
                   {/* AI Smart Filter Input */}
                   <div className="form-group" style={{ marginBottom: '24px' }}>
                     <div style={{ position: 'relative' }}>
@@ -935,32 +1290,49 @@ export function GlobalAddButton({
                         }}>
                           <FontAwesomeIcon icon={faLink} style={{ fontSize: '11px', color: '#60a5fa' }} />
                           Enter URL
+                          {smartMode && (
+                            <span style={{
+                              fontSize: '10px',
+                              color: '#a855f7',
+                              fontWeight: 500,
+                              marginLeft: 'auto'
+                            }}>
+                              Auto-categorizes on paste
+                            </span>
+                          )}
                         </label>
                         <div style={{ position: 'relative' }}>
                           <FontAwesomeIcon
-                            icon={faLink}
+                            icon={isAutoCategorizingUrl ? faMagicWandSparkles : faLink}
                             style={{
                               position: 'absolute',
                               left: '16px',
                               top: '50%',
                               transform: 'translateY(-50%)',
-                              color: '#94a3b8',
+                              color: isAutoCategorizingUrl ? '#a855f7' : '#94a3b8',
                               fontSize: '14px',
                               pointerEvents: 'none',
-                              zIndex: 1
+                              zIndex: 1,
+                              animation: isAutoCategorizingUrl ? 'spin 1s linear infinite' : 'none'
                             }}
                           />
                           <input
+                            ref={urlInputRef}
                             type="url"
                             value={urlInput}
-                            onChange={(e) => setUrlInput(e.target.value)}
-                            placeholder="https://example.com"
+                            onChange={(e) => handleUrlInputChange(e.target.value)}
+                            onPaste={handleUrlPaste}
+                            placeholder={smartMode ? "Paste URL for auto-categorization..." : "https://example.com"}
                             style={{
                               width: '100%',
                               padding: '14px 16px 14px 44px',
                               borderRadius: '12px',
-                              background: 'rgba(51, 65, 85, 0.5)',
-                              border: '2px solid rgba(148, 163, 184, 0.3)',
+                              background: autoCategorizedWorkspace
+                                ? 'rgba(34, 197, 94, 0.1)'
+                                : 'rgba(51, 65, 85, 0.5)',
+                              border: autoCategorizedWorkspace
+                                ? '2px solid rgba(34, 197, 94, 0.5)'
+                                : '2px solid rgba(148, 163, 184, 0.3)',
                               color: '#f1f5f9',
                               fontSize: '14px',
                               outline: 'none',
@@ -974,12 +1346,69 @@ export function GlobalAddButton({
                               e.target.style.boxShadow = '0 0 0 3px rgba(96, 165, 250, 0.15)';
                             }}
                             onBlur={(e) => {
-                              e.target.style.borderColor = 'rgba(148, 163, 184, 0.3)';
-                              e.target.style.background = 'rgba(51, 65, 85, 0.5)';
+                              if (!autoCategorizedWorkspace) {
+                                e.target.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+                                e.target.style.background = 'rgba(51, 65, 85, 0.5)';
+                              }
                               e.target.style.boxShadow = 'none';
                             }}
                           />
                         </div>
+
+                        {/* Auto-categorization result */}
+                        {smartMode && autoCategorizedWorkspace && (
+                          <div style={{
+                            marginTop: '10px',
+                            padding: '10px 14px',
+                            background: autoCategorizedWorkspace.isNew
+                              ? 'rgba(168, 85, 247, 0.1)'
+                              : 'rgba(34, 197, 94, 0.1)',
+                            border: `1px solid ${autoCategorizedWorkspace.isNew ? 'rgba(168, 85, 247, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`,
+                            borderRadius: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <FontAwesomeIcon
+                                icon={autoCategorizedWorkspace.isNew ? faMagicWandSparkles : faCheck}
+                                style={{ color: autoCategorizedWorkspace.isNew ? '#a855f7' : '#22c55e' }}
+                              />
+                              <div>
+                                <div style={{
+                                  fontSize: '13px',
+                                  fontWeight: 600,
+                                  color: autoCategorizedWorkspace.isNew ? '#d8b4fe' : '#86efac'
+                                }}>
+                                  {autoCategorizedWorkspace.isNew ? 'New workspace suggested:' : 'Auto-selected:'}
+                                  {' '}{autoCategorizedWorkspace.name}
+                                </div>
+                                {confidenceScore && (
+                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                    {Math.round(confidenceScore * 100)}% confidence
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {autoCategorizedWorkspace.isNew && (
+                              <button
+                                onClick={handleCreateSuggestedWorkspace}
+                                style={{
+                                  padding: '6px 12px',
+                                  borderRadius: '6px',
+                                  background: '#a855f7',
+                                  border: 'none',
+                                  color: 'white',
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Create & Add
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <div className="form-group" style={{ marginBottom: '28px' }}>
@@ -1574,8 +2003,30 @@ export function GlobalAddButton({
           }
         }
 
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @keyframes shimmer {
+          0% {
+            background-position: -200% 0;
+          }
+          100% {
+            background-position: 200% 0;
+          }
+        }
+
         .browse-item:hover .select-icon {
           opacity: 1 !important;
+        }
+
+        .smart-mode-glow {
+          box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
         }
       `}</style>
     </>

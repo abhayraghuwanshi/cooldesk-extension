@@ -19,27 +19,28 @@ use tokio::sync::RwLock;
 // =============================================================================
 
 /// Default system prompt for the agent
-const DEFAULT_SYSTEM_PROMPT: &str = r#"You are CoolDesk AI, a desktop assistant that helps users with their browser workspaces, notes, and activity.
+const DEFAULT_SYSTEM_PROMPT: &str = r#"You are CoolDesk AI, a powerful and highly capable advanced desktop assistant.
+Your primary goal is to help users seamlessly manage their workspaces, categorize their browsing activity, organize notes, and boost their productivity.
 
-IMPORTANT: You MUST use tools to answer questions about the user's data. You do NOT have direct access to their workspaces, notes, or activity - you MUST call a tool first.
-
-When asked about workspaces, notes, URLs, or recent activity, you MUST respond with a tool call like this:
-<tool>search_workspaces</tool><args>{"query": ""}</args>
-
-Available tools:
-- search_workspaces: Search user's workspaces and URLs (use empty query "" to list all)
-- search_notes: Search user's notes
-- get_recent_activity: Get recent browsing activity
-- get_pinned_items: Get pinned/favorite items
-- web_search: Search the web for external information
-
-NEVER make up or guess information about the user's data. If asked about workspaces, notes, or activity, ALWAYS use a tool first.
-
-Example - if user asks "What workspaces do I have?", respond with:
-<tool>search_workspaces</tool><args>{"query": ""}</args>"#;
+Rules & Capabilities:
+1. MANDATORY: ALWAYS call a tool if you need information about the user's data, workspaces, notes, or external content. DO NOT guess or hallucinate user data.
+2. YOU CAN CALL MULTIPLE TOOLS AT ONCE. If you need 2 different pieces of information, output both tool calls in the SAME turn! DO NOT provide a final answer to the user until you have all the facts.
+3. ALWAYS THOUGHT FIRST: Before you use a tool or provide an answer, use a `<thought>...</thought>` block to reason about what data you need and what you are doing.
+4. When asked to "suggest a new workspace", "organize my tabs", or "what workspaces do I have", YOU MUST DO EXACTLY THIS:
+   - Call `search_workspaces` with an empty query AND call `get_recent_activity` AT THE SAME TIME.
+   - Example Output:
+     <thought>I need to search their existing workspaces and see their recent activity before I can suggest a new workspace.</thought>
+     <tool>search_workspaces</tool><args>{"query": ""}</args>
+     <tool>get_recent_activity</tool><args>{"limit": 25}</args>
+   - WAIT for both tool results to return in your conversation history.
+   - ONLY AFTER reviewing both results, analyze the collected URLs and logically group related domains or topics into new workspace suggestions. Provide clear reasons for your suggestions.
+5. Always use EXACTLY the `<tool>tool_name</tool><args>{"key": "value"}</args>` format.
+6. If the user asks a question you don't confidently know the answer to, use `web_search` to find accurate information.
+7. Provide concise, clear, and actionable responses.
+"#;
 
 /// Maximum tool call iterations per request
-const MAX_TOOL_ITERATIONS: usize = 3;
+const MAX_TOOL_ITERATIONS: usize = 7;
 
 // =============================================================================
 // AGENT RESPONSE
@@ -206,81 +207,7 @@ impl CoolDeskAgent {
     // Chat
     // -------------------------------------------------------------------------
 
-    /// Detect which tools should be proactively called based on the query
-    fn detect_required_tools(message: &str) -> Vec<(&'static str, serde_json::Value)> {
-        let lower = message.to_lowercase();
-        let mut tools = Vec::new();
 
-        // Check for workspace-related queries
-        if lower.contains("workspace")
-            || lower.contains("tab")
-            || lower.contains("url")
-            || lower.contains("site")
-            || lower.contains("website")
-            || lower.contains("browser")
-            || lower.contains("what do i have")
-            || lower.contains("show me")
-            || lower.contains("list")
-        {
-            tools.push(("search_workspaces", serde_json::json!({"query": ""})));
-        }
-
-        // Check for notes-related queries
-        if lower.contains("note") || lower.contains("written") || lower.contains("wrote") {
-            tools.push(("search_notes", serde_json::json!({"query": ""})));
-        }
-
-        // Check for activity-related queries
-        if lower.contains("recent")
-            || lower.contains("activity")
-            || lower.contains("history")
-            || lower.contains("visited")
-            || lower.contains("lately")
-        {
-            tools.push(("get_recent_activity", serde_json::json!({"limit": 10})));
-        }
-
-        // Check for pinned items
-        if lower.contains("pin")
-            || lower.contains("favorite")
-            || lower.contains("saved")
-            || lower.contains("bookmark")
-        {
-            tools.push(("get_pinned_items", serde_json::json!({})));
-        }
-
-        // Check for web search (external info)
-        if lower.contains("search the web")
-            || lower.contains("search web")
-            || lower.contains("web search")
-            || lower.contains("look up")
-            || lower.contains("google")
-            || lower.contains("find online")
-            || lower.contains("search for")
-            || lower.contains("search online")
-            || lower.starts_with("what is ")
-            || lower.starts_with("who is ")
-            || lower.starts_with("how to ")
-            || lower.starts_with("find ")
-        {
-            // Extract search query from the message
-            // Remove common prefixes to get cleaner query
-            let query = message
-                .to_lowercase()
-                .replace("search the web for", "")
-                .replace("search web for", "")
-                .replace("search for", "")
-                .replace("look up", "")
-                .replace("find online", "")
-                .replace("google", "")
-                .trim()
-                .to_string();
-            let query = if query.is_empty() { message.to_string() } else { query };
-            tools.push(("web_search", serde_json::json!({"query": query})));
-        }
-
-        tools
-    }
 
     /// Process a chat message and return a response
     pub async fn chat(&self, session_id: &str, user_message: &str) -> Result<AgentResponse, String> {
@@ -292,85 +219,92 @@ impl CoolDeskAgent {
             session.generate_title();
         }
 
-        // Get conversation history and long-term context
-        let (messages, long_term_context) = {
-            let memory = self.memory.read().await;
-            let messages = memory
-                .get_session(session_id)
-                .map(|s| s.messages.clone())
-                .unwrap_or_default();
+        let mut tools_used = Vec::new();
+        let mut iteration = 0;
+        let mut final_content = String::new();
 
-            // Get relevant long-term facts
-            let facts = memory.get_relevant_facts(user_message, self.config.max_long_term_facts);
-            let context = if facts.is_empty() {
-                None
-            } else {
-                Some(
-                    facts
-                        .iter()
-                        .map(|f| format!("- {}", f.content))
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                )
+        while iteration < self.config.max_tool_iterations {
+            iteration += 1;
+
+            // 1. Get current conversation state
+            let (messages, long_term_context) = {
+                let memory = self.memory.read().await;
+                let messages = memory.get_session(session_id).map(|s| s.messages.clone()).unwrap_or_default();
+                let facts = memory.get_relevant_facts(user_message, self.config.max_long_term_facts);
+                let context = if facts.is_empty() {
+                    None
+                } else {
+                    Some(facts.iter().map(|f| format!("- {}", f.content)).collect::<Vec<_>>().join("\n"))
+                };
+                (messages, context)
             };
 
-            (messages, context)
-        };
+            // 2. Build current system prompt with tool context
+            let mut system_prompt = self.config.system_prompt.clone();
+            system_prompt.push_str("\n\n");
+            system_prompt.push_str(&self.tools.format_for_prompt());
 
-        // Proactively detect and execute required tools
-        let required_tools = Self::detect_required_tools(user_message);
-        let mut tools_used = Vec::new();
-        let mut current_messages = messages;
-        let mut tool_context = String::new();
+            let response_text = self
+                .client
+                .chat_with_context(&messages, &system_prompt, long_term_context.as_deref())
+                .await?;
 
-        // Execute detected tools proactively
-        for (tool_name, arguments) in required_tools {
-            log::info!("[Agent] Proactively executing tool: {}", tool_name);
-            tools_used.push(tool_name.to_string());
+            // 3. Parse for tool calls
+            if let Some(tool_calls) = ToolCallParser::parse(&response_text) {
+                log::info!("[Agent] Model requested {} tool(s)", tool_calls.len());
+                
+                // Add assistant's tool-call message to memory (for context in next turn)
+                {
+                    let mut memory = self.memory.write().await;
+                    if let Some(session) = memory.get_session_mut(session_id) {
+                        session.add_message(ChatMessage::assistant(&response_text));
+                    }
+                }
 
-            if let Some(result) = self.tools.execute(tool_name, arguments).await {
-                // Add tool result to context
-                tool_context.push_str(&format!("\n\n[Data from {}]:\n{}", tool_name, result.content));
-                current_messages.push(ChatMessage::tool_response(tool_name, &result.content));
+                // Execute each tool
+                for call in tool_calls {
+                    tools_used.push(call.name.clone());
+                    log::info!("[Agent] Executing tool: {} with {:?}", call.name, call.arguments);
+
+                    if let Some(result) = self.tools.execute(&call.name, call.arguments).await {
+                        // Add tool response to memory
+                        let mut memory = self.memory.write().await;
+                        if let Some(session) = memory.get_session_mut(session_id) {
+                            session.add_message(ChatMessage::tool_response(&call.name, &result.content));
+                        }
+                    } else {
+                        let mut memory = self.memory.write().await;
+                        if let Some(session) = memory.get_session_mut(session_id) {
+                            session.add_message(ChatMessage::tool_response(&call.name, "Error: Tool not found"));
+                        }
+                    }
+                }
+                
+                // Continue loop to let model see tool results
+                continue;
+            } else {
+                // No more tool calls, we have the final answer
+                // Clean the text to hide any internal <thought> blocks from the user
+                final_content = ToolCallParser::extract_text(&response_text);
+                break;
             }
         }
 
-        // Build system prompt (simpler since we already have tool results)
-        let system_prompt = if tool_context.is_empty() {
-            self.config.system_prompt.clone()
-        } else {
-            // When we have tool results, use a simpler prompt without tool instructions
-            format!(
-                r#"You are CoolDesk AI, a helpful desktop assistant.
+        // If we hit max iterations, try to extract whatever text we have or provide a fallback
+        if final_content.is_empty() {
+             final_content = "I reached my maximum reasoning limit. How else can I help?".to_string();
+        }
 
-Here is the data from the user's CoolDesk:
-{}
-
-Based on this data, answer the user's question naturally and concisely. DO NOT use any <tool> tags - the data has already been retrieved for you. Just respond conversationally using the information provided above."#,
-                tool_context
-            )
-        };
-
-        // Generate response with tool context
-        let final_response = self
-            .client
-            .chat_with_context(
-                &current_messages,
-                &system_prompt,
-                long_term_context.as_deref(),
-            )
-            .await?;
-
-        // Save assistant response to session
+        // Save final assistant response to session
         {
             let mut memory = self.memory.write().await;
             if let Some(session) = memory.get_session_mut(session_id) {
-                session.add_message(ChatMessage::assistant(&final_response));
+                session.add_message(ChatMessage::assistant(&final_content));
             }
         }
 
         Ok(AgentResponse {
-            content: final_response,
+            content: final_content,
             session_id: session_id.to_string(),
             tools_used,
             complete: true,

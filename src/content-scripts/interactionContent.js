@@ -34,9 +34,18 @@ const handleScroll = () => {
   if (scrollTimeout) return; // Already scheduled
 
   scrollTimeout = setTimeout(() => {
-    const total = Math.max(1, document.documentElement.scrollHeight || document.body.scrollHeight || 1);
-    const viewportBottom = (window.scrollY || window.pageYOffset || 0) + window.innerHeight;
-    const scrollPercent = Math.max(0, Math.min(1, viewportBottom / total));
+    // FIXED: Calculate actual scroll depth as percentage of scrollable content
+    const docHeight = Math.max(
+      document.documentElement.scrollHeight || 0,
+      document.body.scrollHeight || 0,
+      document.documentElement.offsetHeight || 0
+    );
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const scrollableHeight = Math.max(1, docHeight - viewportHeight);
+    const scrollTop = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+
+    // scrollPercent is 0-1 representing how far down the user has scrolled
+    const scrollPercent = Math.max(0, Math.min(1, scrollTop / scrollableHeight));
 
     if (Math.abs(scrollPercent - lastScrollPercent) >= 0.05) {
       lastScrollPercent = scrollPercent;

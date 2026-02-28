@@ -6,7 +6,7 @@
       "Bash(dir /s /b \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\")",
       "Bash(findstr:*)",
       "Bash(node --check:*)",
-      "Bash(du -sh \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\src\"*)",
+      "Bash(du -sh \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\src\":*)",
       "Bash(tree:*)",
       "Bash(C:WindowsMicrosoft.NETFramework64v4.0.30319csc.exe /nologo /optimize /out:\"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe\" \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.cs\")",
       "Bash(cmd /c \"dir c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe\")",
@@ -18,7 +18,8 @@
       "Bash(curl:*)",
       "Bash(npm run tauri:*)",
       "Bash(npx eslint:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)"
     ],
     "deny": [],
     "ask": [],

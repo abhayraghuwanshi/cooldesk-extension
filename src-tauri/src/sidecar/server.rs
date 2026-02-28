@@ -108,6 +108,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/activity", get(get_activity).post(post_activity))
         .route("/activity/focused", get(get_focused_app))
         .route("/activity/visible", get(get_visible_apps))
+        .route("/activity/all-desktops", get(get_all_desktop_apps))
         .route("/notes", get(get_notes).post(post_notes))
         .route("/url-notes", get(get_url_notes).post(post_url_notes))
         .route("/pins", get(get_pins).post(post_pins))
@@ -143,6 +144,15 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/llm/v2/chat", post(v2_chat))
         .route("/llm/v2/memory", get(v2_get_memory).post(v2_add_memory))
         .route("/llm/v2/memory/clear", post(v2_clear_memory))
+        // Feedback/RL endpoints
+        .route("/feedback/event", post(feedback_record_event))
+        .route("/feedback/stats", get(feedback_get_stats))
+        .route("/feedback/grouping", post(feedback_record_grouping))
+        .route("/feedback/affinity", get(feedback_get_affinity))
+        .route("/feedback/url-workspace", post(feedback_record_url_workspace))
+        .route("/feedback/suggest-workspace", post(feedback_suggest_workspace))
+        .route("/feedback/events", get(feedback_get_events))
+        .route("/feedback/save", post(feedback_save))
         .layer(cors)
         .with_state(state);
 

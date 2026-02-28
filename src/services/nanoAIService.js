@@ -5,6 +5,7 @@
  */
 
 import { APPSTORE_VERSION } from '../data/appstoreVersion.js';
+import * as LocalAIService from './localAIService.js';
 
 // Configuration
 const CONFIG = {
@@ -144,12 +145,16 @@ export const NanoAIService = {
             throw new Error('No AI available (Nano missing and LocalAI not reachable)');
         }
 
-        // Check availability first
-        if (!this.isAvailable()) {
+        // Ensure we are initialized
+        if (this._availability === 'unknown') {
             await this.init();
-            if (!this.isAvailable()) {
-                throw new Error(`Nano AI not ready: ${this._availability}`);
-            }
+        }
+
+        if (this._availability === 'local') return null;
+
+        // Still show error if not available
+        if (!this.isAvailable()) {
+            throw new Error(`Nano AI not ready: ${this._availability}`);
         }
 
         try {
@@ -175,6 +180,16 @@ export const NanoAIService = {
         }
 
         const session = await this.getSession();
+
+        // If we switched to local during getSession, use local chat
+        if (!session && this._availability === 'local') {
+            return LocalAIService.chat(text, { timeout });
+        }
+
+        if (!session) {
+            throw new Error('AI session could not be established');
+        }
+
         const startTime = Date.now();
         console.log(`[NanoAI] Starting prompt (timeout: ${timeout}ms, text length: ${text.length})`);
 
@@ -341,6 +356,11 @@ Category:`;
         if (!items || items.length === 0) return [];
         if (!query || query.trim().length < 3) return items.slice(0, limit);
 
+        // Ensure we are initialized before checking availability
+        if (this._availability === 'unknown') {
+            await this.init();
+        }
+
         if (this._availability === 'local') {
             const results = await LocalAIService.smartSearch(query, items, limit);
             return (results || []).map(item => ({
@@ -406,6 +426,60 @@ Most relevant (numbers only):`;
      */
     getDictionaryVersion() {
         return APPSTORE_VERSION;
+    },
+
+    /**
+     * Group items into smart workspaces
+     * @param {string} items - Formatted item list
+     * @param {string} context - Optional context
+     * @param {string} customPrompt - Optional custom prompt override
+     * @returns {Promise<Object>} - { groups: [...], suggestions: [...] }
+     */
+    async groupWorkspaces(items, context = '', customPrompt = null) {
+        if (!items || items.length === 0) return { groups: [], suggestions: [] };
+
+        if (this._availability === 'local') {
+            return LocalAIService.groupWorkspaces(items, context, customPrompt);
+        }
+
+        const prompt = customPrompt || `Identify 2-5 clear workspace groups from these items. 
+Items:
+${items}
+
+Workspace Context: ${context}
+
+Output strictly valid JSON with no conversational text:
+{
+  "groups": [
+    { "name": "Work", "items": [1, 3] },
+    { "name": "Social", "items": [2] }
+  ],
+  "suggestions": ["Suggestion 1"]
+}
+
+Grouping result:`;
+
+        try {
+            const result = await this.prompt(prompt, 45000);
+
+            // Extract JSON from result
+            const jsonMatch = result.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+            return { groups: [], suggestions: [] };
+        } catch (e) {
+            console.error('[NanoAI] Grouping failed, checking Local fallback:', e);
+            try {
+                // Last ditch fallback if Nano fails during prompt
+                const localAvailable = await LocalAIService.isAvailable();
+                if (localAvailable) {
+                    this._availability = 'local';
+                    return LocalAIService.groupWorkspaces(items, context, customPrompt);
+                }
+            } catch { }
+            return { groups: [], suggestions: [] };
+        }
     },
 
     /**

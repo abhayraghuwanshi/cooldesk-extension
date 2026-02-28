@@ -65,6 +65,11 @@ pub trait Tool: Send + Sync {
     async fn execute(&self, arguments: Value) -> ToolResult;
 }
 
+/// Helper to parse tool arguments into a struct
+pub fn parse_args<T: for<'de> serde::Deserialize<'de>>(tool_name: &str, args: Value) -> Result<T, String> {
+    serde_json::from_value(args).map_err(|e| format!("Invalid arguments for {}: {}", tool_name, e))
+}
+
 // =============================================================================
 // SEARCH WORKSPACES TOOL
 // =============================================================================
@@ -104,12 +109,14 @@ impl Tool for SearchWorkspacesTool {
     }
 
     async fn execute(&self, arguments: Value) -> ToolResult {
-        let query = arguments
-            .get("query")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        #[derive(Deserialize)]
+        struct Args { query: String }
+        let args = match parse_args::<Args>(self.name(), arguments) {
+            Ok(a) => a,
+            Err(e) => return ToolResult::error(e),
+        };
 
-        let query_lower = query.to_lowercase();
+        let query_lower = args.query.to_lowercase();
 
         let data = self.sync_data.read().await;
 
@@ -126,13 +133,13 @@ impl Tool for SearchWorkspacesTool {
                                 .unwrap_or(false)
                     })
             })
-            .take(5)
+            .take(6)
             .collect();
 
         if matching_workspaces.is_empty() {
             return ToolResult::success(format!(
                 "No workspaces found matching '{}'. User has {} total workspaces.",
-                query,
+                args.query,
                 data.workspaces.len()
             ));
         }
@@ -207,12 +214,14 @@ impl Tool for SearchNotesTool {
     }
 
     async fn execute(&self, arguments: Value) -> ToolResult {
-        let query = arguments
-            .get("query")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        #[derive(Deserialize)]
+        struct Args { query: String }
+        let args = match parse_args::<Args>(self.name(), arguments) {
+            Ok(a) => a,
+            Err(e) => return ToolResult::error(e),
+        };
 
-        let query_lower = query.to_lowercase();
+        let query_lower = args.query.to_lowercase();
 
         let data = self.sync_data.read().await;
 
@@ -239,7 +248,7 @@ impl Tool for SearchNotesTool {
         if matching_notes.is_empty() {
             return ToolResult::success(format!(
                 "No notes found matching '{}'. User has {} total notes.",
-                query,
+                args.query,
                 data.notes.len()
             ));
         }
@@ -304,6 +313,10 @@ impl Tool for GetRecentActivityTool {
                     "limit": {
                         "type": "number",
                         "description": "Maximum number of activities to return (default: 10)"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Optional search query to filter recent activity"
                     }
                 }
             }),
@@ -311,17 +324,35 @@ impl Tool for GetRecentActivityTool {
     }
 
     async fn execute(&self, arguments: Value) -> ToolResult {
-        let limit = arguments
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(10) as usize;
+        #[derive(Deserialize)]
+        struct Args {
+            #[serde(default = "default_limit")]
+            limit: usize,
+            #[serde(default)]
+            query: String,
+        }
+        fn default_limit() -> usize { 10 }
 
+        let args = match parse_args::<Args>(self.name(), arguments) {
+            Ok(a) => a,
+            Err(e) => return ToolResult::error(e),
+        };
+
+        let query_lower = args.query.to_lowercase();
         let data = self.sync_data.read().await;
 
-        let recent: Vec<_> = data.activity.iter().rev().take(limit).collect();
+        let recent: Vec<_> = data.activity.iter().rev()
+            .filter(|a| {
+                if query_lower.is_empty() { return true; }
+                let title_match = a.title.as_ref().map(|t| t.to_lowercase().contains(&query_lower)).unwrap_or(false);
+                let url_match = a.url.as_ref().map(|u| u.to_lowercase().contains(&query_lower)).unwrap_or(false);
+                title_match || url_match
+            })
+            .take(args.limit)
+            .collect();
 
         if recent.is_empty() {
-            return ToolResult::success("No recent activity found.".to_string());
+            return ToolResult::success(format!("No recent activity found{}.", if query_lower.is_empty() { "" } else { " matching that query" }));
         }
 
         let result: Vec<String> = recent
@@ -329,7 +360,8 @@ impl Tool for GetRecentActivityTool {
             .filter_map(|a| {
                 let title = a.title.as_deref().unwrap_or("Unknown");
                 let activity_type = a.activity_type.as_deref().unwrap_or("visit");
-                Some(format!("- {} [{}]", title, activity_type))
+                let url = a.url.as_deref().unwrap_or("Unknown");
+                Some(format!("- {} [{}] (URL: {})", title, activity_type, url))
             })
             .collect();
 
@@ -461,90 +493,82 @@ impl WebSearchTool {
         let mut results = Vec::new();
         let mut seen_urls = HashSet::new();
 
-        // Strategy 1: Look for result links with uddg parameter (redirect URLs)
-        for segment in html.split("uddg=") {
-            if results.len() >= self.max_results {
-                break;
-            }
+        // DuckDuckGo HTML Structure:
+        // Titles are in <a class="result__a" href="...">The Title</a>
+        // Snippets are in <div class="result__snippet">The snippet text...</div>
+        // Redirect URLs are in the href, often starting with //duckduckgo.com/l/?uddg=...
 
-            if let Some(end) = segment.find(|c| c == '&' || c == '"' || c == '\'') {
-                let encoded_url = &segment[..end];
-                if let Ok(url) = urlencoding::decode(encoded_url) {
-                    let url_str = url.to_string();
-                    if url_str.starts_with("http")
-                        && !url_str.contains("duckduckgo.com")
-                        && !seen_urls.contains(&url_str)
-                    {
-                        seen_urls.insert(url_str.clone());
-                        results.push(WebSearchResult {
-                            title: Self::extract_domain(&url_str).unwrap_or_else(|| "Result".to_string()),
-                            url: url_str,
-                            snippet: "Search result from DuckDuckGo".to_string(),
-                        });
-                    }
-                }
-            }
+        let segments: Vec<&str> = html.split("class=\"result__a\"").collect();
+        for segment in segments.iter().skip(1) {
+             if results.len() >= self.max_results { break; }
+
+             // 1. Extract Href
+             let href = if let Some(h_start) = segment.find("href=\"") {
+                 let after_h = &segment[h_start + 6..];
+                 if let Some(h_end) = after_h.find('"') {
+                     let mut raw_url = after_h[..h_end].to_string();
+                     // If it's a redirect link, extract the target
+                     if raw_url.contains("uddg=") {
+                         if let Some(pos) = raw_url.find("uddg=") {
+                             let encoded = &raw_url[pos + 5..].split('&').next().unwrap_or("");
+                             if let Ok(decoded) = urlencoding::decode(encoded) {
+                                 raw_url = decoded.to_string();
+                             }
+                         }
+                     }
+                     // Clean up protocol-relative URLs
+                     if raw_url.starts_with("//") {
+                         raw_url = format!("https:{}", raw_url);
+                     }
+                     raw_url
+                 } else { continue; }
+             } else { continue; };
+
+             if href.contains("duckduckgo.com") || seen_urls.contains(&href) || !href.starts_with("http") { continue; }
+
+             // 2. Extract Title
+             let title = if let Some(t_start) = segment.find('>') {
+                 let after_t = &segment[t_start + 1..];
+                 if let Some(t_end) = after_t.find("</a>") {
+                     after_t[..t_end].replace("&amp;", "&").replace("&quot;", "\"").replace("&#x27;", "'")
+                 } else { "Result".to_string() }
+             } else { "Result".to_string() };
+
+             // 3. Extract Snippet (look ahead in next few characters of HTML)
+             // This is harder since it's outside the split but we can try to find the next result__snippet
+             let snippet = if let Some(s_start) = segment.find("result__snippet") {
+                  let after_s = &segment[s_start..];
+                  if let Some(c_start) = after_s.find('>') {
+                      let after_c = &after_s[c_start + 1..];
+                      if let Some(c_end) = after_c.find("</div>") {
+                          after_c[..c_end].replace("&amp;", "&").replace("&quot;", "\"").replace("&#x27;", "'")
+                      } else { "No snippet available".to_string() }
+                  } else { "No snippet available".to_string() }
+             } else { "Search result".to_string() };
+
+             seen_urls.insert(href.clone());
+             results.push(WebSearchResult {
+                 title,
+                 url: href,
+                 snippet,
+             });
         }
 
-        // Strategy 2: Look for result__url class
-        if results.len() < self.max_results {
-            for segment in html.split("result__url") {
-                if results.len() >= self.max_results {
-                    break;
-                }
-
-                if let Some(href_start) = segment.find("href=\"") {
-                    let after_href = &segment[href_start + 6..];
-                    if let Some(href_end) = after_href.find('"') {
-                        let href = &after_href[..href_end];
-                        let url = if href.starts_with("//") {
-                            format!("https:{}", href)
-                        } else if href.starts_with("http") {
-                            href.to_string()
-                        } else {
-                            continue;
-                        };
-
-                        if !url.contains("duckduckgo.com") && !seen_urls.contains(&url) {
-                            seen_urls.insert(url.clone());
+        // If no results via specific classes, fallback to older uddg strategy
+        if results.is_empty() {
+            log::info!("[WebSearch] Class-based parsing failed, falling back to uddg split");
+            for segment in html.split("uddg=") {
+                if results.len() >= self.max_results { break; }
+                if let Some(end) = segment.find(|c| c == '&' || c == '"' || c == '\'') {
+                    let encoded_url = &segment[..end];
+                    if let Ok(url) = urlencoding::decode(encoded_url) {
+                        let url_str = url.to_string();
+                        if url_str.starts_with("http") && !url_str.contains("duckduckgo.com") && !seen_urls.contains(&url_str) {
+                            seen_urls.insert(url_str.clone());
                             results.push(WebSearchResult {
-                                title: Self::extract_domain(&url).unwrap_or_else(|| "Result".to_string()),
-                                url,
-                                snippet: "Search result".to_string(),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        // Strategy 3: Direct URL extraction
-        if results.len() < self.max_results {
-            for segment in html.split("https://") {
-                if results.len() >= self.max_results {
-                    break;
-                }
-
-                if let Some(end) = segment.find(|c: char| {
-                    c == '"' || c == '\'' || c == '<' || c == '>' || c == ' ' || c == ')'
-                }) {
-                    let domain_path = &segment[..end];
-                    if !domain_path.starts_with("duckduckgo")
-                        && !domain_path.contains("cdn.")
-                        && !domain_path.contains(".js")
-                        && !domain_path.contains(".css")
-                        && !domain_path.contains(".png")
-                        && !domain_path.contains(".ico")
-                        && domain_path.contains('.')
-                        && domain_path.len() > 5
-                    {
-                        let url = format!("https://{}", domain_path);
-                        if !seen_urls.contains(&url) {
-                            seen_urls.insert(url.clone());
-                            results.push(WebSearchResult {
-                                title: Self::extract_domain(&url).unwrap_or_else(|| "Result".to_string()),
-                                url,
-                                snippet: "Search result".to_string(),
+                                title: Self::extract_domain(&url_str).unwrap_or_else(|| "Result".to_string()),
+                                url: url_str,
+                                snippet: "Search result from DuckDuckGo".to_string(),
                             });
                         }
                     }
@@ -589,24 +613,26 @@ impl Tool for WebSearchTool {
     }
 
     async fn execute(&self, arguments: Value) -> ToolResult {
-        let query = arguments
-            .get("query")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        #[derive(Deserialize)]
+        struct Args { query: String }
+        let args = match parse_args::<Args>(self.name(), arguments) {
+            Ok(a) => a,
+            Err(e) => return ToolResult::error(e),
+        };
 
-        if query.is_empty() {
-            return ToolResult::error("Search query is required".to_string());
+        if args.query.is_empty() {
+             return ToolResult::error("Search query is required".to_string());
         }
 
-        log::info!("[WebSearch] Searching for: {}", query);
+        log::info!("[WebSearch] Searching for: {}", args.query);
 
         // Add small delay to avoid rate limiting
         tokio::time::sleep(Duration::from_millis(500)).await;
 
-        match self.search_duckduckgo(query).await {
+        match self.search_duckduckgo(&args.query).await {
             Ok(results) => {
                 if results.is_empty() {
-                    ToolResult::success(format!("No results found for: {}", query))
+                    ToolResult::success(format!("No results found for: {}", args.query))
                 } else {
                     let formatted: Vec<String> = results
                         .iter()
@@ -624,12 +650,124 @@ impl Tool for WebSearchTool {
 
                     ToolResult::success(format!(
                         "Web search results for '{}':\n\n{}",
-                        query,
+                        args.query,
                         formatted.join("\n\n")
                     ))
                 }
             }
             Err(e) => ToolResult::error(format!("Web search failed: {}", e)),
+        }
+    }
+}
+
+// =============================================================================
+// READ URL TOOL
+// =============================================================================
+
+/// Tool for reading content of a URL
+pub struct ReadUrlTool;
+
+impl ReadUrlTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl Tool for ReadUrlTool {
+    fn name(&self) -> &str {
+        "read_url"
+    }
+
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "read_url".to_string(),
+            description: "Read the content of a specific web page. Use this to 'chat' with a website or extract detailed information from a link.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The URL of the page to read"
+                    }
+                },
+                "required": ["url"]
+            }),
+        }
+    }
+
+    async fn execute(&self, arguments: Value) -> ToolResult {
+        #[derive(Deserialize)]
+        struct Args { url: String }
+        let args = match parse_args::<Args>(self.name(), arguments) {
+            Ok(a) => a,
+            Err(e) => return ToolResult::error(e),
+        };
+
+        if !args.url.starts_with("http") {
+             return ToolResult::error("Invalid URL: must start with http or https".to_string());
+        }
+
+        let client = match reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .build() {
+                Ok(c) => c,
+                Err(e) => return ToolResult::error(format!("Failed to create client: {}", e)),
+            };
+
+        match client.get(&args.url).send().await {
+            Ok(response) => {
+                match response.text().await {
+                    Ok(html) => {
+                        // Very simple HTML tag stripping
+                        let mut text = String::with_capacity(html.len() / 2);
+                        let mut in_tag = false;
+                        let mut tag_level = 0;
+                        
+                        for c in html.chars() {
+                            if c == '<' {
+                                in_tag = true;
+                                tag_level += 1;
+                                continue;
+                            }
+                            if c == '>' {
+                                tag_level -= 1;
+                                if tag_level <= 0 {
+                                    tag_level = 0;
+                                    in_tag = false;
+                                    text.push(' ');
+                                }
+                                continue;
+                            }
+                            if !in_tag {
+                                text.push(c);
+                            }
+                        }
+
+                        // Clean up whitespace
+                        let cleaned: String = text
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ");
+
+                        // Limit length to avoid context overflow
+                        let final_text = if cleaned.len() > 3000 {
+                            format!("{}... [Truncated]", &cleaned[..3000])
+                        } else {
+                            cleaned
+                        };
+
+                        if final_text.trim().is_empty() {
+                            ToolResult::success("Page read successfully but no text content found (it might be a heavy JS app or image-based).".to_string())
+                        } else {
+                            ToolResult::success(final_text)
+                        }
+                    }
+                    Err(e) => ToolResult::error(format!("Failed to read text: {}", e)),
+                }
+            }
+            Err(e) => ToolResult::error(format!("Failed to fetch URL: {}", e)),
         }
     }
 }
@@ -657,6 +795,7 @@ impl ToolRegistry {
         registry.register(Box::new(GetRecentActivityTool::new(sync_data.clone())));
         registry.register(Box::new(GetPinnedItemsTool::new(sync_data)));
         registry.register(Box::new(WebSearchTool::new(5))); // Web search with max 5 results
+        registry.register(Box::new(ReadUrlTool::new())); // Read URL content
         registry
     }
 
@@ -696,23 +835,28 @@ impl ToolRegistry {
             .iter()
             .map(|t| {
                 format!(
-                    "- {}: {}",
-                    t.name, t.description
+                    "Tool: {}\nDescription: {}\nJSON Argument Format: {}",
+                    t.name, 
+                    t.description, 
+                    serde_json::to_string(&t.parameters).unwrap_or_else(|_| "{}".to_string())
                 )
             })
             .collect();
 
         format!(
             r#"
-You have access to the following tools:
+Available Tools:
 {}
 
-To use a tool, respond with:
-<tool>tool_name</tool><args>{{"param": "value"}}</args>
+To call a tool, use THIS format:
+<tool>tool_name</tool><args>{{"arg": "value"}}</args>
 
-After receiving tool results, incorporate them into your response.
+Example usage:
+User: "What workspaces do I have?"
+Thought: I need to see the current workspaces.
+Assistant: <tool>search_workspaces</tool><args>{{"query": ""}}</args>
 "#,
-            tool_descriptions.join("\n")
+            tool_descriptions.join("\n\n")
         )
     }
 }

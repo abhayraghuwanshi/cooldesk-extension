@@ -190,6 +190,11 @@ pub async fn get_visible_apps() -> Json<Vec<RunningApp>> {
     Json(crate::system::get_visible_apps_info().await)
 }
 
+/// Get ALL apps across all virtual desktops (not just current)
+pub async fn get_all_desktop_apps() -> Json<Vec<RunningApp>> {
+    Json(crate::system::get_all_desktop_apps_info().await)
+}
+
 // ==========================================
 // POST Handlers
 // ==========================================
@@ -1051,5 +1056,263 @@ pub async fn v2_clear_memory(
     }
 
     StatusCode::NO_CONTENT
+}
+
+// ==========================================
+// Feedback/RL Handlers
+// ==========================================
+
+use crate::sidecar::feedback::{
+    FeedbackStore, FeedbackEvent, SuggestionType, UserAction,
+    PatternTracker, RewardCalculator,
+};
+use crate::sidecar::data::{
+    FeedbackEventRequest, FeedbackStatsResponse, UrlGroupingFeedbackRequest,
+    WorkspaceSuggestionRequest, WorkspaceSuggestionResponse, ScoredSuggestion,
+    RecordUrlWorkspaceRequest, UrlAffinityResponse, RelatedUrl,
+};
+
+lazy_static! {
+    /// Global feedback store
+    static ref FEEDBACK_STORE: Mutex<Option<FeedbackStore>> = Mutex::new(None);
+    /// Global pattern tracker
+    static ref PATTERN_TRACKER: Mutex<PatternTracker> = Mutex::new(PatternTracker::new());
+    /// Reward calculator
+    static ref REWARD_CALCULATOR: RewardCalculator = RewardCalculator::new();
+}
+
+/// Initialize or get feedback store
+async fn get_feedback_store() -> &'static Mutex<Option<FeedbackStore>> {
+    let mut store_guard = FEEDBACK_STORE.lock().await;
+    if store_guard.is_none() {
+        let data_dir = crate::sidecar::storage::get_data_dir();
+        *store_guard = Some(FeedbackStore::new(data_dir));
+        log::info!("[Feedback] Initialized feedback store");
+    }
+    drop(store_guard);
+    &FEEDBACK_STORE
+}
+
+/// Parse suggestion type from string
+fn parse_suggestion_type(s: &str) -> SuggestionType {
+    match s.to_lowercase().as_str() {
+        "workspace_group" | "workspacegroup" => SuggestionType::WorkspaceGroup,
+        "url_to_workspace" | "urltoworkspace" => SuggestionType::UrlToWorkspace,
+        "related_resource" | "relatedresource" => SuggestionType::RelatedResource,
+        "tool_result" | "toolresult" => SuggestionType::ToolResult,
+        "tab_category" | "tabcategory" => SuggestionType::TabCategory,
+        "workspace_name" | "workspacename" => SuggestionType::WorkspaceName,
+        _ => SuggestionType::WorkspaceGroup,
+    }
+}
+
+/// Parse user action from string
+fn parse_user_action(s: &str) -> UserAction {
+    match s.to_lowercase().as_str() {
+        "accepted" | "accept" => UserAction::Accepted,
+        "rejected" | "reject" => UserAction::Rejected,
+        "modified" | "modify" => UserAction::Modified,
+        "ignored" | "ignore" => UserAction::Ignored,
+        "previewed" | "preview" => UserAction::Previewed,
+        "undone" | "undo" => UserAction::Undone,
+        _ => UserAction::Ignored,
+    }
+}
+
+/// Record a feedback event
+pub async fn feedback_record_event(
+    Json(req): Json<FeedbackEventRequest>,
+) -> Json<SuccessResponse> {
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        let mut event = FeedbackEvent::new(
+            parse_suggestion_type(&req.suggestion_type),
+            parse_user_action(&req.action),
+            req.suggestion_content,
+        );
+
+        event = event.with_context(req.context_workspace, req.context_urls);
+
+        if let Some(rt) = req.response_time_ms {
+            event = event.with_response_time(rt);
+        }
+
+        if let Some(modified) = req.modified_content {
+            event = event.with_modification(modified);
+        }
+
+        if let Some(session_id) = req.session_id {
+            event = event.with_session(session_id);
+        }
+
+        if let Some(tool_name) = req.tool_name {
+            event = event.with_tool(tool_name);
+        }
+
+        store.record_event(event).await;
+
+        // Save periodically (every 10 events or so)
+        let count = store.event_count().await;
+        if count % 10 == 0 {
+            let _ = store.save().await;
+        }
+
+        Json(SuccessResponse { success: true })
+    } else {
+        Json(SuccessResponse { success: false })
+    }
+}
+
+/// Get feedback statistics
+pub async fn feedback_get_stats() -> Json<FeedbackStatsResponse> {
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        let stats = store.get_all_stats().await;
+        let total = store.event_count().await;
+
+        let stats_json: std::collections::HashMap<String, serde_json::Value> = stats
+            .into_iter()
+            .map(|(k, v)| (k, serde_json::to_value(v).unwrap_or_default()))
+            .collect();
+
+        Json(FeedbackStatsResponse {
+            stats_by_type: stats_json,
+            total_events: total,
+        })
+    } else {
+        Json(FeedbackStatsResponse {
+            stats_by_type: std::collections::HashMap::new(),
+            total_events: 0,
+        })
+    }
+}
+
+/// Record URL grouping feedback
+pub async fn feedback_record_grouping(
+    Json(req): Json<UrlGroupingFeedbackRequest>,
+) -> Json<SuccessResponse> {
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        store
+            .record_grouping_feedback(&req.url1, &req.url2, req.positive)
+            .await;
+        Json(SuccessResponse { success: true })
+    } else {
+        Json(SuccessResponse { success: false })
+    }
+}
+
+/// Get URL affinity
+pub async fn feedback_get_affinity(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<UrlAffinityResponse> {
+    let url1 = params.get("url1").cloned().unwrap_or_default();
+    let url2 = params.get("url2").cloned().unwrap_or_default();
+
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        let affinity = store.get_url_affinity(&url1, &url2).await;
+        let related = store.get_related_urls(&url1, 0.3).await;
+
+        Json(UrlAffinityResponse {
+            affinity,
+            related_urls: related
+                .into_iter()
+                .map(|(url, aff)| RelatedUrl { url, affinity: aff })
+                .collect(),
+        })
+    } else {
+        Json(UrlAffinityResponse {
+            affinity: 0.0,
+            related_urls: Vec::new(),
+        })
+    }
+}
+
+/// Record URL-workspace association (for pattern learning)
+pub async fn feedback_record_url_workspace(
+    Json(req): Json<RecordUrlWorkspaceRequest>,
+) -> Json<SuccessResponse> {
+    let mut tracker = PATTERN_TRACKER.lock().await;
+    tracker.record_url_workspace(&req.url, &req.title, &req.workspace_name);
+
+    // Also record co-occurrence for URLs in same workspace
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        // This would ideally get other URLs in the same workspace
+        // For now, just record the association
+        store.record_co_occurrence(&req.url, &req.url, true).await;
+    }
+
+    Json(SuccessResponse { success: true })
+}
+
+/// Get workspace suggestions for a URL
+pub async fn feedback_suggest_workspace(
+    Json(req): Json<WorkspaceSuggestionRequest>,
+) -> Json<WorkspaceSuggestionResponse> {
+    let tracker = PATTERN_TRACKER.lock().await;
+    let suggestions = tracker.suggest_workspaces(&req.url, &req.title, req.count);
+
+    Json(WorkspaceSuggestionResponse {
+        suggestions: suggestions
+            .into_iter()
+            .map(|(name, score)| ScoredSuggestion {
+                workspace_name: name,
+                score,
+            })
+            .collect(),
+    })
+}
+
+/// Get recent feedback events (for debugging)
+pub async fn feedback_get_events(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<Vec<serde_json::Value>> {
+    let limit: usize = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
+
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        let events = store.get_recent_events(limit).await;
+        Json(
+            events
+                .into_iter()
+                .map(|e| serde_json::to_value(e).unwrap_or_default())
+                .collect(),
+        )
+    } else {
+        Json(Vec::new())
+    }
+}
+
+/// Save feedback state to disk
+pub async fn feedback_save() -> StatusCode {
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        if store.save().await.is_ok() {
+            StatusCode::NO_CONTENT
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
 }
 

@@ -99,12 +99,14 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tauri-plugin-log",
  "tauri-plugin-shell",
+ "tempfile",
  "tokio",
  "tokio-util",
  "tower-http 0.5.2",
  "tracing",
  "url",
  "urlencoding",
+ "uuid",
  "windows 0.58.0",
 ]
 

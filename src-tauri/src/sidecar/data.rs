@@ -442,3 +442,109 @@ pub struct V2SessionSummary {
     pub created_at: i64,
     pub updated_at: i64,
 }
+
+// ==========================================
+// Feedback/RL Request/Response Types
+// ==========================================
+
+/// Request to record a feedback event
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedbackEventRequest {
+    /// Type of suggestion
+    pub suggestion_type: String,
+    /// User action: accepted, rejected, modified, ignored, previewed, undone
+    pub action: String,
+    /// The suggestion content
+    pub suggestion_content: String,
+    /// Current workspace context
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_workspace: Option<String>,
+    /// Active URLs for context
+    #[serde(default)]
+    pub context_urls: Vec<String>,
+    /// Time from suggestion shown to action (ms)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_time_ms: Option<i64>,
+    /// If modified, what user changed it to
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified_content: Option<String>,
+    /// Session ID if from agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    /// Tool name if from agent tool
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
+}
+
+/// Response for feedback stats
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedbackStatsResponse {
+    pub stats_by_type: HashMap<String, serde_json::Value>,
+    pub total_events: u64,
+}
+
+/// Request to record URL grouping feedback
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UrlGroupingFeedbackRequest {
+    /// First URL
+    pub url1: String,
+    /// Second URL
+    pub url2: String,
+    /// Whether grouping was positive (accepted) or negative (rejected)
+    pub positive: bool,
+}
+
+/// Request to get workspace suggestions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSuggestionRequest {
+    pub url: String,
+    pub title: String,
+    #[serde(default = "default_suggestion_count")]
+    pub count: usize,
+}
+
+fn default_suggestion_count() -> usize {
+    3
+}
+
+/// Response for workspace suggestions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSuggestionResponse {
+    pub suggestions: Vec<ScoredSuggestion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScoredSuggestion {
+    pub workspace_name: String,
+    pub score: f64,
+}
+
+/// Request to record URL-workspace association
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordUrlWorkspaceRequest {
+    pub url: String,
+    pub title: String,
+    pub workspace_name: String,
+}
+
+/// Response for URL affinity query
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UrlAffinityResponse {
+    pub affinity: f64,
+    pub related_urls: Vec<RelatedUrl>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelatedUrl {
+    pub url: String,
+    pub affinity: f64,
+}
