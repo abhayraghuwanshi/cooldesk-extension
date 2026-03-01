@@ -27,7 +27,6 @@
     "search",
     "alarms",
     "commands",
-    "contextMenus",
     "topSites"
   ],
   "host_permissions": [

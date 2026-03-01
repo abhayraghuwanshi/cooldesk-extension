@@ -1,154 +1,154 @@
 console.log('[Background] ====== SERVICE WORKER STARTING ======');
 
 // Initialize context menus on install
-chrome.runtime.onInstalled.addListener(() => {
-  // Remove existing menus first to avoid duplicates
-  chrome.contextMenus.removeAll(() => {
-    // Highlight selection (only when text is selected)
-    chrome.contextMenus.create({
-      id: 'cooldesk-highlight',
-      title: '🖍️ Highlight Selection',
-      contexts: ['selection']
-    });
+// chrome.runtime.onInstalled.addListener(() => {
+//   // Remove existing menus first to avoid duplicates
+//   chrome.contextMenus.removeAll(() => {
+//     // Highlight selection (only when text is selected)
+//     chrome.contextMenus.create({
+//       id: 'cooldesk-highlight',
+//       title: '🖍️ Highlight Selection',
+//       contexts: ['selection']
+//     });
 
-    // Scrape links from page
-    chrome.contextMenus.create({
-      id: 'cooldesk-scrape-links',
-      title: '🔗 Scrape Links from Page',
-      contexts: ['page', 'link']
-    });
+//     // Scrape links from page
+//     chrome.contextMenus.create({
+//       id: 'cooldesk-scrape-links',
+//       title: '🔗 Scrape Links from Page',
+//       contexts: ['page', 'link']
+//     });
 
-    // Create sticky note (available everywhere)
-    chrome.contextMenus.create({
-      id: 'cooldesk-sticky-note',
-      title: '📝 Create Sticky Note',
-      contexts: ['page', 'selection']
-    });
+//     // Create sticky note (available everywhere)
+//     chrome.contextMenus.create({
+//       id: 'cooldesk-sticky-note',
+//       title: '📝 Create Sticky Note',
+//       contexts: ['page', 'selection']
+//     });
 
-    // Add to workspace
-    chrome.contextMenus.create({
-      id: 'cooldesk-add-to-workspace',
-      title: '📂 Add Page to Workspace',
-      contexts: ['page']
-    });
+//     // Add to workspace
+//     chrome.contextMenus.create({
+//       id: 'cooldesk-add-to-workspace',
+//       title: '📂 Add Page to Workspace',
+//       contexts: ['page']
+//     });
 
-    console.log('[Background] Context menus created');
-  });
-});
+//     console.log('[Background] Context menus created');
+//   });
+// });
 
-// Handle context menu clicks
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  console.log('[Background] Context menu clicked:', info.menuItemId);
+// // Handle context menu clicks
+// chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+//   console.log('[Background] Context menu clicked:', info.menuItemId);
 
-  if (!tab?.id) {
-    console.warn('[Background] No tab available for context menu action');
-    return;
-  }
+//   if (!tab?.id) {
+//     console.warn('[Background] No tab available for context menu action');
+//     return;
+//   }
 
-  try {
-    switch (info.menuItemId) {
-      case 'cooldesk-highlight':
-        // Send message to content script to highlight selected text
-        await chrome.tabs.sendMessage(tab.id, {
-          type: 'COOLDESK_HIGHLIGHT',
-          selectionText: info.selectionText
-        });
-        break;
+//   try {
+//     switch (info.menuItemId) {
+//       case 'cooldesk-highlight':
+//         // Send message to content script to highlight selected text
+//         await chrome.tabs.sendMessage(tab.id, {
+//           type: 'COOLDESK_HIGHLIGHT',
+//           selectionText: info.selectionText
+//         });
+//         break;
 
-      case 'cooldesk-scrape-links':
-        // Send message to content script to scrape links
-        await chrome.tabs.sendMessage(tab.id, {
-          type: 'COOLDESK_SCRAPE_LINKS',
-          pageUrl: info.pageUrl,
-          linkUrl: info.linkUrl
-        });
-        break;
+//       case 'cooldesk-scrape-links':
+//         // Send message to content script to scrape links
+//         await chrome.tabs.sendMessage(tab.id, {
+//           type: 'COOLDESK_SCRAPE_LINKS',
+//           pageUrl: info.pageUrl,
+//           linkUrl: info.linkUrl
+//         });
+//         break;
 
-      case 'cooldesk-sticky-note':
-        // Send message to content script to create sticky note
-        await chrome.tabs.sendMessage(tab.id, {
-          type: 'COOLDESK_STICKY_NOTE',
-          selectionText: info.selectionText || '',
-          pageUrl: info.pageUrl
-        });
-        break;
+//       case 'cooldesk-sticky-note':
+//         // Send message to content script to create sticky note
+//         await chrome.tabs.sendMessage(tab.id, {
+//           type: 'COOLDESK_STICKY_NOTE',
+//           selectionText: info.selectionText || '',
+//           pageUrl: info.pageUrl
+//         });
+//         break;
 
-      case 'cooldesk-add-to-workspace':
-        // Send message to content script to show workspace picker
-        await chrome.tabs.sendMessage(tab.id, {
-          type: 'COOLDESK_ADD_TO_WORKSPACE',
-          pageUrl: info.pageUrl,
-          pageTitle: tab.title
-        });
-        break;
-    }
-  } catch (err) {
-    console.warn('[Background] Context menu action failed:', err);
-    // Try to inject content script and retry
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ['src/content-scripts/interactionContent.js']
-      });
-      // Retry after injection
-      setTimeout(async () => {
-        try {
-          await chrome.tabs.sendMessage(tab.id, {
-            type: info.menuItemId === 'cooldesk-highlight' ? 'COOLDESK_HIGHLIGHT' :
-              info.menuItemId === 'cooldesk-scrape-links' ? 'COOLDESK_SCRAPE_LINKS' :
-                info.menuItemId === 'cooldesk-sticky-note' ? 'COOLDESK_STICKY_NOTE' :
-                  'COOLDESK_ADD_TO_WORKSPACE',
-            selectionText: info.selectionText,
-            pageUrl: info.pageUrl,
-            linkUrl: info.linkUrl,
-            pageTitle: tab.title
-          });
-        } catch (e) {
-          console.error('[Background] Context menu retry failed:', e);
-        }
-      }, 200);
-    } catch (injectErr) {
-      console.error('[Background] Failed to inject content script:', injectErr);
-    }
-  }
-});
+//       case 'cooldesk-add-to-workspace':
+//         // Send message to content script to show workspace picker
+//         await chrome.tabs.sendMessage(tab.id, {
+//           type: 'COOLDESK_ADD_TO_WORKSPACE',
+//           pageUrl: info.pageUrl,
+//           pageTitle: tab.title
+//         });
+//         break;
+//     }
+//   } catch (err) {
+//     console.warn('[Background] Context menu action failed:', err);
+//     // Try to inject content script and retry
+//     try {
+//       await chrome.scripting.executeScript({
+//         target: { tabId: tab.id },
+//         files: ['src/content-scripts/interactionContent.js']
+//       });
+//       // Retry after injection
+//       setTimeout(async () => {
+//         try {
+//           await chrome.tabs.sendMessage(tab.id, {
+//             type: info.menuItemId === 'cooldesk-highlight' ? 'COOLDESK_HIGHLIGHT' :
+//               info.menuItemId === 'cooldesk-scrape-links' ? 'COOLDESK_SCRAPE_LINKS' :
+//                 info.menuItemId === 'cooldesk-sticky-note' ? 'COOLDESK_STICKY_NOTE' :
+//                   'COOLDESK_ADD_TO_WORKSPACE',
+//             selectionText: info.selectionText,
+//             pageUrl: info.pageUrl,
+//             linkUrl: info.linkUrl,
+//             pageTitle: tab.title
+//           });
+//         } catch (e) {
+//           console.error('[Background] Context menu retry failed:', e);
+//         }
+//       }, 200);
+//     } catch (injectErr) {
+//       console.error('[Background] Failed to inject content script:', injectErr);
+//     }
+//   }
+// });
 
 // Global Command Handlers (Keyboard Shortcuts)
 if (chrome?.commands?.onCommand) {
-chrome.commands.onCommand.addListener(async (command) => {
-  console.log('[Background] Command received:', command);
+  chrome.commands.onCommand.addListener(async (command) => {
+    console.log('[Background] Command received:', command);
 
-  if (command === 'open_spotlight') {
-    // Send message to active tab to trigger Spotlight UI
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab) {
-        console.log('[Background] Toggling Spotlight on tab:', tab.id);
-        chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SPOTLIGHT' }).catch(async (err) => {
-          console.warn('[Background] Message failed (likely content script not loaded), attempting to re-inject:', err);
-          try {
-            // Attempt to inject the content script manually if it's not present
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['src/content-scripts/interactionContent.js']
-            });
-            // Try sending the message again after a short delay
-            setTimeout(() => {
-              chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SPOTLIGHT' }).catch(e => {
-                console.error('[Background] Failed to toggle spotlight even after injection:', e);
+    if (command === 'open_spotlight') {
+      // Send message to active tab to trigger Spotlight UI
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab) {
+          console.log('[Background] Toggling Spotlight on tab:', tab.id);
+          chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SPOTLIGHT' }).catch(async (err) => {
+            console.warn('[Background] Message failed (likely content script not loaded), attempting to re-inject:', err);
+            try {
+              // Attempt to inject the content script manually if it's not present
+              await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ['src/content-scripts/interactionContent.js']
               });
-            }, 200);
-          } catch (injectErr) {
-            console.error('[Background] Failed to re-inject content script:', injectErr);
-          }
-        });
+              // Try sending the message again after a short delay
+              setTimeout(() => {
+                chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SPOTLIGHT' }).catch(e => {
+                  console.error('[Background] Failed to toggle spotlight even after injection:', e);
+                });
+              }, 200);
+            } catch (injectErr) {
+              console.error('[Background] Failed to re-inject content script:', injectErr);
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('[Background] Failed to send Spotlight message:', e);
       }
-    } catch (e) {
-      console.warn('[Background] Failed to send Spotlight message:', e);
     }
-  }
 
-});
+  });
 } // End of chrome.commands check
 
 // MV3 background service worker (type: module)
@@ -270,8 +270,8 @@ import {
 } from './activity.js';
 import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
-import { runWorkspaceCleanup } from '../utils/urlQualification.js';
 import { CommandParser } from '../services/commandParser.js';
+import { runWorkspaceCleanup } from '../utils/urlQualification.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
 import { scheduleDailySummary } from '../services/memory/dailySummaryGenerator.js';
 import { NanoAIService } from '../services/nanoAIService.js';
@@ -283,19 +283,19 @@ import { initializeWorkspaces } from './workspaces.js';
 
 // Task Manager for Task-First Tab Modeling
 import {
-  initialize as initializeTaskManager,
-  handleTabCreated as taskHandleTabCreated,
-  handleTabActivated as taskHandleTabActivated,
-  handleTabRemoved as taskHandleTabRemoved,
-  handleTabUpdated as taskHandleTabUpdated,
+  getActiveTaskId,
   getAllTasks,
   getTaskById,
   getTaskForTab,
+  initialize as initializeTaskManager,
+  mergeTasksInto,
+  moveTabToTask,
   renameTask,
   setTaskAiNamed,
-  moveTabToTask,
-  mergeTasksInto,
-  getActiveTaskId
+  handleTabActivated as taskHandleTabActivated,
+  handleTabCreated as taskHandleTabCreated,
+  handleTabRemoved as taskHandleTabRemoved,
+  handleTabUpdated as taskHandleTabUpdated
 } from './taskManager.js';
 
 // Initialize Search Indexer (Background Service)

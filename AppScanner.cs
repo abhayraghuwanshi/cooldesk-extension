@@ -51,10 +51,13 @@ public class AppScanner {
     static Dictionary<string, AppInfo> apps = new Dictionary<string, AppInfo>(StringComparer.OrdinalIgnoreCase);
 
     class AppInfo {
+        public string id;
         public string name;
         public string path;
         public string source;
         public string iconBase64;
+        public uint pid;
+        public bool isRunning;
     }
 
     static void Main(string[] args) {
@@ -68,6 +71,9 @@ public class AppScanner {
             // Method 3: Scan Registry (for apps without shortcuts)
             ScanRegistry();
 
+            // Method 4: Scan Running Processes
+            ScanRunning();
+
             // Output JSON
             Console.Write("[");
             bool first = true;
@@ -75,16 +81,19 @@ public class AppScanner {
                 if (!first) Console.Write(",");
                 first = false;
                 Console.Write("{");
-                Console.Write("\"id\":\"installed-" + EscapeJson(app.name) + "\",");
+                Console.Write("\"id\":\"" + (string.IsNullOrEmpty(app.id) ? "installed-" + EscapeJson(app.name) : app.id) + "\",");
                 Console.Write("\"name\":\"" + EscapeJson(app.name) + "\",");
                 Console.Write("\"title\":\"" + EscapeJson(app.name) + "\",");
                 Console.Write("\"path\":\"" + EscapeJson(app.path) + "\",");
                 Console.Write("\"type\":\"app\",");
                 Console.Write("\"source\":\"" + app.source + "\",");
+                if (app.pid > 0) {
+                    Console.Write("\"pid\":" + app.pid + ",");
+                }
                 if (!string.IsNullOrEmpty(app.iconBase64)) {
                     Console.Write("\"icon\":\"data:image/png;base64," + app.iconBase64 + "\",");
                 }
-                Console.Write("\"isRunning\":false");
+                Console.Write("\"isRunning\":" + (app.isRunning ? "true" : "false"));
                 Console.Write("}");
             }
             Console.WriteLine("]");
@@ -269,6 +278,91 @@ public class AppScanner {
         } catch { }
     }
 
+    static void ScanRunning() {
+        // Collect all running processes for path matching
+        Dictionary<string, System.Diagnostics.Process> runningProcessesByPath = new Dictionary<string, System.Diagnostics.Process>(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, System.Diagnostics.Process> runningProcessesByName = new Dictionary<string, System.Diagnostics.Process>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var proc in System.Diagnostics.Process.GetProcesses()) {
+            try {
+                if (!runningProcessesByName.ContainsKey(proc.ProcessName)) {
+                    runningProcessesByName[proc.ProcessName] = proc;
+                }
+                string exePath = proc.MainModule.FileName;
+                if (!string.IsNullOrEmpty(exePath) && !runningProcessesByPath.ContainsKey(exePath)) {
+                    runningProcessesByPath[exePath] = proc;
+                }
+            } catch { }
+        }
+
+        // 1. Mark installed apps as running if found in processes
+        foreach (var app in apps.Values) {
+            if (runningProcessesByPath.ContainsKey(app.path)) {
+                app.isRunning = true;
+                app.pid = (uint)runningProcessesByPath[app.path].Id;
+            } else {
+                string exeName = Path.GetFileNameWithoutExtension(app.path);
+                if (runningProcessesByName.ContainsKey(exeName)) {
+                    app.isRunning = true;
+                    app.pid = (uint)runningProcessesByName[exeName].Id;
+                }
+            }
+        }
+
+        // 2. Discover running apps with windows (including those on other desktops)
+        EnumWindows((hWnd, lParam) => {
+            // Must be visible
+            if (!IsWindowVisible(hWnd)) {
+                // Check if it's cloaked (likely on another virtual desktop)
+                int cloaked = 0;
+                DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, sizeof(int));
+                if (cloaked == 0) return true; // Not visible and not cloaked -> skip
+            }
+
+            // Must have a title
+            int length = GetWindowTextLength(hWnd);
+            if (length == 0) return true;
+
+            // Filter by styles (typical for taskbar apps)
+            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            if ((exStyle & WS_EX_TOOLWINDOW) != 0 && (exStyle & WS_EX_APPWINDOW) == 0) return true;
+            
+            IntPtr owner = GetWindow(hWnd, GW_OWNER);
+            if (owner != IntPtr.Zero && (exStyle & WS_EX_APPWINDOW) == 0) return true;
+
+            uint pid;
+            GetWindowThreadProcessId(hWnd, out pid);
+            if (pid == 0) return true;
+
+            try {
+                var proc = System.Diagnostics.Process.GetProcessById((int)pid);
+                string path = proc.MainModule.FileName;
+                string name = proc.ProcessName;
+                
+                // Skip system processes
+                if (ShouldSkipPath(path) || ShouldSkip(name)) return true;
+
+                string key = name.ToLower();
+                if (!apps.ContainsKey(key)) {
+                    apps[key] = new AppInfo {
+                        id = "app-" + pid,
+                        name = name,
+                        path = path,
+                        source = "running",
+                        pid = pid,
+                        isRunning = true,
+                        iconBase64 = ExtractIconAsBase64(path)
+                    };
+                } else {
+                    apps[key].isRunning = true;
+                    apps[key].pid = pid;
+                }
+            } catch { }
+
+            return true;
+        }, IntPtr.Zero);
+    }
+
     static bool ShouldSkip(string name) {
         if (string.IsNullOrEmpty(name)) return true;
         string lower = name.ToLower();
@@ -374,6 +468,35 @@ public class AppScanner {
     [DllImport("shell32.dll", CharSet = CharSet.Auto)]
     static extern IntPtr SHGetFileInfo(string pszPath, uint dwFileAttributes, ref SHFILEINFO psfi, uint cbFileInfo, uint uFlags);
     
+    [DllImport("user32.dll")]
+    static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    [DllImport("user32.dll")]
+    static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("dwmapi.dll")]
+    static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    const int GWL_EXSTYLE = -20;
+    const int WS_EX_TOOLWINDOW = 0x00000080;
+    const int WS_EX_APPWINDOW = 0x00040000;
+    const uint GW_OWNER = 4;
+    const int DWMWA_CLOAKED = 14;
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     struct SHFILEINFO {
         public IntPtr hIcon;
