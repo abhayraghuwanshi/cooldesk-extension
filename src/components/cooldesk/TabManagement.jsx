@@ -280,7 +280,7 @@ export function TabManagement() {
           return true;
         });
 
-        // runningAppsService already deduplicates by PID — one entry per process.
+        // runningAppsService returns per-HWND entries — multi-window apps appear once per window.
         const sortedApps = [...filteredApps].sort((a, b) =>
           (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())
         );

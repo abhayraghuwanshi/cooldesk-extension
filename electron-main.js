@@ -969,12 +969,12 @@ async function getInstalledAppsLinux() {
 /**
  * Focus an application window by PID (cross-platform)
  */
-async function focusAppWindow(pid, processName) {
+async function focusAppWindow(pid, processName, hwnd) {
     const platform = process.platform;
 
     try {
         if (platform === 'win32') {
-            return await focusAppWindowWindows(pid, processName);
+            return await focusAppWindowWindows(pid, processName, hwnd);
         } else if (platform === 'darwin') {
             return await focusAppWindowMac(pid);
         } else {
@@ -988,9 +988,10 @@ async function focusAppWindow(pid, processName) {
 
 /**
  * Windows: Focus window using compiled AppFocus.exe (FAST ~30-50ms)
- * This is 6-10x faster than PowerShell Add-Type approach
+ * Supports --hwnd <handle> for precise per-window focus (multi-window apps).
+ * Falls back to PID-based focus if no HWND provided.
  */
-async function focusAppWindowWindows(pid, processName) {
+async function focusAppWindowWindows(pid, processName, hwnd) {
     let exePath;
     if (app.isPackaged) {
         exePath = join(process.resourcesPath, 'AppFocus.exe');
@@ -999,9 +1000,14 @@ async function focusAppWindowWindows(pid, processName) {
     }
 
     try {
-        // Pass both PID and process name to AppFocus.exe for better fallback
-        // AppFocus.exe will try PID first, then fall back to process name if PID fails
-        const args = processName ? `${pid} "${processName}"` : `${pid}`;
+        let args;
+        if (hwnd && hwnd !== 0) {
+            // Precise per-window focus using HWND handle
+            args = `--hwnd ${hwnd}`;
+        } else {
+            // PID-based focus with optional process name fallback
+            args = processName ? `${pid} "${processName}"` : `${pid}`;
+        }
         await execAsync(`"${exePath}" ${args}`, {
             windowsHide: true,
             timeout: 1000
@@ -1344,6 +1350,80 @@ function handleGetRequest(path, url, res) {
             res.writeHead(200);
             res.end(JSON.stringify({ ok: true, timestamp: Date.now() }));
             break;
+
+        case '/search':
+            // App search endpoint — mirrors the Rust sidecar /search for Electron mode.
+            // Reads from getRunningApps() + getInstalledApps() so search is consistent with TabManagement.
+            (async () => {
+                try {
+                    const query = (url.searchParams.get('q') || '').toLowerCase().trim();
+                    const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+                    // Running apps (fresh 3s cache) + installed apps (24h cache)
+                    const [runningApps, installedApps] = await Promise.all([
+                        getRunningApps(),
+                        getInstalledApps()
+                    ]);
+                    // Merge: running apps take priority, installed apps fill in the rest
+                    const runningPaths = new Set(runningApps.map(a => (a.path || '').toLowerCase()));
+                    const notRunning = installedApps.filter(a => !a.isRunning && !runningPaths.has((a.path || '').toLowerCase()));
+                    const allApps = [...runningApps, ...notRunning];
+
+                    // Simple fuzzy score: exact > startsWith > includes > chars-in-order
+                    function appFuzzyScore(text, q) {
+                        if (!text || !q) return 0;
+                        const t = text.toLowerCase();
+                        if (t === q) return 100;
+                        if (t.startsWith(q)) return 90;
+                        if (t.includes(q)) return 75;
+                        // char-sequence match
+                        let ti = 0, qi = 0, matched = 0;
+                        while (ti < t.length && qi < q.length) {
+                            if (t[ti] === q[qi]) { matched++; qi++; }
+                            ti++;
+                        }
+                        return qi === q.length ? Math.floor(50 * matched / t.length) : 0;
+                    }
+
+                    const results = allApps
+                        .filter(a => {
+                            if (!query) return a.isRunning;
+                            const nameScore = appFuzzyScore(a.name, query);
+                            const titleScore = appFuzzyScore(a.title, query);
+                            const titlesScore = Array.isArray(a.titles)
+                                ? Math.max(0, ...a.titles.map(t => appFuzzyScore(t, query)))
+                                : 0;
+                            return Math.max(nameScore, titleScore, titlesScore) > 0;
+                        })
+                        .map(a => {
+                            const nameScore = appFuzzyScore(a.name, query);
+                            const titleScore = appFuzzyScore(a.title, query);
+                            const titlesScore = Array.isArray(a.titles)
+                                ? Math.max(0, ...a.titles.map(t => appFuzzyScore(t, query)))
+                                : 0;
+                            const matchScore = query ? Math.max(nameScore, titleScore, titlesScore) : 100;
+                            // Running visible apps rank higher
+                            let score = matchScore;
+                            if (a.isRunning) {
+                                if (a.isVisible && !a.cloaked) score = Math.max(score, 85) + 15;
+                                else if (a.cloaked) score = Math.max(score, 80) + 12;
+                                else score = Math.max(score, 75) + 10;
+                            } else {
+                                score = Math.min(score, 75);
+                            }
+                            return { ...a, score: Math.min(score, 100) };
+                        })
+                        .sort((a, b) => b.score - a.score)
+                        .slice(0, limit);
+
+                    res.writeHead(200);
+                    res.end(JSON.stringify({ results }));
+                } catch (e) {
+                    console.warn('[Electron] /search failed:', e.message);
+                    res.writeHead(500);
+                    res.end(JSON.stringify({ results: [] }));
+                }
+            })();
+            return; // async handler — don't fall through
 
         case '/debug/tabs':
             // Debug endpoint to see tab sync status per device
@@ -2558,9 +2638,9 @@ ipcMain.handle('refresh-installed-apps', async () => {
     }
 });
 
-ipcMain.handle('focus-app', async (_event, pid, processName) => {
+ipcMain.handle('focus-app', async (_event, pid, processName, hwnd) => {
     try {
-        return await focusAppWindow(pid, processName);
+        return await focusAppWindow(pid, processName, hwnd);
     } catch (e) {
         console.warn('[Electron] focus-app failed:', e.message);
         return { success: false, error: e.message };

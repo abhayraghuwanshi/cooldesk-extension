@@ -105,7 +105,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // App discovery (cross-platform)
     getRunningApps: () => ipcRenderer.invoke('get-running-apps'),
     getInstalledApps: () => ipcRenderer.invoke('get-installed-apps'),
-    focusApp: (pid) => ipcRenderer.invoke('focus-app', pid),
+    focusApp: (pid, name, hwnd) => ipcRenderer.invoke('focus-app', pid, name, hwnd),
     launchApp: (path) => ipcRenderer.invoke('launch-app', path),
 
     // App info

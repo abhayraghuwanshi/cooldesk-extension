@@ -140,10 +140,8 @@ class RunningAppsService {
     }
 
     /**
-     * Deduplicate an array of running apps by PID.
-     * AppMatcher may emit multiple HWND entries per PID for multi-window apps.
-     * Consumers (TabManagement, ActivityFeed, etc.) want one entry per process.
-     * Search results come from the backend directly and are not affected.
+     * Collapse multiple HWND entries for the same PID to one entry.
+     * Not used internally — available for consumers that need one-per-process behaviour.
      */
     deduplicateByPid(apps) {
         const byPid = new Map();
@@ -174,10 +172,9 @@ class RunningAppsService {
 
         try {
             const runningApps = await window.electronAPI.getRunningApps();
-            const filtered = Array.isArray(runningApps)
+            this.cache.runningApps = Array.isArray(runningApps)
                 ? runningApps.filter(a => a.isRunning === true)
                 : [];
-            this.cache.runningApps = this.deduplicateByPid(filtered);
             this.cache.lastRunningFetch = Date.now();
             this.notifySubscribers();
         } catch (error) {
@@ -229,11 +226,10 @@ class RunningAppsService {
                     window.electronAPI.getInstalledApps?.() || []
                 ]);
 
-                // Update cache — filter to running only, then dedup by PID
-                const filtered = Array.isArray(runningApps)
+                // Update cache — filter to running only, preserve per-HWND entries for multi-window apps
+                this.cache.runningApps = Array.isArray(runningApps)
                     ? runningApps.filter(a => a.isRunning === true)
                     : [];
-                this.cache.runningApps = this.deduplicateByPid(filtered);
                 const newInstalledApps = Array.isArray(installedApps) ? installedApps : [];
 
                 // Only update and save installed apps if they changed
