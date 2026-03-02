@@ -140,6 +140,30 @@ class RunningAppsService {
     }
 
     /**
+     * Deduplicate an array of running apps by PID.
+     * AppMatcher may emit multiple HWND entries per PID for multi-window apps.
+     * Consumers (TabManagement, ActivityFeed, etc.) want one entry per process.
+     * Search results come from the backend directly and are not affected.
+     */
+    deduplicateByPid(apps) {
+        const byPid = new Map();
+        for (const app of apps) {
+            const key = app.pid || app.id;
+            if (!byPid.has(key)) {
+                byPid.set(key, app);
+            } else {
+                // Prefer the entry whose title contains the app name (the primary window)
+                const existing = byPid.get(key);
+                const nameLower = (app.name || '').toLowerCase();
+                const newHasName = (app.title || '').toLowerCase().includes(nameLower);
+                const existingHasName = (existing.title || '').toLowerCase().includes(nameLower);
+                if (!existingHasName && newHasName) byPid.set(key, app);
+            }
+        }
+        return [...byPid.values()];
+    }
+
+    /**
      * Fetch only running apps (used during polling)
      */
     async fetchRunningApps() {
@@ -150,9 +174,10 @@ class RunningAppsService {
 
         try {
             const runningApps = await window.electronAPI.getRunningApps();
-            this.cache.runningApps = Array.isArray(runningApps)
+            const filtered = Array.isArray(runningApps)
                 ? runningApps.filter(a => a.isRunning === true)
                 : [];
+            this.cache.runningApps = this.deduplicateByPid(filtered);
             this.cache.lastRunningFetch = Date.now();
             this.notifySubscribers();
         } catch (error) {
@@ -204,10 +229,11 @@ class RunningAppsService {
                     window.electronAPI.getInstalledApps?.() || []
                 ]);
 
-                // Update cache — only keep apps that are actually running
-                this.cache.runningApps = Array.isArray(runningApps)
+                // Update cache — filter to running only, then dedup by PID
+                const filtered = Array.isArray(runningApps)
                     ? runningApps.filter(a => a.isRunning === true)
                     : [];
+                this.cache.runningApps = this.deduplicateByPid(filtered);
                 const newInstalledApps = Array.isArray(installedApps) ? installedApps : [];
 
                 // Only update and save installed apps if they changed

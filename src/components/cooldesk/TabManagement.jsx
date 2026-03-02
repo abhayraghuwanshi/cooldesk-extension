@@ -280,8 +280,7 @@ export function TabManagement() {
           return true;
         });
 
-        // No deduplication needed — AppMatcher outputs one entry per unique PID.
-        // Each entry is a real focusable window. Show them all.
+        // runningAppsService already deduplicates by PID — one entry per process.
         const sortedApps = [...filteredApps].sort((a, b) =>
           (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())
         );
