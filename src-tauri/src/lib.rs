@@ -109,24 +109,37 @@ async fn focus_window(app: tauri::AppHandle, pid: u32, name: Option<String>, hwn
 fn toggle_spotlight(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("spotlight") {
         if window.is_visible().unwrap_or(false) {
-            window.hide().unwrap();
+            let _ = window.hide();
         } else {
-            // Get cursor position and move window to that monitor
-            if let Ok(cursor_pos) = window.cursor_position() {
-                // Get window size
-                let window_width = 800.0;
-                let window_height = 600.0;
+            // Get PHYSICAL cursor position from Win32
+            let mut pt = windows::Win32::Foundation::POINT::default();
+            let _ = unsafe { windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt) };
 
-                // Center the window horizontally on cursor, position near top
-                let x = cursor_pos.x - (window_width / 2.0);
-                let y = cursor_pos.y.min(200.0); // Position near top of screen, max 200px from top
+            // Find which monitor contains this physical cursor point
+            let monitors = app.available_monitors().unwrap_or_default();
+            let target_monitor = monitors.into_iter().find(|m| {
+                let pos = m.position();
+                let size = m.size();
+                pt.x >= pos.x && pt.x < pos.x + size.width as i32 &&
+                pt.y >= pos.y && pt.y < pos.y + size.height as i32
+            }).or_else(|| app.primary_monitor().ok().flatten());
 
-                // Move window to cursor's monitor
-                let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+            if let Some(monitor) = target_monitor {
+                let m_pos = monitor.position();
+                let m_size = monitor.size();
+                
+                // Get physical window size (default to 800x600 if unknown)
+                let w_size = window.outer_size().unwrap_or(tauri::PhysicalSize { width: 800, height: 600 });
+                
+                // Multi-monitor aware centering: Center X, and find Y at 1/3 from top
+                let x = m_pos.x + (m_size.width as i32 - w_size.width as i32) / 2;
+                let y = m_pos.y + (m_size.height as i32 - w_size.height as i32) / 3;
+                
+                let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
             }
 
-            window.show().unwrap();
-            window.set_focus().unwrap();
+            let _ = window.show();
+            let _ = window.set_focus();
         }
     }
 }
