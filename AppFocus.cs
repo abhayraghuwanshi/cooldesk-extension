@@ -58,18 +58,38 @@ public class AppFocus {
     }
 
     static bool TryFocusPid(int pid) {
-        try {
-            Process p = Process.GetProcessById(pid);
-            if (p.MainWindowHandle != IntPtr.Zero) {
-                if (IsIconic(p.MainWindowHandle)) {
-                    ShowWindow(p.MainWindowHandle, SW_RESTORE);
-                } else {
-                    ShowWindow(p.MainWindowHandle, SW_SHOW);
+        bool focused = false;
+        EnumWindows((hWnd, lParam) => {
+            uint windowPid;
+            GetWindowThreadProcessId(hWnd, out windowPid);
+            
+            if (windowPid == (uint)pid) {
+                // Must have a title or be visible
+                int len = GetWindowTextLength(hWnd);
+                if (len > 0 || IsWindowVisible(hWnd)) {
+                    // Restore if minimized
+                    if (IsIconic(hWnd)) {
+                        ShowWindow(hWnd, SW_RESTORE);
+                    } else {
+                        ShowWindow(hWnd, SW_SHOW);
+                    }
+                    
+                    // Bring to front
+                    SetForegroundWindow(hWnd);
+                    focused = true;
+                    return false; // Stop enumerating
                 }
-                SetForegroundWindow(p.MainWindowHandle);
-                return true;
             }
-        } catch { }
-        return false;
+            return true;
+        }, IntPtr.Zero);
+        
+        return focused;
     }
+
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] static extern int GetWindowTextLength(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
+
+    delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 }

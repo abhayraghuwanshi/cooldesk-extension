@@ -33,6 +33,83 @@ let electronDataCache = {
   }
 };
 
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
+// Normalize app name for matching (strips spaces, dots, exes, etc)
+function normalizeAppName(name) {
+  return (name || '').toLowerCase()
+    .replace(/\.exe$/i, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+// ==========================================
+// PERSISTENT APP MAPPING CACHE
+// Learns which processes belong to which apps over time
+// e.g., "DBeaver" -> "javaw.exe", "Canva" -> "msedge.exe"
+// ==========================================
+let appProcessMapping = {}; // { "dbeaver": { processName: "javaw", path: "...", lastSeen: timestamp } }
+
+// Load mapping from localStorage if available
+function loadAppMapping() {
+  try {
+    const stored = localStorage.getItem('app_process_mapping');
+    if (stored) {
+      appProcessMapping = JSON.parse(stored);
+      console.log('[SearchService] Loaded app mapping cache:', Object.keys(appProcessMapping).length, 'entries');
+    }
+  } catch (e) {
+    console.warn('[SearchService] Failed to load app mapping:', e);
+  }
+}
+
+// Save mapping to localStorage
+function saveAppMapping() {
+  try {
+    localStorage.setItem('app_process_mapping', JSON.stringify(appProcessMapping));
+  } catch (e) {
+    console.warn('[SearchService] Failed to save app mapping:', e);
+  }
+}
+
+// Learn from successful matches
+function learnAppMapping(appName, runningApp) {
+  if (!appName || !runningApp) return;
+
+  const key = normalizeAppName(appName);
+  const processName = runningApp.name;
+  const processPath = runningApp.path;
+
+  // Update mapping
+  appProcessMapping[key] = {
+    processName: processName,
+    path: processPath,
+    lastSeen: Date.now()
+  };
+
+  // Save to localStorage (debounced via setTimeout to avoid too many writes)
+  if (!window.saveAppMappingTimeout) {
+    window.saveAppMappingTimeout = setTimeout(() => {
+      saveAppMapping();
+      window.saveAppMappingTimeout = null;
+    }, 1000);
+  }
+}
+
+// Initialize mapping cache on load
+if (typeof localStorage !== 'undefined') {
+  loadAppMapping();
+}
+
+// Print AppMatcher results in DevTools so you can inspect matching in-browser
+if (typeof window !== 'undefined' && window.electronAPI?.subscribe) {
+  window.electronAPI.subscribe('debug-running-apps', (apps) => {
+    console.log('[AppMatcher] Running apps from matcher (' + apps.length + ' total):');
+    console.table(apps);
+  });
+}
+
 // Different TTLs for different data types
 const CACHE_TTL = {
   tabs: 5000,              // 5 seconds - dynamic, changes frequently
@@ -106,10 +183,24 @@ export async function refreshElectronCache(forceRefresh = false) {
   // 1. DYNAMIC DATA: Tabs & Running Apps (refresh if stale or forced)
   if (forceRefresh || !isCacheFresh('runningApps')) {
     refreshPromises.push(
-      withTimeout(window.electronAPI.getRunningApps?.().catch(() => []), 1000)
+      withTimeout(window.electronAPI.getRunningApps?.().catch(() => []), 3000)
         .then(apps => {
-          electronDataCache.runningApps = Array.isArray(apps) ? apps : [];
-          electronDataCache.lastRefresh.runningApps = now;
+          if (Array.isArray(apps)) {
+            electronDataCache.runningApps = apps;
+            electronDataCache.lastRefresh.runningApps = now;
+            const runningCount = apps.filter(a => a.isRunning).length;
+            const visibleCount = apps.filter(a => a.isRunning && a.isVisible && !a.cloaked).length;
+            console.log(`[SearchService] Loaded ${apps.length} apps (${runningCount} running, ${visibleCount} visible):`, apps.filter(a => a.isRunning).map(a => a.name).join(', '));
+            if (apps.length > 0) {
+              console.table(apps.filter(a => a.isRunning).map(a => ({
+                name: a.name,
+                pid: a.pid,
+                visible: a.isVisible,
+                cloaked: a.cloaked,
+                title: a.title
+              })));
+            }
+          }
         })
     );
   }
@@ -214,138 +305,47 @@ export async function refreshElectronCache(forceRefresh = false) {
 function searchElectronCache(query) {
   if (!query || !query.trim()) return [];
 
-  console.log('[SearchService] searchElectronCache called with:', query);
-  console.log('[SearchService] Cache state:', {
-    tabs: electronDataCache.tabs.length,
-    runningApps: electronDataCache.runningApps.length,
-    installedApps: electronDataCache.installedApps.length,
-    history: electronDataCache.history.length,
-    bookmarks: electronDataCache.bookmarks.length,
-    workspaces: electronDataCache.workspaces.length
-  });
-
   const results = [];
   const q = query.toLowerCase();
-
-  // Helper to normalize app name for duplicate detection
-  const normalizeAppName = (name) => (name || '').toLowerCase().replace(/\.exe$/, '');
-
-  // Track running app names/paths for better matching
-  const runningAppsMap = new Map(); // key: normalized name -> app
-  const runningAppsPathMap = new Map(); // key: lowercase path -> app
-
-  electronDataCache.runningApps.forEach(a => {
-    const norm = normalizeAppName(a.name);
-    runningAppsMap.set(norm, a);
-    if (a.path) runningAppsPathMap.set(a.path.toLowerCase(), a);
-  });
-
-  // Debug: log running apps for matching
-  console.log('[SearchService] Running apps for matching:', [...runningAppsMap.keys()]);
-
-  // Track added apps to avoid duplicates
   const addedIds = new Set();
-  const activeRunningAppNames = new Set();
 
-  // Search ALL installed apps first (shows all apps, marks running ones)
+  // AppMatcher already set isRunning/isVisible/cloaked/pid on each app.
+  // Trust those flags directly — no re-matching needed.
   for (const app of electronDataCache.installedApps) {
-    const appNameLower = (app.name || '').toLowerCase();
-    const appNameNorm = normalizeAppName(app.name);
+    const nameScore = fuzzyScore(app.name || '', query);
+    const titleScore = app.title ? fuzzyScore(app.title, query) : 0;
+    const matchScore = Math.max(nameScore, titleScore);
+    if (matchScore === 0) continue;
 
-    // Search match
-    if (!appNameLower.includes(q)) continue;
+    const uniqueId = `app-${app.id || app.name}`;
+    if (addedIds.has(uniqueId)) continue;
+    addedIds.add(uniqueId);
 
-    // Check if running
-    let runningInfo = runningAppsPathMap.get((app.path || '').toLowerCase());
-    if (!runningInfo) runningInfo = runningAppsMap.get(appNameNorm);
+    const isRunning = !!app.isRunning;
+    let score = matchScore;
 
-    // Also try checking if installed app name matches running app name closely
-    // Only match if names are very similar (not just substring match)
-    if (!runningInfo) {
-      for (const [rName, rApp] of runningAppsMap.entries()) {
-        // Require either exact match or significant overlap (at least 5 chars and 60% match)
-        const minLen = Math.min(appNameNorm.length, rName.length);
-        const maxLen = Math.max(appNameNorm.length, rName.length);
-        if (minLen >= 5 && (appNameNorm === rName ||
-            (appNameNorm.includes(rName) && rName.length >= maxLen * 0.6) ||
-            (rName.includes(appNameNorm) && appNameNorm.length >= maxLen * 0.6))) {
-          runningInfo = rApp;
-          break;
-        }
-      }
+    if (isRunning) {
+      if (app.isVisible && !app.cloaked) score = Math.max(score, 85) + 15; // current desktop
+      else if (app.cloaked > 0)          score = Math.max(score, 80) + 12; // other desktop
+      else                               score = Math.max(score, 75) + 10; // minimized/hidden
+    } else {
+      score = Math.min(score, 75); // not running: cap below running apps
     }
-
-    const isRunning = !!runningInfo;
-    const uniqueId = `app-${app.name}`;
 
     results.push({
       id: uniqueId,
       title: app.name,
       name: app.name,
       path: app.path,
-      pid: runningInfo?.pid,
-      description: isRunning ? (runningInfo?.title || 'Running') : 'Application',
+      pid: app.pid || undefined,
+      description: isRunning ? (app.title || 'Running') : 'Application',
       type: 'app',
-      isRunning: isRunning,
-      icon: app.icon, // Pass through the icon from AppScanner
-      score: isRunning ? 95 : 75 // Running apps score higher
+      isRunning,
+      isVisible: app.isVisible,
+      cloaked: app.cloaked,
+      icon: app.icon,
+      score: Math.min(100, Math.max(0, score))
     });
-    addedIds.add(uniqueId);
-
-    if (isRunning) {
-      if (runningInfo) addedIds.add(`app-running-${runningInfo.pid}`);
-      activeRunningAppNames.add(appNameNorm);
-      if (runningInfo) activeRunningAppNames.add(normalizeAppName(runningInfo.name));
-    }
-  }
-
-  // Add running apps that aren't in installed list (system processes, etc.)
-  for (const app of electronDataCache.runningApps) {
-    const uniqueId = `app-running-${app.pid}`;
-    if (addedIds.has(uniqueId)) continue;
-
-    const appNameNorm = normalizeAppName(app.name);
-    if (activeRunningAppNames.has(appNameNorm)) continue; // Already shown effectively
-
-    // Filter match
-    const title = app.title || app.name || '';
-    const nameMatch = (app.name || '').toLowerCase().includes(q);
-    const titleMatch = title.toLowerCase().includes(q);
-
-    if (nameMatch || titleMatch) {
-      // PROACTIVE: Try to find an icon from Installed Apps if missing
-      let icon = app.icon;
-      if (!icon) {
-        // Try path match
-        const installedByPath = app.path ? electronDataCache.installedApps.find(ia => ia.path && ia.path.toLowerCase() === app.path.toLowerCase()) : null;
-        if (installedByPath) icon = installedByPath.icon;
-
-        // Try loose name match if path fails
-        if (!icon) {
-          const installedByName = electronDataCache.installedApps.find(ia => {
-            const iaNorm = normalizeAppName(ia.name);
-            return iaNorm === appNameNorm || iaNorm.includes(appNameNorm) || appNameNorm.includes(iaNorm);
-          });
-          if (installedByName) icon = installedByName.icon;
-        }
-      }
-
-      results.push({
-        id: uniqueId,
-        title: app.name,
-        name: app.name,
-        path: app.path,
-        pid: app.pid,
-        description: app.title || 'Running Process',
-        type: 'app',
-        isRunning: true,
-        icon: icon, // Use resolved icon
-        score: nameMatch ? 90 : 80
-      });
-      // Mark as added
-      addedIds.add(uniqueId);
-      activeRunningAppNames.add(appNameNorm);
-    }
   }
 
   // Search tabs
@@ -420,8 +420,20 @@ function searchElectronCache(query) {
   // Sort by score
   results.sort((a, b) => (b.score || 0) - (a.score || 0));
 
-  // Log final unique results
-  console.log('[SearchService] Search results for "' + query + '":', results.map(r => r.title));
+  // Log final unique results with visibility info
+  console.log(`[SearchService] Search results for "${query}" (${results.length} total):`);
+  if (results.length > 0) {
+    console.table(results.map(r => ({
+      title: r.title,
+      score: r.score,
+      type: r.type,
+      isRunning: r.isRunning ?? false,
+      isVisible: r.isVisible ?? false,
+      cloaked: r.cloaked ?? 0,
+      pid: r.pid ?? null,
+      description: (r.description || '').slice(0, 50)
+    })));
+  }
 
   return results;
 }
@@ -433,39 +445,90 @@ function isContentScript() {
   return typeof chrome !== 'undefined' && chrome.runtime && !chrome.tabs;
 }
 
-// --- HELPER: Fuzzy Scoring (Client Side) ---
+// --- HELPER: Advanced Fuzzy Scoring ---
+/**
+ * Production-grade fuzzy matching with multiple strategies
+ * Returns score 0-100 based on match quality
+ */
 export function fuzzyScore(text, query) {
   if (!text || !query) return 0;
+
   const textLower = text.toLowerCase();
   const queryLower = query.toLowerCase();
 
+  // EXACT MATCH: Highest priority
   if (textLower === queryLower) return 100;
-  if (textLower.startsWith(queryLower)) return 90;
-  if (textLower.includes(queryLower)) return 70;
 
-  const textWords = textLower.split(/\s+/);
-  if (textWords.some(w => w.startsWith(queryLower))) return 60;
+  // STARTS WITH: Very high priority
+  if (textLower.startsWith(queryLower)) return 95;
 
-  // Multi-word query matching: check if all query words appear in text
-  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 0);
+  // WORD BOUNDARY MATCH: e.g., "vs" matches "Visual Studio"
+  const textWords = textLower.split(/[\s\-_\.]+/).filter(w => w.length > 0);
+  const queryWords = queryLower.split(/[\s\-_\.]+/).filter(w => w.length > 0);
+
+  // Check if query words match start of text words
+  if (queryWords.length === 1) {
+    const hasWordStart = textWords.some(w => w.startsWith(queryLower));
+    if (hasWordStart) return 90;
+  }
+
+  // ACRONYM MATCH: e.g., "vsc" matches "Visual Studio Code"
+  if (queryLower.length >= 2 && textWords.length > 1) {
+    const acronym = textWords.map(w => w[0]).join('');
+    if (acronym === queryLower) return 85;
+    if (acronym.startsWith(queryLower)) return 82;
+  }
+
+  // CONTAINS MATCH: Full query appears in text
+  if (textLower.includes(queryLower)) return 75;
+
+  // MULTI-WORD MATCH: All query words appear in text
   if (queryWords.length > 1) {
     const allWordsMatch = queryWords.every(qw =>
       textLower.includes(qw) || textWords.some(tw => tw.startsWith(qw))
     );
-    if (allWordsMatch) return 65; // Good match for multi-word queries
-  }
-
-  // Simple character match walk
-  let queryIdx = 0;
-  let score = 0;
-  for (let i = 0; i < textLower.length && queryIdx < queryLower.length; i++) {
-    if (textLower[i] === queryLower[queryIdx]) {
-      score += 10;
-      queryIdx++;
+    if (allWordsMatch) {
+      // Boost score if words appear in order
+      let lastIndex = -1;
+      let inOrder = true;
+      for (const qw of queryWords) {
+        const index = textLower.indexOf(qw, lastIndex + 1);
+        if (index === -1 || index <= lastIndex) {
+          inOrder = false;
+          break;
+        }
+        lastIndex = index;
+      }
+      return inOrder ? 70 : 65;
     }
   }
+
+  // SUBSTRING MATCH: Query is part of a word
+  const hasSubstring = textWords.some(w => w.includes(queryLower));
+  if (hasSubstring) return 60;
+
+  // CHARACTER SEQUENCE MATCH: Characters appear in order (fuzzy)
+  let queryIdx = 0;
+  let matchCount = 0;
+  let consecutiveMatches = 0;
+  let maxConsecutive = 0;
+
+  for (let i = 0; i < textLower.length && queryIdx < queryLower.length; i++) {
+    if (textLower[i] === queryLower[queryIdx]) {
+      matchCount++;
+      consecutiveMatches++;
+      maxConsecutive = Math.max(maxConsecutive, consecutiveMatches);
+      queryIdx++;
+    } else {
+      consecutiveMatches = 0;
+    }
+  }
+
+  // All characters found in order
   if (queryIdx === queryLower.length) {
-    return Math.min(50, score);
+    const completeness = matchCount / queryLower.length;
+    const consecutiveBonus = maxConsecutive / queryLower.length;
+    return Math.floor(30 + (completeness * 20) + (consecutiveBonus * 10));
   }
 
   return 0;

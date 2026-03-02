@@ -30,7 +30,9 @@ const VALID_CHANNELS = [
     'llm-progress',
     'llm-token',
     'llm-complete',
-    'llm-error'
+    'llm-error',
+    // Debug
+    'debug-running-apps'
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {

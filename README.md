@@ -3,6 +3,11 @@
 ## Single Purpose
 CoolDesk is a **productivity enhancement extension** that captures and organizes web content for daily note-taking and workspace management. The extension serves one primary function: to help users collect, categorize, and manage information from their browsing sessions in an organized workspace environment.
 
+##
+# I have already recompiled the scanner for you using the following command:
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:exe /out:AppScanner.exe AppScanner.cs /r:System.Drawing.dll /unsafe
+
+
 ## Core Functionality
 - **Text Selection Capture**: Automatically saves selected text from web pages to daily notes
 - **Workspace Organization**: Categorizes captured content by domain and context

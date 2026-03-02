@@ -4,9 +4,25 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32;
+using System.Linq;
 
 public class AppScanner {
+    // Virtual Desktop Manager COM Interface (Windows 10+)
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("a5cd92ff-29be-454c-8d04-d82879fb3f1b")]
+    interface IVirtualDesktopManager {
+        bool IsWindowOnCurrentVirtualDesktop(IntPtr topLevelWindow);
+        Guid GetWindowDesktopId(IntPtr topLevelWindow);
+        void MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
+    }
+
+    [ComImport]
+    [Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a")]
+    class VirtualDesktopManager { }
+
     // For reading .lnk shortcut targets
     [ComImport]
     [Guid("00021401-0000-0000-C000-000000000046")]
@@ -53,15 +69,44 @@ public class AppScanner {
     class AppInfo {
         public string id;
         public string name;
+        public string title;
         public string path;
         public string source;
         public string iconBase64;
         public uint pid;
         public bool isRunning;
+        public int cloaked;
+        public bool isVisible;
+        public string desktopId; // Virtual Desktop GUID
+        public bool isOnCurrentDesktop; // Quick flag for current desktop
     }
 
+    static bool debug = false;
+    static Dictionary<string, List<uint>> pathPidMap = new Dictionary<string, List<uint>>(StringComparer.OrdinalIgnoreCase);
+    static Dictionary<string, List<uint>> namePidMap = new Dictionary<string, List<uint>>(StringComparer.OrdinalIgnoreCase);
+    static HashSet<uint> windowPids = new HashSet<uint>();
+    static Dictionary<uint, List<string>> pidToTitles = new Dictionary<uint, List<string>>();
+    static Dictionary<uint, Tuple<bool, int>> pidToWindowStates = new Dictionary<uint, Tuple<bool, int>>();
+    static Dictionary<uint, Guid> pidToDesktopId = new Dictionary<uint, Guid>();
+    static Guid currentDesktopId = Guid.Empty;
+    static IVirtualDesktopManager vdManager = null;
+
     static void Main(string[] args) {
+        foreach (var arg in args) {
+            if (arg == "--debug") debug = true;
+        }
+
         try {
+            // Initialize Virtual Desktop Manager (Windows 10+)
+            try {
+                Type vdmType = Type.GetTypeFromCLSID(new Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a"));
+                vdManager = (IVirtualDesktopManager)Activator.CreateInstance(vdmType);
+                if (debug) Console.Error.WriteLine("[VirtualDesktop] Manager initialized successfully");
+            } catch (Exception e) {
+                // Windows 10+ only, gracefully degrade on older systems
+                if (debug) Console.Error.WriteLine("[VirtualDesktop] Not available (Windows 10+ required): " + e.Message);
+            }
+
             // Method 1: Scan Start Menu shortcuts (most reliable)
             ScanStartMenu();
 
@@ -74,33 +119,84 @@ public class AppScanner {
             // Method 4: Scan Running Processes
             ScanRunning();
 
-            // Output JSON
-            Console.Write("[");
+            // Output JSON: { "installed": [...], "windows": [...] }
+            Console.Write("{\"installed\":[");
             bool first = true;
             foreach (var app in apps.Values) {
                 if (!first) Console.Write(",");
                 first = false;
                 Console.Write("{");
-                Console.Write("\"id\":\"" + (string.IsNullOrEmpty(app.id) ? "installed-" + EscapeJson(app.name) : app.id) + "\",");
+                Console.Write("\"id\":\"installed-" + EscapeJson(app.name) + "\",");
                 Console.Write("\"name\":\"" + EscapeJson(app.name) + "\",");
-                Console.Write("\"title\":\"" + EscapeJson(app.name) + "\",");
                 Console.Write("\"path\":\"" + EscapeJson(app.path) + "\",");
-                Console.Write("\"type\":\"app\",");
-                Console.Write("\"source\":\"" + app.source + "\",");
-                if (app.pid > 0) {
-                    Console.Write("\"pid\":" + app.pid + ",");
-                }
+                Console.Write("\"source\":\"" + app.source + "\"");
                 if (!string.IsNullOrEmpty(app.iconBase64)) {
-                    Console.Write("\"icon\":\"data:image/png;base64," + app.iconBase64 + "\",");
+                    Console.Write(",\"icon\":\"data:image/png;base64," + app.iconBase64 + "\"");
                 }
-                Console.Write("\"isRunning\":" + (app.isRunning ? "true" : "false"));
                 Console.Write("}");
             }
-            Console.WriteLine("]");
+            Console.Write("],\"windows\":[");
+
+            // Build reverse lookup: pid -> path
+            var pidToPath = new Dictionary<uint, string>();
+            foreach (var kvp in pathPidMap) {
+                foreach (uint pid2 in kvp.Value) {
+                    if (!pidToPath.ContainsKey(pid2)) pidToPath[pid2] = kvp.Key;
+                }
+            }
+
+            bool firstWin = true;
+            foreach (uint pid in windowPids) {
+                string wPath;
+                if (!pidToPath.TryGetValue(pid, out wPath) || string.IsNullOrEmpty(wPath)) continue;
+
+                string exeName = Path.GetFileNameWithoutExtension(wPath);
+                List<string> titles;
+                if (!pidToTitles.TryGetValue(pid, out titles)) titles = new List<string>();
+
+                bool isVisible = false;
+                int cloaked = 0;
+                Tuple<bool, int> state;
+                if (pidToWindowStates.TryGetValue(pid, out state)) {
+                    isVisible = state.Item1;
+                    cloaked = state.Item2;
+                }
+
+                bool isOnCurrentDesktop = true;
+                string desktopIdStr = null;
+                Guid deskId;
+                if (pidToDesktopId.TryGetValue(pid, out deskId)) {
+                    desktopIdStr = deskId.ToString();
+                    isOnCurrentDesktop = (deskId == currentDesktopId);
+                }
+
+                if (!firstWin) Console.Write(",");
+                firstWin = false;
+                Console.Write("{");
+                Console.Write("\"pid\":" + pid + ",");
+                Console.Write("\"exeName\":\"" + EscapeJson(exeName) + "\",");
+                Console.Write("\"path\":\"" + EscapeJson(wPath) + "\",");
+                Console.Write("\"titles\":[");
+                bool firstTitle = true;
+                foreach (var t in titles) {
+                    if (!firstTitle) Console.Write(",");
+                    firstTitle = false;
+                    Console.Write("\"" + EscapeJson(t) + "\"");
+                }
+                Console.Write("],");
+                Console.Write("\"isVisible\":" + (isVisible ? "true" : "false") + ",");
+                Console.Write("\"cloaked\":" + cloaked + ",");
+                Console.Write("\"isOnCurrentDesktop\":" + (isOnCurrentDesktop ? "true" : "false"));
+                if (!string.IsNullOrEmpty(desktopIdStr)) {
+                    Console.Write(",\"desktopId\":\"" + desktopIdStr + "\"");
+                }
+                Console.Write("}");
+            }
+            Console.WriteLine("]}");
 
         } catch (Exception ex) {
             Console.Error.WriteLine("Error: " + ex.Message);
-            Console.WriteLine("[]");
+            Console.WriteLine("{\"installed\":[],\"windows\":[]}");
         }
     }
 
@@ -122,6 +218,11 @@ public class AppScanner {
                     if (ShouldSkipPath(target)) continue;  // Filter by path
 
                     string name = Path.GetFileNameWithoutExtension(lnkFile);
+                    if (name.ToLower().EndsWith(".exe")) name = name.Substring(0, name.Length - 4);
+
+                    // Generic cleanup: Remove common suffixes like "-cli", " (x64)", etc.
+                    name = name.Replace("-cli", "").Replace(" (x64)", "").Replace(" (32-bit)", "").Trim();
+
                     if (ShouldSkip(name)) continue;
 
                     string key = name.ToLower();
@@ -279,88 +380,177 @@ public class AppScanner {
     }
 
     static void ScanRunning() {
-        // Collect all running processes for path matching
-        Dictionary<string, System.Diagnostics.Process> runningProcessesByPath = new Dictionary<string, System.Diagnostics.Process>(StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, System.Diagnostics.Process> runningProcessesByName = new Dictionary<string, System.Diagnostics.Process>(StringComparer.OrdinalIgnoreCase);
+        // Clear maps for each scan
+        pathPidMap.Clear();
+        namePidMap.Clear();
+        windowPids.Clear();
+        pidToTitles.Clear();
+        pidToWindowStates.Clear();
 
+        // 1. Collect all processes and their paths
         foreach (var proc in System.Diagnostics.Process.GetProcesses()) {
             try {
-                if (!runningProcessesByName.ContainsKey(proc.ProcessName)) {
-                    runningProcessesByName[proc.ProcessName] = proc;
-                }
-                string exePath = proc.MainModule.FileName;
-                if (!string.IsNullOrEmpty(exePath) && !runningProcessesByPath.ContainsKey(exePath)) {
-                    runningProcessesByPath[exePath] = proc;
+                uint pid = (uint)proc.Id;
+                string path = GetProcessPath(pid);
+                if (!string.IsNullOrEmpty(path)) {
+                    if (!pathPidMap.ContainsKey(path)) pathPidMap[path] = new List<uint>();
+                    pathPidMap[path].Add(pid);
+                    
+                    string exeName = Path.GetFileNameWithoutExtension(path).ToLower();
+                    if (!namePidMap.ContainsKey(exeName)) namePidMap[exeName] = new List<uint>();
+                    namePidMap[exeName].Add(pid);
                 }
             } catch { }
         }
 
-        // 1. Mark installed apps as running if found in processes
-        foreach (var app in apps.Values) {
-            if (runningProcessesByPath.ContainsKey(app.path)) {
-                app.isRunning = true;
-                app.pid = (uint)runningProcessesByPath[app.path].Id;
-            } else {
-                string exeName = Path.GetFileNameWithoutExtension(app.path);
-                if (runningProcessesByName.ContainsKey(exeName)) {
-                    app.isRunning = true;
-                    app.pid = (uint)runningProcessesByName[exeName].Id;
-                }
-            }
-        }
-
-        // 2. Discover running apps with windows (including those on other desktops)
+        // 2. Scan windows to find which processes have UI (including ALL virtual desktops)
         EnumWindows((hWnd, lParam) => {
-            // Must be visible
-            if (!IsWindowVisible(hWnd)) {
-                // Check if it's cloaked (likely on another virtual desktop)
-                int cloaked = 0;
-                DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, sizeof(int));
-                if (cloaked == 0) return true; // Not visible and not cloaked -> skip
-            }
-
-            // Must have a title
+            // 1. Basic visibility and title check
+            bool isVisible = IsWindowVisible(hWnd);
             int length = GetWindowTextLength(hWnd);
             if (length == 0) return true;
 
-            // Filter by styles (typical for taskbar apps)
-            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
-            if ((exStyle & WS_EX_TOOLWINDOW) != 0 && (exStyle & WS_EX_APPWINDOW) == 0) return true;
-            
-            IntPtr owner = GetWindow(hWnd, GW_OWNER);
-            if (owner != IntPtr.Zero && (exStyle & WS_EX_APPWINDOW) == 0) return true;
+            StringBuilder sb = new StringBuilder(length + 1);
+            GetWindowText(hWnd, sb, sb.Capacity);
+            string title = sb.ToString();
+
+            // 2. NOISE FILTER: Skip common background/utility windows
+            string titleLower = title.ToLower();
+            if (string.IsNullOrWhiteSpace(title) ||
+                titleLower == "program manager" || 
+                titleLower == "microsoft text input application" ||
+                titleLower == "windows input experience" ||
+                titleLower == "settings" ||
+                titleLower.Contains("msctfime ui") ||
+                titleLower.Contains("default ime") ||
+                titleLower.Contains("gdi+ window") ||
+                titleLower == "cptmsg" || // Zoom helper
+                titleLower == "nvcontainer" ||
+                titleLower.StartsWith("uwp-") ||
+                titleLower == "media context menu") {
+                return true;
+            }
+
+            int cloaked = 0;
+            DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, 4);
+
+            // 3. CLOAKED FILTER: 
+            // 0 = Visible, 1 = Cloaked by app (usually hidden/suspended), 2 = Cloaked by Shell (Virtual Desktops)
+            // We want 0 and 2. We usually want to SKIP 1 as it's often a "zombie" UWP app.
+            if (cloaked == 1) return true;
 
             uint pid;
             GetWindowThreadProcessId(hWnd, out pid);
-            if (pid == 0) return true;
 
-            try {
-                var proc = System.Diagnostics.Process.GetProcessById((int)pid);
-                string path = proc.MainModule.FileName;
-                string name = proc.ProcessName;
-                
-                // Skip system processes
-                if (ShouldSkipPath(path) || ShouldSkip(name)) return true;
+            // Get Virtual Desktop ID for this window (Windows 10+)
+            Guid desktopId = Guid.Empty;
+            bool isOnCurrentDesktop = true;
+            if (vdManager != null) {
+                try {
+                    isOnCurrentDesktop = vdManager.IsWindowOnCurrentVirtualDesktop(hWnd);
+                    desktopId = vdManager.GetWindowDesktopId(hWnd);
 
-                string key = name.ToLower();
-                if (!apps.ContainsKey(key)) {
-                    apps[key] = new AppInfo {
-                        id = "app-" + pid,
-                        name = name,
-                        path = path,
-                        source = "running",
-                        pid = pid,
-                        isRunning = true,
-                        iconBase64 = ExtractIconAsBase64(path)
-                    };
-                } else {
-                    apps[key].isRunning = true;
-                    apps[key].pid = pid;
+                    // Track current desktop ID from first window we find
+                    if (currentDesktopId == Guid.Empty && isOnCurrentDesktop) {
+                        currentDesktopId = desktopId;
+                    }
+
+                    // Store desktop ID for this PID
+                    if (pid != 0 && !pidToDesktopId.ContainsKey(pid)) {
+                        pidToDesktopId[pid] = desktopId;
+                    }
+                } catch {
+                    // Ignore errors for windows that don't support virtual desktops
                 }
-            } catch { }
+            }
+
+            if (debug) {
+                string desktopInfo = desktopId != Guid.Empty ?
+                    (isOnCurrentDesktop ? "Current" : "Other:" + desktopId.ToString().Substring(0, 8)) : "N/A";
+                Console.Error.WriteLine(string.Format("Window: '{0}' (PID: {1}) Visible: {2}, Cloaked: {3}, Desktop: {4}",
+                    title, pid, isVisible, cloaked, desktopInfo));
+            }
+
+            // MULTI-DESKTOP SUPPORT: Very permissive filtering
+            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            bool isToolWindow = (exStyle & WS_EX_TOOLWINDOW) != 0;
+            bool isAppWindow = (exStyle & WS_EX_APPWINDOW) != 0;
+            IntPtr owner = GetWindow(hWnd, GW_OWNER);
+            bool hasOwner = owner != IntPtr.Zero;
+
+            // Skip tool windows UNLESS they're explicitly marked as app windows
+            if (!isAppWindow && isToolWindow) return true;
+
+            // CRITICAL: Include windows from other desktops (cloaked > 0)
+            // Only skip windows that are:
+            // - Not marked as app window AND
+            // - Have an owner AND
+            // - NOT cloaked (on current desktop) AND
+            // - Not visible
+            // This means: If cloaked > 0 (other desktop), ALWAYS include!
+            if (cloaked == 0 && !isAppWindow && hasOwner && !isVisible) return true;
+
+            if (pid != 0) {
+                windowPids.Add(pid);
+                if (!pidToTitles.ContainsKey(pid)) pidToTitles[pid] = new List<string>();
+                if (!string.IsNullOrEmpty(title) && !pidToTitles[pid].Contains(title)) pidToTitles[pid].Add(title);
+
+                // Track state for the "best" window we find for this PID
+                // Prefer: visible > not visible, uncloaked > cloaked, lower cloaked value
+                if (!pidToWindowStates.ContainsKey(pid)) {
+                    pidToWindowStates[pid] = new Tuple<bool, int>(isVisible, cloaked);
+                } else {
+                    var existing = pidToWindowStates[pid];
+                    bool existingVisible = existing.Item1;
+                    int existingCloaked = existing.Item2;
+
+                    // Replace if this window is "better" (more visible)
+                    bool shouldReplace = false;
+
+                    // Priority 1: Visible and uncloaked is best
+                    if (isVisible && cloaked == 0 && (!existingVisible || existingCloaked > 0)) {
+                        shouldReplace = true;
+                    }
+                    // Priority 2: Visible but cloaked is better than invisible
+                    else if (isVisible && !existingVisible) {
+                        shouldReplace = true;
+                    }
+                    // Priority 3: If both cloaked, prefer lower cloaked value
+                    else if (isVisible == existingVisible && cloaked < existingCloaked) {
+                        shouldReplace = true;
+                    }
+
+                    if (shouldReplace) {
+                        pidToWindowStates[pid] = new Tuple<bool, int>(isVisible, cloaked);
+                    }
+                }
+            }
 
             return true;
         }, IntPtr.Zero);
+
+    }
+
+    static string GetProcessPath(uint pid) {
+        StringBuilder sb = new StringBuilder(1024);
+        // Try query limited first (standard)
+        IntPtr hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (hProcess == IntPtr.Zero) {
+            // Fallback to query information (if legacy)
+            hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, false, pid);
+        }
+
+        if (hProcess != IntPtr.Zero) {
+            try {
+                int size = sb.Capacity;
+                if (QueryFullProcessImageName(hProcess, 0, sb, ref size)) {
+                    return sb.ToString();
+                }
+            } finally {
+                CloseHandle(hProcess);
+            }
+        }
+        return null;
     }
 
     static bool ShouldSkip(string name) {
@@ -382,13 +572,13 @@ public class AppScanner {
         
         string lowerPath = path.ToLower();
         
-        // Filter out Windows system directories
-        return lowerPath.StartsWith("c:\\windows\\system32") ||
-               lowerPath.StartsWith("c:\\windows\\syswow64") ||
-               lowerPath.StartsWith("c:\\windows\\inf") ||
-               lowerPath.StartsWith("c:\\windows\\resources") ||
-               lowerPath.StartsWith("c:\\windows\\debug");
-               // Note: Don't filter all of C:\Windows since some apps install there
+        // ONLY filter out very specific Windows system paths that are NEVER user apps
+        // Avoid filtering c:\windows\system32 entirely as apps like Calculator live there
+        return lowerPath.Contains("c:\\windows\\syswow64") || // SysWOW64 usually contains helpers
+               lowerPath.Contains("c:\\windows\\inf") ||
+               lowerPath.Contains("c:\\windows\\resources") ||
+               lowerPath.Contains("c:\\windows\\debug") ||
+               lowerPath.Contains("c:\\windows\\servicing");
     }
 
     static string GetShortcutTarget(string lnkPath) {
@@ -472,6 +662,9 @@ public class AppScanner {
     static extern bool IsWindowVisible(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    [DllImport("user32.dll")]
     static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll")]
@@ -489,13 +682,25 @@ public class AppScanner {
     [DllImport("dwmapi.dll")]
     static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
 
+    [DllImport("kernel32.dll")]
+    static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, uint dwProcessId);
+
+    [DllImport("kernel32.dll")]
+    static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    static extern bool QueryFullProcessImageName([In] IntPtr hProcess, [In] int dwFlags, [Out] StringBuilder lpExeName, [In, Out] ref int lpdwSize);
+
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     const int GWL_EXSTYLE = -20;
+    const int GWL_STYLE = -16;
     const int WS_EX_TOOLWINDOW = 0x00000080;
     const int WS_EX_APPWINDOW = 0x00040000;
     const uint GW_OWNER = 4;
     const int DWMWA_CLOAKED = 14;
+    const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+    const uint PROCESS_QUERY_INFORMATION = 0x0400;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     struct SHFILEINFO {

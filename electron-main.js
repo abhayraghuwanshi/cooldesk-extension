@@ -71,6 +71,11 @@ function focusBrowserWindow() {
 // CROSS-PLATFORM APP DISCOVERY
 // ==========================================
 
+// Running apps cache (short TTL since they change frequently)
+let runningAppsCache = null;
+let runningAppsCacheTime = 0;
+const RUNNING_APPS_CACHE_TTL = 3000; // 3 seconds - enough to buffer typing in Spotlight
+
 // Installed apps cache (in-memory + persistent disk cache)
 let installedAppsCache = null;
 let installedAppsCacheTime = 0;
@@ -87,7 +92,10 @@ const INSTALLED_APPS_CACHE_FILE = join(app.getPath('userData'), 'installed-apps-
 function loadIconCacheFromDisk() {
     try {
         if (existsSync(ICON_CACHE_FILE)) {
-            const data = JSON.parse(readFileSync(ICON_CACHE_FILE, 'utf8'));
+            const content = readFileSync(ICON_CACHE_FILE, 'utf8');
+            if (!content || content.trim() === '') return;
+
+            const data = JSON.parse(content);
             if (data.icons && typeof data.icons === 'object') {
                 Object.entries(data.icons).forEach(([key, value]) => {
                     iconCache.set(key, value);
@@ -96,7 +104,7 @@ function loadIconCacheFromDisk() {
             }
         }
     } catch (e) {
-        console.warn('[Electron] Failed to load icon cache from disk:', e.message);
+        // Ignore cache load errors, naturally rebuilds
     }
 }
 
@@ -172,21 +180,25 @@ const INSTALLED_APPS_CACHE_VERSION = 3; // Increment when filter logic changes t
 function loadInstalledAppsFromDisk() {
     try {
         if (existsSync(INSTALLED_APPS_CACHE_FILE)) {
-            const data = JSON.parse(readFileSync(INSTALLED_APPS_CACHE_FILE, 'utf8'));
+            const content = readFileSync(INSTALLED_APPS_CACHE_FILE, 'utf8');
+            if (!content || content.trim() === '') return false;
+
+            const data = JSON.parse(content);
             // Check version to invalidate old caches when filter changes
             if (data.version !== INSTALLED_APPS_CACHE_VERSION) {
                 console.log(`[Electron] Disk cache version mismatch (${data.version} vs ${INSTALLED_APPS_CACHE_VERSION}), will rescan`);
                 return false;
             }
-            if (data.apps && data.timestamp && (Date.now() - data.timestamp) < INSTALLED_APPS_CACHE_TTL) {
+            if (data.apps && Array.isArray(data.apps)) {
                 console.log(`[Electron] Loaded ${data.apps.length} installed apps from disk cache (v${data.version})`);
                 installedAppsCache = data.apps;
-                installedAppsCacheTime = data.timestamp;
+                installedAppsCacheTime = data.timestamp || Date.now();
                 return true;
             }
         }
     } catch (e) {
-        console.warn('[Electron] Failed to load installed apps from disk cache:', e.message);
+        // Silent fail for cache loading to avoid annoying user warnings, will just rescan
+        console.log('[Electron] Note: Rescanning apps (cache not found or invalid)');
     }
     return false;
 }
@@ -252,19 +264,30 @@ function hasDataChanged(type, data) {
  * Get running applications with visible windows (cross-platform)
  */
 async function getRunningApps() {
+    // Return cached if fresh
+    if (runningAppsCache && (Date.now() - runningAppsCacheTime) < RUNNING_APPS_CACHE_TTL) {
+        return runningAppsCache;
+    }
+
     const platform = process.platform;
 
     try {
+        let apps = [];
         if (platform === 'win32') {
-            return await getRunningAppsWindows();
+            apps = await getRunningAppsWindows();
         } else if (platform === 'darwin') {
-            return await getRunningAppsMac();
+            apps = await getRunningAppsMac();
         } else {
-            return await getRunningAppsLinux();
+            apps = await getRunningAppsLinux();
         }
+
+        // Update cache
+        runningAppsCache = apps;
+        runningAppsCacheTime = Date.now();
+        return apps;
     } catch (e) {
         console.warn('[Electron] getRunningApps failed:', e.message);
-        return [];
+        return runningAppsCache || []; // Return stale cache on error
     }
 }
 
@@ -274,97 +297,83 @@ async function getRunningApps() {
  */
 async function getRunningAppsWindows() {
     const startTime = performance.now();
-    let exePath;
-    if (app.isPackaged) {
-        exePath = join(process.resourcesPath, 'AppScanner.exe');
-    } else {
-        exePath = join(__dirname, 'AppScanner.exe');
-    }
-
-    if (!existsSync(exePath)) {
-        console.warn('[Electron] getRunningAppsWindows: AppScanner.exe not found');
-        return [];
-    }
-
     try {
-        const { stdout } = await execAsync(`"${exePath}"`, {
+        const scannerPath = app.isPackaged
+            ? join(process.resourcesPath, 'AppScanner.exe')
+            : join(__dirname, 'AppScanner.exe');
+
+        const matcherPath = app.isPackaged
+            ? join(process.resourcesPath, 'AppMatcher.exe')
+            : join(__dirname, 'AppMatcher.exe');
+
+        if (!existsSync(scannerPath) || !existsSync(matcherPath)) {
+            console.warn('[Electron] Pipeline components missing:', { scannerExists: existsSync(scannerPath), matcherExists: existsSync(matcherPath) });
+            return [];
+        }
+
+        // Run both in a pipeline to get matched results
+        const { stdout, stderr } = await execAsync(`"${scannerPath}" | "${matcherPath}"`, {
             windowsHide: true,
-            timeout: 10000,
-            maxBuffer: 10 * 1024 * 1024
+            timeout: 15000,
+            maxBuffer: 25 * 1024 * 1024 // Increase buffer as scanner output can be large
         });
 
-        if (!stdout || !stdout.trim()) return [];
+        if (stderr) {
+            console.log('[Electron] AppMatcher diagnostics:\n' + stderr.trim());
+        }
 
         const allApps = JSON.parse(stdout);
+        const runningApps = allApps.filter(a => a.isRunning);
+        const notRunningCount = allApps.filter(a => !a.isRunning).length;
+        console.log(`[Electron] AppMatcher: ${allApps.length} total (${runningApps.length} running, ${notRunningCount} not running) in ${(performance.now() - startTime).toFixed(0)}ms`);
+        console.log('[Electron] Running apps:', runningApps.map(a => `${a.name} [${a.source}] pid=${a.pid}`).join(', '));
+
+        // Forward full running list to renderer DevTools
+        mainWindow?.webContents?.send('debug-running-apps', runningApps.map(a => ({
+            name: a.name, pid: a.pid, source: a.source,
+            cloaked: a.cloaked, isVisible: a.isVisible,
+            isOnCurrentDesktop: a.isOnCurrentDesktop,
+            title: a.title
+        })));
+
         const apps = allApps.filter(a => a.isRunning).map(a => {
             // Ensure title is set
             a.title = a.title || a.name;
+            // Use icon from AppScanner if provided
+            if (a.iconBase64) {
+                a.icon = `data:image/png;base64,${a.iconBase64}`;
+            }
             return a;
         });
 
-        console.log(`[Electron] getRunningAppsWindows: found ${apps.length} running apps using AppScanner.exe in ${(performance.now() - startTime).toFixed(0)}ms`);
+        console.log(`[Electron] getRunningAppsWindows: found ${apps.length} running apps in ${(performance.now() - startTime).toFixed(0)}ms`);
 
-        // Fetch icons for running apps (use cache when available)
+        // Fetch icons for running apps only if MISSING (use cache when available)
         for (const appItem of apps) {
-            const cacheKey = appItem.name?.toLowerCase();
+            const cacheKey = (appItem.name || appItem.title)?.toLowerCase();
 
-            // Check icon cache first
+            // 1. Skip if we already have an icon from AppScanner
+            if (appItem.icon) {
+                if (cacheKey) iconCache.set(cacheKey, appItem.icon);
+                continue;
+            }
+
+            // 2. Check icon cache
             if (cacheKey && iconCache.has(cacheKey)) {
                 appItem.icon = iconCache.get(cacheKey);
                 continue;
             }
 
-            try {
-                let iconData = null;
-
-                // Try direct path first
-                if (!iconData && appItem.path && existsSync(appItem.path)) {
+            // 3. Last resort: Try to fetch if missing and we have a path
+            if (appItem.path && existsSync(appItem.path)) {
+                try {
                     const icon = await app.getFileIcon(appItem.path);
                     if (!icon.isEmpty()) {
-                        iconData = icon.toDataURL();
+                        const iconData = icon.toDataURL();
+                        appItem.icon = iconData;
+                        if (cacheKey) iconCache.set(cacheKey, iconData);
                     }
-                }
-
-                // Try to find exe from installed apps cache
-                if (!iconData && installedAppsCache && installedAppsCache.length > 0) {
-                    const installed = installedAppsCache.find(ia =>
-                        ia.name?.toLowerCase() === appItem.name?.toLowerCase() ||
-                        ia.name?.toLowerCase().includes(appItem.name?.toLowerCase())
-                    );
-                    if (installed?.path && existsSync(installed.path)) {
-                        const icon = await app.getFileIcon(installed.path);
-                        if (!icon.isEmpty()) {
-                            iconData = icon.toDataURL();
-                        }
-                    }
-                }
-
-                // Fallback: try common paths for the app
-                if (!iconData) {
-                    const possiblePaths = [
-                        `C:\\Program Files\\${appItem.name}\\${appItem.name}.exe`,
-                        `C:\\Program Files (x86)\\${appItem.name}\\${appItem.name}.exe`,
-                        `${process.env.LOCALAPPDATA}\\Programs\\${appItem.name}\\${appItem.name}.exe`,
-                        `${process.env.LOCALAPPDATA}\\${appItem.name}\\${appItem.name}.exe`,
-                    ];
-                    for (const tryPath of possiblePaths) {
-                        if (existsSync(tryPath)) {
-                            const icon = await app.getFileIcon(tryPath);
-                            if (!icon.isEmpty()) {
-                                iconData = icon.toDataURL();
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Store in cache and assign to app
-                if (iconData) {
-                    iconCache.set(cacheKey, iconData);
-                    appItem.icon = iconData;
-                }
-            } catch (e) {
-                // Ignore icon fetch errors
+                } catch (e) { /* ignore */ }
             }
         }
 
@@ -804,17 +813,17 @@ async function getInstalledAppsWindows() {
     console.log('[Electron] getInstalledAppsWindows: scanning...');
     const startTime = performance.now();
 
-    // Try AppScanner.exe first (fastest, ~50ms)
-    let exePath;
-    if (app.isPackaged) {
-        exePath = join(process.resourcesPath, 'AppScanner.exe');
-    } else {
-        exePath = join(__dirname, 'AppScanner.exe');
-    }
+    const scannerPath = app.isPackaged
+        ? join(process.resourcesPath, 'AppScanner.exe')
+        : join(__dirname, 'AppScanner.exe');
 
-    if (existsSync(exePath)) {
+    const matcherPath = app.isPackaged
+        ? join(process.resourcesPath, 'AppMatcher.exe')
+        : join(__dirname, 'AppMatcher.exe');
+
+    if (existsSync(scannerPath) && existsSync(matcherPath)) {
         try {
-            const { stdout } = await execAsync(`"${exePath}"`, {
+            const { stdout } = await execAsync(`"${scannerPath}" | "${matcherPath}"`, {
                 windowsHide: true,
                 timeout: 10000,
                 maxBuffer: 10 * 1024 * 1024
@@ -960,12 +969,12 @@ async function getInstalledAppsLinux() {
 /**
  * Focus an application window by PID (cross-platform)
  */
-async function focusAppWindow(pid) {
+async function focusAppWindow(pid, processName) {
     const platform = process.platform;
 
     try {
         if (platform === 'win32') {
-            return await focusAppWindowWindows(pid);
+            return await focusAppWindowWindows(pid, processName);
         } else if (platform === 'darwin') {
             return await focusAppWindowMac(pid);
         } else {
@@ -981,7 +990,7 @@ async function focusAppWindow(pid) {
  * Windows: Focus window using compiled AppFocus.exe (FAST ~30-50ms)
  * This is 6-10x faster than PowerShell Add-Type approach
  */
-async function focusAppWindowWindows(pid) {
+async function focusAppWindowWindows(pid, processName) {
     let exePath;
     if (app.isPackaged) {
         exePath = join(process.resourcesPath, 'AppFocus.exe');
@@ -990,7 +999,10 @@ async function focusAppWindowWindows(pid) {
     }
 
     try {
-        await execAsync(`"${exePath}" ${pid}`, {
+        // Pass both PID and process name to AppFocus.exe for better fallback
+        // AppFocus.exe will try PID first, then fall back to process name if PID fails
+        const args = processName ? `${pid} "${processName}"` : `${pid}`;
+        await execAsync(`"${exePath}" ${args}`, {
             windowsHide: true,
             timeout: 1000
         });
@@ -2478,22 +2490,24 @@ ipcMain.handle('runtime:send-message', async (_event, message) => {
             }
 
             try {
-                const [running, installed] = await Promise.all([
-                    getRunningApps(),
-                    getInstalledApps()
-                ]);
+                // getRunningApps() uses its own 3s cache, avoiding redundant scanner calls
+                const running = await getRunningApps();
+
+                // getInstalledApps() uses its own 24h cache
+                const installed = await getInstalledApps();
 
                 // Dedupe: don't show installed if already running
                 const runningNames = new Set(running.map(a => a.name?.toLowerCase()));
 
+                // Efficient title matching
                 const runningMatches = running
-                    .filter(a => a.name?.toLowerCase().includes(queryApps) ||
-                        a.title?.toLowerCase().includes(queryApps))
+                    .filter(a => (a.name || '').toLowerCase().includes(queryApps) ||
+                        (a.title || '').toLowerCase().includes(queryApps))
                     .slice(0, 5);
 
                 const installedMatches = installed
-                    .filter(a => a.name?.toLowerCase().includes(queryApps) &&
-                        !runningNames.has(a.name?.toLowerCase()))
+                    .filter(a => (a.name || '').toLowerCase().includes(queryApps) &&
+                        !runningNames.has((a.name || '').toLowerCase()))
                     .slice(0, 5);
 
                 return { results: [...runningMatches, ...installedMatches] };
@@ -2544,9 +2558,9 @@ ipcMain.handle('refresh-installed-apps', async () => {
     }
 });
 
-ipcMain.handle('focus-app', async (_event, pid) => {
+ipcMain.handle('focus-app', async (_event, pid, processName) => {
     try {
-        return await focusAppWindow(pid);
+        return await focusAppWindow(pid, processName);
     } catch (e) {
         console.warn('[Electron] focus-app failed:', e.message);
         return { success: false, error: e.message };

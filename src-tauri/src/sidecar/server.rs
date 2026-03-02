@@ -100,6 +100,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     let app = Router::new()
         // Health check
         .route("/health", get(health))
+        // App search (for testing recommendations)
+        .route("/search", get(search_apps))
         // GET endpoints
         .route("/workspaces", get(get_workspaces).post(post_workspaces))
         .route("/urls", get(get_urls).post(post_urls))

@@ -16,26 +16,48 @@ async fn get_focused_app() -> Option<RunningApp> {
 }
 
 #[tauri::command]
-async fn get_running_apps() -> Vec<RunningApp> {
-    system::get_visible_apps_info().await
+async fn get_running_apps(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use tauri_plugin_shell::ShellExt;
+    
+    // 1. Run AppScanner to get all windows and installed apps
+    let scan_output = app.shell().command("AppScanner")
+        .args(["--debug"])
+        .output()
+        .await
+        .map_err(|e| format!("AppScanner failed: {}", e))?;
+    
+    if !scan_output.status.success() {
+        return Err(format!("AppScanner failed: {}", String::from_utf8_lossy(&scan_output.stderr)));
+    }
+
+    // 2. Write scan data to a temporary file
+    let temp_dir = std::env::temp_dir();
+    let scan_file = temp_dir.join(format!("cooldesk_scan_{}.json", std::process::id()));
+    std::fs::write(&scan_file, &scan_output.stdout).map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    // 3. Run AppMatcher with the temp file as input
+    let match_output = app.shell().command("AppMatcher")
+        .args(["--input", scan_file.to_string_lossy().as_ref()])
+        .output()
+        .await
+        .map_err(|e| format!("AppMatcher failed: {}", e))?;
+    
+    // Clean up temp file
+    let _ = std::fs::remove_file(&scan_file);
+
+    if !match_output.status.success() {
+        let stderr = String::from_utf8_lossy(&match_output.stderr);
+        return Err(format!("AppMatcher failed: {}", stderr));
+    }
+
+    let stdout_str = String::from_utf8_lossy(&match_output.stdout);
+    serde_json::from_str(&stdout_str).map_err(|e| format!("Failed to parse matcher JSON: {}", e))
 }
 
 #[tauri::command]
 async fn get_installed_apps(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    let output = app.shell().command("AppScanner")
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-    
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        // println!("[AppScanner] Raw Output: {}", stdout); // DEBUG LOG
-        serde_json::from_str(&stdout).map_err(|e| e.to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("AppScanner failed: {}", stderr);
-        Err(format!("AppScanner failed: {}", stderr))
-    }
+    // We can use the same pipeline to get the full list of apps (running + not running)
+    get_running_apps(app).await
 }
 
 #[tauri::command]

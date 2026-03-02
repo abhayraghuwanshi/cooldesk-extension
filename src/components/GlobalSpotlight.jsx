@@ -272,7 +272,7 @@ export function GlobalSpotlight() {
                     usedIds.add(name);
                     return true;
                 })
-                .slice(0, 4)
+                .slice(0, 8) // Show more running apps
                 .map(a => ({ ...a, type: 'app', description: 'Running', isRunning: true }));
 
             console.log('[Spotlight] Active apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(icon:${!!a.icon})`));
@@ -898,23 +898,35 @@ export function GlobalSpotlight() {
                 // Track app usage for recommendations
                 trackAppUsage(item.name);
 
-                // For pinned apps, we need to find the current running instance
-                // because the stored PID might be stale (use cached service)
-                const { runningApps } = await runningAppsService.getApps();
-                if (runningApps?.length > 0) {
-                    const runningInstance = runningApps.find(app =>
-                        app.name?.toLowerCase() === item.name?.toLowerCase()
-                    );
+                // Check if app is running (use PID from search result if available)
+                if (item.isRunning && item.pid) {
+                    // App is running - focus it using PID from search result
+                    console.log('[Spotlight] Focusing running app:', item.name, 'PID:', item.pid);
+                    await window.electronAPI.focusApp(item.pid, item.name);
+                    return;
+                }
 
-                    if (runningInstance && runningInstance.pid) {
-                        // App is running - focus it
-                        await window.electronAPI.focusApp(runningInstance.pid, runningInstance.name);
-                        return;
+                // For pinned apps without PID, we need to find the current running instance
+                // because the stored PID might be stale (use cached service)
+                if (!item.pid) {
+                    const { runningApps } = await runningAppsService.getApps();
+                    if (runningApps?.length > 0) {
+                        const runningInstance = runningApps.find(app =>
+                            app.name?.toLowerCase() === item.name?.toLowerCase()
+                        );
+
+                        if (runningInstance && runningInstance.pid) {
+                            // App is running - focus it
+                            console.log('[Spotlight] Found running instance via lookup:', runningInstance.name, 'PID:', runningInstance.pid);
+                            await window.electronAPI.focusApp(runningInstance.pid, runningInstance.name);
+                            return;
+                        }
                     }
                 }
 
                 // App is not running - launch it
                 if (item.path && window.electronAPI?.launchApp) {
+                    console.log('[Spotlight] Launching app:', item.name, 'path:', item.path);
                     await window.electronAPI.launchApp(item.path);
                 }
             } catch (e) {

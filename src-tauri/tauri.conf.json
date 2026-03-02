@@ -48,6 +48,7 @@
     ],
     "externalBin": [
       "bin/AppScanner",
+      "bin/AppMatcher",
       "bin/BrowserFocus",
       "bin/AppFocus"
     ]

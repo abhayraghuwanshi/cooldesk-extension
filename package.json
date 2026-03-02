@@ -96,7 +96,8 @@
       },
       "BrowserFocus.exe",
       "AppFocus.exe",
-      "AppScanner.exe"
+      "AppScanner.exe",
+      "AppMatcher.exe"
     ],
     "asarUnpack": [
       "node_modules/node-llama-cpp/**/*"

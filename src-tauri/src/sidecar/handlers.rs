@@ -195,6 +195,54 @@ pub async fn get_all_desktop_apps() -> Json<Vec<RunningApp>> {
     Json(crate::system::get_all_desktop_apps_info().await)
 }
 
+/// Search running apps by query — for testing recommendations
+/// GET /search?q=chrome&limit=10
+#[derive(Debug, serde::Deserialize)]
+pub struct SearchQuery {
+    pub q: Option<String>,
+    pub limit: Option<usize>,
+}
+
+pub async fn search_apps(Query(params): Query<SearchQuery>) -> Json<serde_json::Value> {
+    let query = params.q.unwrap_or_default().to_lowercase();
+    let limit = params.limit.unwrap_or(20);
+
+    let apps = crate::system::get_all_desktop_apps_info().await;
+
+    let mut scored: Vec<(u32, &RunningApp)> = apps
+        .iter()
+        .filter_map(|a| {
+            let name = a.name.to_lowercase();
+            let title = a.title.to_lowercase();
+            let score = if name == query                   { 100 }
+                else if name.starts_with(&query)           { 90 }
+                else if name.contains(&query)              { 75 }
+                else if title.contains(&query)             { 60 }
+                else                                       { 0 };
+            if score > 0 { Some((score, a)) } else { None }
+        })
+        .collect();
+
+    scored.sort_by(|a, b| b.0.cmp(&a.0));
+    scored.truncate(limit);
+
+    let results: Vec<serde_json::Value> = scored
+        .into_iter()
+        .map(|(score, a)| serde_json::json!({
+            "id": a.id,
+            "name": a.name,
+            "title": a.title,
+            "path": a.path,
+            "pid": a.pid,
+            "score": score,
+            "isOnCurrentDesktop": a.is_on_current_desktop,
+            "desktopNumber": a.desktop_number,
+        }))
+        .collect();
+
+    Json(serde_json::json!({ "query": query, "results": results }))
+}
+
 // ==========================================
 // POST Handlers
 // ==========================================
