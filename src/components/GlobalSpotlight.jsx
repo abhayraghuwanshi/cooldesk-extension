@@ -900,9 +900,9 @@ export function GlobalSpotlight() {
 
                 // Check if app is running (use PID from search result if available)
                 if (item.isRunning && item.pid) {
-                    // App is running - focus it using PID from search result
-                    console.log('[Spotlight] Focusing running app:', item.name, 'PID:', item.pid);
-                    await window.electronAPI.focusApp(item.pid, item.name);
+                    // App is running - focus specific window by HWND if available, else by PID
+                    console.log('[Spotlight] Focusing running app:', item.name, 'PID:', item.pid, 'HWND:', item.hwnd);
+                    await window.electronAPI.focusApp(item.pid, item.name, item.hwnd);
                     return;
                 }
 

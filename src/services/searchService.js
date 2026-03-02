@@ -299,54 +299,58 @@ export async function refreshElectronCache(forceRefresh = false) {
 }
 
 /**
- * Fast local search using in-memory cache (Electron)
- * No IPC calls - pure JS filtering
+ * Call the Rust /search endpoint — returns app results with fuzzy scoring.
+ * The backend uses the full AppMatcher cache (installed + running state).
+ */
+async function searchAppsFromBackend(query, maxResults = 20) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1000);
+    const res = await fetch(
+      `http://localhost:4000/search?q=${encodeURIComponent(query)}&limit=${maxResults}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results || []).map(app => {
+      // Build description from window titles (multi-window Electron apps have several)
+      const windowTitles = Array.isArray(app.titles) && app.titles.length > 0 ? app.titles : null;
+      const description = app.isRunning
+        ? (windowTitles ? windowTitles.join(' · ') : 'Running')
+        : 'Application';
+
+      return {
+        id: app.id || (app.pid ? `app-pid-${app.pid}` : `app-${app.name}`),
+        title: app.title || app.name,
+        name: app.name,
+        path: app.path,
+        pid: app.pid || undefined,
+        hwnd: app.hwnd || undefined,
+        description,
+        type: 'app',
+        isRunning: !!app.isRunning,
+        isVisible: app.isVisible,
+        cloaked: app.cloaked,
+        icon: app.icon,
+        score: app.score,
+        titles: app.titles || [],
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Local cache search for non-app items (tabs, workspaces, history, bookmarks).
+ * Apps are handled by the Rust backend via searchAppsFromBackend().
  */
 function searchElectronCache(query) {
   if (!query || !query.trim()) return [];
 
   const results = [];
   const q = query.toLowerCase();
-  const addedIds = new Set();
-
-  // AppMatcher already set isRunning/isVisible/cloaked/pid on each app.
-  // Trust those flags directly — no re-matching needed.
-  for (const app of electronDataCache.installedApps) {
-    const nameScore = fuzzyScore(app.name || '', query);
-    const titleScore = app.title ? fuzzyScore(app.title, query) : 0;
-    const matchScore = Math.max(nameScore, titleScore);
-    if (matchScore === 0) continue;
-
-    const uniqueId = `app-${app.id || app.name}`;
-    if (addedIds.has(uniqueId)) continue;
-    addedIds.add(uniqueId);
-
-    const isRunning = !!app.isRunning;
-    let score = matchScore;
-
-    if (isRunning) {
-      if (app.isVisible && !app.cloaked) score = Math.max(score, 85) + 15; // current desktop
-      else if (app.cloaked > 0)          score = Math.max(score, 80) + 12; // other desktop
-      else                               score = Math.max(score, 75) + 10; // minimized/hidden
-    } else {
-      score = Math.min(score, 75); // not running: cap below running apps
-    }
-
-    results.push({
-      id: uniqueId,
-      title: app.name,
-      name: app.name,
-      path: app.path,
-      pid: app.pid || undefined,
-      description: isRunning ? (app.title || 'Running') : 'Application',
-      type: 'app',
-      isRunning,
-      isVisible: app.isVisible,
-      cloaked: app.cloaked,
-      icon: app.icon,
-      score: Math.min(100, Math.max(0, score))
-    });
-  }
 
   // Search tabs
   for (const tab of electronDataCache.tabs) {
@@ -609,35 +613,25 @@ async function searchDesktop(query) {
 export async function quickSearch(query, maxResults = 15) {
   if (!query || !query.trim()) return [];
 
-  // ELECTRON/TAURI: Use in-memory cache first, fallback to live fetch if cache empty
+  // ELECTRON/TAURI: apps come from Rust backend, tabs/workspaces from local cache
   if (isElectron()) {
-    // Pure in-memory search - instant results
-    let cacheResults = searchElectronCache(query);
+    // Run app search (backend) and non-app cache search in parallel
+    const [appResults, cacheResults] = await Promise.all([
+      searchAppsFromBackend(query, maxResults),
+      Promise.resolve(searchElectronCache(query)),
+    ]);
 
-    // If cache returned nothing but we have installed apps, cache is working - just no matches
-    const cacheIsPopulated = electronDataCache.installedApps.length > 0 ||
-      electronDataCache.runningApps.length > 0;
-
-    console.log(`[SearchService] quickSearch: query="${query}", cacheResults=${cacheResults.length}, cachePopulated=${cacheIsPopulated}, installedApps=${electronDataCache.installedApps.length}, runningApps=${electronDataCache.runningApps.length}`);
-
-    // If cache is empty (not populated yet), try a quick live fetch
-    // This handles first search before cache is ready
-    if (cacheResults.length === 0 && !cacheIsPopulated) {
-      console.log('[SearchService] Cache empty, forcing refresh...');
-      await refreshElectronCache(true);
-      cacheResults = searchElectronCache(query);
-      console.log(`[SearchService] After refresh: ${cacheResults.length} results, installedApps=${electronDataCache.installedApps.length}`);
+    // Refresh stale cache data for next search (non-blocking)
+    if (!isCacheFresh('tabs') || !isCacheFresh('workspaces')) {
+      refreshElectronCache().catch(() => {});
     }
 
-    const deduped = deduplicateByUrl(cacheResults);
-    const results = deduped.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, maxResults);
-
-    // Background: trigger cache refresh for next search if data is stale
-    if (!isCacheFresh('runningApps') || !isCacheFresh('installedApps')) {
-      refreshElectronCache().catch(() => { }); // Non-blocking
-    }
-
-    return results;
+    // No deduplication needed — AppMatcher outputs one entry per unique PID.
+    // Each entry is a real focusable window. Show them all.
+    const combined = [...appResults, ...cacheResults];
+    return deduplicateByUrl(combined)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, maxResults);
   }
 
   // CHROME EXTENSION: Try Local Index FIRST

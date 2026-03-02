@@ -22,12 +22,18 @@ struct InstalledApp {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+struct WindowTitle {
+    hwnd: i64,
+    text: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 struct WindowEntry {
     pid: u32,
     #[serde(rename = "exeName")]
     exe_name: String,
     path: String,
-    titles: Vec<String>,
+    titles: Vec<WindowTitle>,
     #[serde(rename = "isVisible")]
     is_visible: bool,
     cloaked: i32,
@@ -44,6 +50,8 @@ struct AppEntry {
     id: String,
     name: String,
     title: String,
+    /// All window titles for this process (for search scoring)
+    titles: Vec<String>,
     path: String,
     #[serde(rename = "type")]
     app_type: String,
@@ -51,6 +59,8 @@ struct AppEntry {
     #[serde(rename = "isRunning")]
     is_running: bool,
     pid: u32,
+    /// HWND for this specific window (0 = unknown/not running)
+    hwnd: i64,
     cloaked: i32,
     #[serde(rename = "isVisible")]
     is_visible: bool,
@@ -111,6 +121,46 @@ fn pick_best_idx(idxs: &[usize], windows: &[WindowEntry]) -> usize {
         .iter()
         .min_by_key(|&&i| window_score(&windows[i]))
         .unwrap()
+}
+
+/// Filter a window's titles to only those that represent distinct user-visible
+/// windows (i.e., the title contains the exe or app name as a word).
+/// This removes internal navigation tabs (e.g., Zoom's "Hub", "Calendar", etc.)
+/// while keeping real project windows (e.g., "extension - Antigravity - a1.json").
+///
+/// Falls back to the single best title if no titles pass the filter.
+fn meaningful_titles<'a>(titles: &'a [WindowTitle], exe_name: &str, app_name: &str) -> Vec<&'a WindowTitle> {
+    let exe_lower = exe_name.to_lowercase();
+    let app_lower = app_name.to_lowercase();
+
+    let filtered: Vec<&WindowTitle> = titles.iter().filter(|wt| {
+        let t = wt.text.to_lowercase();
+        // Keep if title contains the exe name or app name as a word boundary
+        contains_word(&t, &exe_lower) || contains_word(&t, &app_lower)
+    }).collect();
+
+    if filtered.is_empty() {
+        // No title contains the app name — keep only the longest (most descriptive)
+        titles.iter().max_by_key(|wt| wt.text.len()).into_iter().collect()
+    } else {
+        filtered
+    }
+}
+
+/// Check if `haystack` contains `needle` as a whole word (not a substring of a longer word).
+fn contains_word(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() { return false; }
+    let mut start = 0;
+    while let Some(pos) = haystack[start..].find(needle) {
+        let abs = start + pos;
+        let before_ok = abs == 0 || !haystack.as_bytes()[abs - 1].is_ascii_alphanumeric();
+        let after_ok = abs + needle.len() >= haystack.len()
+            || !haystack.as_bytes()[abs + needle.len()].is_ascii_alphanumeric();
+        if before_ok && after_ok { return true; }
+        start = abs + 1;
+        if start >= haystack.len() { break; }
+    }
+    false
 }
 
 /// Priority 3: the normalized window title must START WITH the normalized app
@@ -216,8 +266,8 @@ fn main() {
         // Priority 3 — title-prefix match (strict)
         if matched_idx.is_none() && !app_name_norm.is_empty() {
             'outer: for (i, w) in windows.iter().enumerate() {
-                for title in &w.titles {
-                    if title_matches_app(&normalize_text(title), &app_name_norm) {
+                for wt in &w.titles {
+                    if title_matches_app(&normalize_text(&wt.text), &app_name_norm) {
                         matched_idx = Some(i);
                         break 'outer;
                     }
@@ -229,39 +279,67 @@ fn main() {
             let win = &windows[idx];
             matched_pids.insert(win.pid);
 
-            // Use the longest title as display title
-            let title = win
-                .titles
-                .iter()
-                .max_by_key(|t| t.len())
-                .cloned()
-                .unwrap_or_else(|| app.name.clone());
+            let all_title_texts: Vec<String> = win.titles.iter().map(|wt| wt.text.clone()).collect();
+            let exe_name = exe_basename(&win.path);
+            let show_titles = meaningful_titles(&win.titles, &exe_name, &app.name);
 
-            result.push(AppEntry {
-                id: app.id.clone(),
-                name: app.name.clone(),
-                title,
-                path: app.path.clone(),
-                app_type: "app".to_string(),
-                source: app.source.clone(),
-                is_running: true,
-                pid: win.pid,
-                cloaked: win.cloaked,
-                is_visible: win.is_visible,
-                is_on_current_desktop: win.is_on_current_desktop,
-                desktop_id: win.desktop_id.clone(),
-                icon: app.icon.clone(),
-            });
+            if show_titles.len() <= 1 {
+                // Single window (or no titles) — one entry, title = first meaningful title or app name
+                let title = show_titles.first()
+                    .map(|wt| wt.text.clone())
+                    .unwrap_or_else(|| app.name.clone());
+                let hwnd = show_titles.first().map(|wt| wt.hwnd).unwrap_or(0);
+                result.push(AppEntry {
+                    id: app.id.clone(),
+                    name: app.name.clone(),
+                    title,
+                    titles: all_title_texts,
+                    path: app.path.clone(),
+                    app_type: "app".to_string(),
+                    source: app.source.clone(),
+                    is_running: true,
+                    pid: win.pid,
+                    hwnd,
+                    cloaked: win.cloaked,
+                    is_visible: win.is_visible,
+                    is_on_current_desktop: win.is_on_current_desktop,
+                    desktop_id: win.desktop_id.clone(),
+                    icon: app.icon.clone(),
+                });
+            } else {
+                // Multiple distinct windows — one entry per meaningful window title
+                for wt in show_titles {
+                    result.push(AppEntry {
+                        id: format!("{}-hwnd-{}", app.id, wt.hwnd),
+                        name: app.name.clone(),
+                        title: wt.text.clone(),
+                        titles: all_title_texts.clone(),
+                        path: app.path.clone(),
+                        app_type: "app".to_string(),
+                        source: app.source.clone(),
+                        is_running: true,
+                        pid: win.pid,
+                        hwnd: wt.hwnd,
+                        cloaked: win.cloaked,
+                        is_visible: win.is_visible,
+                        is_on_current_desktop: win.is_on_current_desktop,
+                        desktop_id: win.desktop_id.clone(),
+                        icon: app.icon.clone(),
+                    });
+                }
+            }
         } else {
             result.push(AppEntry {
                 id: app.id.clone(),
                 name: app.name.clone(),
                 title: app.name.clone(),
+                titles: vec![],
                 path: app.path.clone(),
                 app_type: "app".to_string(),
                 source: app.source.clone(),
                 is_running: false,
                 pid: 0,
+                hwnd: 0,
                 cloaked: 0,
                 is_visible: false,
                 is_on_current_desktop: false,
@@ -274,28 +352,52 @@ fn main() {
     // Orphan discovery — window PIDs not matched to any installed app
     for w in windows {
         if !matched_pids.contains(&w.pid) {
-            let display_name = w
-                .titles
-                .iter()
-                .max_by_key(|t| t.len())
-                .cloned()
-                .unwrap_or_else(|| w.exe_name.clone());
+            let all_title_texts: Vec<String> = w.titles.iter().map(|wt| wt.text.clone()).collect();
+            let show_titles = meaningful_titles(&w.titles, &w.exe_name, &w.exe_name);
 
-            result.push(AppEntry {
-                id: format!("app-{}", w.pid),
-                name: display_name.clone(),
-                title: display_name,
-                path: w.path.clone(),
-                app_type: "app".to_string(),
-                source: "running".to_string(),
-                is_running: true,
-                pid: w.pid,
-                cloaked: w.cloaked,
-                is_visible: w.is_visible,
-                is_on_current_desktop: w.is_on_current_desktop,
-                desktop_id: w.desktop_id.clone(),
-                icon: None,
-            });
+            if show_titles.len() <= 1 {
+                let title = show_titles.first()
+                    .map(|wt| wt.text.clone())
+                    .unwrap_or_else(|| w.exe_name.clone());
+                let hwnd = show_titles.first().map(|wt| wt.hwnd).unwrap_or(0);
+                result.push(AppEntry {
+                    id: format!("app-{}", w.pid),
+                    name: w.exe_name.clone(),
+                    title,
+                    titles: all_title_texts,
+                    path: w.path.clone(),
+                    app_type: "app".to_string(),
+                    source: "running".to_string(),
+                    is_running: true,
+                    pid: w.pid,
+                    hwnd,
+                    cloaked: w.cloaked,
+                    is_visible: w.is_visible,
+                    is_on_current_desktop: w.is_on_current_desktop,
+                    desktop_id: w.desktop_id.clone(),
+                    icon: None,
+                });
+            } else {
+                for wt in show_titles {
+                    result.push(AppEntry {
+                        id: format!("app-{}-hwnd-{}", w.pid, wt.hwnd),
+                        name: w.exe_name.clone(),
+                        title: wt.text.clone(),
+                        titles: all_title_texts.clone(),
+                        path: w.path.clone(),
+                        app_type: "app".to_string(),
+                        source: "running".to_string(),
+                        is_running: true,
+                        pid: w.pid,
+                        hwnd: wt.hwnd,
+                        cloaked: w.cloaked,
+                        is_visible: w.is_visible,
+                        is_on_current_desktop: w.is_on_current_desktop,
+                        desktop_id: w.desktop_id.clone(),
+                        icon: None,
+                    });
+                }
+            }
         }
     }
 

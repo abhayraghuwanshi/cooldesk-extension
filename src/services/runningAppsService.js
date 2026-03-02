@@ -150,7 +150,9 @@ class RunningAppsService {
 
         try {
             const runningApps = await window.electronAPI.getRunningApps();
-            this.cache.runningApps = Array.isArray(runningApps) ? runningApps : [];
+            this.cache.runningApps = Array.isArray(runningApps)
+                ? runningApps.filter(a => a.isRunning === true)
+                : [];
             this.cache.lastRunningFetch = Date.now();
             this.notifySubscribers();
         } catch (error) {
@@ -202,8 +204,10 @@ class RunningAppsService {
                     window.electronAPI.getInstalledApps?.() || []
                 ]);
 
-                // Update cache
-                this.cache.runningApps = Array.isArray(runningApps) ? runningApps : [];
+                // Update cache — only keep apps that are actually running
+                this.cache.runningApps = Array.isArray(runningApps)
+                    ? runningApps.filter(a => a.isRunning === true)
+                    : [];
                 const newInstalledApps = Array.isArray(installedApps) ? installedApps : [];
 
                 // Only update and save installed apps if they changed

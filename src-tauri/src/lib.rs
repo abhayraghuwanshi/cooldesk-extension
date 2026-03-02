@@ -3,11 +3,19 @@ use tauri_plugin_shell::ShellExt;
 use serde::Serialize;
 use tauri::Manager; // Import Manager trait
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 mod sidecar;
 mod system;
 
 use system::RunningApp;
+
+// Global cache of the last AppMatcher output.
+// Written by get_running_apps(), read by the sidecar /search endpoint.
+lazy_static::lazy_static! {
+    pub static ref APP_CACHE: Arc<RwLock<Vec<serde_json::Value>>> =
+        Arc::new(RwLock::new(Vec::new()));
+}
 
 
 #[tauri::command]
@@ -51,7 +59,17 @@ async fn get_running_apps(app: tauri::AppHandle) -> Result<serde_json::Value, St
     }
 
     let stdout_str = String::from_utf8_lossy(&match_output.stdout);
-    serde_json::from_str(&stdout_str).map_err(|e| format!("Failed to parse matcher JSON: {}", e))
+    let parsed: serde_json::Value = serde_json::from_str(&stdout_str)
+        .map_err(|e| format!("Failed to parse matcher JSON: {}", e))?;
+
+    // Populate global cache so the /search HTTP endpoint can use full installed+running data
+    if let Some(arr) = parsed.as_array() {
+        if let Ok(mut cache) = APP_CACHE.write() {
+            *cache = arr.clone();
+        }
+    }
+
+    Ok(parsed)
 }
 
 #[tauri::command]
@@ -61,12 +79,18 @@ async fn get_installed_apps(app: tauri::AppHandle) -> Result<serde_json::Value, 
 }
 
 #[tauri::command]
-async fn focus_window(app: tauri::AppHandle, pid: u32, name: Option<String>) -> Result<(), String> {
+async fn focus_window(app: tauri::AppHandle, pid: u32, name: Option<String>, hwnd: Option<i64>) -> Result<(), String> {
     let mut command = app.shell().command("AppFocus");
-    command = command.args([pid.to_string()]);
-    
-    if let Some(n) = name {
-        command = command.args([n]);
+
+    if let Some(h) = hwnd.filter(|&h| h != 0) {
+        // Precise focus: target the specific window handle
+        command = command.args(["--hwnd", &h.to_string()]);
+    } else {
+        // Fallback: focus by PID (brings first window of that process to front)
+        command = command.args([pid.to_string()]);
+        if let Some(n) = name {
+            command = command.args([n]);
+        }
     }
 
     let output = command

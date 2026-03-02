@@ -261,7 +261,7 @@ export function TabManagement() {
         // Enrich running apps with icons from installed apps using utility
         const enrichedApps = enrichRunningAppsWithIcons(apps, installedApps);
 
-        // Filter out browsers since we show their tabs directly
+        // Filter out browsers and tray/background-only processes
         const filteredApps = enrichedApps.filter(app => {
           const appName = (app.name || '').toLowerCase();
           const isBrowser = appName.includes('chrome') ||
@@ -270,14 +270,21 @@ export function TabManagement() {
             appName === 'edge' ||
             appName.includes('brave') ||
             appName.includes('firefox');
-          return !isBrowser;
+          if (isBrowser) return false;
+
+          // Skip tray/background windows: hidden (isVisible=false) and not cloaked by
+          // virtual desktop (cloaked=2). These are system trays, not focusable apps.
+          const isTrayOnly = app.isVisible === false && (app.cloaked || 0) !== 2;
+          if (isTrayOnly) return false;
+
+          return true;
         });
 
-        const sortedApps = [...filteredApps].sort((a, b) => {
-          const nameA = (a.name || '').toLowerCase();
-          const nameB = (b.name || '').toLowerCase();
-          return nameA.localeCompare(nameB);
-        });
+        // No deduplication needed — AppMatcher outputs one entry per unique PID.
+        // Each entry is a real focusable window. Show them all.
+        const sortedApps = [...filteredApps].sort((a, b) =>
+          (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())
+        );
         setRunningApps(sortedApps);
       }
     });
@@ -367,8 +374,8 @@ export function TabManagement() {
   const handleAppClick = useCallback(async (app) => {
     try {
       if (window.electronAPI?.focusApp && app.pid) {
-        console.log('[TabManagement] Focusing app:', app.name, app.pid);
-        await window.electronAPI.focusApp(app.pid, app.name);
+        console.log('[TabManagement] Focusing app:', app.name, app.pid, 'HWND:', app.hwnd);
+        await window.electronAPI.focusApp(app.pid, app.name, app.hwnd);
       }
     } catch (error) {
       console.error('[TabManagement] Failed to focus app:', error);

@@ -402,8 +402,8 @@ const electronAPI = {
         }
     },
 
-    focusApp: async (pid, name) => {
-        return await invoke('focus_window', { pid, name });
+    focusApp: async (pid, name, hwnd) => {
+        return await invoke('focus_window', { pid, name, hwnd: hwnd || null });
     },
 
     // ==========================================

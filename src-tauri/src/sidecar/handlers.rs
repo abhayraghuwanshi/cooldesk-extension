@@ -195,7 +195,7 @@ pub async fn get_all_desktop_apps() -> Json<Vec<RunningApp>> {
     Json(crate::system::get_all_desktop_apps_info().await)
 }
 
-/// Search running apps by query — for testing recommendations
+/// Search apps by query — fuzzy match against installed+running list
 /// GET /search?q=chrome&limit=10
 #[derive(Debug, serde::Deserialize)]
 pub struct SearchQuery {
@@ -203,44 +203,142 @@ pub struct SearchQuery {
     pub limit: Option<usize>,
 }
 
+/// Port of the JS fuzzyScore function — returns 0-100
+fn fuzzy_score(text: &str, query: &str) -> u32 {
+    if text.is_empty() || query.is_empty() { return 0; }
+
+    let tl = text.to_lowercase();
+    let ql = query.to_lowercase();
+
+    if tl == ql { return 100; }
+    if tl.starts_with(&ql) { return 95; }
+
+    let t_words: Vec<&str> = tl.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    let q_words: Vec<&str> = ql.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+
+    // Word boundary: single-word query starts a word in text
+    if q_words.len() == 1 && t_words.iter().any(|w| w.starts_with(ql.as_str())) { return 90; }
+
+    // Acronym: "vsc" → "Visual Studio Code"
+    if ql.len() >= 2 && t_words.len() > 1 {
+        let acronym: String = t_words.iter().filter_map(|w| w.chars().next()).collect();
+        if acronym == ql { return 85; }
+        if acronym.starts_with(ql.as_str()) { return 82; }
+    }
+
+    // Contains full query
+    if tl.contains(ql.as_str()) { return 75; }
+
+    // All query words appear in text
+    if q_words.len() > 1 {
+        let all_match = q_words.iter().all(|qw| tl.contains(qw) || t_words.iter().any(|tw| tw.starts_with(qw)));
+        if all_match { return 65; }
+    }
+
+    // Query is substring of a word
+    if t_words.iter().any(|w| w.contains(ql.as_str())) { return 60; }
+
+    // Character sequence match (fuzzy)
+    let q_chars: Vec<char> = ql.chars().collect();
+    let mut qi = 0usize;
+    for tc in tl.chars() {
+        if qi < q_chars.len() && tc == q_chars[qi] { qi += 1; }
+    }
+    if qi == q_chars.len() {
+        let tlen = tl.chars().count().max(1) as u32;
+        return 30 + (q_chars.len() as u32 * 10 / tlen).min(20);
+    }
+
+    0
+}
+
 pub async fn search_apps(Query(params): Query<SearchQuery>) -> Json<serde_json::Value> {
-    let query = params.q.unwrap_or_default().to_lowercase();
+    let query = params.q.unwrap_or_default();
     let limit = params.limit.unwrap_or(20);
 
-    let apps = crate::system::get_all_desktop_apps_info().await;
+    // Try the populated AppMatcher cache first (full installed + running list)
+    let cached = crate::APP_CACHE.read().ok()
+        .map(|c| c.clone())
+        .unwrap_or_default();
 
-    let mut scored: Vec<(u32, &RunningApp)> = apps
-        .iter()
-        .filter_map(|a| {
-            let name = a.name.to_lowercase();
-            let title = a.title.to_lowercase();
-            let score = if name == query                   { 100 }
-                else if name.starts_with(&query)           { 90 }
-                else if name.contains(&query)              { 75 }
-                else if title.contains(&query)             { 60 }
-                else                                       { 0 };
-            if score > 0 { Some((score, a)) } else { None }
-        })
-        .collect();
+    let source;
+    let mut results: Vec<serde_json::Value> = if !cached.is_empty() {
+        source = "cache";
+        cached.iter().filter_map(|app| {
+            let name  = app["name"].as_str().unwrap_or("");
+            let title = app["title"].as_str().unwrap_or("");
 
-    scored.sort_by(|a, b| b.0.cmp(&a.0));
-    scored.truncate(limit);
+            if query.is_empty() {
+                // No query: return running apps only
+                if !app["isRunning"].as_bool().unwrap_or(false) { return None; }
+                return Some(serde_json::json!({
+                    "id": app["id"], "name": name, "title": title,
+                    "titles": app["titles"],
+                    "path": app["path"], "pid": app["pid"], "hwnd": app["hwnd"], "score": 100,
+                    "isRunning": true, "isVisible": app["isVisible"],
+                    "cloaked": app["cloaked"], "isOnCurrentDesktop": app["isOnCurrentDesktop"],
+                    "icon": app["icon"], "source": app["source"],
+                }));
+            }
 
-    let results: Vec<serde_json::Value> = scored
-        .into_iter()
-        .map(|(score, a)| serde_json::json!({
-            "id": a.id,
-            "name": a.name,
-            "title": a.title,
-            "path": a.path,
-            "pid": a.pid,
-            "score": score,
-            "isOnCurrentDesktop": a.is_on_current_desktop,
-            "desktopNumber": a.desktop_number,
-        }))
-        .collect();
+            let name_score  = fuzzy_score(name, &query);
+            let title_score = fuzzy_score(title, &query);
+            // Also score against each individual window title (multi-window Electron apps)
+            let titles_score = app["titles"].as_array()
+                .map(|arr| arr.iter()
+                    .filter_map(|t| t.as_str())
+                    .map(|t| fuzzy_score(t, &query))
+                    .max()
+                    .unwrap_or(0))
+                .unwrap_or(0);
+            let match_score = name_score.max(title_score).max(titles_score);
+            if match_score == 0 { return None; }
 
-    Json(serde_json::json!({ "query": query, "results": results }))
+            let is_running = app["isRunning"].as_bool().unwrap_or(false);
+            let is_visible = app["isVisible"].as_bool().unwrap_or(false);
+            let cloaked    = app["cloaked"].as_i64().unwrap_or(0);
+
+            let score: u32 = if is_running {
+                if is_visible && cloaked == 0 { match_score.max(85) + 15 }
+                else if cloaked > 0           { match_score.max(80) + 12 }
+                else                          { match_score.max(75) + 10 }
+            } else {
+                match_score.min(75)
+            };
+
+            Some(serde_json::json!({
+                "id": app["id"], "name": name, "title": title,
+                "titles": app["titles"],
+                "path": app["path"], "pid": app["pid"], "hwnd": app["hwnd"],
+                "score": score.min(100),
+                "isRunning": is_running, "isVisible": is_visible,
+                "cloaked": cloaked, "isOnCurrentDesktop": app["isOnCurrentDesktop"],
+                "icon": app["icon"], "source": app["source"],
+            }))
+        }).collect()
+    } else {
+        // Cache empty (first launch before Spotlight opened) — fallback to live running windows
+        source = "live";
+        let apps = crate::system::get_all_desktop_apps_info().await;
+        apps.iter().filter_map(|a| {
+            let score = fuzzy_score(&a.name, &query).max(fuzzy_score(&a.title, &query));
+            if score == 0 && !query.is_empty() { return None; }
+            Some(serde_json::json!({
+                "id": a.id, "name": a.name, "title": a.title,
+                "path": a.path, "pid": a.pid,
+                "score": if query.is_empty() { 100u32 } else { score.min(100) },
+                "isRunning": true, "isVisible": true, "cloaked": 0,
+                "isOnCurrentDesktop": a.is_on_current_desktop,
+            }))
+        }).collect()
+    };
+
+    results.sort_by(|a, b| {
+        b["score"].as_u64().unwrap_or(0).cmp(&a["score"].as_u64().unwrap_or(0))
+    });
+    results.truncate(limit);
+
+    Json(serde_json::json!({ "query": query, "results": results, "source": source }))
 }
 
 // ==========================================

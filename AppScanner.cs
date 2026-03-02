@@ -85,7 +85,8 @@ public class AppScanner {
     static Dictionary<string, List<uint>> pathPidMap = new Dictionary<string, List<uint>>(StringComparer.OrdinalIgnoreCase);
     static Dictionary<string, List<uint>> namePidMap = new Dictionary<string, List<uint>>(StringComparer.OrdinalIgnoreCase);
     static HashSet<uint> windowPids = new HashSet<uint>();
-    static Dictionary<uint, List<string>> pidToTitles = new Dictionary<uint, List<string>>();
+    // hwnd (as long) paired with title text — lets us expand to per-window entries downstream
+    static Dictionary<uint, List<Tuple<long, string>>> pidToTitles = new Dictionary<uint, List<Tuple<long, string>>>();
     static Dictionary<uint, Tuple<bool, int>> pidToWindowStates = new Dictionary<uint, Tuple<bool, int>>();
     static Dictionary<uint, Guid> pidToDesktopId = new Dictionary<uint, Guid>();
     static Guid currentDesktopId = Guid.Empty;
@@ -151,8 +152,8 @@ public class AppScanner {
                 if (!pidToPath.TryGetValue(pid, out wPath) || string.IsNullOrEmpty(wPath)) continue;
 
                 string exeName = Path.GetFileNameWithoutExtension(wPath);
-                List<string> titles;
-                if (!pidToTitles.TryGetValue(pid, out titles)) titles = new List<string>();
+                List<Tuple<long, string>> titles;
+                if (!pidToTitles.TryGetValue(pid, out titles)) titles = new List<Tuple<long, string>>();
 
                 bool isVisible = false;
                 int cloaked = 0;
@@ -181,7 +182,7 @@ public class AppScanner {
                 foreach (var t in titles) {
                     if (!firstTitle) Console.Write(",");
                     firstTitle = false;
-                    Console.Write("\"" + EscapeJson(t) + "\"");
+                    Console.Write("{\"hwnd\":" + t.Item1 + ",\"text\":\"" + EscapeJson(t.Item2) + "\"}");
                 }
                 Console.Write("],");
                 Console.Write("\"isVisible\":" + (isVisible ? "true" : "false") + ",");
@@ -492,8 +493,13 @@ public class AppScanner {
 
             if (pid != 0) {
                 windowPids.Add(pid);
-                if (!pidToTitles.ContainsKey(pid)) pidToTitles[pid] = new List<string>();
-                if (!string.IsNullOrEmpty(title) && !pidToTitles[pid].Contains(title)) pidToTitles[pid].Add(title);
+                if (!pidToTitles.ContainsKey(pid)) pidToTitles[pid] = new List<Tuple<long, string>>();
+                if (!string.IsNullOrEmpty(title)) {
+                    long hwndVal = hWnd.ToInt64();
+                    bool alreadyHave = false;
+                    foreach (var t in pidToTitles[pid]) { if (t.Item2 == title) { alreadyHave = true; break; } }
+                    if (!alreadyHave) pidToTitles[pid].Add(new Tuple<long, string>(hwndVal, title));
+                }
 
                 // Track state for the "best" window we find for this PID
                 // Prefer: visible > not visible, uncloaked > cloaked, lower cloaked value

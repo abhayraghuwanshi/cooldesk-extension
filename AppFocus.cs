@@ -13,26 +13,39 @@ public class AppFocus {
 
     static void Main(string[] args) {
         if (args.Length == 0) {
-            Console.Error.WriteLine("Usage: AppFocus.exe <pid> [process_name]");
+            Console.Error.WriteLine("Usage: AppFocus.exe --hwnd <handle> | <pid> [process_name]");
             Environment.Exit(1);
         }
 
-        int pid;
-        if (!int.TryParse(args[0], out pid)) {
-            Console.Error.WriteLine("Invalid PID");
-            Environment.Exit(1);
-        }
-
-        string processName = args.Length > 1 ? args[1] : null;
-        if (processName != null && processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) {
-            processName = processName.Substring(0, processName.Length - 4);
-        }
-        
         // Simulate Alt key press/release to allow SetForegroundWindow to work
         keybd_event(0x12, 0, 0, UIntPtr.Zero);
         keybd_event(0x12, 0, 2, UIntPtr.Zero);
-        
+
         try {
+            // Mode 1: Focus specific window by HWND
+            if (args[0] == "--hwnd") {
+                if (args.Length < 2) { Console.Error.WriteLine("Missing hwnd value"); Environment.Exit(1); }
+                long hwndVal;
+                if (!long.TryParse(args[1], out hwndVal)) { Console.Error.WriteLine("Invalid hwnd"); Environment.Exit(1); }
+                IntPtr hwnd = new IntPtr(hwndVal);
+                if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+                else ShowWindow(hwnd, SW_SHOW);
+                SetForegroundWindow(hwnd);
+                Environment.Exit(0);
+            }
+
+            // Mode 2: Focus by PID (original behaviour)
+            int pid;
+            if (!int.TryParse(args[0], out pid)) {
+                Console.Error.WriteLine("Invalid PID");
+                Environment.Exit(1);
+            }
+
+            string processName = args.Length > 1 ? args[1] : null;
+            if (processName != null && processName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) {
+                processName = processName.Substring(0, processName.Length - 4);
+            }
+
             // Try by PID first
             if (TryFocusPid(pid)) {
                 Environment.Exit(0);
