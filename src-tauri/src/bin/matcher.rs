@@ -241,6 +241,10 @@ fn main() {
     }
 
     let mut matched_pids: HashSet<u32> = HashSet::new();
+    // Track which window indices have already been claimed by an installed app.
+    // Prevents duplicate entries when multiple installed app records (e.g. "Visual Studio Code"
+    // from Start Menu and "Microsoft VS Code" from Registry) match the same running process.
+    let mut claimed_win_indices: HashSet<usize> = HashSet::new();
     let mut result: Vec<AppEntry> = Vec::new();
 
     for app in installed {
@@ -276,6 +280,31 @@ fn main() {
         }
 
         if let Some(idx) = matched_idx {
+            // If this window was already claimed by another installed app entry (e.g. "Visual
+            // Studio Code" via Start Menu already claimed the VS Code windows, so skip the
+            // "Microsoft VS Code" registry entry that points to the same exe), treat as not running.
+            if claimed_win_indices.contains(&idx) {
+                result.push(AppEntry {
+                    id: app.id.clone(),
+                    name: app.name.clone(),
+                    title: app.name.clone(),
+                    titles: vec![],
+                    path: app.path.clone(),
+                    app_type: "app".to_string(),
+                    source: app.source.clone(),
+                    is_running: false,
+                    pid: 0,
+                    hwnd: 0,
+                    cloaked: 0,
+                    is_visible: false,
+                    is_on_current_desktop: false,
+                    desktop_id: None,
+                    icon: app.icon.clone(),
+                });
+                continue;
+            }
+            claimed_win_indices.insert(idx);
+
             let win = &windows[idx];
             matched_pids.insert(win.pid);
 

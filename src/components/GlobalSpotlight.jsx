@@ -267,12 +267,32 @@ export function GlobalSpotlight() {
                 .filter(a => {
                     const name = (a.name || '').toLowerCase();
                     const path = (a.path || '').toLowerCase();
+                    const title = (a.title || '').toLowerCase();
+
                     if (usedIds.has(name)) return false;
+
+                    // Filter browsers (shown as tabs)
                     if (systemApps.some(s => name.includes(s) || path.includes(s))) return false;
+
+                    // Filter the spotlight/cooldesk app itself
+                    if (name.includes('cooldesk') || title.includes('cooldesk spotlight')) return false;
+
+                    // Filter tray/background windows (invisible and not on another virtual desktop)
+                    if (a.isVisible === false && (a.cloaked || 0) !== 2) return false;
+
+                    // Filter obvious noise: log windows, temp windows, tray icon windows
+                    if (name.endsWith(' log') || name === 'temp window' || name.endsWith('trayiconwindow')) return false;
+
                     usedIds.add(name);
                     return true;
                 })
-                .slice(0, 8) // Show more running apps
+                // Sort by usage frequency — most-used apps appear first
+                .sort((a, b) => {
+                    const freqA = frequentApps[(a.name || '').toLowerCase()] || 0;
+                    const freqB = frequentApps[(b.name || '').toLowerCase()] || 0;
+                    return freqB - freqA;
+                })
+                .slice(0, 6)
                 .map(a => ({ ...a, type: 'app', description: 'Running', isRunning: true }));
 
             console.log('[Spotlight] Active apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(icon:${!!a.icon})`));
@@ -1126,8 +1146,7 @@ export function GlobalSpotlight() {
                     const tabs = contextItems.filter(item => item.type === 'tab');
                     let flatIndex = pinnedItems.length; // Start after pinned items
 
-                    console.log('[Spotlight] Rendering context - contextItems:', contextItems.length, 'apps:', apps.length, 'tabs:', tabs.length);
-                    console.log('[Spotlight] Context items types:', contextItems.map(i => ({ type: i.type, title: i.title || i.name })));
+                    console.log('[Spotlight] Rendering context - apps:', apps.length, 'tabs:', tabs.length);
 
                     return (
                         <div className="spotlight-context">
