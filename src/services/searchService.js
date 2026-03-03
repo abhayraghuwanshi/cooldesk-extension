@@ -228,68 +228,77 @@ export async function refreshElectronCache(forceRefresh = false) {
     }
   }
 
-  // 3. SIDECAR DATA: Only fetch if sidecar is available
-  const sidecarUp = await isSidecarAvailable();
+  // 3. START SIDECAR HEALTH CHECK (Parallel)
+  const sidecarPromise = isSidecarAvailable();
+
+  // 4. ELECTRON IPC DATA: Fetch immediately as these are handled by main process
+  // Workspaces from main
+  if (forceRefresh || !isCacheFresh('workspaces')) {
+    refreshPromises.push(
+      withTimeout(
+        window.electronAPI.sendMessage?.({ type: 'SEARCH_WORKSPACES', query: '', maxResults: 500 })
+          .then(r => Array.isArray(r?.results) ? r.results : []).catch(() => []),
+        2000
+      ).then(ws => {
+        electronDataCache.workspaces = ws;
+        electronDataCache.lastRefresh.workspaces = now;
+        console.log(`[SearchService] Loaded ${ws.length} workspaces/urls from cache`);
+        if (ws.length > 0) {
+          console.log('[SearchService] Cache sample:', JSON.stringify(ws[0]).slice(0, 100));
+        }
+      })
+    );
+  }
+
+  // History from main
+  if (forceRefresh || !isCacheFresh('history')) {
+    refreshPromises.push(
+      withTimeout(
+        window.electronAPI.sendMessage?.({ type: 'SEARCH_HISTORY', query: '', maxResults: 200 })
+          .then(r => Array.isArray(r?.results) ? r.results : [])
+          .catch(e => { console.error('[SearchService] history error:', e); return []; }),
+        3000
+      ).then(h => {
+        electronDataCache.history = h;
+        electronDataCache.lastRefresh.history = now;
+        console.log(`[SearchService] Loaded ${h.length} history items from cache`);
+      })
+    );
+  }
+
+  // Bookmarks from main
+  if (forceRefresh || !isCacheFresh('bookmarks')) {
+    refreshPromises.push(
+      withTimeout(
+        window.electronAPI.sendMessage?.({ type: 'SEARCH_BOOKMARKS', query: '', maxResults: 200 })
+          .then(r => Array.isArray(r?.results) ? r.results : [])
+          .catch(e => { console.error('[SearchService] bookmarks error:', e); return []; }),
+        2000
+      ).then(b => {
+        electronDataCache.bookmarks = b;
+        electronDataCache.lastRefresh.bookmarks = now;
+        console.log(`[SearchService] Loaded ${b.length} bookmarks items from cache`);
+      })
+    );
+  }
+
+  // 5. SIDECAR ONLY DATA: Tabs from sidecar
+  const sidecarUp = await sidecarPromise;
   console.log('[SearchService] Sidecar available:', sidecarUp);
 
   if (sidecarUp) {
-    // Tabs from sidecar
     if (forceRefresh || !isCacheFresh('tabs')) {
       refreshPromises.push(
         withTimeout(window.electronAPI.getTabs?.().catch(e => { console.error('[SearchService] getTabs error:', e); return []; }), 1000)
           .then(tabs => {
-            console.log('[SearchService] Got tabs:', tabs?.length || 0);
+            console.log('[SearchService] Got tabs from sidecar:', tabs?.length || 0);
             electronDataCache.tabs = Array.isArray(tabs) ? tabs : [];
             electronDataCache.lastRefresh.tabs = now;
           })
       );
     }
-
-    // Workspaces from sidecar
-    if (forceRefresh || !isCacheFresh('workspaces')) {
-      refreshPromises.push(
-        withTimeout(
-          window.electronAPI.sendMessage?.({ type: 'SEARCH_WORKSPACES', query: '', maxResults: 100 })
-            .then(r => Array.isArray(r?.results) ? r.results : []).catch(() => []),
-          1500
-        ).then(ws => {
-          electronDataCache.workspaces = ws;
-          electronDataCache.lastRefresh.workspaces = now;
-        })
-      );
-    }
-
-    // History from sidecar (background, lower priority)
-    if (!isCacheFresh('history')) {
-      refreshPromises.push(
-        withTimeout(
-          window.electronAPI.sendMessage?.({ type: 'SEARCH_HISTORY', query: '', maxResults: 100 })
-            .then(r => { console.log('[SearchService] Got history:', r?.results?.length || 0); return Array.isArray(r?.results) ? r.results : []; })
-            .catch(e => { console.error('[SearchService] history error:', e); return []; }),
-          2000
-        ).then(h => {
-          electronDataCache.history = h;
-          electronDataCache.lastRefresh.history = now;
-        })
-      );
-    }
-
-    // Bookmarks from sidecar (background, lower priority)
-    if (!isCacheFresh('bookmarks')) {
-      refreshPromises.push(
-        withTimeout(
-          window.electronAPI.sendMessage?.({ type: 'SEARCH_BOOKMARKS', query: '', maxResults: 100 })
-            .then(r => { console.log('[SearchService] Got bookmarks:', r?.results?.length || 0); return Array.isArray(r?.results) ? r.results : []; })
-            .catch(e => { console.error('[SearchService] bookmarks error:', e); return []; }),
-          2000
-        ).then(b => {
-          electronDataCache.bookmarks = b;
-          electronDataCache.lastRefresh.bookmarks = now;
-        })
-      );
-    }
   } else {
-    console.log('[SearchService] Sidecar NOT available - skipping tabs/history/bookmarks fetch');
+    console.log('[SearchService] Sidecar NOT available - skipping sidecar-specific data');
   }
 
   // Wait for all refreshes
@@ -373,8 +382,9 @@ function searchElectronCache(query) {
   // Search workspaces
   for (const ws of electronDataCache.workspaces) {
     const nameMatch = (ws.title || ws.name || '').toLowerCase().includes(q);
+    const urlMatch = (ws.url || '').toLowerCase().includes(q);
     const descMatch = (ws.description || '').toLowerCase().includes(q);
-    if (nameMatch || descMatch) {
+    if (nameMatch || urlMatch || descMatch) {
       results.push({
         id: ws.id,
         title: ws.title || ws.name,
@@ -382,7 +392,7 @@ function searchElectronCache(query) {
         description: ws.description || 'Workspace',
         type: ws.type || 'workspace',
         favicon: ws.favicon,
-        score: nameMatch ? 70 : 50
+        score: nameMatch ? 85 : (urlMatch ? 75 : 55)
       });
     }
   }
@@ -547,7 +557,7 @@ async function searchLocalIndex(query, typeFilter = null) {
     const indexData = data[SEARCH_INDEX_KEY];
 
     if (!indexData || !indexData.items) {
-      // console.warn('[SearchService] Local index empty or missing');
+      console.warn('[SearchService] Local index empty or missing');
       return null; // SIGNAL: Index Missing
     }
 
@@ -623,7 +633,7 @@ export async function quickSearch(query, maxResults = 15) {
 
     // Refresh stale cache data for next search (non-blocking)
     if (!isCacheFresh('tabs') || !isCacheFresh('workspaces')) {
-      refreshElectronCache().catch(() => {});
+      refreshElectronCache().catch(() => { });
     }
 
     // No deduplication needed — AppMatcher outputs one entry per unique PID.
@@ -941,7 +951,11 @@ function deduplicateByUrl(results) {
     }
   }
 
-  return Array.from(urlMap.values());
+  const deduped = Array.from(urlMap.values());
+  if (results.length > 0) {
+    console.log(`[SearchService] deduplicateByUrl: ${results.length} -> ${deduped.length} items`);
+  }
+  return deduped;
 }
 
 /**

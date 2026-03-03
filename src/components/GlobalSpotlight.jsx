@@ -169,6 +169,8 @@ export function GlobalSpotlight() {
         console.log('[Spotlight] Initial mount - loading context items');
         loadContextItems();
         loadPinnedItems();
+        // Pre-warm the search cache so history/workspace results are ready for first search
+        refreshElectronCache().catch(() => { });
 
         // Listen for spotlight-shown event from Electron (when Alt+K is pressed)
         if (window.electronAPI?.subscribe) {
@@ -219,7 +221,7 @@ export function GlobalSpotlight() {
                         console.log('[Spotlight] Using electronAPI.getTabs');
                         const tabs = await window.electronAPI.getTabs();
                         console.log('[Spotlight] electronAPI.getTabs returned:', tabs?.length, 'tabs', tabs);
-                        return tabs;
+                        return Array.isArray(tabs) ? tabs : []; // Guard: IPC may return null if handler was missing
                     }
                     // Fallback to Chrome extension API
                     if (typeof chrome !== 'undefined' && chrome?.tabs?.query) {
@@ -246,42 +248,57 @@ export function GlobalSpotlight() {
                 storageGet(['frequent_apps']).then(d => d.frequent_apps || {}).catch(() => ({}))
             ]);
 
+            // Guard: ensure tabs is always an array — avoids TypeError that would silently kill all recommendations
+            const safeTabs = Array.isArray(tabs) ? tabs : [];
+
             console.log('[Spotlight] Data fetched:', {
                 runningApps: runningApps?.length || 0,
                 installedApps: installedApps?.length || 0,
-                tabs: tabs?.length || 0,
+                tabs: safeTabs.length,
                 frequentApps: Object.keys(frequentApps).length
             });
 
             const recommendations = [];
             const usedIds = new Set();
 
-            // System apps and browsers to filter out (tabs are shown separately)
-            const systemApps = ['svchost', 'csrss', 'system', 'registry', 'service', 'runtime', 'host', 'helper', 'background', 'agent',
-                'chrome', 'msedge', 'edge', 'firefox', 'brave', 'opera', 'vivaldi', 'safari', 'iexplore', 'chromium'];
-
             // 1. Running Apps (top priority - what user is actively using)
             // Enrich with icons from installed apps, then filter
             const enrichedRunning = enrichRunningAppsWithIcons(runningApps, installedApps);
+
+            // Exact process names that are pure system noise (no user value)
+            const systemExactNames = new Set([
+                'svchost', 'csrss', 'smss', 'wininit', 'winlogon', 'services', 'lsass',
+                'registry', 'system', 'idle', 'dwm', 'conhost', 'ctfmon', 'spoolsv',
+                'taskhostw', 'sihost', 'runtimebroker', 'applicationframehost',
+                'searchindexer', 'searchhost', 'securityhealthsystray'
+            ]);
+            // Browser exe names (shown as tabs instead, not apps)
+            const browserNames = new Set([
+                'chrome', 'msedge', 'firefox', 'brave', 'opera', 'vivaldi', 'iexplore', 'chromium',
+                'safari', 'waterfox', 'librewolf', 'thorium'
+            ]);
+
             const activeApps = enrichedRunning
                 .filter(a => {
-                    const name = (a.name || '').toLowerCase();
-                    const path = (a.path || '').toLowerCase();
+                    const name = (a.name || '').toLowerCase().replace(/\.exe$/i, '');
                     const title = (a.title || '').toLowerCase();
 
                     if (usedIds.has(name)) return false;
 
-                    // Filter browsers (shown as tabs)
-                    if (systemApps.some(s => name.includes(s) || path.includes(s))) return false;
+                    // Skip known system noise processes (exact name match)
+                    if (systemExactNames.has(name)) return false;
+
+                    // Skip browsers (tabs are shown separately)
+                    if (browserNames.has(name)) return false;
 
                     // Filter the spotlight/cooldesk app itself
-                    if (name.includes('cooldesk') || title.includes('cooldesk spotlight')) return false;
+                    if (name.includes('cooldesk')) return false;
 
                     // Filter tray/background windows (invisible and not on another virtual desktop)
                     if (a.isVisible === false && (a.cloaked || 0) !== 2) return false;
 
-                    // Filter obvious noise: log windows, temp windows, tray icon windows
-                    if (name.endsWith(' log') || name === 'temp window' || name.endsWith('trayiconwindow')) return false;
+                    // Filter obvious noise: log windows, tray windows
+                    if (title.endsWith(' log') || title === 'temp window' || title.endsWith('trayiconwindow')) return false;
 
                     usedIds.add(name);
                     return true;
@@ -307,7 +324,8 @@ export function GlobalSpotlight() {
                 if (usedIds.has(appName.toLowerCase())) continue;
 
                 // Skip browsers (they're shown as tabs instead)
-                if (systemApps.some(s => appName.toLowerCase().includes(s))) continue;
+                const appNameLower = appName.toLowerCase().replace(/\.exe$/i, '');
+                if (browserNames.has(appNameLower) || systemExactNames.has(appNameLower)) continue;
 
                 // Find app in installed apps with flexible matching
                 const frequentName = appName.toLowerCase();
@@ -320,8 +338,9 @@ export function GlobalSpotlight() {
                     return false;
                 });
                 if (app) {
-                    const path = (app.path || '').toLowerCase();
-                    if (systemApps.some(s => path.includes(s))) continue;
+                    // Skip if this app's name is a system process or browser
+                    const installedExe = (app.path || '').split(/[\/\\]/).pop()?.toLowerCase().replace(/\.exe$/i, '') || '';
+                    if (browserNames.has(installedExe) || systemExactNames.has(installedExe)) continue;
 
                     usedIds.add(appName.toLowerCase());
                     recommendations.push({
@@ -334,10 +353,10 @@ export function GlobalSpotlight() {
             }
 
             // 3. Active Tabs (unique by domain)
-            console.log('[Spotlight] Processing tabs, raw count:', tabs?.length);
-            console.log('[Spotlight] Raw tabs data:', JSON.stringify(tabs?.slice(0, 3), null, 2));
+            console.log('[Spotlight] Processing tabs, raw count:', safeTabs.length);
+            console.log('[Spotlight] Raw tabs data:', JSON.stringify(safeTabs.slice(0, 3), null, 2));
 
-            const afterUrlFilter = tabs.filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://') && !t.url.startsWith('about:'));
+            const afterUrlFilter = safeTabs.filter(t => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('edge://') && !t.url.startsWith('about:'));
             console.log('[Spotlight] After URL filter:', afterUrlFilter.length);
 
             const relevantTabs = afterUrlFilter
@@ -616,7 +635,7 @@ export function GlobalSpotlight() {
             setResults(cached);
             setSelectedIndex(-1);
             // Still fetch fresh results in background for longer queries
-            if (trimmedQuery.length < 3) return;
+            if (trimmedQuery.length < 1) return;
         }
 
         // Increment search ID to track this request

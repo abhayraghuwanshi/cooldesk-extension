@@ -305,7 +305,8 @@ const electronAPI = {
                 }
             });
 
-            return { results: wsResults.slice(0, 20) };
+            console.log(`[Shim] SEARCH_WORKSPACES: q="${q}", found ${wsResults.length} total across all workspaces`);
+            return { results: wsResults.slice(0, msg.maxResults || 500) };
         }
 
         // Handle History commands (Activity Log)
@@ -334,7 +335,7 @@ const electronAPI = {
                     favicon: a.data.favicon,
                     lastVisitTime: a.timestamp
                 }))
-                .slice(0, msg.maxResults || 20);
+                .slice(0, msg.maxResults || 200);
 
             return { results };
         }
@@ -375,7 +376,7 @@ const electronAPI = {
                 }
             });
 
-            return { results: results.slice(0, msg.maxResults || 20) };
+            return { results: results.slice(0, msg.maxResults || 500) };
         }
 
         // Handle Note commands

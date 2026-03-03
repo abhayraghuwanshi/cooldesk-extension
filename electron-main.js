@@ -2314,8 +2314,13 @@ ipcMain.handle('sync:get-workspaces', () => syncData.workspaces);
 ipcMain.handle('sync:set-workspaces', (_event, data) => {
     // Use name-based merge for workspaces to handle multi-browser sync
     const incoming = Array.isArray(data) ? data : [];
+    const prevCount = syncData.workspaces?.length || 0;
+
     syncData.workspaces = mergeWorkspacesByName(syncData.workspaces, incoming);
-    // Limit workspaces if needed, but they are usually few
+
+    const totalUrls = syncData.workspaces.reduce((sum, ws) => sum + (ws.urls?.length || 0), 0);
+    console.log(`[Electron] sync:set-workspaces: Received ${incoming.length}, Merged to ${syncData.workspaces.length} (was ${prevCount}), Total URLs: ${totalUrls}`);
+
     syncData.lastUpdated.workspaces = Date.now();
     saveData();
     broadcastToClients('workspaces-updated', syncData.workspaces);
@@ -2367,11 +2372,34 @@ ipcMain.handle('sync:set-daily-memory', (_event, data) => {
     return { ok: true };
 });
 
+ipcMain.handle('sync:get-urls', () => syncData.urls);
 ipcMain.handle('sync:set-urls', (_event, data) => {
     syncData.urls = Array.isArray(data) ? data : [];
     syncData.lastUpdated.urls = Date.now();
     saveData();
     broadcastToClients('urls-updated', syncData.urls);
+    return { ok: true };
+});
+
+// Tabs - tabs are transient (not persisted to disk), populated when browser extension connects
+ipcMain.handle('sync:get-tabs', () => syncData.tabs);
+ipcMain.handle('sync:set-tabs', (_event, data) => {
+    // data can be [tabs] or { deviceId, tabs }
+    let incomingTabs = [];
+    let deviceId = 'ipc-unknown';
+
+    if (Array.isArray(data)) {
+        incomingTabs = data;
+    } else if (data && Array.isArray(data.tabs)) {
+        incomingTabs = data.tabs;
+        deviceId = data.deviceId || 'ipc-unknown';
+    }
+
+    console.log(`[Electron IPC] Received tabs from device: ${deviceId}, count: ${incomingTabs.length}`);
+    syncData.deviceTabsMap.set(deviceId, incomingTabs);
+    recomputeAggregatedTabs();
+    notifyRenderer('tabs-updated', syncData.tabs);
+    broadcastToClients('tabs-updated', syncData.tabs);
     return { ok: true };
 });
 
@@ -2450,25 +2478,56 @@ ipcMain.handle('runtime:send-message', async (_event, message) => {
                     .slice(0, 10)
             };
 
-        case 'SEARCH_HISTORY':
-            // Search in synced activity/history
+        case 'SEARCH_HISTORY': {
+            // Search in synced activity/history AND synced URLs (browser-visited URLs)
             const queryHist = (message.query || '').toLowerCase();
-            return {
-                results: syncData.activity
-                    .filter(a => a.title?.toLowerCase().includes(queryHist) || a.url?.toLowerCase().includes(queryHist))
-                    .map(a => {
-                        const timestamp = a.lastVisitTime || a.timestamp || Date.now();
-                        return {
-                            id: a.id || timestamp,
-                            title: a.title || a.url, // Fallback to URL if title is missing
-                            url: a.url,
-                            // description: new Date(timestamp).toLocaleDateString(), // Don't show date
-                            type: 'history',
-                            favicon: a.favicon || a.favIconUrl
-                        };
-                    })
-                    .slice(0, 10)
-            };
+            const histMax = message.maxResults || 50;
+
+            // 1. Activity items (desktop app usage + anything the extension explicitly tracked)
+            const activityHits = syncData.activity
+                .filter(a => {
+                    // Skip desktop app entries (url is an exe path, not a web URL)
+                    if (a.type === 'app') return false;
+                    return a.title?.toLowerCase().includes(queryHist) || a.url?.toLowerCase().includes(queryHist);
+                })
+                .map(a => ({
+                    id: a.id || a.url,
+                    title: a.title || a.url,
+                    url: a.url,
+                    type: 'history',
+                    favicon: a.favicon || a.favIconUrl,
+                    timestamp: a.lastVisitTime || a.timestamp || 0
+                }));
+
+            // 2. Synced URL entries from browser extension (browser-visited URLs, bookmarked pages)
+            const urlHits = syncData.urls
+                .filter(u => {
+                    if (!u.url) return false; // must be a valid URL
+                    return u.title?.toLowerCase().includes(queryHist) || u.url?.toLowerCase().includes(queryHist);
+                })
+                .map(u => ({
+                    id: u.id || u.url,
+                    title: u.title || u.url,
+                    url: u.url,
+                    type: 'history',
+                    favicon: u.favicon || u.favIconUrl,
+                    timestamp: u.updatedAt || u.createdAt || u.lastVisitTime || 0
+                }));
+
+            // Merge, deduplicate by URL, sort by recency
+            const histSeen = new Set();
+            const histResults = [...activityHits, ...urlHits]
+                .filter(h => {
+                    if (!h.url || histSeen.has(h.url)) return false;
+                    histSeen.add(h.url);
+                    return true;
+                })
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                .slice(0, histMax);
+
+            console.log(`[SEARCH_HISTORY] query="${queryHist}", results=${histResults.length} (activity=${activityHits.length}, urls=${urlHits.length})`);
+            return { results: histResults };
+        }
 
         case 'SEARCH_BOOKMARKS':
             // Search in synced pins
@@ -2484,12 +2543,12 @@ ipcMain.handle('runtime:send-message', async (_event, message) => {
                 }));
             return { results: pins.slice(0, 10) };
 
-        case 'SEARCH_WORKSPACES':
+        case 'SEARCH_WORKSPACES': {
             // Search in synced workspaces and their URLs
             const queryWs = (message.query || '').toLowerCase();
+            const wsMax = message.maxResults || 100;
             const wsResults = [];
 
-            // Search Workspace Names
             if (syncData.workspaces) {
                 // 1. Workspace Containers
                 syncData.workspaces.forEach(ws => {
@@ -2505,26 +2564,39 @@ ipcMain.handle('runtime:send-message', async (_event, message) => {
 
                     // 2. URLs inside Workspaces
                     if (ws.urls && Array.isArray(ws.urls)) {
+                        let addedUrls = 0;
                         ws.urls.forEach(u => {
+                            if (!u.url) return;
                             const uTitle = (u.title || '').toLowerCase();
                             const uUrl = (u.url || '').toLowerCase();
 
                             if (uTitle.includes(queryWs) || uUrl.includes(queryWs)) {
+                                let hostname = u.url;
+                                try { hostname = new URL(u.url).hostname; } catch { }
                                 wsResults.push({
                                     id: `${ws.id}_${u.url}`,
-                                    title: u.title || new URL(u.url).hostname,
+                                    title: u.title || hostname,
                                     url: u.url,
                                     description: `in ${ws.name}`,
                                     type: 'workspace-url',
                                     favicon: u.favicon || null,
                                     workspaceId: ws.id
                                 });
+                                addedUrls++;
                             }
                         });
+                        console.log(`[Electron] SEARCH_WORKSPACES: workspace "${ws.name}" had ${ws.urls.length} raw URLs, added ${addedUrls} to results`);
+                    } else {
+                        console.log(`[Electron] SEARCH_WORKSPACES: workspace "${ws.name}" has NO valid urls array (exists: ${!!ws.urls})`);
                     }
                 });
             }
-            return { results: wsResults.slice(0, 20) };
+            if (wsResults.length > 0) {
+                console.log(`[SEARCH_WORKSPACES] First result:`, JSON.stringify(wsResults[0]).slice(0, 100));
+            }
+            console.log(`[SEARCH_WORKSPACES] query="${queryWs}", total_returned=${wsResults.length}, workspaces_count=${syncData.workspaces?.length || 0}`);
+            return { results: wsResults.slice(0, wsMax) };
+        }
 
         case 'NANO_AI_SEARCH':
             // Mock AI search for now, or just return items
