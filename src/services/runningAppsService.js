@@ -220,11 +220,10 @@ class RunningAppsService {
 
         this.fetchPromise = (async () => {
             try {
-                // Fetch both types in parallel
-                const [runningApps, installedApps] = await Promise.all([
-                    window.electronAPI.getRunningApps(),
-                    window.electronAPI.getInstalledApps?.() || []
-                ]);
+                // Single call — getInstalledApps() is identical to getRunningApps() in Rust
+                const allApps = await window.electronAPI.getRunningApps();
+                const runningApps = Array.isArray(allApps) ? allApps : [];
+                const installedApps = runningApps;
 
                 // Update cache — filter to running only, preserve per-HWND entries for multi-window apps
                 this.cache.runningApps = Array.isArray(runningApps)

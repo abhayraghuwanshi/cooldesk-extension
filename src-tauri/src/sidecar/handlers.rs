@@ -7,7 +7,7 @@ use crate::system::RunningApp;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    response::Json,
+    response::{Json, IntoResponse},
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,15 +18,24 @@ pub struct AppState {
     pub sync_data: Arc<RwLock<SyncData>>,
     pub change_tracker: Arc<RwLock<ChangeTracker>>,
     pub ws_broadcast: tokio::sync::broadcast::Sender<String>,
+    pub search_db: Arc<crate::sidecar::search_db::SearchDb>,
 }
 
 impl AppState {
-    pub fn new(ws_broadcast: tokio::sync::broadcast::Sender<String>) -> Self {
-        Self {
+    pub async fn new(ws_broadcast: tokio::sync::broadcast::Sender<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let search_db = crate::sidecar::search_db::SearchDb::new().await
+            .map_err(|e| { log::error!("[Sidecar] SearchDb init failed: {}", e); e })?;
+        let state = Self {
             sync_data: Arc::new(RwLock::new(crate::sidecar::storage::load_data())),
             change_tracker: Arc::new(RwLock::new(ChangeTracker::new())),
             ws_broadcast,
-        }
+            search_db: Arc::new(search_db),
+        };
+
+        // Initial reindex
+        state.reindex_all().await;
+
+        Ok(state)
     }
 
     /// Broadcast message to all WebSocket clients
@@ -58,8 +67,16 @@ impl AppState {
         {
             let data = self.sync_data.read().await;
             if let Err(e) = save_data(&data) {
-                log::warn!("[Sidecar] Failed to save: {}", e);
+                log::warn!("[Sidecar] Failed to save {}: {}", data_type, e);
             }
+        }
+
+        // Trigger reindex for searchable types
+        match data_type {
+            "workspaces" | "urls" | "tabs" | "pins" | "notes" => {
+                self.reindex_all().await;
+            }
+            _ => {}
         }
 
         // Check for changes before broadcasting
@@ -75,6 +92,89 @@ impl AppState {
                 self.broadcast(&format!("{}-updated", data_type), payload);
             }
         }
+    }
+
+    /// Reindex all searchable data into LanceDB
+    pub async fn reindex_all(&self) {
+        log::debug!("[Search] Reindexing all data into LanceDB...");
+        let data = self.sync_data.read().await;
+
+        // Index Workspaces
+        for ws in &data.workspaces {
+            // Only index the name/meta to prevent it from "swallowing" all child searches
+            let _ = self.search_db.upsert_item(
+                &ws.id,
+                "workspace",
+                &ws.name,
+                None, // No child titles in content
+                None,
+                Some(serde_json::to_value(ws).unwrap_or_default())
+            ).await;
+
+            // Index EACH link in the workspace separately
+            for url in &ws.urls {
+                let mut metadata = serde_json::to_value(url).unwrap_or_default();
+                if let Some(obj) = metadata.as_object_mut() {
+                    obj.insert("workspaceId".to_string(), serde_json::json!(ws.id));
+                    obj.insert("workspaceName".to_string(), serde_json::json!(ws.name));
+                }
+                
+                let _ = self.search_db.upsert_item(
+                    &format!("ws-link-{}-{}", ws.id, url.url),
+                    "workspace-url", 
+                    url.title.as_deref().unwrap_or(&url.url),
+                    None,
+                    Some(&url.url),
+                    Some(metadata)
+                ).await;
+            }
+        }
+
+        // Index Tabs
+        for tab in &data.tabs {
+            let _ = self.search_db.upsert_item(
+                &format!("tab-{}", tab.id),
+                "tab",
+                &tab.title,
+                None,
+                Some(&tab.url),
+                Some(serde_json::to_value(tab).unwrap_or_default())
+            ).await;
+        }
+
+        // Index History (URLs)
+        for url in &data.urls {
+            let _ = self.search_db.upsert_item(
+                &url.id,
+                "url",
+                url.title.as_deref().unwrap_or(&url.url),
+                None,
+                Some(&url.url),
+                Some(serde_json::to_value(url).unwrap_or_default())
+            ).await;
+        }
+
+        // Index Pins
+        for pin in &data.pins {
+            let _ = self.search_db.upsert_item(
+                &pin.id,
+                "pin",
+                pin.title.as_deref().unwrap_or(&pin.url),
+                None,
+                Some(&pin.url),
+                Some(serde_json::to_value(pin).unwrap_or_default())
+            ).await;
+        }
+
+        // Apps are now indexed via /search/sync-apps from the main process
+
+        // Rebuild FTS index in background so startup is not blocked.
+        drop(data); // release the read lock before spawning
+        let db = self.search_db.clone();
+        tokio::spawn(async move {
+            let _ = db.rebuild_indices().await;
+            log::debug!("[Search] Reindexing complete.");
+        });
     }
 }
 
@@ -361,6 +461,9 @@ pub async fn post_workspaces(
         serde_json::to_value(&data.workspaces).unwrap_or_default()
     };
     state.save_and_broadcast("workspaces", payload).await;
+    
+    // Refresh search index
+    state.reindex_all().await;
 
     StatusCode::NO_CONTENT
 }
@@ -381,6 +484,9 @@ pub async fn post_urls(
         serde_json::to_value(&data.urls).unwrap_or_default()
     };
     state.save_and_broadcast("urls", payload).await;
+    
+    // Refresh search index
+    state.reindex_all().await;
 
     StatusCode::NO_CONTENT
 }
@@ -415,6 +521,9 @@ pub async fn post_tabs(
         serde_json::to_value(&data.tabs).unwrap_or_default()
     };
     state.save_and_broadcast("tabs", payload).await;
+    
+    // Refresh search index
+    state.reindex_all().await;
 
     StatusCode::NO_CONTENT
 }
@@ -489,6 +598,9 @@ pub async fn post_notes(
         serde_json::to_value(&data.notes).unwrap_or_default()
     };
     state.save_and_broadcast("notes", payload).await;
+    
+    // Refresh search index
+    state.reindex_all().await;
     log::info!("[Sidecar] HTTP POST /notes broadcast complete");
 
     StatusCode::NO_CONTENT
@@ -530,6 +642,9 @@ pub async fn post_pins(
         serde_json::to_value(&data.pins).unwrap_or_default()
     };
     state.save_and_broadcast("pins", payload).await;
+    
+    // Refresh search index
+    state.reindex_all().await;
 
     StatusCode::NO_CONTENT
 }
@@ -715,6 +830,8 @@ pub async fn post_sync(
             log::warn!("[Sidecar] Failed to save: {}", e);
         }
     }
+
+    state.reindex_all().await;
 
     state.broadcast(
         "sync-complete",
@@ -1462,3 +1579,174 @@ pub async fn feedback_save() -> StatusCode {
     }
 }
 
+
+// ── Unified Search ───────────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct UnifiedSearchParams {
+    pub q: String,
+    pub limit: Option<usize>,
+    pub context_urls: Option<String>, // Comma-separated
+}
+
+pub async fn search_unified(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<UnifiedSearchParams>,
+) -> Json<serde_json::Value> {
+    let limit = params.limit.unwrap_or(20);
+    let mut affinities = std::collections::HashMap::new();
+
+    // 1. Get affinities for context URLs from FeedbackStore
+    if let Some(ctx_urls) = &params.context_urls {
+        let store_mutex = get_feedback_store().await;
+        let store_guard = store_mutex.lock().await;
+        if let Some(store) = store_guard.as_ref() {
+            for url in ctx_urls.split(',') {
+                let url = url.trim();
+                if url.is_empty() { continue; }
+                
+                // Direct match affinity (highest)
+                affinities.insert(url.to_string(), 1.0);
+                
+                // Related URL affinities (learned patterns)
+                let related = store.get_related_urls(url, 0.2).await;
+                for (rel_url, score) in related {
+                    let entry = affinities.entry(rel_url).or_insert(0.0);
+                    if score > *entry {
+                        *entry = score;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. In-memory app search from APP_CACHE — always fresh, fast, has live isRunning/hwnd/pid.
+    let app_results: Vec<serde_json::Value> = {
+        let cached = crate::APP_CACHE.read().ok().map(|c| c.clone()).unwrap_or_default();
+        if cached.is_empty() {
+            // APP_CACHE not yet populated (first launch) — live fallback mirrors what /search does
+            let live = crate::system::get_all_desktop_apps_info().await;
+            live.iter().filter_map(|a| {
+                let score = fuzzy_score(&a.name, &params.q).max(fuzzy_score(&a.title, &params.q));
+                if score == 0 && !params.q.is_empty() { return None; }
+                Some(serde_json::json!({
+                    "id": a.id, "type": "app",
+                    "title": a.name, "description": a.title,
+                    "path": a.path, "pid": a.pid, "hwnd": a.handle,
+                    "score": if params.q.is_empty() { 100u32 } else { score.min(100) },
+                    "isRunning": true, "isVisible": true, "cloaked": 0,
+                    "isOnCurrentDesktop": a.is_on_current_desktop,
+                    "icon": a.icon
+                }))
+            }).collect()
+        } else if params.q.is_empty() {
+            cached.iter()
+                .filter(|app| app["isRunning"].as_bool().unwrap_or(false))
+                .map(|app| {
+                    let name = app["name"].as_str().unwrap_or("");
+                    let title = app["title"].as_str().unwrap_or("");
+                    serde_json::json!({
+                        "id": app["id"], "type": "app",
+                        "title": name, "description": title,
+                        "path": app["path"], "pid": app["pid"], "hwnd": app["hwnd"],
+                        "score": 100u32, "isRunning": true, "isVisible": app["isVisible"],
+                        "cloaked": app["cloaked"], "isOnCurrentDesktop": app["isOnCurrentDesktop"],
+                        "icon": app["icon"], "metadata": app
+                    })
+                }).collect()
+        } else {
+            cached.iter().filter_map(|app| {
+                let name = app["name"].as_str().unwrap_or("");
+                let title = app["title"].as_str().unwrap_or("");
+                let name_score = fuzzy_score(name, &params.q);
+                let title_score = fuzzy_score(title, &params.q);
+                let titles_score = app["titles"].as_array()
+                    .map(|arr| arr.iter().filter_map(|t| t.as_str()).map(|t| fuzzy_score(t, &params.q)).max().unwrap_or(0))
+                    .unwrap_or(0);
+                let match_score = name_score.max(title_score).max(titles_score);
+                if match_score == 0 { return None; }
+
+                let is_running = app["isRunning"].as_bool().unwrap_or(false);
+                let is_visible = app["isVisible"].as_bool().unwrap_or(false);
+                let cloaked = app["cloaked"].as_i64().unwrap_or(0);
+                let score: u32 = if is_running {
+                    if is_visible && cloaked == 0 { match_score.max(85) + 15 }
+                    else if cloaked > 0           { match_score.max(80) + 12 }
+                    else                          { match_score.max(75) + 10 }
+                } else {
+                    match_score.min(75)
+                };
+
+                Some(serde_json::json!({
+                    "id": app["id"], "type": "app",
+                    "title": name, "description": title,
+                    "path": app["path"], "pid": app["pid"], "hwnd": app["hwnd"],
+                    "score": score.min(100), "isRunning": is_running, "isVisible": is_visible,
+                    "cloaked": cloaked, "isOnCurrentDesktop": app["isOnCurrentDesktop"],
+                    "icon": app["icon"], "metadata": app
+                }))
+            }).collect()
+        }
+    };
+
+    // 3. LanceDB search for non-app items (tabs, workspaces, history, pins).
+    match state.search_db.search(&params.q, limit, affinities).await {
+        Ok(mut db_results) => {
+            if app_results.is_empty() {
+                // APP_CACHE not yet populated — keep LanceDB's stale app entries as fallback
+                // (they have correct names/paths from a previous session; PIDs may be stale)
+            } else {
+                // Fresh data available — replace stale LanceDB app entries with live data
+                db_results.retain(|r| r["type"].as_str() != Some("app"));
+                db_results.extend(app_results);
+            }
+            db_results.sort_by(|a, b| {
+                b["score"].as_u64().unwrap_or(0).cmp(&a["score"].as_u64().unwrap_or(0))
+            });
+            db_results.truncate(limit);
+            Json(serde_json::json!({
+                "ok": true,
+                "results": db_results,
+                "query": params.q
+            }))
+        }
+        Err(e) => {
+            log::error!("[Search] LanceDB search failed: {:?}", e);
+            // Fall back to just the fresh app results so the spotlight still shows running apps.
+            Json(serde_json::json!({
+                "ok": true,
+                "results": app_results,
+                "query": params.q
+            }))
+        }
+    }
+}
+
+pub async fn post_sync_apps(
+    State(state): State<Arc<AppState>>,
+    Json(apps): Json<Vec<serde_json::Value>>,
+) -> impl IntoResponse {
+    log::debug!("[Search] Syncing {} apps to LanceDB", apps.len());
+    
+    for app in apps {
+        if let (Some(id), Some(name)) = (app["id"].as_str(), app["name"].as_str()) {
+            let title = app["title"].as_str().unwrap_or("");
+            let _ = state.search_db.upsert_item(
+                id,
+                "app",
+                name,
+                Some(title),
+                None,
+                Some(app.clone())
+            ).await;
+        }
+    }
+
+    // Rebuild FTS index in the background — don't block the HTTP response.
+    let db = state.search_db.clone();
+    tokio::spawn(async move {
+        let _ = db.rebuild_indices().await;
+    });
+
+    StatusCode::OK
+}

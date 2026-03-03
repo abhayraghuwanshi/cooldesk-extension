@@ -1,9 +1,8 @@
-use sysinfo::System;
-use tauri_plugin_shell::ShellExt;
-use serde::Serialize;
-use tauri::Manager; // Import Manager trait
-use std::collections::HashMap;
+use tauri::Manager;
 use std::sync::{Arc, RwLock};
+use serde::Serialize;
+use tauri_plugin_shell::ShellExt;
+use serde_json::Value; // Added back
 
 mod sidecar;
 mod system;
@@ -67,6 +66,13 @@ async fn get_running_apps(app: tauri::AppHandle) -> Result<serde_json::Value, St
         if let Ok(mut cache) = APP_CACHE.write() {
             *cache = arr.clone();
         }
+        
+        // Push to sidecar for LanceDB indexing
+        let client = reqwest::Client::new();
+        let _ = client.post("http://localhost:4000/search/sync-apps")
+            .json(arr)
+            .send()
+            .await;
     }
 
     Ok(parsed)
@@ -107,7 +113,8 @@ async fn focus_window(app: tauri::AppHandle, pid: u32, name: Option<String>, hwn
 
 #[tauri::command]
 fn toggle_spotlight(app: tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("spotlight") {
+    let window: Option<tauri::WebviewWindow> = app.get_webview_window("spotlight");
+    if let Some(window) = window {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
@@ -146,8 +153,9 @@ fn toggle_spotlight(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn hide_spotlight(app: tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("spotlight") {
-        window.hide().unwrap();
+    let window: Option<tauri::WebviewWindow> = app.get_webview_window("spotlight");
+    if let Some(window) = window {
+        let _ = window.hide();
     }
 }
 
@@ -180,6 +188,8 @@ pub fn run() {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
             .level(log::LevelFilter::Info)
+            .level_for("tracing::span", log::LevelFilter::Warn)
+            .level_for("axum::rejection", log::LevelFilter::Warn)
             .build(),
         )?;
       }
@@ -188,6 +198,16 @@ pub fn run() {
       tauri::async_runtime::spawn(async {
           if let Err(e) = sidecar::start_server().await {
               log::error!("[Sidecar] Server failed: {}", e);
+          }
+      });
+
+      // Pre-warm APP_CACHE so search works on first spotlight open
+      let app_handle_prewarm = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+          // Wait for sidecar to start listening before warming
+          tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+          if let Ok(_) = get_running_apps(app_handle_prewarm).await {
+              log::info!("[Startup] APP_CACHE pre-warmed");
           }
       });
 

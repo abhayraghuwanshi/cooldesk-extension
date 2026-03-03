@@ -183,6 +183,7 @@ export function GlobalSpotlight() {
                 // Refresh search cache (non-blocking)
                 refreshElectronCache();
                 loadContextItems();
+                searchCache.clear();
 
                 handleFocus();
             });
@@ -636,10 +637,14 @@ export function GlobalSpotlight() {
                 // Determine search type and run search
                 // In Electron: quickSearch uses in-memory cache (includes apps, tabs, workspaces)
                 // In Chrome: quickSearch uses local index or IPC fallback
-                const isNaturalLanguage = isNaturalLanguageQuery(trimmedQuery);
-                let searchResults = isNaturalLanguage
-                    ? await naturalLanguageSearch(trimmedQuery, 15)
-                    : await quickSearch(trimmedQuery, 15);
+                // Get context URLs from active tabs for affinity boosting
+                const contextUrls = contextItems
+                    .filter(item => item.type === 'tab' && item.url)
+                    .map(item => item.url);
+
+                let searchResults = isNaturalLanguageQuery(trimmedQuery)
+                    ? await naturalLanguageSearch(trimmedQuery, 15, contextUrls)
+                    : await quickSearch(trimmedQuery, 15, contextUrls);
 
                 // Check if still relevant (user may have typed more)
                 if (searchIdRef.current !== currentSearchId) return;
@@ -974,6 +979,13 @@ export function GlobalSpotlight() {
         } else if (item.type === 'command') {
             // Handle commands if any
             console.log('Command executed:', item);
+        } else if (item.type === 'web_search') {
+            const url = `https://www.google.com/search?q=${encodeURIComponent(query.trim())}`;
+            if (window.electronAPI?.openExternal) {
+                window.electronAPI.openExternal(url);
+            } else {
+                window.open(url, '_blank');
+            }
         }
     };
 
@@ -1015,6 +1027,7 @@ export function GlobalSpotlight() {
         if (item.type === 'history') return 'History';
         if (item.type === 'bookmark') return 'Bookmark';
         if (item.type === 'app') return item.isRunning ? 'Running' : 'App';
+        if (item.type === 'web_search') return 'Search';
         return item.category || 'Link';
     };
 
@@ -1343,6 +1356,7 @@ function getIcon(type, name) {
 
 // Memoized Pin Item to prevent unnecessary re-renders
 const PinItem = memo(function PinItem({ pin, index, isSelected, onSelect, onHover, onRemove, getAppIcon }) {
+    const itemRef = useRef(null);
     const handleClick = useCallback(() => onSelect(pin), [pin, onSelect]);
     const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
     const handleRemove = useCallback((e) => onRemove(index, e), [index, onRemove]);
@@ -1355,8 +1369,16 @@ const PinItem = memo(function PinItem({ pin, index, isSelected, onSelect, onHove
         e.target.parentNode.innerHTML = '🔗';
     }, []);
 
+    // Scroll into view when selected via keyboard
+    useEffect(() => {
+        if (isSelected && itemRef.current) {
+            itemRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [isSelected]);
+
     return (
         <div
+            ref={itemRef}
             className={`pin-item ${pin.type === 'app' ? 'pin-app' : ''} ${isSelected ? 'pin-selected' : ''}`}
             onClick={handleClick}
             onMouseEnter={handleMouseEnter}
@@ -1385,17 +1407,26 @@ const PinItem = memo(function PinItem({ pin, index, isSelected, onSelect, onHove
 
 // Memoized Context Item - compact version for grouped display
 const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelect, onHover, getAppIcon }) {
+    const itemRef = useRef(null);
     const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
     const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
     const handleIconError = useCallback((e) => {
         e.target.style.display = 'none';
     }, []);
 
+    // Scroll into view when selected via keyboard
+    useEffect(() => {
+        if (isSelected && itemRef.current) {
+            itemRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [isSelected]);
+
     const isApp = item.type === 'app';
     const isRunning = isApp && item.isRunning;
 
     return (
         <div
+            ref={itemRef}
             className={`context-item ${isApp ? 'context-app' : 'context-tab'} ${isSelected ? 'pin-selected' : ''}`}
             onClick={handleClick}
             onMouseEnter={handleMouseEnter}
@@ -1427,6 +1458,7 @@ const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelec
 
 // Memoized Result Item to prevent unnecessary re-renders
 const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect, onHover, onTogglePin, formatUrl, getBadgeLabel, getAppIcon }) {
+    const itemRef = useRef(null);
     const handleClick = useCallback(() => onSelect(item), [item, onSelect]);
     const handleMouseEnter = useCallback(() => onHover(index), [index, onHover]);
     const handlePinClick = useCallback((e) => onTogglePin(item, e), [item, onTogglePin]);
@@ -1439,8 +1471,16 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
         setIconError(false);
     }, [item.id, item.icon, item.favicon]);
 
+    // Scroll into view when selected via keyboard
+    useEffect(() => {
+        if (isSelected && itemRef.current) {
+            itemRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [isSelected]);
+
     return (
         <div
+            ref={itemRef}
             className={`result-item ${isSelected ? 'selected' : ''} result-${['tab', 'bookmark', 'history', 'workspace', 'note', 'app'].includes(item.type) ? item.type : 'link'}`}
             onClick={handleClick}
             onMouseEnter={handleMouseEnter}
@@ -1453,6 +1493,13 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
                         <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
                     )
                 ) : (() => {
+                    if (item.type === 'web_search') {
+                        return (
+                            <div className="fa-icon-wrapper">
+                                <FontAwesomeIcon icon={faSearch} style={{ color: '#A78BFA' }} />
+                            </div>
+                        );
+                    }
                     const resolvedFavicon = item.favicon || (item.url ? getFaviconUrl(item.url, 32, null, true) : null);
                     return resolvedFavicon && !iconError ? (
                         <img src={resolvedFavicon} onError={() => setIconError(true)} alt="" />

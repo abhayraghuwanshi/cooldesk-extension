@@ -9,7 +9,7 @@
   "main": "electron-main.js",
   "scripts": {
     "dev": "vite",
-    "tauri:dev": "concurrently -k \"node sidecar/server.js\" \"npm run tauri dev\"",
+    "tauri:dev": "npm run tauri dev",
     "dev:electron": "concurrently \"vite --mode electron\" \"wait-on http://localhost:5173 && npx cross-env NODE_ENV=development electron .\"",
     "build": "vite build",
     "build:electron": "vite build --mode electron",

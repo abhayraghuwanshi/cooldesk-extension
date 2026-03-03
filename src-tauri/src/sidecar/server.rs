@@ -26,8 +26,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     // Create broadcast channel for WebSocket messages
     let (ws_tx, _) = broadcast::channel::<String>(100);
 
-    // Create shared state
-    let state = Arc::new(AppState::new(ws_tx.clone()));
+    // Create shared state — propagates errors instead of panicking
+    let state = Arc::new(AppState::new(ws_tx.clone()).await?);
 
     // Start background app activity tracking
     let tracker_state = state.clone();
@@ -102,6 +102,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/health", get(health))
         // App search (for testing recommendations)
         .route("/search", get(search_apps))
+        .route("/search/unified", get(search_unified))
+        .route("/search/sync-apps", post(post_sync_apps))
         // GET endpoints
         .route("/workspaces", get(get_workspaces).post(post_workspaces))
         .route("/urls", get(get_urls).post(post_urls))
@@ -159,9 +161,25 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .with_state(state);
 
     let addr = format!("127.0.0.1:{}", PORT);
-    log::info!("[Sidecar] Server running on http://{}", addr);
 
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    // Retry binding — in dev, a previous process may still hold the port for a moment
+    let listener = {
+        let mut last_err = None;
+        let mut listener = None;
+        for attempt in 1..=5 {
+            match tokio::net::TcpListener::bind(&addr).await {
+                Ok(l) => { listener = Some(l); break; }
+                Err(e) => {
+                    log::warn!("[Sidecar] Port {} busy (attempt {}): {} — retrying in 1s", PORT, attempt, e);
+                    last_err = Some(e);
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            }
+        }
+        listener.ok_or_else(|| last_err.unwrap())?
+    };
+
+    log::info!("[Sidecar] Server running on http://{}", addr);
     axum::serve(listener, app).await?;
 
     Ok(())
@@ -202,7 +220,7 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
         log::info!("[Sidecar] SyncStatePayload notes count: {}", sync_state.notes.len());
 
         // Include clientId in the message so client can identify itself
-        let mut msg = WsMessage::new("sync-state", serde_json::to_value(&sync_state).unwrap_or_default());
+        let msg = WsMessage::new("sync-state", serde_json::to_value(&sync_state).unwrap_or_default());
         // Add clientId to the message
         let mut msg_json = serde_json::to_value(&msg).unwrap_or_default();
         if let Some(obj) = msg_json.as_object_mut() {

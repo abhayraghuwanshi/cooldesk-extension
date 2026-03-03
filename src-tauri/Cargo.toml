@@ -29,13 +29,17 @@ sysinfo = "0.30"
 tauri-plugin-global-shortcut = "2"
 
 # Sidecar server dependencies
-axum = { version = "0.7", features = ["ws"] }
+axum = { version = "0.7", features = ["ws", "query"] }
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors"] }
 futures-util = "0.3"
-chrono = "0.4"
+chrono = "0.4.39"
 url = "2"
 rand = "0.8"
+lancedb = "0.10"
+arrow = "52"
+arrow-schema = "52"
+arrow-array = "52"
 
 # Phase 2 ML/LLM dependencies
 llama-cpp-2 = "0.1"

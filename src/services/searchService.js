@@ -130,13 +130,14 @@ const SIDECAR_CHECK_INTERVAL = 60000; // Re-check every 60 seconds
  */
 async function isSidecarAvailable() {
   const now = Date.now();
-  if (sidecarAvailable !== null && now - sidecarLastCheck < SIDECAR_CHECK_INTERVAL) {
+  const interval = sidecarAvailable === false ? 5000 : SIDECAR_CHECK_INTERVAL;
+  if (sidecarAvailable !== null && now - sidecarLastCheck < interval) {
     return sidecarAvailable;
   }
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1000);
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
     const res = await fetch('http://localhost:4000/health', { signal: controller.signal });
     clearTimeout(timeoutId);
     sidecarAvailable = res.ok;
@@ -299,45 +300,49 @@ export async function refreshElectronCache(forceRefresh = false) {
 }
 
 /**
- * Call the Rust /search endpoint — returns app results with fuzzy scoring.
- * The backend uses the full AppMatcher cache (installed + running state).
+ * Call the Rust /search/unified endpoint — returns unified findings from LanceDB.
  */
-async function searchAppsFromBackend(query, maxResults = 20) {
+async function searchUnifiedFromBackend(query, maxResults = 20, contextUrls = null) {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1000);
-    const res = await fetch(
-      `http://localhost:4000/search?q=${encodeURIComponent(query)}&limit=${maxResults}`,
-      { signal: controller.signal }
-    );
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    let url = `http://localhost:4000/search/unified?q=${encodeURIComponent(query)}&limit=${maxResults}`;
+    if (contextUrls && contextUrls.length > 0) {
+      url += `&context_urls=${encodeURIComponent(contextUrls.join(','))}`;
+    }
+
+    const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.results || []).map(app => {
-      // Build description from window titles (multi-window Electron apps have several)
-      const windowTitles = Array.isArray(app.titles) && app.titles.length > 0 ? app.titles : null;
-      const description = app.isRunning
-        ? (windowTitles ? windowTitles.join(' · ') : 'Running')
-        : 'Application';
+    return (data.results || []).map(item => {
+      // Map LanceDB results back to frontend expectations
+      if (item.type === 'app') {
+        const app = item.metadata;
+        const windowTitles = Array.isArray(app.titles) && app.titles.length > 0 ? app.titles : null;
+        const description = app.isRunning
+          ? (windowTitles ? windowTitles.join(' · ') : 'Running')
+          : 'Application';
 
+        return {
+          ...item,
+          id: app.id || `app-${app.name}`,
+          description,
+          isRunning: !!app.isRunning,
+          icon: app.icon,
+        };
+      }
+
+      // For other types (tabs, workspaces, history), we use the LanceDB metadata directly
       return {
-        id: app.id || (app.pid ? `app-pid-${app.pid}` : `app-${app.name}`),
-        title: app.title || app.name,
-        name: app.name,
-        path: app.path,
-        pid: app.pid || undefined,
-        hwnd: app.hwnd || undefined,
-        description,
-        type: 'app',
-        isRunning: !!app.isRunning,
-        isVisible: app.isVisible,
-        cloaked: app.cloaked,
-        icon: app.icon,
-        score: app.score,
-        titles: app.titles || [],
+        ...item,
+        // Ensure description/favicon mapping if needed
+        favicon: item.metadata?.favicon || item.metadata?.favIconUrl,
       };
     });
-  } catch {
+  } catch (e) {
+    console.error('[SearchService] Unified search failed:', e);
     return [];
   }
 }
@@ -610,28 +615,49 @@ async function searchDesktop(query) {
 
 
 // --- MAIN API: Quick Search ---
-export async function quickSearch(query, maxResults = 15) {
+export async function quickSearch(query, maxResults = 15, contextUrls = null) {
   if (!query || !query.trim()) return [];
+  const trimmedQuery = query.trim();
 
-  // ELECTRON/TAURI: apps come from Rust backend, tabs/workspaces from local cache
+  // ELECTRON/TAURI: unified search from LanceDB + local cache fallback
   if (isElectron()) {
-    // Run app search (backend) and non-app cache search in parallel
-    const [appResults, cacheResults] = await Promise.all([
-      searchAppsFromBackend(query, maxResults),
-      Promise.resolve(searchElectronCache(query)),
-    ]);
+    // Try sidecar first if available
+    const sidecarUp = await isSidecarAvailable();
+    let unifiedResults = [];
+
+    if (sidecarUp) {
+      unifiedResults = await searchUnifiedFromBackend(trimmedQuery, maxResults, contextUrls);
+    }
+
+    let cacheResults = [];
+    // Supplement with local cache search to ensure nothing is missed
+    cacheResults = searchElectronCache(trimmedQuery);
 
     // Refresh stale cache data for next search (non-blocking)
     if (!isCacheFresh('tabs') || !isCacheFresh('workspaces')) {
-      refreshElectronCache().catch(() => {});
+      refreshElectronCache().catch(() => { });
     }
 
-    // No deduplication needed — AppMatcher outputs one entry per unique PID.
-    // Each entry is a real focusable window. Show them all.
-    const combined = [...appResults, ...cacheResults];
-    return deduplicateByUrl(combined)
-      .sort((a, b) => (b.score || 0) - (a.score || 0))
-      .slice(0, maxResults);
+    // Combined results and add virtual "Search Google" fallback
+    const combined = [...unifiedResults, ...cacheResults];
+
+    // Deduplicate and Sort
+    const sorted = deduplicateByUrl(combined)
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    // Append virtual "Search Google" result
+    // We always include this if there's a query, to give the user a clear fallback
+    sorted.push({
+      id: `web-search-${trimmedQuery}`,
+      title: `Search Google for "${trimmedQuery}"`,
+      description: 'Open in default browser',
+      type: 'web_search',
+      favicon: null,
+      score: 10, // Lower priority than local matches, but always there
+      url: `https://www.google.com/search?q=${encodeURIComponent(trimmedQuery)}`
+    });
+
+    return sorted.slice(0, maxResults);
   }
 
   // CHROME EXTENSION: Try Local Index FIRST
@@ -639,8 +665,7 @@ export async function quickSearch(query, maxResults = 15) {
 
   if (localResults !== null) {
     // Index Exists. Even if 0 results, we trust it.
-    const filteredResults = localResults.filter(r => r.type !== 'workspace');
-    const dedupedResults = deduplicateByUrl(filteredResults);
+    const dedupedResults = deduplicateByUrl(localResults);
     const typeCount = {};
     localResults.forEach(r => { typeCount[r.type] = (typeCount[r.type] || 0) + 1; });
     console.log(`[SearchService] Fast local hit: ${dedupedResults.length} results (from ${localResults.length}), types:`, typeCount);
@@ -665,10 +690,8 @@ export async function quickSearch(query, maxResults = 15) {
     ]);
 
     const all = [...tabs, ...history, ...bookmarks, ...workspaces];
-    // Filter out workspace folders - only keep actual links/URLs
-    const filtered = all.filter(r => r.type !== 'workspace');
     // Deduplicate by URL - keep highest scored item for each URL
-    const deduped = deduplicateByUrl(filtered);
+    const deduped = deduplicateByUrl(all);
     return deduped.sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, maxResults);
 
   } catch (e) {
@@ -1010,13 +1033,13 @@ export function isNaturalLanguageQuery(query) {
  * @param {number} maxResults - Max results to return
  * @returns {Promise<Array>} Search results with AI ranking
  */
-export async function naturalLanguageSearch(query, maxResults = 15) {
+export async function naturalLanguageSearch(query, maxResults = 15, contextUrls = null) {
   if (!query || !query.trim()) return [];
 
   console.log('[SearchService] naturalLanguageSearch:', query);
 
   // First, get regular search results
-  const baseResults = await quickSearch(query, 30);
+  const baseResults = await quickSearch(query, 30, contextUrls);
 
   // If not a natural language query or no results, return base results
   if (!isNaturalLanguageQuery(query) || baseResults.length === 0) {
