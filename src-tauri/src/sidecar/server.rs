@@ -29,6 +29,14 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     // Create shared state — propagates errors instead of panicking
     let state = Arc::new(AppState::new(ws_tx.clone()).await?);
 
+    // Reindex existing data into LanceDB in the background so port 4000 binds immediately
+    {
+        let state_ref = state.clone();
+        tokio::spawn(async move {
+            state_ref.reindex_all().await;
+        });
+    }
+
     // Start background app activity tracking
     let tracker_state = state.clone();
     tokio::spawn(async move {
@@ -104,6 +112,10 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/search", get(search_apps))
         .route("/search/unified", get(search_unified))
         .route("/search/sync-apps", post(post_sync_apps))
+        // All cached apps (running + installed) — for Chrome extension sidebar
+        .route("/apps", get(get_all_cached_apps))
+        // Focus a desktop window from the Chrome extension
+        .route("/cmd/focus-app", post(cmd_focus_app))
         // GET endpoints
         .route("/workspaces", get(get_workspaces).post(post_workspaces))
         .route("/urls", get(get_urls).post(post_urls))

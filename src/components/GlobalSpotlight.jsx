@@ -623,8 +623,8 @@ export function GlobalSpotlight() {
         // Increment search ID to track this request
         const currentSearchId = ++searchIdRef.current;
 
-        // Short debounce - 50ms for fast typing, 0ms if we have cache
-        const debounceMs = cached ? 100 : 50;
+        // Debounce — 150ms with cache (update stale results), 200ms cold (avoid spamming backend)
+        const debounceMs = cached ? 150 : 200;
 
         const timeoutId = setTimeout(async () => {
             // Check if this search is still relevant

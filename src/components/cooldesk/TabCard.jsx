@@ -330,7 +330,7 @@ export const AppCard = memo(function AppCard({ app, onClick }) {
             {displayName}
           </div>
           <div className="tab-hostname">
-            {name !== title && name ? name : 'Running'}
+            {app.isRunning === false ? 'Not running' : (name !== title && name ? name : 'Running')}
           </div>
         </div>
       </div>

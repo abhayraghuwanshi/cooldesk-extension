@@ -41,6 +41,7 @@ pub struct RunningApp {
     pub is_on_current_desktop: bool,      // Whether window is on current virtual desktop
 }
 
+#[derive(Clone)]
 pub struct TaskbarWindow {
     pub pid: u32,
     pub title: String,
@@ -347,23 +348,30 @@ pub async fn get_all_desktop_apps_info() -> Vec<RunningApp> {
         let mut sys = System::new_all();
         sys.refresh_all();
 
-        // Deduplicate by PID + desktop (same app can be on multiple desktops)
-        let mut apps = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-
+        // For each (PID, desktop) keep the window with the longest title.
+        // Browsers like Chrome/Edge run many windows under one PID; the longest
+        // title is typically the most descriptive one (e.g. "YouTube – Google Chrome"
+        // beats a bare "Google Chrome" from another window), which matters for search.
+        let mut best: std::collections::HashMap<(u32, Option<String>), TaskbarWindow> =
+            std::collections::HashMap::new();
         for win in data.windows {
             let key = (win.pid, win.desktop_id.clone());
-            if seen.contains(&key) { continue; }
-            seen.insert(key);
+            let entry = best.entry(key).or_insert_with(|| win.clone());
+            if win.title.len() > entry.title.len() {
+                *entry = win;
+            }
+        }
 
-            if let Some(process) = sys.process(Pid::from_u32(win.pid)) {
+        let mut apps = Vec::new();
+        for ((pid, _), win) in best {
+            if let Some(process) = sys.process(Pid::from_u32(pid)) {
                 let desktop_number = vd_helper.get_desktop_number(&win.desktop_id);
                 apps.push(RunningApp {
                     id: format!("win-{}", win.handle.0 as isize),
                     name: process.name().to_string(),
                     title: win.title,
                     path: process.exe().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
-                    pid: win.pid,
+                    pid,
                     icon: None,
                     handle: format!("{:?}", win.handle),
                     x: win.x,

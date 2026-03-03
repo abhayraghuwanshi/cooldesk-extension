@@ -125,19 +125,28 @@ let sidecarAvailable = null; // null = unknown, true/false = known state
 let sidecarLastCheck = 0;
 const SIDECAR_CHECK_INTERVAL = 60000; // Re-check every 60 seconds
 
+// Tracks the in-flight backend search so we can abort it when a newer query arrives
+let activeSearchController = null;
+
 /**
- * Check if sidecar is available (with caching)
+ * Check if sidecar is available (with caching).
+ * Pass bypassNegativeCache=true (from quickSearch) to always re-check after a failure
+ * so a startup race condition doesn't permanently block search in the current session.
  */
-async function isSidecarAvailable() {
+async function isSidecarAvailable(bypassNegativeCache = false) {
   const now = Date.now();
-  const interval = sidecarAvailable === false ? 5000 : SIDECAR_CHECK_INTERVAL;
-  if (sidecarAvailable !== null && now - sidecarLastCheck < interval) {
-    return sidecarAvailable;
+  // Positive result: cache for 60 seconds — no need to hit /health on every keystroke
+  if (sidecarAvailable === true && now - sidecarLastCheck < SIDECAR_CHECK_INTERVAL) {
+    return true;
+  }
+  // Negative result: cache for 2s in background, but skip cache for user-initiated searches
+  if (sidecarAvailable === false && !bypassNegativeCache && now - sidecarLastCheck < 2000) {
+    return false;
   }
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 1000); // 1s is plenty for localhost
     const res = await fetch('http://localhost:4000/health', { signal: controller.signal });
     clearTimeout(timeoutId);
     sidecarAvailable = res.ok;
@@ -229,11 +238,10 @@ export async function refreshElectronCache(forceRefresh = false) {
     }
   }
 
-  // 3. SIDECAR DATA: Only fetch if sidecar is available
-  const sidecarUp = await isSidecarAvailable();
-  console.log('[SearchService] Sidecar available:', sidecarUp);
-
-  if (sidecarUp) {
+  // 3. SIDECAR DATA: Attempt regardless — each fetch has its own withTimeout so they fail
+  // gracefully if the sidecar isn't up yet. Don't gate on isSidecarAvailable() here because
+  // a startup race can cache a false-negative and block cache population for the whole session.
+  {
     // Tabs from sidecar
     if (forceRefresh || !isCacheFresh('tabs')) {
       refreshPromises.push(
@@ -289,8 +297,6 @@ export async function refreshElectronCache(forceRefresh = false) {
         })
       );
     }
-  } else {
-    console.log('[SearchService] Sidecar NOT available - skipping tabs/history/bookmarks fetch');
   }
 
   // Wait for all refreshes
@@ -304,7 +310,12 @@ export async function refreshElectronCache(forceRefresh = false) {
  */
 async function searchUnifiedFromBackend(query, maxResults = 20, contextUrls = null) {
   try {
+    // Cancel any previous in-flight request for an older query
+    if (activeSearchController) {
+      activeSearchController.abort();
+    }
     const controller = new AbortController();
+    activeSearchController = controller;
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
     let url = `http://localhost:4000/search/unified?q=${encodeURIComponent(query)}&limit=${maxResults}`;
@@ -314,34 +325,50 @@ async function searchUnifiedFromBackend(query, maxResults = 20, contextUrls = nu
 
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.warn('[SearchService] /search/unified returned', res.status);
+      return [];
+    }
     const data = await res.json();
+    console.log(`[SearchService] /search/unified returned ${(data.results || []).length} results for "${query}"`);
     return (data.results || []).map(item => {
       // Map LanceDB results back to frontend expectations
       if (item.type === 'app') {
-        const app = item.metadata;
+        // `metadata` is present when result comes from APP_CACHE; absent on live Win32 fallback.
+        const app = item.metadata || item;
         const windowTitles = Array.isArray(app.titles) && app.titles.length > 0 ? app.titles : null;
         const description = app.isRunning
-          ? (windowTitles ? windowTitles.join(' · ') : 'Running')
+          ? (windowTitles ? windowTitles.join(' · ') : (item.description || 'Running'))
           : 'Application';
 
         return {
           ...item,
-          id: app.id || `app-${app.name}`,
+          id: app.id || item.id || `app-${app.name || item.title}`,
           description,
-          isRunning: !!app.isRunning,
-          icon: app.icon,
+          isRunning: !!(app.isRunning ?? item.isRunning),
+          icon: app.icon || item.icon,
         };
       }
 
-      // For other types (tabs, workspaces, history), we use the LanceDB metadata directly
+      if (item.type === 'tab') {
+        const meta = item.metadata || {};
+        return {
+          ...item,
+          // numeric Chrome tab ID is stored as `id` in the Tab struct
+          tabId: meta.id,
+          _deviceId: meta['_deviceId'],
+          favicon: meta.favIconUrl || meta.favicon,
+        };
+      }
+
+      // For other types (workspaces, history, pins), pass through with favicon resolved
       return {
         ...item,
-        // Ensure description/favicon mapping if needed
         favicon: item.metadata?.favicon || item.metadata?.favIconUrl,
       };
     });
   } catch (e) {
+    if (e.name === 'AbortError') return []; // superseded by a newer query — silent
     console.error('[SearchService] Unified search failed:', e);
     return [];
   }
@@ -622,7 +649,7 @@ export async function quickSearch(query, maxResults = 15, contextUrls = null) {
   // ELECTRON/TAURI: unified search from LanceDB + local cache fallback
   if (isElectron()) {
     // Try sidecar first if available
-    const sidecarUp = await isSidecarAvailable();
+    const sidecarUp = await isSidecarAvailable(true); // bypass negative cache for user-initiated search
     let unifiedResults = [];
 
     if (sidecarUp) {
@@ -952,11 +979,13 @@ function deduplicateByUrl(results) {
     if (!urlMap.has(normalizedUrl)) {
       urlMap.set(normalizedUrl, item);
     } else {
-      // Keep the one with higher score, or prefer tabs over history
+      // Keep the one with higher score, or prefer tabs over history,
+      // or prefer the item that has a usable tabId (for tab switching)
       const existing = urlMap.get(normalizedUrl);
       const shouldReplace =
         (item.score || 0) > (existing.score || 0) ||
-        (item.type === 'tab' && existing.type !== 'tab');
+        (item.type === 'tab' && existing.type !== 'tab') ||
+        (item.type === 'tab' && !existing.tabId && item.tabId);
 
       if (shouldReplace) {
         urlMap.set(normalizedUrl, item);

@@ -1,5 +1,5 @@
 use tauri::Manager;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, OnceLock};
 use serde::Serialize;
 use tauri_plugin_shell::ShellExt;
 use serde_json::Value; // Added back
@@ -15,6 +15,9 @@ lazy_static::lazy_static! {
     pub static ref APP_CACHE: Arc<RwLock<Vec<serde_json::Value>>> =
         Arc::new(RwLock::new(Vec::new()));
 }
+
+// App handle exposed to the sidecar so it can invoke shell commands (e.g. AppFocus).
+pub static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 
 
 #[tauri::command]
@@ -80,7 +83,15 @@ async fn get_running_apps(app: tauri::AppHandle) -> Result<serde_json::Value, St
 
 #[tauri::command]
 async fn get_installed_apps(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    // We can use the same pipeline to get the full list of apps (running + not running)
+    // Return APP_CACHE if it was already populated by the startup pre-warm.
+    // Re-running AppScanner from scratch on every frontend call is slow and
+    // often times out; the cached data is fresh enough for UI purposes.
+    if let Ok(cache) = APP_CACHE.read() {
+        if !cache.is_empty() {
+            return Ok(serde_json::Value::Array(cache.clone()));
+        }
+    }
+    // Cache not ready yet — fall back to a full scan.
     get_running_apps(app).await
 }
 
@@ -184,6 +195,9 @@ pub fn run() {
         get_focused_app
     ])
     .setup(|app| {
+      // Store handle for use by the sidecar (focus-app, etc.)
+      let _ = APP_HANDLE.set(app.handle().clone());
+
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()

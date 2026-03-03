@@ -116,18 +116,38 @@ impl SearchDb {
         Ok(())
     }
 
+    /// Drop the table and recreate it empty.
+    /// Called automatically when corruption is detected.  Data will be
+    /// repopulated on the next `reindex_all()` call.
+    pub async fn reset_table(&self) -> Result<(), lancedb::Error> {
+        log::warn!("[Search] Resetting corrupted LanceDB table '{}'", self.table_name);
+        if let Err(e) = self.conn.drop_table(&self.table_name).await {
+            log::warn!("[Search] drop_table failed (may already be gone): {}", e);
+        }
+        self.has_rows.store(false, Ordering::Relaxed);
+        self.ensure_table().await?;
+        log::info!("[Search] Table '{}' recreated successfully", self.table_name);
+        Ok(())
+    }
+
     pub async fn rebuild_indices(&self) -> Result<(), lancedb::Error> {
         let table = self.conn.open_table(&self.table_name).execute().await?;
-        
+
+        // Compact accumulated version fragments *before* rebuilding the index.
+        // Doing this after building the index invalidates the index row addresses
+        // causing "_rowaddr belongs to non-existent fragment" errors on subsequent searches.
+        if let Err(e) = table.optimize(lancedb::table::OptimizeAction::All).await {
+            log::warn!("[Search] Optimize (compaction) failed — non-fatal: {}", e);
+        }
+
         // FTS indices in LanceDB 0.10+ are not automatically updated on write.
         // We recreate the index to ensure new data is searchable.
-        // Doing this frequently can be expensive, but for local user data it's acceptable.
         table.create_index(&["search_text"], lancedb::index::Index::FTS(Default::default()))
             .replace(true)
             .execute()
             .await?;
-        
-        log::info!("[Search] Rebuilt FTS indices for {}", self.table_name);
+
+        log::info!("[Search] Rebuilt FTS indices and compacted '{}'", self.table_name);
         Ok(())
     }
 
@@ -176,9 +196,16 @@ impl SearchDb {
         let results = match results_query {
             Ok(r) => r,
             Err(e) => {
-                // Return empty if it's the "empty range" error or similar FTS quirks
                 let msg = e.to_string();
+                // Known benign: table empty when FTS index was just created
                 if msg.contains("empty range") || msg.contains("0..0") {
+                    return Ok(Vec::new());
+                }
+                // Fragment corruption — drop and recreate so future searches work.
+                // Return empty for this search; reindex_all() will repopulate the table.
+                if msg.contains("non-existent fragment") || msg.contains("_rowaddr") {
+                    log::error!("[Search] LanceDB fragment corruption detected — auto-healing table");
+                    let _ = self.reset_table().await;
                     return Ok(Vec::new());
                 }
                 return Err(e);

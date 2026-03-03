@@ -52,6 +52,7 @@ export function TabManagement() {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [runningApps, setRunningApps] = useState([]);
+  const [suggestedApps, setSuggestedApps] = useState([]);
 
   // Task-First Tab Modeling state
   const [taskViewEnabled, setTaskViewEnabled] = useState(false);
@@ -291,6 +292,60 @@ export function TabManagement() {
     return unsubscribe;
   }, []);
 
+  // Fetch running + installed apps from sidecar HTTP API.
+  // Used in Chrome extension mode (no window.electronAPI) so apps still appear.
+  // Also supplements Tauri mode by providing suggested (not-running) apps.
+  useEffect(() => {
+    let cancelled = false;
+
+    const isBrowserApp = (name = '') => {
+      const n = name.toLowerCase();
+      return n.includes('chrome') || n === 'msedge' || n.includes('microsoft edge') ||
+        n === 'edge' || n.includes('brave') || n.includes('firefox');
+    };
+
+    const fetchSidecarApps = async () => {
+      try {
+        const res = await fetch('http://localhost:4000/apps');
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!data.ok || cancelled) return;
+
+        const allApps = (data.apps || []).filter(app => {
+          if (isBrowserApp(app.name)) return false;
+          // Skip hidden tray-only windows (isVisible=false and not cloaked by virtual desktop)
+          const isTrayOnly = app.isVisible === false && (app.cloaked || 0) !== 2;
+          return !isTrayOnly;
+        });
+
+        const running = allApps
+          .filter(a => a.isRunning)
+          .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        const suggested = allApps
+          .filter(a => !a.isRunning)
+          .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+          .slice(0, 8)
+          // Clear stale window title so AppCard shows name cleanly
+          .map(a => ({ ...a, title: '' }));
+
+        if (cancelled) return;
+        // In Tauri mode electronAPI already handles running apps — only take them
+        // from sidecar when the IPC service hasn't populated them yet.
+        if (!window.electronAPI?.getRunningApps || running.length === 0) {
+          if (running.length > 0) setRunningApps(running);
+        }
+        setSuggestedApps(suggested);
+      } catch {
+        // sidecar not yet up — silently ignore
+      }
+    };
+
+    fetchSidecarApps();
+    const timer = setInterval(fetchSidecarApps, 8000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
+
   // Extension Mode (real browser extension, not Electron)
   useEffect(() => {
     const isRealExtension = typeof chrome !== 'undefined' && chrome.tabs && !window.electronAPI;
@@ -375,6 +430,13 @@ export function TabManagement() {
       if (window.electronAPI?.focusApp && app.pid) {
         console.log('[TabManagement] Focusing app:', app.name, app.pid, 'HWND:', app.hwnd);
         await window.electronAPI.focusApp(app.pid, app.name, app.hwnd);
+      } else if (app.pid || app.hwnd) {
+        // Chrome extension mode: delegate focus to the sidecar
+        await fetch('http://localhost:4000/cmd/focus-app', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pid: app.pid || 0, hwnd: app.hwnd || 0 })
+        });
       }
     } catch (error) {
       console.error('[TabManagement] Failed to focus app:', error);
@@ -894,7 +956,36 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 3. Grouped by Task Section (Task-First Tab Modeling) */}
+            {/* 3. Suggested Apps (installed, not currently running) */}
+            {suggestedApps.length > 0 && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-2xl, 20px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <FontAwesomeIcon icon={faDesktop} style={{ opacity: 0.4 }} />
+                  Suggested ({suggestedApps.length})
+                </h3>
+                <div className="tabs-grid">
+                  {suggestedApps.map(app => (
+                    <AppCard
+                      key={app.id || app.name}
+                      app={app}
+                      onClick={handleAppClick}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Grouped by Task Section (Task-First Tab Modeling) */}
             {taskViewEnabled && partitionedByTask && partitionedByTask.length > 0 && (
               <div>
                 <h3 style={{

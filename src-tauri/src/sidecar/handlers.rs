@@ -18,24 +18,27 @@ pub struct AppState {
     pub sync_data: Arc<RwLock<SyncData>>,
     pub change_tracker: Arc<RwLock<ChangeTracker>>,
     pub ws_broadcast: tokio::sync::broadcast::Sender<String>,
-    pub search_db: Arc<crate::sidecar::search_db::SearchDb>,
+    pub search_db: Option<Arc<crate::sidecar::search_db::SearchDb>>,
 }
 
 impl AppState {
     pub async fn new(ws_broadcast: tokio::sync::broadcast::Sender<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let search_db = crate::sidecar::search_db::SearchDb::new().await
-            .map_err(|e| { log::error!("[Sidecar] SearchDb init failed: {}", e); e })?;
-        let state = Self {
+        let search_db = match crate::sidecar::search_db::SearchDb::new().await {
+            Ok(db) => {
+                log::info!("[Sidecar] SearchDb initialized");
+                Some(Arc::new(db))
+            }
+            Err(e) => {
+                log::error!("[Sidecar] SearchDb init failed (search will be limited to running apps): {}", e);
+                None
+            }
+        };
+        Ok(Self {
             sync_data: Arc::new(RwLock::new(crate::sidecar::storage::load_data())),
             change_tracker: Arc::new(RwLock::new(ChangeTracker::new())),
             ws_broadcast,
-            search_db: Arc::new(search_db),
-        };
-
-        // Initial reindex
-        state.reindex_all().await;
-
-        Ok(state)
+            search_db,
+        })
     }
 
     /// Broadcast message to all WebSocket clients
@@ -96,13 +99,17 @@ impl AppState {
 
     /// Reindex all searchable data into LanceDB
     pub async fn reindex_all(&self) {
+        let search_db = match &self.search_db {
+            Some(db) => db.clone(),
+            None => return,
+        };
         log::debug!("[Search] Reindexing all data into LanceDB...");
         let data = self.sync_data.read().await;
 
         // Index Workspaces
         for ws in &data.workspaces {
             // Only index the name/meta to prevent it from "swallowing" all child searches
-            let _ = self.search_db.upsert_item(
+            let _ = search_db.upsert_item(
                 &ws.id,
                 "workspace",
                 &ws.name,
@@ -118,10 +125,10 @@ impl AppState {
                     obj.insert("workspaceId".to_string(), serde_json::json!(ws.id));
                     obj.insert("workspaceName".to_string(), serde_json::json!(ws.name));
                 }
-                
-                let _ = self.search_db.upsert_item(
+
+                let _ = search_db.upsert_item(
                     &format!("ws-link-{}-{}", ws.id, url.url),
-                    "workspace-url", 
+                    "workspace-url",
                     url.title.as_deref().unwrap_or(&url.url),
                     None,
                     Some(&url.url),
@@ -132,7 +139,7 @@ impl AppState {
 
         // Index Tabs
         for tab in &data.tabs {
-            let _ = self.search_db.upsert_item(
+            let _ = search_db.upsert_item(
                 &format!("tab-{}", tab.id),
                 "tab",
                 &tab.title,
@@ -144,7 +151,7 @@ impl AppState {
 
         // Index History (URLs)
         for url in &data.urls {
-            let _ = self.search_db.upsert_item(
+            let _ = search_db.upsert_item(
                 &url.id,
                 "url",
                 url.title.as_deref().unwrap_or(&url.url),
@@ -156,7 +163,7 @@ impl AppState {
 
         // Index Pins
         for pin in &data.pins {
-            let _ = self.search_db.upsert_item(
+            let _ = search_db.upsert_item(
                 &pin.id,
                 "pin",
                 pin.title.as_deref().unwrap_or(&pin.url),
@@ -170,9 +177,8 @@ impl AppState {
 
         // Rebuild FTS index in background so startup is not blocked.
         drop(data); // release the read lock before spawning
-        let db = self.search_db.clone();
         tokio::spawn(async move {
-            let _ = db.rebuild_indices().await;
+            let _ = search_db.rebuild_indices().await;
             log::debug!("[Search] Reindexing complete.");
         });
     }
@@ -1690,7 +1696,17 @@ pub async fn search_unified(
     };
 
     // 3. LanceDB search for non-app items (tabs, workspaces, history, pins).
-    match state.search_db.search(&params.q, limit, affinities).await {
+    let search_db = match &state.search_db {
+        Some(db) => db.clone(),
+        None => {
+            // SearchDb unavailable — return app results only
+            let mut results = app_results;
+            results.sort_by(|a, b| b["score"].as_u64().unwrap_or(0).cmp(&a["score"].as_u64().unwrap_or(0)));
+            results.truncate(limit);
+            return Json(serde_json::json!({ "ok": true, "results": results, "query": params.q }));
+        }
+    };
+    match search_db.search(&params.q, limit, affinities).await {
         Ok(mut db_results) => {
             if app_results.is_empty() {
                 // APP_CACHE not yet populated — keep LanceDB's stale app entries as fallback
@@ -1727,26 +1743,77 @@ pub async fn post_sync_apps(
     Json(apps): Json<Vec<serde_json::Value>>,
 ) -> impl IntoResponse {
     log::debug!("[Search] Syncing {} apps to LanceDB", apps.len());
-    
-    for app in apps {
-        if let (Some(id), Some(name)) = (app["id"].as_str(), app["name"].as_str()) {
-            let title = app["title"].as_str().unwrap_or("");
-            let _ = state.search_db.upsert_item(
-                id,
-                "app",
-                name,
-                Some(title),
-                None,
-                Some(app.clone())
-            ).await;
+
+    if let Some(db) = &state.search_db {
+        for app in apps {
+            if let (Some(id), Some(name)) = (app["id"].as_str(), app["name"].as_str()) {
+                let title = app["title"].as_str().unwrap_or("");
+                let _ = db.upsert_item(
+                    id,
+                    "app",
+                    name,
+                    Some(title),
+                    None,
+                    Some(app.clone())
+                ).await;
+            }
         }
+
+        // Rebuild FTS index in the background — don't block the HTTP response.
+        let db = db.clone();
+        tokio::spawn(async move {
+            let _ = db.rebuild_indices().await;
+        });
     }
 
-    // Rebuild FTS index in the background — don't block the HTTP response.
-    let db = state.search_db.clone();
-    tokio::spawn(async move {
-        let _ = db.rebuild_indices().await;
-    });
-
     StatusCode::OK
+}
+
+/// GET /apps — Return all apps from APP_CACHE (running + installed).
+/// Falls back to live window enumeration when cache is empty (first launch).
+/// Used by the Chrome extension sidebar which can't call Tauri IPC directly.
+pub async fn get_all_cached_apps() -> Json<serde_json::Value> {
+    let cached = crate::APP_CACHE.read().ok().map(|c| c.clone()).unwrap_or_default();
+    if cached.is_empty() {
+        let live = crate::system::get_all_desktop_apps_info().await;
+        let apps: Vec<serde_json::Value> = live.iter().map(|a| serde_json::json!({
+            "id": a.id, "name": a.name, "title": a.title,
+            "path": a.path, "pid": a.pid, "hwnd": a.handle,
+            "isRunning": true, "isVisible": true, "cloaked": 0,
+            "isOnCurrentDesktop": a.is_on_current_desktop,
+            "icon": a.icon
+        })).collect();
+        return Json(serde_json::json!({ "ok": true, "apps": apps }));
+    }
+    Json(serde_json::json!({ "ok": true, "apps": cached }))
+}
+
+/// POST /cmd/focus-app — Focus a desktop window by PID or HWND.
+/// Accepts JSON: { pid?: number, hwnd?: number }
+/// Used by the Chrome extension sidebar to switch focus to a running app.
+pub async fn cmd_focus_app(
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    use tauri_plugin_shell::ShellExt;
+
+    let pid  = payload["pid"].as_u64().unwrap_or(0) as u32;
+    let hwnd = payload["hwnd"].as_i64().unwrap_or(0);
+
+    let Some(handle) = crate::APP_HANDLE.get() else {
+        return StatusCode::SERVICE_UNAVAILABLE;
+    };
+
+    let mut command = handle.shell().command("AppFocus");
+    if hwnd != 0 {
+        command = command.args(["--hwnd", &hwnd.to_string()]);
+    } else if pid != 0 {
+        command = command.args([pid.to_string().as_str()]);
+    } else {
+        return StatusCode::BAD_REQUEST;
+    }
+
+    match command.output().await {
+        Ok(o) if o.status.success() => StatusCode::OK,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
 }

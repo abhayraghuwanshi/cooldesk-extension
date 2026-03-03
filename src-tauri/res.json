@@ -1,0 +1,72 @@
+{
+  "ok": true,
+  "query": "reddit",
+  "results": [
+    {
+      "description": "",
+      "id": "ws-link-ws_1770665162561_nb5h29-https://reddit.com",
+      "metadata": {
+        "addedAt": 1772289398289,
+        "createdAt": null,
+        "title": "reddit.com",
+        "url": "https://reddit.com",
+        "workspaceId": "ws_1770665162561_nb5h29",
+        "workspaceName": "Social"
+      },
+      "score": 100,
+      "title": "reddit.com",
+      "type": "workspace-url",
+      "url": "https://reddit.com"
+    },
+    {
+      "description": "",
+      "id": "ws-link-ws_1770665162561_nb5h29-https://developers.reddit.com",
+      "metadata": {
+        "addedAt": 1771523959687,
+        "createdAt": null,
+        "title": "developers.reddit.com",
+        "url": "https://developers.reddit.com",
+        "workspaceId": "ws_1770665162561_nb5h29",
+        "workspaceName": "Social"
+      },
+      "score": 100,
+      "title": "developers.reddit.com",
+      "type": "workspace-url",
+      "url": "https://developers.reddit.com"
+    },
+    {
+      "cloaked": 0,
+      "description": "Cooldesk-final-promo - Google Vids and 6 more pages - Personal - Microsoft? Edge",
+      "hwnd": 134042,
+      "icon": "data:image/png;base64,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",
+      "id": "installed-Microsoft Edge",
+      "isOnCurrentDesktop": true,
+      "isRunning": true,
+      "isVisible": true,
+      "metadata": {
+        "cloaked": 0,
+        "desktopId": "4e1a9b9b-9b13-4d9f-9af0-cedde906b352",
+        "hwnd": 134042,
+        "icon": "data:image/png;base64,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",
+        "id": "installed-Microsoft Edge",
+        "isOnCurrentDesktop": true,
+        "isRunning": true,
+        "isVisible": true,
+        "name": "Microsoft Edge",
+        "path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "pid": 17608,
+        "source": "startmenu",
+        "title": "Cooldesk-final-promo - Google Vids and 6 more pages - Personal - Microsoft? Edge",
+        "titles": [
+          "Cooldesk-final-promo - Google Vids and 6 more pages - Personal - Microsoft? Edge"
+        ],
+        "type": "app"
+      },
+      "path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "pid": 17608,
+      "score": 100,
+      "title": "Microsoft Edge",
+      "type": "app"
+    }
+  ]
+}
