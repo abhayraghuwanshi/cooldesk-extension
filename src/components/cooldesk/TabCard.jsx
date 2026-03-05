@@ -338,7 +338,7 @@ export const AppCard = memo(function AppCard({ app, onClick }) {
   );
 });
 
-export const TabGroupCard = memo(function TabGroupCard({ domain, tabs = [], onToggleExpand, onTabClick, onTabClose, isExpanded = false }) {
+export const TabGroupCard = memo(function TabGroupCard({ domain, tabs = [], onToggleExpand, onTabClick, onTabClose, isExpanded = false, groupColor = null }) {
   if (!domain || tabs.length === 0) return null;
 
   const topTab = tabs[0];
@@ -359,14 +359,20 @@ export const TabGroupCard = memo(function TabGroupCard({ domain, tabs = [], onTo
   };
 
   return (
-    <div className={`cooldesk-tab-group-card ${isExpanded ? 'expanded' : ''}`}>
+    <div
+      className={`cooldesk-tab-group-card ${isExpanded ? 'expanded' : ''}`}
+      style={groupColor ? { borderLeftColor: groupColor, borderLeftWidth: '4px', borderLeftStyle: 'solid' } : undefined}
+    >
       {/* Tab count badge - positioned top right */}
       <div className="tab-group-count-badge">
         <span>{tabs.length}</span>
       </div>
 
       <div className="tab-group-header" onClick={handleHeaderClick} style={{ cursor: 'pointer' }}>
-        <div className={`tab-group-icon ${colorClass}`}>
+        <div
+          className={`tab-group-icon ${groupColor ? '' : colorClass}`}
+          style={groupColor ? { background: `${groupColor}22`, border: `1px solid ${groupColor}44`, color: groupColor } : undefined}
+        >
           {faviconUrl ? (
             <img
               src={faviconUrl}

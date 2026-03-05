@@ -396,15 +396,27 @@ const electronAPI = {
 
     // App Management
     launchApp: async (path) => {
+        console.log('[TauriShim] launchApp called with path:', path);
         try {
-            return await invoke('launch_app', { path });
+            const result = await invoke('launch_app', { path });
+            console.log('[TauriShim] launchApp result:', result);
+            return result;
         } catch (e) {
-            console.error('Failed to launch app:', e);
+            console.error('[TauriShim] Failed to launch app:', e);
+            throw e;
         }
     },
 
     focusApp: async (pid, name, hwnd) => {
-        return await invoke('focus_window', { pid, name, hwnd: hwnd || null });
+        console.log('[TauriShim] focusApp called - pid:', pid, 'name:', name, 'hwnd:', hwnd);
+        try {
+            const result = await invoke('focus_window', { pid, name, hwnd: hwnd || null });
+            console.log('[TauriShim] focusApp result:', result);
+            return result;
+        } catch (e) {
+            console.error('[TauriShim] Failed to focus app:', e);
+            throw e;
+        }
     },
 
     // ==========================================

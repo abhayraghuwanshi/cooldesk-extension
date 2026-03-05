@@ -2780,14 +2780,127 @@ function getGroupColorForDomain(domain) {
   return GROUP_COLORS[hash % GROUP_COLORS.length];
 }
 
+// Store group titles ourselves since Chrome API doesn't persist them reliably
+// Maps: domain -> { title, color, tabUrls[] } for re-applying after restart
+async function saveGroupTitleMapping(domain, title, color, tabUrls) {
+  const result = await chrome.storage.local.get(['tabGroupTitles']);
+  const titles = result.tabGroupTitles || {};
+  titles[domain] = { title, color, tabUrls, timestamp: Date.now() };
+  await chrome.storage.local.set({ tabGroupTitles: titles });
+}
+
+// Re-apply saved titles to groups on startup
+async function reapplyGroupTitles() {
+  try {
+    const result = await chrome.storage.local.get(['tabGroupTitles']);
+    const savedTitles = result.tabGroupTitles || {};
+
+    if (Object.keys(savedTitles).length === 0) return;
+
+    const allGroups = await chrome.tabGroups.query({});
+
+    for (const group of allGroups) {
+      // Skip groups that already have a title
+      if (group.title && group.title.trim() !== '') continue;
+
+      // Get tabs in this group to find matching domain
+      const tabsInGroup = await chrome.tabs.query({ groupId: group.id });
+      if (tabsInGroup.length === 0) continue;
+
+      // Find domain from first tab
+      const domain = getDomainFromUrl(tabsInGroup[0]?.url);
+      if (!domain) continue;
+
+      // Check if we have a saved title for this domain
+      if (savedTitles[domain]) {
+        const { title, color } = savedTitles[domain];
+        await chrome.tabGroups.update(group.id, { title, color });
+        console.log(`[TabGroups] Re-applied saved title "${title}" to group ${group.id}`);
+      }
+    }
+  } catch (error) {
+    console.error('[TabGroups] Failed to re-apply group titles:', error);
+  }
+}
+
+// Helper: Create a tab group and set properties, saving title for persistence
+async function createTabGroupWithTitle(tabIds, title, color) {
+  const groupId = await chrome.tabs.group({ tabIds });
+  console.log(`[TabGroups] Created group ${groupId}, setting title: "${title}"`);
+
+  // Wait for Chrome to fully register the group
+  await new Promise(resolve => setTimeout(resolve, 100));
+
+  // Set title and color - with verification
+  await chrome.tabGroups.update(groupId, { title, color, collapsed: false });
+
+  // Verify the title was set
+  await new Promise(resolve => setTimeout(resolve, 50));
+  let group = await chrome.tabGroups.get(groupId);
+  console.log(`[TabGroups] After first update, title is: "${group.title}"`);
+
+  // If title didn't stick, retry aggressively
+  if (!group.title || group.title !== title) {
+    console.log(`[TabGroups] Title didn't stick, retrying...`);
+    for (let i = 0; i < 3; i++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await chrome.tabGroups.update(groupId, { title });
+      await new Promise(resolve => setTimeout(resolve, 50));
+      group = await chrome.tabGroups.get(groupId);
+      if (group.title === title) {
+        console.log(`[TabGroups] Title set on retry ${i + 1}`);
+        break;
+      }
+    }
+  }
+
+  // Save the title mapping for persistence across restarts
+  // Get tab URLs to identify the group later
+  const tabs = await Promise.all(tabIds.map(id => chrome.tabs.get(id).catch(() => null)));
+  const tabUrls = tabs.filter(t => t).map(t => t.url);
+  const domain = getDomainFromUrl(tabUrls[0]);
+  if (domain) {
+    await saveGroupTitleMapping(domain, title, color, tabUrls);
+  }
+
+  // Force Chrome UI to refresh by multiple techniques
+  try {
+    // Technique 1: Collapse and expand
+    await chrome.tabGroups.update(groupId, { collapsed: true });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    await chrome.tabGroups.update(groupId, { collapsed: false });
+
+    // Technique 2: Toggle color to force redraw
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const tempColor = color === 'blue' ? 'grey' : 'blue';
+    await chrome.tabGroups.update(groupId, { color: tempColor });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    await chrome.tabGroups.update(groupId, { color, title }); // Reset color AND re-set title
+
+    // Technique 3: Move group position
+    await chrome.tabGroups.move(groupId, { index: -1 });
+  } catch (e) {
+    console.log(`[TabGroups] UI refresh error (non-fatal):`, e.message);
+  }
+
+  // Final verification
+  const finalGroup = await chrome.tabGroups.get(groupId);
+  console.log(`[TabGroups] FINAL state - groupId: ${groupId}, title: "${finalGroup.title}", color: ${finalGroup.color}`);
+
+  return groupId;
+}
+
 // Auto-group all tabs by domain
 async function autoGroupTabsByDomain() {
   try {
     const allTabs = await chrome.tabs.query({});
     const domainGroups = {};
 
-    // Group tabs by domain
+    // Group tabs by domain - SKIP tabs already in a group
     for (const tab of allTabs) {
+      // Skip tabs that are already in a group (preserve existing groups)
+      if (tab.groupId !== undefined && tab.groupId !== -1) continue;
+
       const domain = getDomainFromUrl(tab.url);
       if (!domain) continue; // Skip system URLs
 
@@ -2827,17 +2940,12 @@ async function autoGroupTabsByDomain() {
             groupId: targetGroupId
           });
         } else {
-          // Create new group
-          const groupId = await chrome.tabs.group({
-            tabIds: group.tabIds
-          });
-
-          // Update group properties
-          await chrome.tabGroups.update(groupId, {
-            title: group.domain,
-            color: getGroupColorForDomain(group.domain),
-            collapsed: false
-          });
+          // Create new group with title (uses delay to ensure Chrome persists)
+          await createTabGroupWithTitle(
+            group.tabIds,
+            group.domain || 'Tabs',
+            getGroupColorForDomain(group.domain)
+          );
         }
 
         console.log(`[TabGroups] Grouped ${group.tabIds.length} tabs for ${group.domain}`);
@@ -2875,12 +2983,69 @@ async function ungroupAllTabs() {
 // Auto-group state
 let autoGroupEnabled = false;
 
+// Fix unnamed groups by setting title based on tabs' domain
+async function fixUnnamedGroups() {
+  try {
+    const allGroups = await chrome.tabGroups.query({});
+
+    for (const group of allGroups) {
+      // Skip groups that already have a title
+      if (group.title && group.title.trim() !== '') continue;
+
+      // Get tabs in this group
+      const tabsInGroup = await chrome.tabs.query({ groupId: group.id });
+      if (tabsInGroup.length === 0) continue;
+
+      // Find the most common domain in this group
+      const domainCounts = {};
+      for (const tab of tabsInGroup) {
+        const domain = getDomainFromUrl(tab.url);
+        if (domain) {
+          domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+        }
+      }
+
+      // Get the domain with most tabs
+      let bestDomain = null;
+      let maxCount = 0;
+      for (const [domain, count] of Object.entries(domainCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          bestDomain = domain;
+        }
+      }
+
+      // Update the group with a title
+      const title = bestDomain || 'Tabs';
+
+      await chrome.tabGroups.update(group.id, { title });
+
+      // Workaround: Move group to force UI refresh
+      try {
+        await chrome.tabGroups.move(group.id, { index: -1 });
+      } catch (e) {
+        // Fallback if move fails
+      }
+
+      console.log(`[TabGroups] Fixed unnamed group ${group.id} with title: ${title}`);
+    }
+  } catch (error) {
+    console.error('[TabGroups] Failed to fix unnamed groups:', error);
+  }
+}
+
 // Load auto-group state from storage
-chrome.storage.local.get(['autoGroupEnabled'], (result) => {
+chrome.storage.local.get(['autoGroupEnabled'], async (result) => {
   autoGroupEnabled = result.autoGroupEnabled || false;
   console.log('[TabGroups] Auto-group enabled:', autoGroupEnabled);
 
-  // If enabled on startup, group existing tabs
+  // First, re-apply any saved titles (from our storage) to groups that lost them
+  await reapplyGroupTitles();
+
+  // Then fix any remaining unnamed groups
+  await fixUnnamedGroups();
+
+  // If enabled on startup, group existing ungrouped tabs
   if (autoGroupEnabled) {
     autoGroupTabsByDomain();
   }
@@ -2925,14 +3090,9 @@ chrome.tabs.onCreated.addListener(async (tab) => {
         });
 
         if (sameDomainTabs.length > 0) {
-          // Create new group with this tab and others
+          // Create new group with this tab and others (uses delay to ensure Chrome persists)
           const tabIds = [updatedTab.id, ...sameDomainTabs.map(t => t.id)];
-          const groupId = await chrome.tabs.group({ tabIds });
-          await chrome.tabGroups.update(groupId, {
-            title: domain,
-            color: getGroupColorForDomain(domain),
-            collapsed: false
-          });
+          await createTabGroupWithTitle(tabIds, domain || 'Tabs', getGroupColorForDomain(domain));
         }
       }
     } catch (error) {
@@ -2977,14 +3137,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       });
 
       if (sameDomainTabs.length > 0) {
-        // Create new group
+        // Create new group (uses delay to ensure Chrome persists)
         const tabIds = [tabId, ...sameDomainTabs.map(t => t.id)];
-        const groupId = await chrome.tabs.group({ tabIds });
-        await chrome.tabGroups.update(groupId, {
-          title: domain,
-          color: getGroupColorForDomain(domain),
-          collapsed: false
-        });
+        await createTabGroupWithTitle(tabIds, domain || 'Tabs', getGroupColorForDomain(domain));
       }
     }
   } catch (error) {

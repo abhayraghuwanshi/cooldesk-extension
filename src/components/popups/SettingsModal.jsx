@@ -61,6 +61,9 @@ export function SettingsModal({
   // Unsplash API Key State
   const [unsplashApiKey, setUnsplashApiKey] = useState('');
 
+  // Tab Management State
+  const [autoGroupEnabled, setAutoGroupEnabled] = useState(false);
+
   // Check if running in Tauri/Electron app (for tab visibility)
   const isDesktopApp = isElectronApp();
 
@@ -155,6 +158,11 @@ export function SettingsModal({
       // Load Unsplash API Key
       storageGet(['unsplashApiKey']).then((result) => {
         setUnsplashApiKey(result?.unsplashApiKey || '');
+      });
+
+      // Load Tab Management
+      storageGet(['autoGroupEnabled']).then((result) => {
+        setAutoGroupEnabled(result?.autoGroupEnabled || false);
       });
 
     } catch (e) {
@@ -324,6 +332,16 @@ export function SettingsModal({
       }
     } catch (err) {
       setError('Failed to update backup frequency');
+    }
+  };
+
+  const handleToggleAutoGroup = async (enabled) => {
+    try {
+      await storageSet({ autoGroupEnabled: enabled });
+      setAutoGroupEnabled(enabled);
+      sendMessage({ type: 'TOGGLE_AUTO_GROUP', enabled }).catch(() => {});
+    } catch (err) {
+      setError('Failed to toggle auto-group');
     }
   };
 
@@ -630,6 +648,39 @@ export function SettingsModal({
 
             {activeTabId === 'general' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+
+                {/* Tab Management */}
+                <section>
+                  <div style={{ marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Tab Management</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Control how your browser tabs are organized and displayed.</p>
+                  </div>
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 16,
+                    padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 12,
+                    cursor: 'pointer', border: '1px solid rgba(255,255,255,0.04)',
+                    transition: 'all 0.2s', color: '#fff'
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={autoGroupEnabled}
+                      onChange={(e) => handleToggleAutoGroup(e.target.checked)}
+                      style={{ width: 18, height: 18, accentColor: '#22c55e' }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 500 }}>Auto-Group Tabs by Domain</div>
+                      <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+                        Automatically group tabs from the same website together in Tab Management
+                      </div>
+                    </div>
+                  </label>
+                </section>
+
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
                 <section>
                   <div style={{ marginBottom: 20 }}>
                     <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Extension Updates</h3>

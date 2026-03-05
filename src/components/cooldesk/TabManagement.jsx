@@ -6,6 +6,19 @@ import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/he
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
 import { AppCard, TabCard, TabGroupCard, TaskGroupCard } from './TabCard';
 
+// Chrome native tab group colors (matches Chrome's palette)
+const CHROME_GROUP_COLORS = {
+  grey: '#9AA0A6',
+  blue: '#4285F4',
+  red: '#EA4335',
+  yellow: '#FBBC04',
+  green: '#34A853',
+  pink: '#FF69B4',
+  purple: '#9334E6',
+  cyan: '#00BCD4',
+  orange: '#FF9800'
+};
+
 // Browser colors matching TabCard.jsx
 const BROWSER_INFO = {
   chrome: { name: 'Chrome', color: '#4285F4' },
@@ -52,6 +65,7 @@ export function TabManagement() {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [runningApps, setRunningApps] = useState([]);
+  const [chromeTabGroups, setChromeTabGroups] = useState({});
 
   // Task-First Tab Modeling state
   const [taskViewEnabled, setTaskViewEnabled] = useState(false);
@@ -180,7 +194,18 @@ export function TabManagement() {
 
       if (!uniqueTabs?.length) {
         setTabs([]);
+        setChromeTabGroups({});
         return;
+      }
+
+      // Fetch Chrome native tab groups (extension mode only)
+      if (!window.electronAPI && typeof chrome !== 'undefined' && chrome.tabGroups?.query) {
+        try {
+          const groups = await chrome.tabGroups.query({});
+          const groupMap = {};
+          groups.forEach(g => { groupMap[g.id] = g; });
+          setChromeTabGroups(groupMap);
+        } catch { /* tabGroups API unavailable */ }
       }
 
       // Show UNIQUE tabs IMMEDIATELY
@@ -243,6 +268,16 @@ export function TabManagement() {
       if (allTabs?.length) {
         setTabs(allTabs);
       }
+
+      // Fetch Chrome native tab groups for initial display
+      if (!window.electronAPI && typeof chrome !== 'undefined' && chrome.tabGroups?.query) {
+        try {
+          const groups = await chrome.tabGroups.query({});
+          const groupMap = {};
+          groups.forEach(g => { groupMap[g.id] = g; });
+          setChromeTabGroups(groupMap);
+        } catch { }
+      }
     };
 
     fetchInitial();
@@ -303,7 +338,11 @@ export function TabManagement() {
       chrome.tabs.onActivated,
       chrome.tabs.onMoved,
       chrome.tabs.onDetached,
-      chrome.tabs.onAttached
+      chrome.tabs.onAttached,
+      // Tab group changes should also trigger a refresh (picks up new group metadata)
+      chrome.tabGroups?.onCreated,
+      chrome.tabGroups?.onUpdated,
+      chrome.tabGroups?.onRemoved,
     ];
 
     events.forEach(event => {
@@ -428,25 +467,38 @@ export function TabManagement() {
     // 2. Unpinned Tabs
     const unpinned = filteredTabs.filter(t => !pinnedIds.has(t.id));
 
-    // 3. Grouped Tabs (Priority 2: >1 tab per domain)
+    // 3. Chrome native tab groups (extension mode only)
+    // Tabs with groupId !== -1 belong to a Chrome group - separate them out
+    const hasChromeGroupData = Object.keys(chromeTabGroups).length > 0;
+    const chromeGrouped = {}; // groupId -> { group, tabs[] }
+    const domainGroupable = []; // tabs not in any Chrome group
+
+    unpinned.forEach(t => {
+      const gid = t.groupId;
+      if (hasChromeGroupData && gid !== undefined && gid !== -1 && chromeTabGroups[gid]) {
+        if (!chromeGrouped[gid]) chromeGrouped[gid] = { group: chromeTabGroups[gid], tabs: [] };
+        chromeGrouped[gid].tabs.push(t);
+      } else {
+        domainGroupable.push(t);
+      }
+    });
+
+    // 4. Domain-based grouping for remaining tabs
     const groups = {};
     const singles = [];
 
-    // First pass: organize unpinned by base domain
+    // Domains that should never be auto-grouped (system/fallback values)
+    const SKIP_GROUP_DOMAINS = new Set(['System', 'Local Files', 'Other', 'Unknown', 'Local']);
+
     const byDomain = {};
-    unpinned.forEach(t => {
+    domainGroupable.forEach(t => {
       const domain = getBaseDomainFromUrl(t.url);
       if (!byDomain[domain]) byDomain[domain] = [];
       byDomain[domain].push(t);
     });
 
-    // Identify valid groups vs singles
     Object.entries(byDomain).forEach(([domain, domainTabs]) => {
-      // Group if either:
-      // 1. Auto-group is enabled and we have multiple tabs
-      // 2. We have a lot of tabs (force group > 3 even if auto-group is off, for sanity?)
-      // Actually, let's stick to autoGroupEnabled preference.
-      if (autoGroupEnabled && domainTabs.length > 1) {
+      if (autoGroupEnabled && domainTabs.length > 1 && !SKIP_GROUP_DOMAINS.has(domain)) {
         groups[domain] = domainTabs;
       } else {
         singles.push(...domainTabs);
@@ -457,28 +509,23 @@ export function TabManagement() {
     const sortedSingles = [...singles].sort((a, b) => {
       const scoreA = tabActivity[a.id] || 0;
       const scoreB = tabActivity[b.id] || 0;
-      if (scoreA !== scoreB) {
-        return scoreB - scoreA;
-      }
+      if (scoreA !== scoreB) return scoreB - scoreA;
       return (a.title || '').localeCompare(b.title || '');
     });
 
-    // Take top 8 as "Recent" (active or high score)
-    // Or strictly checks activity existence?
-    // Let's take top 8 regardless, as "Recent/Singles"
     const recent = sortedSingles.slice(0, 8);
-
-    // 5. Others (Priority 4: The rest)
     const others = sortedSingles.slice(8);
 
     return {
       pinned,
+      chromeGroups: Object.values(chromeGrouped),
       grouped: groups,
       recent,
       others,
-      hasGroups: Object.keys(groups).length > 0
+      hasGroups: Object.keys(groups).length > 0,
+      hasChromeGroups: Object.values(chromeGrouped).length > 0
     };
-  }, [filteredTabs, tabActivity, autoGroupEnabled]);
+  }, [filteredTabs, tabActivity, autoGroupEnabled, chromeTabGroups]);
 
   // Partition tabs by task (when task view is enabled)
   const partitionedByTask = useMemo(() => {
@@ -865,7 +912,43 @@ export function TabManagement() {
               </div>
             )}
 
-            {/* 2. Active Apps Section (Electron only) */}
+            {/* 2. Chrome Native Tab Groups (Extension only) */}
+            {!taskViewEnabled && partitionedTabs.hasChromeGroups && (
+              <div>
+                <h3 style={{
+                  fontSize: 'var(--font-2xl, 20px)',
+                  fontWeight: 600,
+                  color: 'var(--text-secondary, #94A3B8)',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Tab Groups ({partitionedTabs.chromeGroups.length})
+                </h3>
+                <div className="tabs-grid">
+                  {partitionedTabs.chromeGroups.map(({ group, tabs: groupTabs }) => {
+                    const color = CHROME_GROUP_COLORS[group.color] || '#9AA0A6';
+                    // Fall back to primary domain if group has no title
+                    const label = group.title || getBaseDomainFromUrl(groupTabs[0]?.url) || 'Group';
+                    const groupKey = `chrome-${group.id}`;
+                    return (
+                      <TabGroupCard
+                        key={group.id}
+                        domain={label}
+                        tabs={groupTabs}
+                        onToggleExpand={() => startTransition(() => setExpandedDomain(expandedDomain === groupKey ? null : groupKey))}
+                        onTabClick={handleTabClick}
+                        onTabClose={handleTabClose}
+                        isExpanded={expandedDomain === groupKey}
+                        groupColor={color}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 3. Active Apps Section (Electron only) */}
             {runningApps.length > 0 && (
               <div>
                 <h3 style={{

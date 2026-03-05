@@ -933,15 +933,27 @@ export function GlobalSpotlight() {
 
         // For apps, focus running app or launch installed app
         if (item.type === 'app') {
+            console.log('[Spotlight] App selected:', item.name, 'isRunning:', item.isRunning, 'pid:', item.pid, 'path:', item.path, 'electronAPI:', !!window.electronAPI);
+
             try {
                 // Track app usage for recommendations
                 trackAppUsage(item.name);
+
+                // Check if electronAPI is available
+                if (!window.electronAPI) {
+                    console.warn('[Spotlight] electronAPI not available - cannot launch/focus apps');
+                    return;
+                }
 
                 // Check if app is running (use PID from search result if available)
                 if (item.isRunning && item.pid) {
                     // App is running - focus specific window by HWND if available, else by PID
                     console.log('[Spotlight] Focusing running app:', item.name, 'PID:', item.pid, 'HWND:', item.hwnd);
-                    await window.electronAPI.focusApp(item.pid, item.name, item.hwnd);
+                    if (window.electronAPI.focusApp) {
+                        await window.electronAPI.focusApp(item.pid, item.name, item.hwnd);
+                    } else {
+                        console.warn('[Spotlight] focusApp not available');
+                    }
                     return;
                 }
 
@@ -957,16 +969,41 @@ export function GlobalSpotlight() {
                         if (runningInstance && runningInstance.pid) {
                             // App is running - focus it
                             console.log('[Spotlight] Found running instance via lookup:', runningInstance.name, 'PID:', runningInstance.pid);
-                            await window.electronAPI.focusApp(runningInstance.pid, runningInstance.name);
+                            if (window.electronAPI.focusApp) {
+                                await window.electronAPI.focusApp(runningInstance.pid, runningInstance.name);
+                            }
                             return;
                         }
                     }
                 }
 
                 // App is not running - launch it
-                if (item.path && window.electronAPI?.launchApp) {
-                    console.log('[Spotlight] Launching app:', item.name, 'path:', item.path);
-                    await window.electronAPI.launchApp(item.path);
+                let launchPath = item.path;
+
+                // If no path, try to find it from installed apps
+                if (!launchPath) {
+                    console.log('[Spotlight] No path in item, searching installed apps for:', item.name);
+                    const { installedApps } = await runningAppsService.getApps();
+                    if (installedApps?.length > 0) {
+                        const foundApp = installedApps.find(app =>
+                            app.name?.toLowerCase() === item.name?.toLowerCase()
+                        );
+                        if (foundApp?.path) {
+                            launchPath = foundApp.path;
+                            console.log('[Spotlight] Found path from installed apps:', launchPath);
+                        }
+                    }
+                }
+
+                if (launchPath) {
+                    if (window.electronAPI.launchApp) {
+                        console.log('[Spotlight] Launching app:', item.name, 'path:', launchPath);
+                        await window.electronAPI.launchApp(launchPath);
+                    } else {
+                        console.warn('[Spotlight] launchApp not available');
+                    }
+                } else {
+                    console.warn('[Spotlight] No path available for app:', item.name);
                 }
             } catch (e) {
                 console.warn('[Spotlight] App action failed:', e);

@@ -4,6 +4,16 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getFaviconUrl, safeGetHostname } from '../../utils/helpers';
 
+// Helper to open URLs - works in both extension and Electron modes
+const openUrl = (url) => {
+    if (!url) return;
+    if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+        chrome.tabs.create({ url });
+    } else {
+        window.open(url, '_blank');
+    }
+};
+
 export function GroupedLinksPopover({ group, onClose, triggerRect }) {
     const popoverRef = useRef(null);
 
@@ -178,7 +188,7 @@ export function GroupedLinksPopover({ group, onClose, triggerRect }) {
                             <div
                                 key={idx}
                                 className="popover-item"
-                                onClick={() => window.open(urlObj.url, '_blank')}
+                                onClick={() => openUrl(urlObj.url)}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',

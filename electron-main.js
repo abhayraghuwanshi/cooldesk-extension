@@ -776,17 +776,25 @@ function filterUserApps(apps) {
     ];
 
     const beforeCount = apps.length;
+    let excludedCount = 0;
+    let alwaysIncludedCount = 0;
+    const excludedSample = [];
+
     const filtered = apps.filter(app => {
         const name = app.name || app.title || '';
         if (!name || name.length < 2) return false;
 
         // Check if always include first
         if (alwaysInclude.some(pattern => pattern.test(name))) {
+            alwaysIncludedCount++;
+            // console.log(`[Electron] filterUserApps: Always including "${name}"`);
             return true;
         }
 
         // Check if should exclude
         if (excludePatterns.some(pattern => pattern.test(name))) {
+            excludedCount++;
+            if (excludedSample.length < 5) excludedSample.push(name);
             return false;
         }
 
@@ -794,7 +802,10 @@ function filterUserApps(apps) {
         return true;
     });
 
-    console.log(`[Electron] filterUserApps: ${beforeCount} -> ${filtered.length} apps (removed ${beforeCount - filtered.length} system/utility apps)`);
+    console.log(`[Electron] filterUserApps: ${beforeCount} -> ${filtered.length} apps. (Included: ${filtered.length}, Always: ${alwaysIncludedCount}, Excluded: ${excludedCount})`);
+    if (excludedSample.length > 0) {
+        console.log(`[Electron] filterUserApps: Sample excluded: ${excludedSample.join(', ')}`);
+    }
     return filtered;
 }
 
@@ -821,18 +832,25 @@ async function getInstalledAppsWindows() {
         ? join(process.resourcesPath, 'AppMatcher.exe')
         : join(__dirname, 'AppMatcher.exe');
 
+    console.log(`[Electron] getInstalledAppsWindows: scanner="${scannerPath}", matcher="${matcherPath}"`);
+
     if (existsSync(scannerPath) && existsSync(matcherPath)) {
         try {
-            const { stdout } = await execAsync(`"${scannerPath}" | "${matcherPath}"`, {
+            console.log('[Electron] getInstalledAppsWindows: Running pipeline...');
+            const { stdout, stderr } = await execAsync(`"${scannerPath}" | "${matcherPath}"`, {
                 windowsHide: true,
-                timeout: 10000,
-                maxBuffer: 10 * 1024 * 1024
+                timeout: 15000,
+                maxBuffer: 25 * 1024 * 1024
             });
+
+            if (stderr) console.log('[Electron] AppScanner stderr:', stderr);
 
             if (stdout && stdout.trim()) {
                 const rawApps = JSON.parse(stdout);
+                console.log(`[Electron] getInstalledAppsWindows: Pipeline returned ${rawApps.length} raw apps`);
                 if (Array.isArray(rawApps) && rawApps.length > 0) {
                     const apps = filterUserApps(rawApps);
+                    console.log(`[Electron] getInstalledAppsWindows: Filtered to ${apps.length} user apps`);
 
                     // AppScanner.exe already includes icons, just cache them for running apps lookup
                     apps.forEach(appItem => {
@@ -844,13 +862,17 @@ async function getInstalledAppsWindows() {
 
                     installedAppsCache = apps;
                     installedAppsCacheTime = now;
-                    console.log(`[Electron] AppScanner.exe found ${rawApps.length} raw apps, filtered to ${apps.length} user apps in ${(performance.now() - startTime).toFixed(0)}ms`);
+                    console.log(`[Electron] getInstalledAppsWindows: Complete. found ${rawApps.length} raw, returned ${apps.length} filtered in ${(performance.now() - startTime).toFixed(0)}ms`);
                     return apps;
                 }
+            } else {
+                console.warn('[Electron] getInstalledAppsWindows: Pipeline returned empty stdout');
             }
         } catch (e) {
             console.warn('[Electron] AppScanner.exe failed:', e.message);
         }
+    } else {
+        console.warn('[Electron] AppScanner components missing:', { scanner: existsSync(scannerPath), matcher: existsSync(matcherPath) });
     }
 
     // Fallback: inline directory scanning (if exe not available)

@@ -101,6 +101,18 @@ const CATEGORY_ICONS = {
   cooldesk: faVrCardboard
 };
 
+// Helper to open URLs - works in both extension and Electron modes
+const openUrl = (url) => {
+  if (!url) return;
+  // Prefer chrome.tabs.create for extensions (more reliable, no popup blocker)
+  if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+    chrome.tabs.create({ url });
+  } else {
+    // Fallback for Electron or other environments
+    window.open(url, '_blank');
+  }
+};
+
 // Memoized WorkspaceCard to prevent unnecessary re-renders
 export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, deferAnalytics = false, ...rest }) {
   if (!workspace) return null;
@@ -609,7 +621,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                       const rect = e.currentTarget.getBoundingClientRect();
                       setGroupPopoverState({ group: item, rect });
                     } else {
-                      window.open(item.url, '_blank');
+                      openUrl(item.url);
                     }
                   }}
                   title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : (item.title || formatDomainName(item.url))}
@@ -854,7 +866,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     onClick={(e) => {
                       e.stopPropagation();
                       if (urlObj.url) {
-                        window.open(urlObj.url, '_blank');
+                        openUrl(urlObj.url);
                       }
                     }}
                     style={{ cursor: 'pointer', position: 'relative' }}
