@@ -3,19 +3,47 @@
  * Determines if a URL has enough engagement to be added to a workspace
  *
  * Qualification requires EITHER:
- * 1. Strong recurrence signal: 2+ unique days visited
- * 2. Combined engagement: visits AND time thresholds met
+ * 1. Strong recurrence signal: 3-4+ unique days visited (category-dependent)
+ * 2. Combined engagement: 4-5+ visits AND 5-10 min time spent
+ *
+ * These thresholds are intentionally high to only capture truly important URLs.
+ * Casual browsing should not clutter workspaces.
  */
 
 import { getUrlAnalytics, listWorkspaces, saveWorkspace } from '../db/index.js';
 
 // Category-specific qualification thresholds
-// Stricter for categories with more transient visits (utilities, maps)
+// Significantly increased to reduce workspace clutter - only truly important URLs qualify
 export const CATEGORY_RULES = {
-  utilities: { minDays: 2, minVisits: 3, minTimeMs: 180000 },  // 3 min - stricter
-  travel: { minDays: 1, minVisits: 2, minTimeMs: 300000 },     // 5 min (research)
-  shopping: { minDays: 1, minVisits: 2, minTimeMs: 120000 },   // 2 min
-  default: { minDays: 2, minVisits: 2, minTimeMs: 120000 }     // 2 min
+  // Utilities are often quick one-off visits - require strong recurrence
+  utilities: { minDays: 4, minVisits: 5, minTimeMs: 300000 },  // 5 min, 4 days or 5 visits
+
+  // Travel research often happens in bursts - need return visits to show importance
+  travel: { minDays: 3, minVisits: 4, minTimeMs: 360000 },     // 6 min, 3 days or 4 visits
+
+  // Shopping - many one-off purchases, only save recurring stores
+  shopping: { minDays: 3, minVisits: 4, minTimeMs: 300000 },   // 5 min, 3 days or 4 visits
+
+  // Finance - sensitive, should only save if truly used regularly
+  finance: { minDays: 3, minVisits: 4, minTimeMs: 300000 },    // 5 min, 3 days or 4 visits
+
+  // Entertainment - lots of casual browsing, need strong signal
+  entertainment: { minDays: 4, minVisits: 5, minTimeMs: 420000 }, // 7 min, 4 days or 5 visits
+
+  // Social - very casual, need strong recurrence
+  social: { minDays: 4, minVisits: 5, minTimeMs: 300000 },     // 5 min, 4 days or 5 visits
+
+  // Education/Learning - often deep-dive sessions
+  education: { minDays: 2, minVisits: 3, minTimeMs: 600000 },  // 10 min, 2 days or 3 visits
+
+  // Productivity tools - should show regular work usage
+  productivity: { minDays: 3, minVisits: 5, minTimeMs: 300000 }, // 5 min, 3 days or 5 visits
+
+  // AI tools - frequent usage expected if important
+  ai: { minDays: 3, minVisits: 4, minTimeMs: 300000 },         // 5 min, 3 days or 4 visits
+
+  // Default for uncategorized - strict to avoid clutter
+  default: { minDays: 4, minVisits: 4, minTimeMs: 360000 }     // 6 min, 4 days or 4 visits
 };
 
 /**
@@ -43,8 +71,14 @@ export async function isUrlQualified(url, category = 'default') {
 
     const qualified = hasRecurrence || hasCombinedEngagement;
 
-    if (!qualified) {
-      console.debug(`[Qualification] ${url} not qualified: days=${uniqueDays}/${rules.minDays}, visits=${analytics.totalVisits}/${rules.minVisits}, time=${Math.round(analytics.totalTime / 1000)}s/${rules.minTimeMs / 1000}s`);
+    // Always log qualification status for debugging
+    const timeInSec = Math.round(analytics.totalTime / 1000);
+    const minTimeInSec = Math.round(rules.minTimeMs / 1000);
+
+    if (qualified) {
+      console.log(`[Qualification] ✅ ${url.slice(0, 50)} qualified: days=${uniqueDays}/${rules.minDays}, visits=${analytics.totalVisits}/${rules.minVisits}, time=${timeInSec}s/${minTimeInSec}s`);
+    } else {
+      console.debug(`[Qualification] ❌ ${url.slice(0, 50)} not qualified: days=${uniqueDays}/${rules.minDays}, visits=${analytics.totalVisits}/${rules.minVisits}, time=${timeInSec}s/${minTimeInSec}s`);
     }
 
     return qualified;
@@ -77,7 +111,7 @@ export function normalizeUrlForCategory(url, isCategoryBased = false) {
 
 // ===== ONE-TIME CLEANUP =====
 
-const CLEANUP_FLAG_KEY = 'cooldesk_workspace_cleanup_v1';
+const CLEANUP_FLAG_KEY = 'cooldesk_workspace_cleanup_v2'; // v2: stricter thresholds
 
 /**
  * Run one-time cleanup of existing workspaces

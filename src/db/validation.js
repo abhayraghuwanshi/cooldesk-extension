@@ -375,6 +375,14 @@ export const VALIDATION_SCHEMAS = {
         type: {
             [ValidationRules.TYPE]: 'string',
             [ValidationRules.MAX_LENGTH]: 100
+        },
+        visitCount: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
+        },
+        returnVisits: {
+            [ValidationRules.TYPE]: 'number',
+            [ValidationRules.MIN_VALUE]: 0
         }
     },
 

@@ -294,10 +294,11 @@ class ActivityTracker {
 
     isActivelyEngaged() {
         // Consider engaged if:
-        // 1. User interacted within last 30 seconds, OR
-        // 2. Media is currently playing (passive video watching like Netflix)
-        const recentActivity = (Date.now() - this.lastActivityTime) < 30000;
-        return recentActivity || this.hasActiveMedia;
+        // 1. User interacted within last 2 minutes (extended for passive reading), OR
+        // 2. Media is currently playing (passive video watching), OR
+        // 3. Tab is visible (for time tracking even without interaction)
+        const recentActivity = (Date.now() - this.lastActivityTime) < 120000; // 2 min instead of 30s
+        return recentActivity || this.hasActiveMedia || this.isVisible;
     }
 
     destroy() {

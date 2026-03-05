@@ -66,6 +66,7 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
                         title: Some(app.title.clone()),
                         created_at: Some(now),
                         updated_at: Some(now),
+                        ..Default::default()  // Fill remaining fields (time, scroll, clicks, etc.) with None
                     };
                     activities.push(activity);
                 }

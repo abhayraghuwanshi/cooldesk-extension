@@ -777,7 +777,14 @@ class SyncOrchestrator {
         if (!remoteState || typeof remoteState !== 'object') return;
         try {
             const localState = await getUIState() || {};
-            const merged = { ...localState, ...remoteState };
+            // Preserve local-only fields that shouldn't be overwritten by remote
+            const merged = {
+                ...remoteState,
+                ...localState,
+                // Ensure local-only fields are preserved
+                lastAutoCreateHash: localState.lastAutoCreateHash,
+                categoryLastCheck: localState.categoryLastCheck || remoteState.categoryLastCheck
+            };
             await saveUIState(merged, { skipNotify: true });
             this.lastSyncTime.uiState = Date.now();
             this.notifyListeners('ui-state-synced', merged);

@@ -101,6 +101,13 @@ pub struct Activity {
     pub title: Option<String>,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
+    // Extended activity metrics
+    pub time: Option<i64>,           // Time spent in ms
+    pub scroll: Option<i32>,         // Scroll depth percentage
+    pub clicks: Option<i32>,         // Click count
+    pub forms: Option<i32>,          // Form submissions
+    pub visit_count: Option<i32>,    // Total visits
+    pub return_visits: Option<i32>,  // Visits on different days
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -664,12 +664,23 @@ async function main() {
         console.warn('[Background] Time series cleanup failed:', e);
       }
 
-      // One-time cleanup of existing workspaces to remove unqualified URLs
-      // (e.g., one-time Google Maps visits that shouldn't be in Utilities)
+      // Cleanup workspaces to remove unqualified URLs (respects user setting)
       try {
-        const cleanupResult = await runWorkspaceCleanup();
-        if (!cleanupResult.skipped) {
-          console.log(`[Background] Workspace cleanup: removed ${cleanupResult.totalRemoved} URLs from ${cleanupResult.workspacesModified} workspaces`);
+        // Check if auto-cleanup is enabled (default: true)
+        const { autoWorkspaceCleanup } = await chrome.storage.local.get(['autoWorkspaceCleanup']);
+        const isAutoCleanupEnabled = autoWorkspaceCleanup !== false; // Default true
+
+        if (isAutoCleanupEnabled) {
+          const cleanupResult = await runWorkspaceCleanup();
+          if (!cleanupResult.skipped) {
+            console.log(`[Background] Workspace cleanup: removed ${cleanupResult.totalRemoved} URLs from ${cleanupResult.workspacesModified} workspaces`);
+            // Save result for settings UI
+            await chrome.storage.local.set({
+              lastCleanupResult: { ...cleanupResult, timestamp: Date.now() }
+            });
+          }
+        } else {
+          console.log('[Background] Auto workspace cleanup disabled by user');
         }
       } catch (e) {
         console.warn('[Background] Workspace cleanup failed:', e);

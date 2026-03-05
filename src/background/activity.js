@@ -253,15 +253,22 @@ async function flushActivityBatch() {
             const payload = { url, time: activityData[url]?.time || 0, updatedAt: Date.now(), ...activityData[url] };
             // DISABLED: Let tab-based time series system handle all persistence
             // await putActivityRow(payload);
+            const now = Date.now();
             batch.push({
+                id: `activity_${simpleHash(payload.url)}_${Math.floor(now / 86400000)}`, // Unique per URL per day
                 url: payload.url,
                 title: payload.title || '',
-                favicon: payload.favicon || '',
+                type: payload.pageType || 'page', // Use pageType if available
+                timestamp: now,
+                createdAt: payload.firstVisit || now,
+                updatedAt: payload.updatedAt || now,
+                // Extended metrics for better analytics
                 time: payload.time || 0,
                 scroll: Number(payload.scroll) || 0,
                 clicks: Number(payload.clicks) || 0,
                 forms: Number(payload.forms) || 0,
-                updatedAt: payload.updatedAt
+                visitCount: payload.visitCount || 1,
+                returnVisits: payload.returnVisits || 0
             });
         } catch (e) {
             // If write fails, keep it dirty for next round
@@ -854,15 +861,26 @@ export async function handleActivityMessage(msg, sender) {
             engagementScore: msg.metrics.engagementScore || 0
         };
 
-        // Update activity data with rich metrics
-        activityData[cleaned].time = richMetrics.timeSpent;
-        activityData[cleaned].scroll = richMetrics.maxScrollDepth;
-        activityData[cleaned].clicks = richMetrics.clicks;
-        activityData[cleaned].forms = richMetrics.forms;
+        // Update activity data - use max for time to handle page restarts
+        // The content script sends cumulative timeSpent since page load
+        const existingTime = activityData[cleaned].time || 0;
+        activityData[cleaned].time = Math.max(existingTime, richMetrics.timeSpent);
+        activityData[cleaned].scroll = Math.max(activityData[cleaned].scroll || 0, richMetrics.maxScrollDepth);
+        activityData[cleaned].clicks = Math.max(activityData[cleaned].clicks || 0, richMetrics.clicks);
+        activityData[cleaned].forms = Math.max(activityData[cleaned].forms || 0, richMetrics.forms);
         activityData[cleaned].lastVisit = now;
 
-        // Store in time series with rich context
+        // Track visit days for qualification
+        const currentDay = new Date(now).toISOString().split('T')[0];
+        if (!activityData[cleaned].visitDays) {
+            activityData[cleaned].visitDays = new Set();
+        }
+        activityData[cleaned].visitDays.add(currentDay);
+
+        // Use consistent ID: tabSessionId ensures same tab+URL+day = same record (upsert)
+        // This prevents database bloat from repeated heartbeats
         await putActivityTimeSeriesEvent({
+            id: tabSessionId, // FIXED: Use tabSessionId as event ID for upsert behavior
             url: cleaned,
             sessionId: tabSessionId,
             timestamp: now,

@@ -1653,22 +1653,45 @@ export const getUrlAnalytics = withErrorHandling(async (url) => {
         console.warn('Failed to parse URL for analytics:', e);
     }
 
-    // console.log('[Unified API Debug] getUrlAnalytics searching for:', targetUrls);
-    const results = await Promise.all(targetUrls.map(u =>
+    // Check if URL is domain-only (no path) - if so, do prefix search to aggregate all activity
+    let isDomainOnly = false;
+    let domainPrefix = null;
+    try {
+        const urlObj = new URL(url);
+        // Domain-only if path is "/" or empty
+        if (urlObj.pathname === '/' || urlObj.pathname === '') {
+            isDomainOnly = true;
+            domainPrefix = `${urlObj.protocol}//${urlObj.hostname}`;
+        }
+    } catch (e) {
+        // Not a valid URL, skip prefix search
+    }
+
+    // console.log('[Unified API Debug] getUrlAnalytics searching for:', targetUrls, 'isDomainOnly:', isDomainOnly);
+
+    // First try exact URL matches
+    const exactResults = await Promise.all(targetUrls.map(u =>
         new Promise((resolve) => {
             const req = index.getAll(u);
-            req.onsuccess = () => {
-                // console.log(`[Unified API Debug] Found ${req.result?.length || 0} events for ${u}`);
-                resolve(req.result || []);
-            };
-            req.onerror = () => {
-                console.warn(`[Unified API Debug] Error fetching for ${u}:`, req.error);
-                resolve([]);
-            }
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
         })
     ));
 
-    const events = results.flat();
+    let events = exactResults.flat();
+
+    // If domain-only URL and no exact matches found, do prefix search to aggregate domain activity
+    if (isDomainOnly && events.length === 0 && domainPrefix) {
+        // Use IDBKeyRange to get all URLs starting with this domain
+        const prefixRange = IDBKeyRange.bound(domainPrefix, domainPrefix + '\uffff', false, false);
+        const prefixEvents = await new Promise((resolve) => {
+            const req = index.getAll(prefixRange, 100); // Limit to 100 events for performance
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        });
+        events = prefixEvents;
+        // console.log(`[Unified API Debug] Prefix search for ${domainPrefix} found ${events.length} events`);
+    }
     // console.log('[Unified API Debug] Total events found:', events.length);
 
     return new Promise((resolve) => {

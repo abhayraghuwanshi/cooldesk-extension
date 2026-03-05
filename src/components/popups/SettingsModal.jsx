@@ -12,6 +12,7 @@ import AIModelsTab from '../settings/AIModelsTab';
 import ExportData from '../settings/ExportData';
 import TeamsTab from '../settings/TeamsTab';
 import ThemesTab from '../settings/ThemesTab';
+import WorkspaceCleanupSettings from '../settings/WorkspaceCleanupSettings';
 
 export function SettingsModal({
   show,
@@ -1090,6 +1091,15 @@ export function SettingsModal({
 
             {activeTabId === 'data' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                {/* Workspace Cleanup Section */}
+                <section>
+                  <WorkspaceCleanupSettings />
+                </section>
+
+                {/* Divider */}
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.1)' }} />
+
+                {/* Data Export Section */}
                 <section>
                   <div style={{ marginBottom: 20 }}>
                     <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Data Export</h3>

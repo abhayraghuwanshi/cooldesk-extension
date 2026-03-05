@@ -484,6 +484,18 @@ export class GenericUrlParser {
       /\/legal/,
       /\/policy/,
 
+      // Search engines and results pages - don't save these
+      /^https?:\/\/(www\.)?google\.[a-z.]+\/search/i,
+      /^https?:\/\/(www\.)?google\.[a-z.]+\/\?q=/i,
+      /^https?:\/\/(www\.)?google\.[a-z.]+\/?$/i,  // Google homepage
+      /^https?:\/\/(www\.)?bing\.com\/search/i,
+      /^https?:\/\/(www\.)?bing\.com\/?$/i,
+      /^https?:\/\/(www\.)?duckduckgo\.com\/\?/i,
+      /^https?:\/\/(www\.)?duckduckgo\.com\/?$/i,
+      /^https?:\/\/search\.yahoo\.com/i,
+      /^https?:\/\/(www\.)?baidu\.com\/s/i,
+      /^https?:\/\/(www\.)?yandex\.[a-z]+\/search/i,
+
       // Development and testing
       /localhost/,
       /127\.0\.0\.1/,
