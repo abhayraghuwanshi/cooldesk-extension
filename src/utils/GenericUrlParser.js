@@ -486,15 +486,34 @@ export class GenericUrlParser {
 
       // Search engines and results pages - don't save these
       /^https?:\/\/(www\.)?google\.[a-z.]+\/search/i,
-      /^https?:\/\/(www\.)?google\.[a-z.]+\/\?q=/i,
-      /^https?:\/\/(www\.)?google\.[a-z.]+\/?$/i,  // Google homepage
+      /^https?:\/\/(www\.)?google\.[a-z.]+\/\?/i,   // Google with query params
+      /^https?:\/\/(www\.)?google\.[a-z.]+\/?$/i,   // Google homepage
+      /^https?:\/\/search\.google\.[a-z.]+/i,       // search.google.com
       /^https?:\/\/(www\.)?bing\.com\/search/i,
       /^https?:\/\/(www\.)?bing\.com\/?$/i,
-      /^https?:\/\/(www\.)?duckduckgo\.com\/\?/i,
-      /^https?:\/\/(www\.)?duckduckgo\.com\/?$/i,
+      /^https?:\/\/rewards\.bing\.com/i,            // Bing rewards
+      /^https?:\/\/(www\.)?duckduckgo\.com/i,       // All DuckDuckGo
       /^https?:\/\/search\.yahoo\.com/i,
       /^https?:\/\/(www\.)?baidu\.com\/s/i,
       /^https?:\/\/(www\.)?yandex\.[a-z]+\/search/i,
+
+      // Google Maps - transient search/navigation URLs
+      /^https?:\/\/(www\.)?google\.[a-z.]+\/maps\/search/i,
+      /^https?:\/\/(www\.)?google\.[a-z.]+\/maps\/place/i,
+      /^https?:\/\/(www\.)?google\.[a-z.]+\/maps\/@/i,  // Map view coordinates
+      /^https?:\/\/(www\.)?google\.[a-z.]+\/maps\/?(\?|$)/i, // Maps homepage
+      /^https?:\/\/maps\.google\.[a-z.]+/i,         // maps.google.com
+
+      // Auth and login domains (entire domains, not just paths)
+      /^https?:\/\/accounts\.google\.com/i,
+      /^https?:\/\/login\.[a-z]+\./i,               // login.*.com
+      /^https?:\/\/auth\.[a-z]+\./i,                // auth.*.com
+      /^https?:\/\/signin\.[a-z]+\./i,              // signin.*.com
+      /^https?:\/\/[^/]+\.auth\.[a-z]+/i,           // *.auth.*
+
+      // Cloudflare challenge pages
+      /__cf_chl/i,                                   // Cloudflare challenge token
+      /\?__cf/i,                                     // CF query params
 
       // Development and testing
       /localhost/,

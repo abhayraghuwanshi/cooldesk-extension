@@ -271,7 +271,7 @@ import {
 import { initializeData } from './data.js';
 // import { initializeProjectContext } from './projectContext.js'; // DISABLED - depends on ML modules
 import { CommandParser } from '../services/commandParser.js';
-import { runWorkspaceCleanup } from '../utils/urlQualification.js';
+import { cleanupBadUrls, listenForPromotionAlarm, runPromotion, schedulePromotion } from '../utils/promotionService.js';
 // import '../utils/realTimeCategorizor.js'; // REMOVED
 import { scheduleDailySummary } from '../services/memory/dailySummaryGenerator.js';
 import { NanoAIService } from '../services/nanoAIService.js';
@@ -504,6 +504,22 @@ async function main() {
     console.warn('[Background] Daily summary scheduler init failed:', e.message);
   }
 
+  // Set up promotion service alarm listener (must be registered early)
+  try {
+    listenForPromotionAlarm();
+    schedulePromotion();
+    console.log('[Background] Promotion service alarm registered');
+
+    // Run promotion immediately on service worker start (async, non-blocking)
+    runPromotion().then(result => {
+      console.log(`[Background] Initial promotion: promoted=${result.promoted} upgraded=${result.upgraded} skipped=${result.skipped}`);
+    }).catch(e => {
+      console.warn('[Background] Initial promotion failed:', e.message);
+    });
+  } catch (e) {
+    console.warn('[Background] Promotion service setup failed:', e.message);
+  }
+
   // Initialize Task Manager for Task-First Tab Modeling
   try {
     await initializeTaskManager();
@@ -598,6 +614,15 @@ async function main() {
     try {
       await populateAndStore()
 
+      // Run promotion immediately on install to populate workspaces from Chrome history
+      // The promotion service will use history fallback when ACTIVITY_SERIES is empty
+      try {
+        const promotionResult = await runPromotion();
+        console.log(`[Background] Install promotion: promoted=${promotionResult.promoted} upgraded=${promotionResult.upgraded}`);
+      } catch (promotionErr) {
+        console.warn('[Background] Install promotion failed:', promotionErr);
+      }
+
       // Initialize side panel settings on install (same as working sample.js)
       if (chrome?.sidePanel?.setOptions) {
         try {
@@ -664,26 +689,25 @@ async function main() {
         console.warn('[Background] Time series cleanup failed:', e);
       }
 
-      // Cleanup workspaces to remove unqualified URLs (respects user setting)
+      // Clean up bad URLs from workspaces (runs once per startup)
       try {
-        // Check if auto-cleanup is enabled (default: true)
-        const { autoWorkspaceCleanup } = await chrome.storage.local.get(['autoWorkspaceCleanup']);
-        const isAutoCleanupEnabled = autoWorkspaceCleanup !== false; // Default true
-
-        if (isAutoCleanupEnabled) {
-          const cleanupResult = await runWorkspaceCleanup();
-          if (!cleanupResult.skipped) {
-            console.log(`[Background] Workspace cleanup: removed ${cleanupResult.totalRemoved} URLs from ${cleanupResult.workspacesModified} workspaces`);
-            // Save result for settings UI
-            await chrome.storage.local.set({
-              lastCleanupResult: { ...cleanupResult, timestamp: Date.now() }
-            });
-          }
-        } else {
-          console.log('[Background] Auto workspace cleanup disabled by user');
+        const cleanupResult = await cleanupBadUrls();
+        if (cleanupResult.cleaned > 0) {
+          console.log(`[Background] Cleaned ${cleanupResult.cleaned} bad URLs from ${cleanupResult.workspacesModified} workspaces`);
         }
       } catch (e) {
-        console.warn('[Background] Workspace cleanup failed:', e);
+        console.warn('[Background] Bad URL cleanup failed:', e);
+      }
+
+      // Run initial promotion job
+      try {
+        const promotionResult = await runPromotion();
+        console.log(`[Background] Startup promotion: promoted=${promotionResult.promoted} upgraded=${promotionResult.upgraded}`);
+        await chrome.storage.local.set({
+          lastPromotionResult: { ...promotionResult, timestamp: Date.now() }
+        });
+      } catch (e) {
+        console.warn('[Background] Startup promotion failed:', e);
       }
 
     } catch (e) {
@@ -708,6 +732,23 @@ async function main() {
       } catch { }
     };
 
+
+    // Handle manual promotion trigger from Settings UI
+    if (msg?.action === 'runPromotion') {
+      (async () => {
+        try {
+          const result = await runPromotion();
+          await chrome.storage.local.set({
+            lastPromotionResult: { ...result, timestamp: Date.now() }
+          });
+          sendResponse({ success: true, ...result });
+        } catch (e) {
+          console.error('[Background] runPromotion error:', e);
+          sendResponse({ success: false, error: e.message });
+        }
+      })();
+      return true; // Keep channel open for async response
+    }
 
     // Handle auto-group tabs command
     if (msg?.type === 'AUTO_GROUP_TABS') {

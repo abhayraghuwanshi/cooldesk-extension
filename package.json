@@ -45,7 +45,6 @@
     "buffer": "^6.0.3",
     "crypto-js": "^4.2.0",
     "elliptic": "^6.6.1",
-    "flexsearch": "^0.8.212",
     "fuse.js": "^7.1.0",
     "node-llama-cpp": "^3.0.0",
     "open": "^11.0.0",

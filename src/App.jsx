@@ -28,7 +28,6 @@ import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
 import { getFaviconUrl, safeGetHostname } from './utils/helpers';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
-import { isUrlQualified } from './utils/urlQualification';
 
 library.add(
   faPlus,
@@ -440,12 +439,11 @@ export default function App() {
           icon: categoryIcons[category] || 'globe',
           description: `${group.displayName} websites`,
           gridType: 'ItemGrid',
-          urls: group.urls.map(url => ({
-            url,
-            title: safeGetHostname(url),
-            addedAt: Date.now(),
-            favicon: getFaviconUrl(url, 32)
-          }))
+          urls: [], // Start empty - promotionService adds qualified URLs
+          context: {
+            category: category,
+            autoCreated: true
+          }
         };
 
         workspacesToCreate.push(workspaceConfig);
@@ -551,39 +549,11 @@ export default function App() {
           { urlTimes, categoryLastCheck }
         );
 
-        // Append new URLs to existing category workspaces (incremental)
-        // Only add URLs that meet qualification thresholds
-        let appendedCount = 0;
-        if (urlsToAppend && typeof urlsToAppend === 'object') {
-          for (const [wsName, list] of Object.entries(urlsToAppend)) {
-            if (!Array.isArray(list) || list.length === 0) continue;
-            const target = existingWorkspaces.find(w => (w?.name || '').toLowerCase() === wsName.toLowerCase());
-            if (!target || !target.id) continue;
-            // Get category from workspace context or derive from name
-            const category = target.context?.category || wsName.toLowerCase();
-            for (const url of list) {
-              try {
-                // Check if URL meets qualification thresholds before adding
-                const qualified = await isUrlQualified(url, category);
-                if (!qualified) {
-                  console.debug(`[AutoCreate] Skipping unqualified URL: ${url.slice(0, 50)}`);
-                  continue;
-                }
-                await addUrlToWorkspace(url, target.id, {
-                  title: safeGetHostname(url),
-                  favicon: getFaviconUrl(url, 32),
-                  addedAt: Date.now()
-                });
-                appendedCount++;
-              } catch (e) {
-                console.warn(`Failed to append URL to workspace ${wsName}:`, e);
-              }
-            }
-          }
-        }
+        // Note: URL additions to existing workspaces are handled by the promotion service
+        // (runs on startup and every 30 min). No manual append needed here.
 
-        // If nothing to create/append and dataset hasn't changed, skip
-        if ((platformWorkspacesToCreate.length === 0 && categoryWorkspacesToCreate.length === 0 && appendedCount === 0) && lastHash === dataHash) {
+        // If nothing to create and dataset hasn't changed, skip
+        if ((platformWorkspacesToCreate.length === 0 && categoryWorkspacesToCreate.length === 0) && lastHash === dataHash) {
           console.log('⏭️ Nothing new to auto-create for this dataset');
           return;
         }
@@ -594,43 +564,26 @@ export default function App() {
 
         for (const workspaceData of workspacesToCreate) {
           try {
-            // Get category for qualification check
-            const category = workspaceData.context?.category || workspaceData.name?.toLowerCase() || 'default';
-
-            // Filter URLs to only include qualified ones
-            const qualifiedUrls = [];
-            for (const urlObj of (workspaceData.urls || [])) {
-              const qualified = await isUrlQualified(urlObj.url, category);
-              if (qualified) {
-                qualifiedUrls.push(urlObj);
-              } else {
-                console.debug(`[AutoCreate] Skipping unqualified URL for new workspace: ${urlObj.url?.slice(0, 50)}`);
-              }
-            }
-
-            // Skip creating workspace if no qualified URLs
-            if (qualifiedUrls.length === 0) {
-              console.log(`[AutoCreate] Skipping workspace "${workspaceData.name}" - no qualified URLs`);
-              continue;
-            }
-
             const workspace = {
               id: `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
               createdAt: Date.now(),
               ...workspaceData,
-              urls: qualifiedUrls
+              // Start with URLs from GenericUrlParser (platform-specific, already curated)
+              // Category-based workspaces start empty and get populated by promotionService
+              urls: workspaceData.context?.autoCreated ? [] : (workspaceData.urls || [])
             };
 
             await saveWorkspace(workspace);
             createdWorkspaces.push(workspace);
 
-            // Index URLs
+            // Index URLs for WORKSPACE_URLS store (for search and analytics)
             for (const urlObj of workspace.urls) {
               try {
                 await addUrlToWorkspace(urlObj.url, workspace.id, {
                   title: urlObj.title,
                   favicon: urlObj.favicon,
-                  addedAt: urlObj.addedAt
+                  addedAt: urlObj.addedAt,
+                  status: 'active' // Initial URLs from parsers are considered active
                 });
               } catch (error) {
                 console.warn(`Failed to index URL ${urlObj.url}:`, error);

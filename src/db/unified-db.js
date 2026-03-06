@@ -6,7 +6,7 @@
 // Single database configuration
 export const DB_CONFIG = {
     NAME: 'cooldesk-unified-db',
-    VERSION: 8, // Added DAILY_ANALYTICS store
+    VERSION: 9, // Added status field to WORKSPACE_URLS for draft/active promotion
     STORES: {
         WORKSPACES: 'workspaces',
         WORKSPACE_URLS: 'workspace_urls',
@@ -43,7 +43,8 @@ export const SCHEMAS = {
         indexes: [
             { name: 'by_workspaceIds', keyPath: 'workspaceIds', options: { unique: false, multiEntry: true } },
             { name: 'by_addedAt', keyPath: 'addedAt', options: { unique: false } },
-            { name: 'by_title', keyPath: 'title', options: { unique: false } }
+            { name: 'by_title', keyPath: 'title', options: { unique: false } },
+            { name: 'by_status', keyPath: 'status', options: { unique: false } }
         ]
     },
 
@@ -408,6 +409,48 @@ export const MIGRATIONS = {
             metadataStore.put({
                 key: 'schema_version',
                 value: 8,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+
+    9: {
+        description: 'Add status field (draft/active) to WORKSPACE_URLS for tiered qualification',
+        up: (db, transaction) => {
+            console.log('[Migration v9] Adding status field and index to workspace_urls...')
+
+            try {
+                const store = transaction.objectStore(DB_CONFIG.STORES.WORKSPACE_URLS)
+
+                // Add by_status index if it doesn't already exist
+                if (!store.indexNames.contains('by_status')) {
+                    store.createIndex('by_status', 'status', { unique: false })
+                    console.log('[Migration v9] Created by_status index')
+                }
+
+                // Backfill existing records: set status = 'active' for all existing URLs
+                // (grandfathered in — they were already manually curated or qualified)
+                store.openCursor().onsuccess = (event) => {
+                    const cursor = event.target.result
+                    if (!cursor) {
+                        console.log('[Migration v9] Backfill complete')
+                        return
+                    }
+                    if (!cursor.value.status) {
+                        cursor.update({ ...cursor.value, status: 'active' })
+                    }
+                    cursor.continue()
+                }
+            } catch (err) {
+                console.warn('[Migration v9] Error during status migration:', err)
+            }
+
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 9,
                 type: 'system',
                 timestamp: Date.now(),
                 description: 'Database schema version'

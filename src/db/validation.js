@@ -81,6 +81,9 @@ export const VALIDATION_SCHEMAS = {
                 itemType: 'object',
                 maxItems: 500
             }
+        },
+        context: {
+            [ValidationRules.TYPE]: 'object'
         }
     },
 
@@ -114,6 +117,10 @@ export const VALIDATION_SCHEMAS = {
         },
         extra: {
             [ValidationRules.TYPE]: 'object'
+        },
+        status: {
+            [ValidationRules.TYPE]: 'string',
+            [ValidationRules.ENUM]: ['draft', 'active']
         }
     },
 

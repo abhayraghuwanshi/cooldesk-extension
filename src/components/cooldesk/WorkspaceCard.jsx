@@ -3,6 +3,7 @@ import {
   faBook,
   faBriefcase,
   faChartLine,
+  faCheckCircle,
   faChevronDown,
   faChevronUp,
   faCloud,
@@ -31,6 +32,7 @@ import {
   faTasks,
   faTerminal,
   faThumbtack,
+  faTimesCircle,
   faTools,
   faTrash,
   faUtensils,
@@ -114,12 +116,13 @@ const openUrl = (url) => {
 };
 
 // Memoized WorkspaceCard to prevent unnecessary re-renders
-export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, deferAnalytics = false, ...rest }) {
+export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, isExpanded = false, isActive = false, compact = false, isPinned = false, onPin, onDelete, onAddUrl, onUrlAction, deferAnalytics = false, ...rest }) {
   if (!workspace) return null;
 
   const [popoverState, setPopoverState] = useState({ index: null, rect: null });
   const [hoveredLink, setHoveredLink] = useState(null);
   const [showAll, setShowAll] = useState(false);
+  const [showDrafts, setShowDrafts] = useState(false);
   const activePopover = popoverState.index;
 
   const { name, urls = [], description, icon = 'folder' } = workspace;
@@ -577,9 +580,13 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   };
 
   // Show fewer links in compact mode, unless expanded
-  // Use sortedUrls for display
-  const linkLimit = showAll ? sortedUrls.length : (compact ? 3 : 5);
-  const displayLinks = sortedUrls.slice(0, linkLimit);
+  // Split into active vs draft tiers
+  const activeUrls = sortedUrls.filter(u => u.status !== 'draft');
+  const draftUrls = sortedUrls.filter(u => u.status === 'draft');
+
+  // Use activeUrls for normal display
+  const linkLimit = showAll ? activeUrls.length : (compact ? 3 : 5);
+  const displayLinks = activeUrls.slice(0, linkLimit);
 
   return (
     <div
@@ -957,7 +964,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   </li>
                 );
               })}
-              {sortedUrls.length > (compact ? 3 : 5) && !showAll && (
+              {activeUrls.length > (compact ? 3 : 5) && !showAll && (
                 <li
                   className="workspace-link-item"
                   style={{ opacity: 0.6, fontStyle: 'italic', cursor: 'pointer' }}
@@ -967,11 +974,117 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                   }}
                 >
                   <span className="workspace-link-text">
-                    + {sortedUrls.length - (compact ? 3 : 5)} more items...
+                    + {activeUrls.length - (compact ? 3 : 5)} more items...
                   </span>
                 </li>
               )}
             </ul>
+          )}
+
+          {/* Upcoming (Draft) URLs — collapsible section */}
+          {draftUrls.length > 0 && (
+            <div className="workspace-drafts-section" style={{ marginTop: '8px' }}>
+              <button
+                className="workspace-drafts-toggle"
+                onClick={(e) => { e.stopPropagation(); setShowDrafts(v => !v); }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'rgba(148, 163, 184, 0.7)',
+                  fontSize: '11px',
+                  padding: '4px 0',
+                  width: '100%',
+                  textAlign: 'left'
+                }}
+              >
+                <FontAwesomeIcon icon={showDrafts ? faChevronUp : faChevronDown} style={{ fontSize: '9px' }} />
+                Upcoming ({draftUrls.length})
+              </button>
+
+              {showDrafts && (
+                <ul className="workspace-links workspace-drafts-list" style={{ marginTop: '4px' }}>
+                  {draftUrls.map((urlObj, idx) => {
+                    const faviconUrl = getFaviconUrl(urlObj.url, 16);
+                    return (
+                      <li
+                        key={idx}
+                        className="workspace-link-item workspace-draft-item"
+                        style={{
+                          opacity: 0.6,
+                          borderLeft: '2px dashed rgba(96, 165, 250, 0.4)',
+                          paddingLeft: '6px',
+                          cursor: 'pointer'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (urlObj.url) openUrl(urlObj.url);
+                        }}
+                      >
+                        <span className="workspace-link-icon">
+                          {(() => {
+                            const avatar = getLetterAvatar(urlObj.url);
+                            return (
+                              <>
+                                {faviconUrl ? (
+                                  <img src={faviconUrl} alt="" className="link-favicon"
+                                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                                  />
+                                ) : null}
+                                <div className="letter-avatar" style={{ display: faviconUrl ? 'none' : 'flex', background: avatar.color }}>
+                                  {avatar.letter}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </span>
+                        <span className="workspace-link-text" title={urlObj.url} style={{ flex: 1 }}>
+                          {(() => {
+                            const hostname = safeGetHostname(urlObj.url);
+                            const t = urlObj.title;
+                            if (!t || t === hostname || t === hostname.replace(/^www\./, '') || t.endsWith('.com') || t.endsWith('.org') || t.endsWith('.io')) return formatDomainName(urlObj.url);
+                            return t;
+                          })()}
+                        </span>
+
+                        {/* Promote button */}
+                        {onUrlAction && (
+                          <button
+                            title="Promote to Active"
+                            className="workspace-draft-action"
+                            onClick={(e) => { e.stopPropagation(); onUrlAction('promote', urlObj, workspace); }}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              color: 'rgba(34, 197, 94, 0.6)', fontSize: '12px', padding: '4px'
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faCheckCircle} />
+                          </button>
+                        )}
+
+                        {/* Dismiss button */}
+                        {onUrlAction && (
+                          <button
+                            title="Dismiss"
+                            className="workspace-draft-action"
+                            onClick={(e) => { e.stopPropagation(); onUrlAction('dismiss', urlObj, workspace); }}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              color: 'rgba(239, 68, 68, 0.6)', fontSize: '12px', padding: '4px'
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faTimesCircle} />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           )}
         </>
       )}

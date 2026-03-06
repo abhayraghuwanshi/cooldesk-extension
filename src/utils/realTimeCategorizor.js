@@ -5,11 +5,9 @@
 
 import { needsReclassification } from '../data/appstoreVersion.js';
 import categoryManager from '../data/categories.js';
-import { addUrlToWorkspace, getUrlRecord, listWorkspaces, saveWorkspace, upsertUrl } from '../db/index.js';
+import { getUrlRecord, listWorkspaces, upsertUrl } from '../db/index.js';
 import { NanoAIService } from '../services/nanoAIService.js';
 import GenericUrlParser from './GenericUrlParser.js';
-import { getBaseDomainFromUrl } from './helpers.js';
-import { isUrlQualified, normalizeUrlForCategory } from './urlQualification.js';
 
 // --- State Management ---
 // Cache of known workspace domains/IDs to avoid DB lookups
@@ -210,19 +208,9 @@ function queueNanoClassification(url, title) {
           }
         });
 
-        // If category matches an existing workspace, add the URL
-        if (!result.isNew && workspaceNames.includes(result.category)) {
-          const ws = (workspaces?.data || workspaces || []).find(
-            w => w.name.toLowerCase() === result.category.toLowerCase()
-          );
-          if (ws) {
-            await addUrlToWorkspace(url, ws.id, {
-              title: data.title || url,
-              addedAt: Date.now()
-            });
-            console.log(`[RealTime] ➕ Added Nano-classified URL to workspace: ${result.category}`);
-          }
-        }
+        // Nano classification recorded — promotion job will handle workspace additions
+        // based on qualification thresholds. No direct addUrlToWorkspace here.
+        console.log(`[RealTime] 🤖 Nano classified: ${url.slice(0, 50)} → ${result.category} (promotion job will add if qualified)`)
       }
     } catch (e) {
       console.error('[RealTime] Nano classification failed:', e);
@@ -410,135 +398,9 @@ export function setupRealTimeCategorizor() {
         return;
       }
 
-      if (!parsed) {
-        // console.debug(`[RealTime] ⏭️ Skipped: No parser or category for ${url}`);
-        return;
-      }
-
-      // 5. Workspace Existence Check (Fast In-Memory)
-      // Ensure cache is ready
-      if (!workspaceCacheInitialized) await initializeWorkspaceCache();
-
-      const workspaceName = parsed.workspace;
-      const workspaceKey = workspaceName.toLowerCase();
-
-      // For category-based workspaces, normalize URL to base domain
-      let urlToStore = url;
-      if (category !== 'uncategorized') {
-        try {
-          const urlObj = new URL(url);
-          // Strip www. subdomain to treat www.imdb.com and imdb.com as same
-          let hostname = urlObj.hostname;
-          if (hostname.startsWith('www.')) {
-            hostname = hostname.substring(4);
-          }
-          urlToStore = `${urlObj.protocol}//${hostname}`;
-        } catch (e) {
-          urlToStore = url;
-        }
-      }
-
-      if (workspaceCache.has(workspaceKey)) {
-        const existingId = workspaceCache.get(workspaceKey);
-
-        // Normalize URL for category-based workspaces (strip paths/queries)
-        const isCategoryBased = category !== 'uncategorized';
-        const normalizedUrl = normalizeUrlForCategory(urlToStore, isCategoryBased);
-
-        // Check if URL is qualified based on activity data
-        const qualified = await isUrlQualified(normalizedUrl, category);
-        if (!qualified) {
-          // console.log(`[RealTime] ⏳ URL not yet qualified: ${normalizedUrl} (category: ${category})`);
-          return; // Activity tracking continues, will re-check on next visit
-        }
-
-        // Domain-level dedup: check if this base domain already exists
-        const baseDomain = getBaseDomainFromUrl(normalizedUrl);
-        try {
-          const { getWorkspace } = await import('../db/index.js');
-          const ws = await getWorkspace(existingId);
-          if (ws?.urls?.some(u => {
-            try { return getBaseDomainFromUrl(u.url) === baseDomain; }
-            catch { return false; }
-          })) {
-            // Domain already tracked in this workspace, skip
-            return;
-          }
-        } catch (e) {
-          // If workspace lookup fails, proceed with adding
-          console.warn('[RealTime] Dedup check failed, proceeding:', e);
-        }
-
-        console.log(`[RealTime] ➕ Adding qualified URL to existing workspace: "${workspaceName}" (${existingId})`);
-
-        await addUrlToWorkspace(normalizedUrl, existingId, {
-          title: enhancedTitle || parsed.title || new URL(normalizedUrl).hostname,
-          favicon: parsed.favicon,
-          addedAt: Date.now()
-        });
-
-        // Broadcast change
-        try {
-          const bc = new BroadcastChannel('ws_db_changes');
-          bc.postMessage({ type: 'workspacesChanged', realTime: true });
-          bc.close();
-        } catch (e) { }
-
-        return;
-      }
-
-      // 6. Create New Workspace - only if URL is qualified
-      // Normalize URL for category-based workspaces
-      const isCategoryBased = category !== 'uncategorized';
-      const normalizedUrl = normalizeUrlForCategory(urlToStore, isCategoryBased);
-
-      // Check qualification before creating workspace
-      const qualified = await isUrlQualified(normalizedUrl, category);
-      if (!qualified) {
-        // console.log(`[RealTime] ⏳ Skipping workspace creation - URL not qualified: ${normalizedUrl}`);
-        return;
-      }
-
-      console.log(`[RealTime] 🆕 Creating new workspace: "${workspaceName}" from ${normalizedUrl}`);
-
-      const newId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      cacheWorkspace(workspaceName, newId); // Update cache immediately
-
-      const workspace = {
-        id: newId,
-        name: parsed.workspace,
-        description: `${parsed.platform.name} workspace`,
-        createdAt: Date.now(),
-        urls: [{
-          url: normalizedUrl,
-          title: enhancedTitle || parsed.title || new URL(normalizedUrl).hostname,
-          addedAt: Date.now(),
-          favicon: parsed.favicon
-        }],
-        context: {
-          platform: parsed.platform,
-          details: parsed.details,
-          category: category,
-          createdFrom: 'real_time',
-          autoCreated: true
-        }
-      };
-
-      await saveWorkspace(workspace);
-      await addUrlToWorkspace(normalizedUrl, workspace.id, {
-        title: enhancedTitle || parsed.title || 'Untitled',
-        favicon: parsed.favicon,
-        addedAt: Date.now()
-      });
-
-      console.log(`[RealTime] Workspace actions completed for "${workspaceName}"`);
-
-      // Broadcast change
-      try {
-        const bc = new BroadcastChannel('ws_db_changes');
-        bc.postMessage({ type: 'workspacesChanged', realTime: true });
-        bc.close();
-      } catch (e) { }
+      // 5. Activity recorded; let promotionService handle workspace mutations.
+      // No direct addUrlToWorkspace calls here — promotion job runs on schedule.
+      console.debug(`[RealTime] 📊 Activity tracked for ${url.slice(0, 50)} (category: ${category})`);
 
     } catch (error) {
       console.error('[RealTime] Error processing URL:', error);
