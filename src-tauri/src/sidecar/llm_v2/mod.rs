@@ -13,5 +13,3 @@ pub mod agent;
 pub mod tools;
 
 pub use agent::CoolDeskAgent;
-pub use conversation::ConversationManager;
-pub use memory::{MemoryManager, ChatMessage, ConversationSession};

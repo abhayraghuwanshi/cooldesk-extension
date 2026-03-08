@@ -31,6 +31,7 @@ pub struct ToolDefinition {
 #[derive(Debug, Clone)]
 pub struct ToolResult {
     /// Whether the tool succeeded
+    #[allow(dead_code)]
     pub success: bool,
     /// Result content (for success) or error message (for failure)
     pub content: String,
@@ -119,6 +120,8 @@ impl Tool for SearchWorkspacesTool {
         let query_lower = args.query.to_lowercase();
 
         let data = self.sync_data.read().await;
+
+        log::info!("[Tool:search_workspaces] Query: '{}', Total workspaces: {}", args.query, data.workspaces.len());
 
         let matching_workspaces: Vec<_> = data
             .workspaces
@@ -340,6 +343,8 @@ impl Tool for GetRecentActivityTool {
 
         let query_lower = args.query.to_lowercase();
         let data = self.sync_data.read().await;
+
+        log::info!("[Tool:get_recent_activity] Limit: {}, Total activities: {}", args.limit, data.activity.len());
 
         let recent: Vec<_> = data.activity.iter().rev()
             .filter(|a| {
@@ -773,6 +778,199 @@ impl Tool for ReadUrlTool {
 }
 
 // =============================================================================
+// SUGGEST WORKSPACES TOOL (Smart Analysis)
+// =============================================================================
+
+/// Tool that analyzes activity and suggests workspace organization
+pub struct SuggestWorkspacesTool {
+    sync_data: Arc<RwLock<SyncData>>,
+}
+
+impl SuggestWorkspacesTool {
+    pub fn new(sync_data: Arc<RwLock<SyncData>>) -> Self {
+        Self { sync_data }
+    }
+
+    /// Extract domain from URL
+    fn extract_domain(url: &str) -> Option<String> {
+        url.split("//")
+            .nth(1)?
+            .split('/')
+            .next()
+            .map(|d| d.replace("www.", ""))
+    }
+
+    /// Categorize a URL based on domain patterns
+    fn categorize_url(url: &str, title: Option<&str>) -> &'static str {
+        let url_lower = url.to_lowercase();
+        let title_lower = title.map(|t| t.to_lowercase()).unwrap_or_default();
+
+        // Development
+        if url_lower.contains("github.com") || url_lower.contains("gitlab")
+            || url_lower.contains("stackoverflow") || url_lower.contains("docs.rs")
+            || title_lower.contains("documentation") || url_lower.contains("npmjs")
+            || url_lower.contains("crates.io") {
+            return "Development";
+        }
+
+        // AI/ML
+        if url_lower.contains("openai") || url_lower.contains("anthropic")
+            || url_lower.contains("huggingface") || url_lower.contains("claude")
+            || title_lower.contains("ai") || title_lower.contains("llm")
+            || url_lower.contains("chatgpt") {
+            return "AI & ML";
+        }
+
+        // Social
+        if url_lower.contains("twitter.com") || url_lower.contains("x.com")
+            || url_lower.contains("linkedin") || url_lower.contains("facebook")
+            || url_lower.contains("reddit.com") || url_lower.contains("discord") {
+            return "Social";
+        }
+
+        // Video/Entertainment
+        if url_lower.contains("youtube.com") || url_lower.contains("netflix")
+            || url_lower.contains("twitch") || url_lower.contains("spotify") {
+            return "Entertainment";
+        }
+
+        // Shopping
+        if url_lower.contains("amazon") || url_lower.contains("ebay")
+            || url_lower.contains("shopping") || title_lower.contains("buy")
+            || title_lower.contains("cart") {
+            return "Shopping";
+        }
+
+        // News/Reading
+        if url_lower.contains("news") || url_lower.contains("medium.com")
+            || url_lower.contains("substack") || url_lower.contains("blog") {
+            return "Reading";
+        }
+
+        // Finance
+        if url_lower.contains("bank") || url_lower.contains("finance")
+            || url_lower.contains("trading") || url_lower.contains("crypto") {
+            return "Finance";
+        }
+
+        "General"
+    }
+}
+
+#[async_trait]
+impl Tool for SuggestWorkspacesTool {
+    fn name(&self) -> &str {
+        "suggest_workspaces"
+    }
+
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "suggest_workspaces".to_string(),
+            description: "Analyze browsing activity and suggest new workspace organization. Call this when user asks for workspace suggestions.".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {}
+            }),
+        }
+    }
+
+    async fn execute(&self, _arguments: Value) -> ToolResult {
+        let data = self.sync_data.read().await;
+
+        log::info!("[Tool:suggest_workspaces] Analyzing {} workspaces, {} activities",
+            data.workspaces.len(), data.activity.len());
+
+        // Get existing workspace names
+        let existing_names: HashSet<String> = data.workspaces
+            .iter()
+            .map(|w| w.name.to_lowercase())
+            .collect();
+
+        // Analyze recent activity and group by category
+        let mut category_urls: std::collections::HashMap<&str, Vec<(String, String)>> = std::collections::HashMap::new();
+
+        for activity in data.activity.iter().rev().take(50) {
+            if let Some(url) = &activity.url {
+                let title = activity.title.as_deref().unwrap_or("Untitled");
+                let category = Self::categorize_url(url, Some(title));
+
+                category_urls
+                    .entry(category)
+                    .or_default()
+                    .push((url.clone(), title.to_string()));
+            }
+        }
+
+        // Generate suggestions
+        let mut suggestions = Vec::new();
+
+        for (category, urls) in &category_urls {
+            // Skip if category already has a workspace
+            if existing_names.contains(&category.to_lowercase()) {
+                continue;
+            }
+
+            // Only suggest if there are enough URLs in this category
+            if urls.len() >= 3 {
+                let sample_urls: Vec<String> = urls.iter()
+                    .take(3)
+                    .map(|(_, title)| format!("  - {}", title))
+                    .collect();
+
+                suggestions.push(format!(
+                    "**{}** ({} related sites)\n{}",
+                    category,
+                    urls.len(),
+                    sample_urls.join("\n")
+                ));
+            }
+        }
+
+        // Also check for domain clusters
+        let mut domain_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for activity in data.activity.iter().rev().take(100) {
+            if let Some(url) = &activity.url {
+                if let Some(domain) = Self::extract_domain(url) {
+                    *domain_counts.entry(domain).or_default() += 1;
+                }
+            }
+        }
+
+        // Find frequently visited domains not in existing workspaces
+        let frequent_domains: Vec<_> = domain_counts.iter()
+            .filter(|(_, count)| **count >= 5)
+            .filter(|(domain, _)| !existing_names.iter().any(|w| domain.contains(w.as_str())))
+            .take(3)
+            .collect();
+
+        if !frequent_domains.is_empty() {
+            let domain_list: Vec<String> = frequent_domains.iter()
+                .map(|(d, c)| format!("  - {} ({} visits)", d, c))
+                .collect();
+            suggestions.push(format!(
+                "**Frequent Sites** (consider grouping)\n{}",
+                domain_list.join("\n")
+            ));
+        }
+
+        // Build response
+        let mut response = String::new();
+
+        response.push_str(&format!("You have {} existing workspaces.\n\n", data.workspaces.len()));
+
+        if suggestions.is_empty() {
+            response.push_str("Your workspaces look well organized! No new suggestions at this time.");
+        } else {
+            response.push_str("**Suggested New Workspaces:**\n\n");
+            response.push_str(&suggestions.join("\n\n"));
+            response.push_str("\n\nWould you like me to create any of these workspaces?");
+        }
+
+        ToolResult::success(response)
+    }
+}
+
+// =============================================================================
 // TOOL REGISTRY
 // =============================================================================
 
@@ -793,7 +991,8 @@ impl ToolRegistry {
         registry.register(Box::new(SearchWorkspacesTool::new(sync_data.clone())));
         registry.register(Box::new(SearchNotesTool::new(sync_data.clone())));
         registry.register(Box::new(GetRecentActivityTool::new(sync_data.clone())));
-        registry.register(Box::new(GetPinnedItemsTool::new(sync_data)));
+        registry.register(Box::new(GetPinnedItemsTool::new(sync_data.clone())));
+        registry.register(Box::new(SuggestWorkspacesTool::new(sync_data))); // Smart workspace suggestions
         registry.register(Box::new(WebSearchTool::new(5))); // Web search with max 5 results
         registry.register(Box::new(ReadUrlTool::new())); // Read URL content
         registry
@@ -834,29 +1033,17 @@ impl ToolRegistry {
         let tool_descriptions: Vec<String> = definitions
             .iter()
             .map(|t| {
-                format!(
-                    "Tool: {}\nDescription: {}\nJSON Argument Format: {}",
-                    t.name, 
-                    t.description, 
-                    serde_json::to_string(&t.parameters).unwrap_or_else(|_| "{}".to_string())
-                )
+                // Simplified format to save tokens
+                format!("- {}: {}", t.name, t.description)
             })
             .collect();
 
         format!(
-            r#"
-Available Tools:
+            r#"Tools:
 {}
 
-To call a tool, use THIS format:
-<tool>tool_name</tool><args>{{"arg": "value"}}</args>
-
-Example usage:
-User: "What workspaces do I have?"
-Thought: I need to see the current workspaces.
-Assistant: <tool>search_workspaces</tool><args>{{"query": ""}}</args>
-"#,
-            tool_descriptions.join("\n\n")
+Format: <tool>name</tool><args>{{"key": "value"}}</args>"#,
+            tool_descriptions.join("\n")
         )
     }
 }

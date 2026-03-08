@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
 import { isElectronApp } from '../../services/environmentDetector.js';
+import { recordFeedbackEvent } from '../../services/feedbackService.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
@@ -404,6 +405,14 @@ export function WorkspaceList({
                     e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)';
                 }}
                 onClick={async () => {
+                    // Record feedback for RAG learning
+                    recordFeedbackEvent({
+                        suggestionType: 'related_resource',
+                        action: 'accepted',
+                        suggestionContent: app.name || app.path,
+                        contextWorkspace: activeMode !== 'all' ? modeConfigs[activeMode]?.label : undefined
+                    }).catch(() => { });
+
                     if (isRunning && window.electronAPI?.focusApp && app.pid) {
                         await window.electronAPI.focusApp(app.pid, app.name);
                     } else if (!isRunning && window.electronAPI?.launchApp && app.path) {
@@ -475,67 +484,6 @@ export function WorkspaceList({
             gap: '16px',
             overflow: 'hidden' // Parent manages layout, child scrolls
         }}>
-            {/* Header - Fixed at Top */}
-            {/* <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexShrink: 0,
-                paddingRight: '4px'
-            }}>
-                <h3 style={{
-                    fontSize: 'var(--font-2xl, 20px)',
-                    fontWeight: 600,
-                    color: 'var(--text-primary, #F1F5F9)',
-                    fontFamily: defaultFontFamily,
-                    margin: 0
-                }}>
-                    Workspaces
-                    <span style={{
-                        fontSize: 'var(--font-md, 12px)',
-                        color: 'var(--text-secondary, #94A3B8)',
-                        marginLeft: '8px',
-                        fontWeight: 400
-                    }}>
-                        ({savedWorkspaces.length})
-                    </span>
-                </h3>
-                <div className="view-toggle" style={{ display: 'flex', gap: 8 }}>
-                    <button
-                        className="view-toggle-btn"
-                        onClick={() => setIsShareModalOpen(true)}
-                        title="Share to Team"
-                        style={{ color: '#60a5fa' }}
-                    >
-                        <FontAwesomeIcon icon={faShare} />
-                    </button>
-                    <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
-                    <button
-                        className={`view-toggle-btn ${isSortingByActivity ? 'active' : ''}`}
-                        onClick={() => setIsSortingByActivity(!isSortingByActivity)}
-                        title={isSortingByActivity ? "Sort Alphabetically" : "Sort by Activity"}
-                        style={{ color: isSortingByActivity ? '#34d399' : undefined }}
-                    >
-                        <FontAwesomeIcon icon={faChartLine} />
-                    </button>
-                    <div style={{ width: 1, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></div>
-                    <button
-                        className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                        onClick={() => setViewMode('grid')}
-                        title="Grid View"
-                    >
-                        <FontAwesomeIcon icon={faThLarge} />
-                    </button>
-                    <button
-                        className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
-                        onClick={() => setViewMode('list')}
-                        title="List View"
-                    >
-                        <FontAwesomeIcon icon={faList} />
-                    </button>
-                </div>
-            </div> */}
-
             {/* Scrollable Content Area */}
             <div style={{
                 flex: 1,
@@ -713,7 +661,15 @@ export function WorkspaceList({
                                                 {installedApps.slice(0, 50).map(app => (
                                                     <div
                                                         key={app.id || app.name}
-                                                        onClick={async () => { if (window.electronAPI?.launchApp && app.path) await window.electronAPI.launchApp(app.path); }}
+                                                        onClick={async () => {
+                                                            // Track app launch for feedback
+                                                            recordFeedbackEvent({
+                                                                suggestionType: 'related_resource',
+                                                                action: 'accepted',
+                                                                suggestionContent: app.name || app.path
+                                                            }).catch(() => { });
+                                                            if (window.electronAPI?.launchApp && app.path) await window.electronAPI.launchApp(app.path);
+                                                        }}
                                                         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '16px 12px', borderRadius: '16px', transition: 'all 0.2s', background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(148, 163, 184, 0.1)' }}
                                                         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.8)'; e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.3)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                                                         onMouseLeave={e => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.4)'; e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)'; e.currentTarget.style.transform = 'translateY(0)'; }}

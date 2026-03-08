@@ -7,12 +7,13 @@ import manifest from './manifest.json';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Switch between Chrome Extension (default) and Electron builds using env TARGET=electron
+// Switch between Chrome Extension (default) and Electron/Tauri builds using env
 export default defineConfig(({ mode }) => {
   const isElectron = mode === 'electron'
 
   if (isElectron) {
     // Electron build: no crx(), relative paths for file:// protocol
+    // Uses full App with all features (notes, tabs, team, etc.)
     return {
       base: './',
       plugins: [react()],
@@ -40,12 +41,13 @@ export default defineConfig(({ mode }) => {
     }
   }
 
-  // Chrome extension build (default)
+  // Tauri build
   const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
 
   if (isTauri) {
+    // Uses full App with all features
     return {
-      base: './', // Tauri loads from local file system or custom protocol
+      base: './',
       clearScreen: false,
       server: {
         port: 5173,
@@ -64,7 +66,7 @@ export default defineConfig(({ mode }) => {
         target: process.env.TAURI_ENV_PLATFORM == "windows" ? "chrome105" : "safari13",
         minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
         sourcemap: !!process.env.TAURI_ENV_DEBUG,
-        outDir: 'dist-tauri', // Separate output for Tauri
+        outDir: 'dist-tauri',
         rollupOptions: {
           input: {
             main: resolve(__dirname, 'index.html'),
@@ -76,13 +78,14 @@ export default defineConfig(({ mode }) => {
     }
   }
 
+  // Chrome Extension build (default)
+  // Uses lightweight ExtensionApp - only Overview page, no heavy deps
   return {
     base: './',
 
     plugins: [
       crx({
         manifest,
-        // Configure CSP for Firebase and localhost sync
         contentSecurityPolicy: {
           'extension_pages': "script-src 'self' 'wasm-unsafe-eval' http://localhost:5173; object-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com https://*.google.com https://identitytoolkit.googleapis.com http://localhost:* http://127.0.0.1:* wss://localhost:* ws://localhost:* ws://127.0.0.1:*"
         }
@@ -98,40 +101,43 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      target: 'esnext', // Use modern JS
+      target: 'esnext',
       modulePreload: {
         polyfill: true,
       },
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         input: {
-          main: resolve(__dirname, 'index.html'),
-          sidebar: resolve(__dirname, 'sidebar.html'),
+          // Extension uses lightweight entry point
+          main: resolve(__dirname, 'extension.html'),
         },
         output: {
           manualChunks: (id) => {
             if (id.includes('node_modules')) {
-              // Core React Bundle (Safe to split)
+              // Core React Bundle
               if (id.includes('react') || id.includes('react-dom')) {
                 return 'vendor-react';
               }
 
-              // Utils & Styles
+              // FontAwesome
               if (id.includes('fontawesome')) {
                 return 'vendor-styles';
               }
 
-              // Note: Tiptap and YJS are tightly coupled. Keeping them in the main vendor chunk
-              // prevents "Cannot access 'X' before initialization" errors due to circular deps.
+              // Heavy app-only deps should NOT be in extension bundle
+              // These are excluded because ExtensionApp doesn't import them:
+              // - @tiptap/* (notes editor)
+              // - yjs, y-webrtc, y-indexeddb (P2P sync)
+              // - node-llama-cpp (local AI)
+              // - fuse.js (app search)
 
-              return 'vendor'; // All other node_modules
+              return 'vendor';
             }
           }
         }
       }
     },
     esbuild: {
-      // drop: ['console', 'debugger'],
       legalComments: 'none'
     },
     define: {

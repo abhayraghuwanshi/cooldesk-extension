@@ -4,9 +4,9 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
-// Sidecar Sync/LLM endpoints are on localhost:4000
-const SIDECAR_URL = 'http://localhost:4000';
-const WS_URL = 'ws://localhost:4000';
+// Sidecar Sync/LLM endpoints are on localhost:4545
+const SIDECAR_URL = 'http://localhost:4545';
+const WS_URL = 'ws://localhost:4545';
 
 let ws = null;
 const listeners = new Map(); // channel -> Set<callback>
@@ -237,28 +237,63 @@ const electronAPI = {
         if (msg?.type === 'JUMP_TO_TAB') {
             console.log('[Shim] JUMP_TO_TAB requested:', msg.tabId);
             try {
-                // Fire-and-forget: sidecar broadcasts to browser extensions for chrome.tabs.update
+                // Hide spotlight immediately
+                invoke('hide_spotlight').catch(() => invoke('toggle_spotlight').catch(() => { }));
+
+                const processMap = {
+                    chrome: 'chrome', edge: 'msedge', brave: 'brave',
+                    firefox: 'firefox', opera: 'opera', vivaldi: 'vivaldi'
+                };
+
+                // FIRST: Focus the browser window (this switches virtual desktops if needed)
+                // Must happen BEFORE telling extension to switch tabs
+                let browserFocused = false;
+                if (msg._deviceId) {
+                    const browserKey = msg._deviceId.split('-')[0];
+                    const processName = processMap[browserKey];
+                    if (processName) {
+                        console.log('[Shim] Focusing browser first:', processName);
+                        await invoke('focus_window', { pid: 0, name: processName });
+                        browserFocused = true;
+                    }
+                }
+
+                // Fallback: Try to find the tab's browser from sidecar data
+                if (!browserFocused && msg.tabId) {
+                    try {
+                        const tabs = await (await fetch(`${SIDECAR_URL}/tabs`)).json();
+                        const tab = tabs.find(t => t.id === msg.tabId);
+                        if (tab?._deviceId) {
+                            const browserKey = tab._deviceId.split('-')[0];
+                            const processName = processMap[browserKey];
+                            if (processName) {
+                                console.log('[Shim] Focusing browser (from lookup):', processName);
+                                await invoke('focus_window', { pid: 0, name: processName });
+                                browserFocused = true;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[Shim] Tab lookup failed:', e);
+                    }
+                }
+
+                // Last resort: try chrome then edge (most common browsers)
+                if (!browserFocused) {
+                    console.log('[Shim] No deviceId, trying chrome/edge');
+                    await invoke('focus_window', { pid: 0, name: 'chrome' }).catch(() =>
+                        invoke('focus_window', { pid: 0, name: 'msedge' }).catch(() => {})
+                    );
+                }
+
+                // Small delay to let virtual desktop switch complete
+                await new Promise(r => setTimeout(r, 100));
+
+                // THEN: Tell extension to switch to the tab
                 fetch(`${SIDECAR_URL}/cmd/jump-to-tab`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tabId: msg.tabId, windowId: msg.windowId })
                 }).catch(() => { });
-
-                // Hide spotlight immediately
-                invoke('hide_spotlight').catch(() => invoke('toggle_spotlight').catch(() => { }));
-
-                // Focus the correct browser using _deviceId (e.g. "chrome-abc123" → "chrome")
-                if (msg._deviceId) {
-                    const browserKey = msg._deviceId.split('-')[0];
-                    const processMap = {
-                        chrome: 'chrome', edge: 'msedge', brave: 'brave',
-                        firefox: 'firefox', opera: 'opera', vivaldi: 'vivaldi'
-                    };
-                    const processName = processMap[browserKey];
-                    if (processName) {
-                        invoke('focus_window', { pid: 0, name: processName }).catch(() => { });
-                    }
-                }
 
                 return { success: true };
             } catch (e) {

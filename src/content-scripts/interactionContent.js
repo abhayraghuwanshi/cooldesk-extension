@@ -181,15 +181,8 @@ function collectPreviewFromDom() {
   }
 }
 
-import { initContentInteractions } from './contentInteractions.js';
-
-// Initialize content interactions (analytics, preview collection)
-try {
-  initContentInteractions();
-  console.debug('[CoolDesk] contentInteractions initialized');
-} catch (e) {
-  console.warn('[CoolDesk] contentInteractions init failed', e);
-}
+// Note: Content interactions (scroll, click, visibility, media) are tracked above
+// Notes/highlights rendering and context menu handlers are below
 
 // ========== Notes & Highlights Rendering ==========
 

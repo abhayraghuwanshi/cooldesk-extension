@@ -159,6 +159,7 @@ fn run_inference(
     // Create context
     let ctx_params = LlamaContextParams::default()
         .with_n_ctx(std::num::NonZeroU32::new(4096))
+        .with_n_batch(4096)
         .with_n_threads(4)
         .with_n_threads_batch(4);
 

@@ -429,7 +429,7 @@ export function CoolDeskContainer({
             {shouldRenderFace('workspace') && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px', overflow: 'hidden', padding: '16px 0' }}>
                 {/* WorkspaceList - takes 55% of space */}
-                <div style={{ flex: '0 0 55%', minHeight: 0, overflow: 'auto' }}>
+                <div style={{ flex: '0 0 100%', minHeight: 0, overflow: 'auto' }}>
                   <Suspense fallback={<div style={{ padding: 20, color: '#64748B', textAlign: 'center' }}>Loading...</div>}>
                     <WorkspaceList
                       savedWorkspaces={savedWorkspaces}
@@ -443,14 +443,14 @@ export function CoolDeskContainer({
                   </Suspense>
                 </div>
                 {/* ChatContext - takes 45% of space */}
-                <div style={{ flex: '0 0 45%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                {/* <div style={{ flex: '0 0 45%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                   <Suspense fallback={null}>
                     <ChatContext
                       workspaceId={currentWorkspace?.id}
                       workspaceName={currentWorkspace?.name || 'All Workspaces'}
                     />
                   </Suspense>
-                </div>
+                </div> */}
               </div>
             )}
           </Face>

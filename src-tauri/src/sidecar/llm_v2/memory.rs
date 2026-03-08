@@ -1,6 +1,8 @@
 //! Memory Management for LLM v2
 //!
 //! Handles both short-term (session) and long-term (persistent) memory.
+//!
+//! Note: Some functions are kept for future use but currently unused.
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -69,6 +71,7 @@ impl ChatMessage {
     }
 
     /// Create a new assistant message with tool calls
+    #[allow(dead_code)]
     pub fn assistant_with_tools(content: &str, tool_calls: Vec<ToolCall>) -> Self {
         Self {
             id: generate_id(),
@@ -82,6 +85,7 @@ impl ChatMessage {
     }
 
     /// Create a new system message
+    #[allow(dead_code)]
     pub fn system(content: &str) -> Self {
         Self {
             id: generate_id(),
@@ -125,6 +129,7 @@ pub struct ToolCall {
 }
 
 impl ToolCall {
+    #[allow(dead_code)]
     pub fn new(name: &str, arguments: &str) -> Self {
         Self {
             id: generate_id(),
@@ -201,6 +206,7 @@ impl ConversationSession {
     }
 
     /// Get messages for context building (excludes system messages for counting)
+    #[allow(dead_code)]
     pub fn get_context_messages(&self) -> Vec<&ChatMessage> {
         self.messages.iter().collect()
     }
@@ -322,6 +328,7 @@ impl LongTermMemory {
     }
 
     /// Get all facts in a category
+    #[allow(dead_code)]
     pub fn get_facts_by_category(&self, category: &str) -> Vec<&MemoryFact> {
         self.facts
             .iter()
@@ -355,6 +362,7 @@ impl MemoryManager {
     }
 
     /// Create with existing long-term memory
+    #[allow(dead_code)]
     pub fn with_long_term(long_term: LongTermMemory) -> Self {
         Self {
             sessions: HashMap::new(),
@@ -405,6 +413,7 @@ impl MemoryManager {
     }
 
     /// Add a message to a session
+    #[allow(dead_code)]
     pub fn add_message(&mut self, session_id: &str, message: ChatMessage) {
         let session = self.get_or_create_session(session_id);
         session.add_message(message);
@@ -426,6 +435,7 @@ impl MemoryManager {
     }
 
     /// Clear all sessions
+    #[allow(dead_code)]
     pub fn clear_sessions(&mut self) {
         self.sessions.clear();
         self.dirty = true;
@@ -453,6 +463,7 @@ impl MemoryManager {
     }
 
     /// Get the long-term memory
+    #[allow(dead_code)]
     pub fn get_long_term_memory(&self) -> &LongTermMemory {
         &self.long_term
     }
@@ -468,11 +479,13 @@ impl MemoryManager {
     // -------------------------------------------------------------------------
 
     /// Check if memory has been modified
+    #[allow(dead_code)]
     pub fn is_dirty(&self) -> bool {
         self.dirty
     }
 
     /// Mark memory as clean (after saving)
+    #[allow(dead_code)]
     pub fn mark_clean(&mut self) {
         self.dirty = false;
     }
@@ -514,6 +527,7 @@ impl Default for MemoryManager {
 pub type SharedMemoryManager = Arc<RwLock<MemoryManager>>;
 
 /// Create a new shared memory manager
+#[allow(dead_code)]
 pub fn create_shared_memory() -> SharedMemoryManager {
     Arc::new(RwLock::new(MemoryManager::new()))
 }

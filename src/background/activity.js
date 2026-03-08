@@ -481,10 +481,13 @@ async function accumulateTime(url, now = Date.now(), forcedDelta = null) {
     // 3. Audio site fallback (legacy)
     const shouldTrackTime = isCurrentlyActive || (hasAudioActivity === true);
 
+    // Declare weightedDelta outside if block so it's accessible later
+    let weightedDelta = 0;
+
     if (shouldTrackTime) {
         // Simplified time weighting
         const timeWeight = isCurrentlyActive ? 1.0 : 0.5; // Reduced from 0.3 to 0.5 for background audio
-        const weightedDelta = Math.floor(delta * timeWeight);
+        weightedDelta = Math.floor(delta * timeWeight);
 
         activityData[cleaned].time = (activityData[cleaned].time || 0) + weightedDelta;
 

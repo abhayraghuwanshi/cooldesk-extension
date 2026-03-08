@@ -6,8 +6,8 @@
 // Default sync configuration
 const DEFAULT_SYNC_CONFIG = {
   enableHostSync: true,           // Master switch for localhost sync (enabled by default)
-  hostUrl: 'http://127.0.0.1:4000', // Host server URL
-  websocketUrl: 'ws://127.0.0.1:4000', // WebSocket URL
+  hostUrl: 'http://127.0.0.1:4545', // Host server URL
+  websocketUrl: 'ws://127.0.0.1:4545', // WebSocket URL
   syncWorkspaces: true,           // Sync workspaces to host
   syncTabs: true,                // Sync tabs to host
   syncActivity: true,            // Sync activity to host

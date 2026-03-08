@@ -951,7 +951,6 @@ pub async fn llm_parse_command(Json(req): Json<ParseCommandRequest>) -> Json<Par
 // ==========================================
 
 use crate::sidecar::llm_v2::CoolDeskAgent;
-use crate::sidecar::llm_v2::memory::MemoryManager;
 use crate::sidecar::storage::{load_agent_state, save_agent_state, SavedAgentState};
 use crate::sidecar::data::{
     V2CreateSessionRequest, V2SessionResponse, V2ChatRequest, V2ChatResponse,

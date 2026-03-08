@@ -1,6 +1,7 @@
 import { faBrain, faClock, faDesktop, faSync, faTasks, faToggleOff, faToggleOn } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { recordFeedbackEvent } from '../../services/feedbackService.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
@@ -296,16 +297,30 @@ export function TabManagement() {
         // Enrich running apps with icons from installed apps using utility
         const enrichedApps = enrichRunningAppsWithIcons(apps, installedApps);
 
-        // Filter out browsers and tray/background-only processes
+        // Filter out browsers, cooldesk, and tray/background-only processes
         const filteredApps = enrichedApps.filter(app => {
           const appName = (app.name || '').toLowerCase();
+
+          // Skip browsers (tabs are shown separately)
           const isBrowser = appName.includes('chrome') ||
             appName === 'msedge' ||
             appName === 'microsoft edge' ||
             appName === 'edge' ||
             appName.includes('brave') ||
-            appName.includes('firefox');
+            appName.includes('firefox') ||
+            appName.includes('opera') ||
+            appName.includes('vivaldi') ||
+            appName.includes('safari') ||
+            appName.includes('arc');
           if (isBrowser) return false;
+
+          // Skip cooldesk app itself
+          const isCoolDesk = appName.includes('cooldesk') ||
+            appName.includes('cool-desk') ||
+            appName.includes('tauri') ||
+            appName.includes('webview') ||
+            appName.includes('wry');
+          if (isCoolDesk) return false;
 
           // Skip tray/background windows: hidden (isVisible=false) and not cloaked by
           // virtual desktop (cloaked=2). These are system trays, not focusable apps.
@@ -364,6 +379,14 @@ export function TabManagement() {
   // Handle tab actions
   const handleTabClick = useCallback(async (tab) => {
     try {
+      // Record feedback for RAG learning (fire-and-forget)
+      recordFeedbackEvent({
+        suggestionType: 'tab_category',
+        action: 'accepted',
+        suggestionContent: tab.url || tab.title,
+        contextUrls: [tab.url].filter(Boolean)
+      }).catch(() => { });
+
       // Check if running in Electron
       if (window.electronAPI && window.electronAPI.sendMessage) {
         console.log('[TabManagement] Sending JUMP_TO_TAB to Electron:', tab.id);
@@ -400,6 +423,14 @@ export function TabManagement() {
 
   const handleTabPin = useCallback(async (tab) => {
     try {
+      // Record feedback - pinning is a strong positive signal
+      recordFeedbackEvent({
+        suggestionType: 'tab_category',
+        action: tab.pinned ? 'rejected' : 'accepted', // Unpinning = negative, pinning = positive
+        suggestionContent: tab.url || tab.title,
+        contextUrls: [tab.url].filter(Boolean)
+      }).catch(() => { });
+
       if (typeof chrome !== 'undefined' && chrome?.tabs?.update) {
         console.log('[TabManagement] Manual PIN toggle for tab:', tab.id, !tab.pinned);
         await chrome.tabs.update(tab.id, { pinned: !tab.pinned });
@@ -411,6 +442,13 @@ export function TabManagement() {
 
   const handleAppClick = useCallback(async (app) => {
     try {
+      // Record feedback for RAG learning (fire-and-forget)
+      recordFeedbackEvent({
+        suggestionType: 'related_resource',
+        action: 'accepted',
+        suggestionContent: app.name || app.title
+      }).catch(() => { });
+
       if (window.electronAPI?.focusApp && app.pid) {
         console.log('[TabManagement] Focusing app:', app.name, app.pid, 'HWND:', app.hwnd);
         await window.electronAPI.focusApp(app.pid, app.name, app.hwnd);
@@ -787,7 +825,7 @@ export function TabManagement() {
             />
             <span style={{ pointerEvents: 'none' }}>Auto Group</span>
           </button>
-          <button
+          {/* <button
             onClick={() => {
               const newState = !taskViewEnabled;
               setTaskViewEnabled(newState);
@@ -854,7 +892,7 @@ export function TabManagement() {
               style={{ pointerEvents: 'none' }}
             />
             <span style={{ pointerEvents: 'none' }}>Tasks</span>
-          </button>
+          </button> */}
         </div>
       </div>
 

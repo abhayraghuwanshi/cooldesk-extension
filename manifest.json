@@ -5,9 +5,9 @@
   "action": {
     "default_title": "Open CoolDesk"
   },
-  "options_page": "index.html",
+  "options_page": "extension.html",
   "chrome_url_overrides": {
-    "newtab": "index.html"
+    "newtab": "extension.html"
   },
   "background": {
     "service_worker": "src/background/background.js",
@@ -34,19 +34,15 @@
     "http://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.unsplash.com wss://signaling-server.raghuwanshi-abhay405.workers.dev http://localhost:5173 ws://localhost:5173 http://127.0.0.1:4000 ws://127.0.0.1:4000 http://localhost:4000 ws://localhost:4000; frame-src https://www.google.com"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.unsplash.com wss://signaling-server.raghuwanshi-abhay405.workers.dev http://localhost:5173 ws://localhost:5173 http://127.0.0.1:4545 ws://127.0.0.1:4545 http://localhost:4545 ws://localhost:4545; frame-src https://www.google.com"
   },
   "web_accessible_resources": [
     {
       "resources": [
         "assets/*",
         "dist/*",
-        "src/components/footerBar.js",
-        "src/content-scripts/contentInteractions.js",
-        "src/scrapers/clickToScrape.js",
-        "src/scrapers/genericLinkScraper.js",
         "logo-2.png",
-        "index.html"
+        "extension.html"
       ],
       "matches": [
         "<all_urls>"

@@ -21,8 +21,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useEffect, useState } from 'react';
 import { isElectronApp } from '../../services/environmentDetector';
 
-// Sidecar API URL (Tauri desktop app runs sidecar on port 4000)
-const SIDECAR_URL = 'http://127.0.0.1:4000';
+// Sidecar API URL (Tauri desktop app runs sidecar on port 4545)
+const SIDECAR_URL = 'http://127.0.0.1:4545';
 
 // Helper to call sidecar HTTP API
 async function sidecarGet(path) {
@@ -92,7 +92,7 @@ export default function AIModelsTab({
                     loadModels();
 
                     // Connect WebSocket for progress updates
-                    ws = new WebSocket(`ws://127.0.0.1:4000`);
+                    ws = new WebSocket(`ws://127.0.0.1:4545`);
                     ws.onopen = () => {
                         ws.send(JSON.stringify({ type: 'identify', client: 'aiModelsTab' }));
                     };

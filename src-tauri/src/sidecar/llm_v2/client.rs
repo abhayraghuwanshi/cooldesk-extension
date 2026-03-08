@@ -23,22 +23,6 @@ impl LocalLlamaClient {
         Self { max_tokens: 2048 }
     }
 
-    /// Set the maximum tokens for generation
-    pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
-        self.max_tokens = max_tokens;
-        self
-    }
-
-    /// Send a chat request with conversation history
-    ///
-    /// Takes a list of messages and returns the assistant's response.
-    pub async fn chat(&self, messages: &[ChatMessage], system_prompt: &str) -> Result<String, String> {
-        let prompt_builder = PromptBuilder::new(system_prompt);
-        let prompt = prompt_builder.build(messages, None);
-
-        engine::engine_chat(prompt, self.max_tokens).await
-    }
-
     /// Send a chat request with long-term memory context
     pub async fn chat_with_context(
         &self,
@@ -51,17 +35,6 @@ impl LocalLlamaClient {
 
         engine::engine_chat(prompt, self.max_tokens).await
     }
-
-    /// Send a simple prompt without history
-    pub async fn complete(&self, prompt: &str) -> Result<String, String> {
-        engine::engine_chat(prompt.to_string(), self.max_tokens).await
-    }
-
-    /// Check if a model is loaded
-    pub async fn is_model_loaded() -> Result<bool, String> {
-        let status = crate::sidecar::llm::models::get_status().await?;
-        Ok(status.model_loaded)
-    }
 }
 
 impl Default for LocalLlamaClient {
@@ -71,33 +44,8 @@ impl Default for LocalLlamaClient {
 }
 
 // =============================================================================
-// RESPONSE TYPES
+// TOOL CALL TYPES
 // =============================================================================
-
-/// Response from a chat request
-#[derive(Debug, Clone)]
-pub struct ChatResponse {
-    /// The assistant's response text
-    pub content: String,
-    /// Whether tools were called (for future use)
-    pub tool_calls: Option<Vec<ParsedToolCall>>,
-}
-
-impl ChatResponse {
-    pub fn text(content: String) -> Self {
-        Self {
-            content,
-            tool_calls: None,
-        }
-    }
-
-    pub fn with_tools(content: String, tool_calls: Vec<ParsedToolCall>) -> Self {
-        Self {
-            content,
-            tool_calls: Some(tool_calls),
-        }
-    }
-}
 
 /// A parsed tool call from the model's response
 #[derive(Debug, Clone)]

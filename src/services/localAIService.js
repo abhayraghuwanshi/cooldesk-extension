@@ -7,8 +7,8 @@
  */
 
 // Default sidecar WebSocket URL
-const SIDECAR_WS_URL = 'ws://127.0.0.1:4000';
-const SIDECAR_HTTP_URL = 'http://127.0.0.1:4000';
+const SIDECAR_WS_URL = 'ws://127.0.0.1:4545';
+const SIDECAR_HTTP_URL = 'http://127.0.0.1:4545';
 
 // ==========================================
 // STATE

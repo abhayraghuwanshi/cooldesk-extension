@@ -1,8 +1,10 @@
 //! Pattern tracking for workspace/URL associations
 //!
 //! Learns patterns from user behavior to improve grouping suggestions.
+//! NOTE: Many methods are not yet connected to UI but preserved for RAG system expansion.
 
-use super::types::*;
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 
 /// Tracks URL and workspace patterns for learning

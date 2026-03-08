@@ -6,9 +6,8 @@
 //! - Multi-turn conversation handling
 
 use super::client::{LocalLlamaClient, ToolCallParser};
-use super::conversation::PromptBuilder;
 use super::memory::{ChatMessage, MemoryManager, SharedMemoryManager};
-use super::tools::{ToolRegistry, ToolResult};
+use super::tools::ToolRegistry;
 use crate::sidecar::data::SyncData;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -19,28 +18,22 @@ use tokio::sync::RwLock;
 // =============================================================================
 
 /// Default system prompt for the agent
-const DEFAULT_SYSTEM_PROMPT: &str = r#"You are CoolDesk AI, a powerful and highly capable advanced desktop assistant.
-Your primary goal is to help users seamlessly manage their workspaces, categorize their browsing activity, organize notes, and boost their productivity.
+const DEFAULT_SYSTEM_PROMPT: &str = r#"You are CoolDesk AI, a desktop assistant that helps users manage workspaces and browsing.
 
-Rules & Capabilities:
-1. MANDATORY: ALWAYS call a tool if you need information about the user's data, workspaces, notes, or external content. DO NOT guess or hallucinate user data.
-2. YOU CAN CALL MULTIPLE TOOLS AT ONCE. If you need 2 different pieces of information, output both tool calls in the SAME turn! DO NOT provide a final answer to the user until you have all the facts.
-3. ALWAYS THOUGHT FIRST: Before you use a tool or provide an answer, use a `<thought>...</thought>` block to reason about what data you need and what you are doing.
-4. When asked to "suggest a new workspace", "organize my tabs", or "what workspaces do I have", YOU MUST DO EXACTLY THIS:
-   - Call `search_workspaces` with an empty query AND call `get_recent_activity` AT THE SAME TIME.
-   - Example Output:
-     <thought>I need to search their existing workspaces and see their recent activity before I can suggest a new workspace.</thought>
-     <tool>search_workspaces</tool><args>{"query": ""}</args>
-     <tool>get_recent_activity</tool><args>{"limit": 25}</args>
-   - WAIT for both tool results to return in your conversation history.
-   - ONLY AFTER reviewing both results, analyze the collected URLs and logically group related domains or topics into new workspace suggestions. Provide clear reasons for your suggestions.
-5. Always use EXACTLY the `<tool>tool_name</tool><args>{"key": "value"}</args>` format.
-6. If the user asks a question you don't confidently know the answer to, use `web_search` to find accurate information.
-7. Provide concise, clear, and actionable responses.
+RULES:
+1. Use tools to get data. Never guess.
+2. After tool results, give your final answer immediately.
+3. Tool format: <tool>name</tool><args>{"key": "value"}</args>
+
+WHICH TOOL TO USE:
+- "suggest workspace" or "organize" -> suggest_workspaces
+- "what workspaces" or "list workspaces" -> search_workspaces with empty query
+- "recent activity" or "what was I doing" -> get_recent_activity
+- "search for X" on web -> web_search
 "#;
 
 /// Maximum tool call iterations per request
-const MAX_TOOL_ITERATIONS: usize = 7;
+const MAX_TOOL_ITERATIONS: usize = 3;
 
 // =============================================================================
 // AGENT RESPONSE
@@ -71,10 +64,12 @@ pub struct AgentConfig {
     /// System prompt
     pub system_prompt: String,
     /// Maximum tokens for generation
+    #[allow(dead_code)]
     pub max_tokens: u32,
     /// Maximum tool iterations per request
     pub max_tool_iterations: usize,
     /// Maximum context messages to include
+    #[allow(dead_code)]
     pub max_context_messages: usize,
     /// Maximum long-term facts to include
     pub max_long_term_facts: usize,
@@ -120,6 +115,7 @@ impl CoolDeskAgent {
     }
 
     /// Create an agent with custom config
+    #[allow(dead_code)]
     pub fn with_config(sync_data: Arc<RwLock<SyncData>>, config: AgentConfig) -> Self {
         Self {
             config,
@@ -130,6 +126,7 @@ impl CoolDeskAgent {
     }
 
     /// Create an agent with existing memory
+    #[allow(dead_code)]
     pub fn with_memory(sync_data: Arc<RwLock<SyncData>>, memory: SharedMemoryManager) -> Self {
         Self {
             config: AgentConfig::default(),
@@ -164,6 +161,7 @@ impl CoolDeskAgent {
     }
 
     /// Clear a session's history
+    #[allow(dead_code)]
     pub async fn clear_session(&self, session_id: &str) -> bool {
         let mut memory = self.memory.write().await;
         if let Some(session) = memory.get_session_mut(session_id) {
@@ -210,6 +208,7 @@ impl CoolDeskAgent {
 
 
     /// Process a chat message and return a response
+    /// Uses SIMPLE MODE: pre-fetch data based on query, single LLM call
     pub async fn chat(&self, session_id: &str, user_message: &str) -> Result<AgentResponse, String> {
         // Add user message to session
         {
@@ -219,83 +218,36 @@ impl CoolDeskAgent {
             session.generate_title();
         }
 
+        let msg_lower = user_message.to_lowercase();
         let mut tools_used = Vec::new();
-        let mut iteration = 0;
-        let mut final_content = String::new();
 
-        while iteration < self.config.max_tool_iterations {
-            iteration += 1;
+        // SIMPLE MODE: Pre-fetch relevant data based on query keywords
+        // No complex agentic loops - just get data and respond in one shot
+        let context_data = self.get_context_for_query(&msg_lower, &mut tools_used).await;
 
-            // 1. Get current conversation state
-            let (messages, long_term_context) = {
-                let memory = self.memory.read().await;
-                let messages = memory.get_session(session_id).map(|s| s.messages.clone()).unwrap_or_default();
-                let facts = memory.get_relevant_facts(user_message, self.config.max_long_term_facts);
-                let context = if facts.is_empty() {
-                    None
-                } else {
-                    Some(facts.iter().map(|f| format!("- {}", f.content)).collect::<Vec<_>>().join("\n"))
-                };
-                (messages, context)
-            };
+        log::info!("[Agent] Simple mode: fetched {} chars context, tools: {:?}", context_data.len(), tools_used);
 
-            // 2. Build current system prompt with tool context
-            let mut system_prompt = self.config.system_prompt.clone();
-            system_prompt.push_str("\n\n");
-            system_prompt.push_str(&self.tools.format_for_prompt());
+        // Build simple prompt
+        let system_prompt = self.build_simple_prompt();
 
-            let response_text = self
-                .client
-                .chat_with_context(&messages, &system_prompt, long_term_context.as_deref())
-                .await?;
+        // Get conversation history (limited)
+        let messages = {
+            let memory = self.memory.read().await;
+            memory.get_session(session_id)
+                .map(|s| s.messages.iter().rev().take(6).cloned().collect::<Vec<_>>())
+                .map(|mut v| { v.reverse(); v })
+                .unwrap_or_default()
+        };
 
-            // 3. Parse for tool calls
-            if let Some(tool_calls) = ToolCallParser::parse(&response_text) {
-                log::info!("[Agent] Model requested {} tool(s)", tool_calls.len());
-                
-                // Add assistant's tool-call message to memory (for context in next turn)
-                {
-                    let mut memory = self.memory.write().await;
-                    if let Some(session) = memory.get_session_mut(session_id) {
-                        session.add_message(ChatMessage::assistant(&response_text));
-                    }
-                }
+        // Single LLM call with data already included
+        let response_text = self
+            .client
+            .chat_with_context(&messages, &system_prompt, Some(&context_data))
+            .await?;
 
-                // Execute each tool
-                for call in tool_calls {
-                    tools_used.push(call.name.clone());
-                    log::info!("[Agent] Executing tool: {} with {:?}", call.name, call.arguments);
+        let final_content = ToolCallParser::extract_text(&response_text);
 
-                    if let Some(result) = self.tools.execute(&call.name, call.arguments).await {
-                        // Add tool response to memory
-                        let mut memory = self.memory.write().await;
-                        if let Some(session) = memory.get_session_mut(session_id) {
-                            session.add_message(ChatMessage::tool_response(&call.name, &result.content));
-                        }
-                    } else {
-                        let mut memory = self.memory.write().await;
-                        if let Some(session) = memory.get_session_mut(session_id) {
-                            session.add_message(ChatMessage::tool_response(&call.name, "Error: Tool not found"));
-                        }
-                    }
-                }
-                
-                // Continue loop to let model see tool results
-                continue;
-            } else {
-                // No more tool calls, we have the final answer
-                // Clean the text to hide any internal <thought> blocks from the user
-                final_content = ToolCallParser::extract_text(&response_text);
-                break;
-            }
-        }
-
-        // If we hit max iterations, try to extract whatever text we have or provide a fallback
-        if final_content.is_empty() {
-             final_content = "I reached my maximum reasoning limit. How else can I help?".to_string();
-        }
-
-        // Save final assistant response to session
+        // Save response
         {
             let mut memory = self.memory.write().await;
             if let Some(session) = memory.get_session_mut(session_id) {
@@ -311,13 +263,65 @@ impl CoolDeskAgent {
         })
     }
 
-    /// Quick chat without session (stateless)
-    pub async fn quick_chat(&self, message: &str) -> Result<String, String> {
-        let messages = vec![ChatMessage::user(message)];
+    /// Pre-fetch relevant data based on query keywords
+    async fn get_context_for_query(&self, query: &str, tools_used: &mut Vec<String>) -> String {
+        let mut context_parts = Vec::new();
 
-        self.client
-            .chat(&messages, &self.config.system_prompt)
-            .await
+        // Workspace suggestions
+        if query.contains("suggest") || query.contains("organize") || query.contains("recommend") {
+            if let Some(result) = self.tools.execute("suggest_workspaces", serde_json::json!({})).await {
+                tools_used.push("suggest_workspaces".to_string());
+                context_parts.push(result.content);
+            }
+        }
+        // List/show workspaces
+        else if query.contains("workspace") || query.contains("list") || query.contains("show") {
+            if let Some(result) = self.tools.execute("search_workspaces", serde_json::json!({"query": ""})).await {
+                tools_used.push("search_workspaces".to_string());
+                context_parts.push(format!("Your workspaces:\n{}", result.content));
+            }
+        }
+        // Activity queries
+        else if query.contains("activity") || query.contains("doing") || query.contains("recent") || query.contains("browse") {
+            if let Some(result) = self.tools.execute("get_recent_activity", serde_json::json!({"limit": 15})).await {
+                tools_used.push("get_recent_activity".to_string());
+                context_parts.push(result.content);
+            }
+        }
+        // Notes
+        else if query.contains("note") {
+            if let Some(result) = self.tools.execute("search_notes", serde_json::json!({"query": ""})).await {
+                tools_used.push("search_notes".to_string());
+                context_parts.push(result.content);
+            }
+        }
+        // Pinned/bookmarks
+        else if query.contains("pin") || query.contains("bookmark") || query.contains("saved") {
+            if let Some(result) = self.tools.execute("get_pinned_items", serde_json::json!({})).await {
+                tools_used.push("get_pinned_items".to_string());
+                context_parts.push(result.content);
+            }
+        }
+        // Default: workspace overview
+        else {
+            if let Some(result) = self.tools.execute("search_workspaces", serde_json::json!({"query": ""})).await {
+                tools_used.push("search_workspaces".to_string());
+                context_parts.push(format!("Your workspaces:\n{}", result.content));
+            }
+        }
+
+        context_parts.join("\n\n")
+    }
+
+    /// Build a simple prompt - no tools, just respond based on data
+    fn build_simple_prompt(&self) -> String {
+        r#"You are CoolDesk AI, a helpful desktop assistant for managing workspaces and browsing.
+
+The user's data is provided below. Based on this data:
+- Give a helpful, friendly, and concise response
+- If the data shows workspace suggestions, explain each briefly
+- If showing activity or workspaces, highlight key points
+- Be conversational and direct"#.to_string()
     }
 }
 
@@ -326,11 +330,13 @@ impl CoolDeskAgent {
 // =============================================================================
 
 /// Builder for creating agents with custom configuration
+#[allow(dead_code)]
 pub struct AgentBuilder {
     config: AgentConfig,
     memory: Option<SharedMemoryManager>,
 }
 
+#[allow(dead_code)]
 impl AgentBuilder {
     pub fn new() -> Self {
         Self {

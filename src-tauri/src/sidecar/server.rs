@@ -18,7 +18,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
 
-const PORT: u16 = 4000;
+const PORT: u16 = 4545;
 const WS_MAX_PAYLOAD: usize = 100 * 1024 * 1024; // 100MB
 
 /// Start the sidecar server

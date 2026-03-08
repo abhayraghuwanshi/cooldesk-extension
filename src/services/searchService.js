@@ -137,7 +137,7 @@ async function isSidecarAvailable() {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1000);
-    const res = await fetch('http://localhost:4000/health', { signal: controller.signal });
+    const res = await fetch('http://localhost:4545/health', { signal: controller.signal });
     clearTimeout(timeoutId);
     sidecarAvailable = res.ok;
   } catch {
@@ -316,7 +316,7 @@ async function searchAppsFromBackend(query, maxResults = 20) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1000);
     const res = await fetch(
-      `http://localhost:4000/search?q=${encodeURIComponent(query)}&limit=${maxResults}`,
+      `http://localhost:4545/search?q=${encodeURIComponent(query)}&limit=${maxResults}`,
       { signal: controller.signal }
     );
     clearTimeout(timeoutId);

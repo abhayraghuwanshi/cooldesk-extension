@@ -433,16 +433,27 @@ class SyncOrchestrator {
     }
 
     setupDbListeners() {
-        const channels = [
-            { name: 'ws_db_changes', events: ['workspacesChanged', 'pinsChanged', 'dailyMemoryChanged', 'dailyNotesChanged'] },
+        // Extension only syncs: workspaces, pins, settings, ui-state
+        // App-only: notes, url-notes, scraped-chats, scraped-configs, daily-memory, dashboard
+        const isExt = isExtension();
+
+        let channels = [
+            { name: 'ws_db_changes', events: ['workspacesChanged', 'pinsChanged'] },
             { name: 'settings_db_changes', events: ['settingsChanged'] },
-            { name: 'dashboard_db_changes', events: ['dashboardChanged'] },
-            { name: 'scraped_chats_db_changes', events: ['scrapedChatsChanged'] },
-            { name: 'scraped_configs_db_changes', events: ['scrapedConfigsChanged'] },
-            { name: 'notes_db_changes', events: ['notesChanged'] },
-            { name: 'url_notes_db_changes', events: ['urlNotesChanged'] },
             { name: 'ui_state_db_changes', events: ['uiStateChanged'] }
         ];
+
+        // App-only channels (not needed in extension)
+        if (!isExt) {
+            channels = channels.concat([
+                { name: 'ws_db_changes', events: ['dailyMemoryChanged', 'dailyNotesChanged'] },
+                { name: 'dashboard_db_changes', events: ['dashboardChanged'] },
+                { name: 'scraped_chats_db_changes', events: ['scrapedChatsChanged'] },
+                { name: 'scraped_configs_db_changes', events: ['scrapedConfigsChanged'] },
+                { name: 'notes_db_changes', events: ['notesChanged'] },
+                { name: 'url_notes_db_changes', events: ['urlNotesChanged'] }
+            ]);
+        }
 
         this.dbChannels = channels.map(({ name, events }) => {
             const bc = new BroadcastChannel(name);
@@ -460,6 +471,13 @@ class SyncOrchestrator {
         // In extension mode, check if host sync is enabled
         const shouldSync = isElectronApp() || isHostSyncEnabled();
         if (!shouldSync || this.syncInProgress || this.isApplyingRemoteUpdate) return;
+
+        // App-only sync types - skip in extension
+        const appOnlyTypes = ['dashboardChanged', 'scrapedChatsChanged', 'scrapedConfigsChanged',
+                             'notesChanged', 'urlNotesChanged', 'dailyMemoryChanged'];
+        if (isExtension() && appOnlyTypes.includes(type)) {
+            return; // Skip app-only syncs in extension
+        }
 
         // Map DB event type to sync type for consistent debounce tracking
         const syncTypeMap = {

@@ -43,6 +43,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getUrlAnalytics } from '../../db/index.js';
+import { recordFeedbackEvent, recordUrlWorkspace } from '../../services/feedbackService.js';
 import { getBaseDomainFromUrl, getFaviconUrl, safeGetHostname } from '../../utils/helpers.js';
 import { GroupedLinksPopover } from './GroupedLinksPopover.jsx';
 import { UrlAnalyticsPopover } from './UrlAnalyticsPopover.jsx';
@@ -104,8 +105,22 @@ const CATEGORY_ICONS = {
 };
 
 // Helper to open URLs - works in both extension and Electron modes
-const openUrl = (url) => {
+const openUrl = (url, workspaceName, title) => {
   if (!url) return;
+
+  // Record feedback for RAG learning (fire-and-forget)
+  recordFeedbackEvent({
+    suggestionType: 'url_to_workspace',
+    action: 'accepted',
+    suggestionContent: url,
+    contextWorkspace: workspaceName
+  }).catch(() => {});
+
+  // Also record URL-workspace association for pattern learning
+  if (workspaceName) {
+    recordUrlWorkspace(url, title || url, workspaceName).catch(() => {});
+  }
+
   // Prefer chrome.tabs.create for extensions (more reliable, no popup blocker)
   if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
     chrome.tabs.create({ url });
@@ -628,7 +643,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                       const rect = e.currentTarget.getBoundingClientRect();
                       setGroupPopoverState({ group: item, rect });
                     } else {
-                      openUrl(item.url);
+                      openUrl(item.url, name, item.title);
                     }
                   }}
                   title={isGroup ? `${item.label} (${item.urls.length}) - ${item.subLabel || item.domain}` : (item.title || formatDomainName(item.url))}
@@ -873,7 +888,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                     onClick={(e) => {
                       e.stopPropagation();
                       if (urlObj.url) {
-                        openUrl(urlObj.url);
+                        openUrl(urlObj.url, name, urlObj.title);
                       }
                     }}
                     style={{ cursor: 'pointer', position: 'relative' }}
@@ -1021,7 +1036,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (urlObj.url) openUrl(urlObj.url);
+                          if (urlObj.url) openUrl(urlObj.url, name, urlObj.title);
                         }}
                       >
                         <span className="workspace-link-icon">
@@ -1055,7 +1070,18 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                           <button
                             title="Promote to Active"
                             className="workspace-draft-action"
-                            onClick={(e) => { e.stopPropagation(); onUrlAction('promote', urlObj, workspace); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Record positive feedback for URL suggestion
+                              recordFeedbackEvent({
+                                suggestionType: 'url_to_workspace',
+                                action: 'accepted',
+                                suggestionContent: urlObj.url,
+                                contextWorkspace: name
+                              }).catch(() => {});
+                              recordUrlWorkspace(urlObj.url, urlObj.title || urlObj.url, name).catch(() => {});
+                              onUrlAction('promote', urlObj, workspace);
+                            }}
                             style={{
                               background: 'none', border: 'none', cursor: 'pointer',
                               color: 'rgba(34, 197, 94, 0.6)', fontSize: '12px', padding: '4px'
@@ -1070,7 +1096,17 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                           <button
                             title="Dismiss"
                             className="workspace-draft-action"
-                            onClick={(e) => { e.stopPropagation(); onUrlAction('dismiss', urlObj, workspace); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Record negative feedback for URL suggestion
+                              recordFeedbackEvent({
+                                suggestionType: 'url_to_workspace',
+                                action: 'rejected',
+                                suggestionContent: urlObj.url,
+                                contextWorkspace: name
+                              }).catch(() => {});
+                              onUrlAction('dismiss', urlObj, workspace);
+                            }}
                             style={{
                               background: 'none', border: 'none', cursor: 'pointer',
                               color: 'rgba(239, 68, 68, 0.6)', fontSize: '12px', padding: '4px'

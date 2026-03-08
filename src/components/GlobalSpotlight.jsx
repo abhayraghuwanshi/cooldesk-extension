@@ -3,6 +3,7 @@ import { faBriefcase, faCalculator, faChartLine, faCloud, faCode, faCog, faComme
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { storageGet, storageSet } from '../services/extensionApi';
+import { recordSearchSelection } from '../services/feedbackService';
 import * as LocalAI from '../services/localAIService';
 import { runningAppsService } from '../services/runningAppsService';
 import { isNaturalLanguageQuery, naturalLanguageSearch, quickSearch, refreshElectronCache } from '../services/searchService';
@@ -74,8 +75,17 @@ const APP_ICONS = {
     'visual studio code': faCode,
     'windowsterminal': faTerminal,
     'cmd': faTerminal,
+    'cmd.exe': faTerminal,
+    'command prompt': faTerminal,
     'powershell': faTerminal,
+    'pwsh': faTerminal,
     'terminal': faTerminal,
+    'wt': faTerminal,
+    'bash': faTerminal,
+    'mintty': faTerminal,
+    'conemu': faTerminal,
+    'alacritty': faTerminal,
+    'hyper': faTerminal,
     'github desktop': faGithub,
     // Communication
     'discord': faDiscord,
@@ -149,6 +159,9 @@ export function GlobalSpotlight() {
 
     // Track search request ID to handle race conditions
     const searchIdRef = useRef(0);
+
+    // Track when results were displayed (for response time feedback)
+    const resultsDisplayedAtRef = useRef(null);
 
     // Focus input on mount and load items
     useEffect(() => {
@@ -275,7 +288,11 @@ export function GlobalSpotlight() {
             // Browser exe names (shown as tabs instead, not apps)
             const browserNames = new Set([
                 'chrome', 'msedge', 'firefox', 'brave', 'opera', 'vivaldi', 'iexplore', 'chromium',
-                'safari', 'waterfox', 'librewolf', 'thorium'
+                'safari', 'waterfox', 'librewolf', 'thorium', 'arc', 'floorp', 'zen'
+            ]);
+            // CoolDesk app names to exclude (we are the app, don't show ourselves)
+            const coolDeskNames = new Set([
+                'cooldesk', 'cool desk', 'cool-desk', 'tauri', 'webview', 'wry'
             ]);
 
             const activeApps = enrichedRunning
@@ -292,7 +309,9 @@ export function GlobalSpotlight() {
                     if (browserNames.has(name)) return false;
 
                     // Filter the spotlight/cooldesk app itself
-                    if (name.includes('cooldesk')) return false;
+                    if (coolDeskNames.has(name)) return false;
+                    // Also check partial matches for cooldesk variants
+                    if (name.includes('cooldesk') || name.includes('cool-desk') || name.includes('tauri')) return false;
 
                     // Filter tray/background windows (invisible and not on another virtual desktop)
                     if (a.isVisible === false && (a.cloaked || 0) !== 2) return false;
@@ -323,9 +342,10 @@ export function GlobalSpotlight() {
             for (const [appName] of sortedFrequent) {
                 if (usedIds.has(appName.toLowerCase())) continue;
 
-                // Skip browsers (they're shown as tabs instead)
+                // Skip browsers (they're shown as tabs instead) and cooldesk
                 const appNameLower = appName.toLowerCase().replace(/\.exe$/i, '');
-                if (browserNames.has(appNameLower) || systemExactNames.has(appNameLower)) continue;
+                if (browserNames.has(appNameLower) || systemExactNames.has(appNameLower) || coolDeskNames.has(appNameLower)) continue;
+                if (appNameLower.includes('cooldesk') || appNameLower.includes('tauri')) continue;
 
                 // Find app in installed apps with flexible matching
                 const frequentName = appName.toLowerCase();
@@ -338,9 +358,10 @@ export function GlobalSpotlight() {
                     return false;
                 });
                 if (app) {
-                    // Skip if this app's name is a system process or browser
+                    // Skip if this app's name is a system process, browser, or cooldesk
                     const installedExe = (app.path || '').split(/[\/\\]/).pop()?.toLowerCase().replace(/\.exe$/i, '') || '';
-                    if (browserNames.has(installedExe) || systemExactNames.has(installedExe)) continue;
+                    if (browserNames.has(installedExe) || systemExactNames.has(installedExe) || coolDeskNames.has(installedExe)) continue;
+                    if (installedExe.includes('cooldesk') || installedExe.includes('tauri')) continue;
 
                     usedIds.add(appName.toLowerCase());
                     recommendations.push({
@@ -688,6 +709,7 @@ export function GlobalSpotlight() {
                 // Update UI
                 setResults(searchResults);
                 setSelectedIndex(-1);
+                resultsDisplayedAtRef.current = Date.now(); // Track for feedback response time
 
             } catch (err) {
                 console.error('[Spotlight] Search failed:', err);
@@ -897,6 +919,9 @@ export function GlobalSpotlight() {
     const handleSelect = async (item) => {
         // Close immediately for snappy feel
         handleClose();
+
+        // Record feedback for RAG (fire-and-forget, non-blocking)
+        recordSearchSelection(item, resultsDisplayedAtRef.current).catch(() => {});
 
         // For tabs, switch to the existing tab instead of opening new
         if (item.type === 'tab') {
@@ -1419,7 +1444,7 @@ const PinItem = memo(function PinItem({ pin, index, isSelected, onSelect, onHove
         >
             <div className="pin-icon">
                 {pin.type === 'app' ? (
-                    pin.icon ? (
+                    (pin.icon && pin.icon.length > 50) ? (
                         <img src={pin.icon} className="app-icon-img" alt="" onError={handleIconError} />
                     ) : (
                         <FontAwesomeIcon icon={getAppIcon(pin.name)} className="app-icon" />
@@ -1459,7 +1484,7 @@ const ContextItem = memo(function ContextItem({ item, index, isSelected, onSelec
         >
             <div className="pin-icon">
                 {isApp ? (
-                    item.icon ? (
+                    (item.icon && item.icon.length > 50) ? (
                         <img src={item.icon} className="app-icon-img" alt="" onError={handleIconError} />
                     ) : (
                         <FontAwesomeIcon icon={getAppIcon(item.name)} style={{ color: '#60a5fa' }} />
@@ -1503,7 +1528,7 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
         >
             <div className="result-icon">
                 {item.type === 'app' ? (
-                    (item.icon && !iconError) ? (
+                    (item.icon && item.icon.length > 50 && !iconError) ? (
                         <img src={item.icon} className="app-icon-img" alt="" onError={() => setIconError(true)} />
                     ) : (
                         <FontAwesomeIcon icon={getAppIcon(item.name)} className="app-icon" />
