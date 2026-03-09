@@ -7,6 +7,7 @@ use std::sync::{Arc, RwLock};
 
 mod sidecar;
 mod system;
+mod focus;
 
 use system::RunningApp;
 
@@ -78,31 +79,14 @@ async fn get_installed_apps(app: tauri::AppHandle) -> Result<serde_json::Value, 
     get_running_apps(app).await
 }
 
-#[tauri::command]
-async fn focus_window(app: tauri::AppHandle, pid: u32, name: Option<String>, hwnd: Option<i64>) -> Result<(), String> {
-    let mut command = app.shell().command("AppFocus");
+#[tauri::command(rename_all = "snake_case")]
+async fn focus_window(_app: tauri::AppHandle, pid: u32, name: Option<String>, hwnd: Option<i64>) -> Result<(), String> {
+    // Use native Rust implementation instead of shelling out to AppFocus.exe
+    let hwnd_opt = hwnd.filter(|&h| h != 0).map(|h| h as isize);
+    let name_ref = name.as_deref();
 
-    if let Some(h) = hwnd.filter(|&h| h != 0) {
-        // Precise focus: target the specific window handle
-        command = command.args(["--hwnd", &h.to_string()]);
-    } else {
-        // Fallback: focus by PID (brings first window of that process to front)
-        command = command.args([pid.to_string()]);
-        if let Some(n) = name {
-            command = command.args([n]);
-        }
-    }
-
-    let output = command
-        .output()
-        .await
-        .map_err(|e| e.to_string())?;
-        
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err("Failed to focus window".to_string())
-    }
+    focus::focus_window(hwnd_opt, Some(pid), name_ref)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

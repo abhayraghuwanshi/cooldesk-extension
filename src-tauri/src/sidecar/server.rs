@@ -8,15 +8,15 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         State,
     },
-    http::{header, Method},
+    http::{header, HeaderMap, HeaderValue, Method},
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{get, post},
     Router,
 };
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 const PORT: u16 = 4545;
 const WS_MAX_PAYLOAD: usize = 100 * 1024 * 1024; // 100MB
@@ -91,9 +91,21 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         }
     });
 
-    // CORS configuration
+    // Allowed origins for security - only our extension and Tauri webview
+    // TODO: Replace YOUR_EXTENSION_ID with your actual Chrome extension ID
+    let allowed_origins: Vec<HeaderValue> = vec![
+        "chrome-extension://kbgfibnflipndmhofhoocjjmljjkkjop".parse().unwrap(),
+        "tauri://localhost".parse().unwrap(),
+        "http://tauri.localhost".parse().unwrap(),
+        "http://localhost:5173".parse().unwrap(),  // Vite dev server
+        "http://127.0.0.1:5173".parse().unwrap(),
+        "http://localhost:1420".parse().unwrap(),  // Tauri dev
+        "http://127.0.0.1:1420".parse().unwrap(),
+    ];
+
+    // CORS configuration - restrict to allowed origins
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(allowed_origins)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE]);
 
@@ -168,13 +180,38 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
     Ok(())
 }
 
+/// Check if origin is allowed for WebSocket connections
+fn is_allowed_origin(headers: &HeaderMap) -> bool {
+    const ALLOWED_PREFIXES: &[&str] = &[
+        "chrome-extension://",
+        "tauri://",
+        "http://tauri.localhost",
+        "http://localhost:",
+        "http://127.0.0.1:",
+    ];
+
+    match headers.get("origin").and_then(|v| v.to_str().ok()) {
+        Some(origin) => ALLOWED_PREFIXES.iter().any(|prefix| origin.starts_with(prefix)),
+        None => true, // Allow requests with no Origin (internal/native calls)
+    }
+}
+
 /// WebSocket upgrade handler
 async fn ws_handler(
+    headers: HeaderMap,
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    // Check origin for WebSocket connections
+    if !is_allowed_origin(&headers) {
+        log::warn!("[Sidecar] WebSocket connection rejected - invalid origin: {:?}",
+            headers.get("origin"));
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
     ws.max_message_size(WS_MAX_PAYLOAD)
         .on_upgrade(move |socket| handle_ws_connection(socket, state))
+        .into_response()
 }
 
 /// Handle individual WebSocket connection
