@@ -275,12 +275,12 @@ export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange
       return 'translateX(0)';
     }
 
-    // Desktop app: 4 faces, each taking 20% of the 500% container
+    // Desktop app: 4 faces, each taking 25% of the 400% container
     const transforms = {
       'workspace': 'translateX(0)',
-      'tabs': 'translateX(-20%)',
-      'team': 'translateX(-40%)',
-      'notes': 'translateX(-60%)'
+      'tabs': 'translateX(-25%)',
+      'team': 'translateX(-50%)',
+      'notes': 'translateX(-75%)'
     };
     return transforms[currentFace] || transforms.workspace;
   }, [currentFace, isDesktopApp]);

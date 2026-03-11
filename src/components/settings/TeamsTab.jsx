@@ -60,10 +60,7 @@ export default function TeamsTab() {
         };
     }, []);
 
-<<<<<<< HEAD:src/components/settings/TeamsTab.jsx
     // ... [existing handlers] ...
-=======
->>>>>>> master:extension/src/components/settings/TeamsTab.jsx
     const handleCreateJoin = async (e) => {
         e.preventDefault();
         setError('');
@@ -149,7 +146,6 @@ export default function TeamsTab() {
         }
     };
 
-<<<<<<< HEAD:src/components/settings/TeamsTab.jsx
     const handleRemoveMember = (teamId, memberName) => {
         const team = teams.find(t => t.id === teamId);
         if (!team?.createdByMe) {
@@ -215,8 +211,6 @@ export default function TeamsTab() {
         URL.revokeObjectURL(url);
     };
 
-=======
->>>>>>> master:extension/src/components/settings/TeamsTab.jsx
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {/* Profile Section */}

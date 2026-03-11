@@ -1,11 +1,5 @@
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
 import { useCallback, useState } from 'react';
 import { fontFamilies } from '../../utils/fontUtils';
-=======
-
-import { fontFamilies } from '../../utils/fontUtils';
-
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
 const ThemesTab = ({
   selectedTheme,
   fontSize,
@@ -16,7 +10,6 @@ const ThemesTab = ({
   wallpaperEnabled = false,
   wallpaperUrl = 'https://source.unsplash.com/1920x1080/?nature',
   wallpaperOpacity = 0.3,
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
   wallpaperAutoRotate = false,
   onWallpaperEnabledChange = () => { },
   onWallpaperUrlChange = () => { },
@@ -75,12 +68,6 @@ const ThemesTab = ({
       setUnsplashLoading(false);
     }
   }, [unsplashApiKey]);
-=======
-  onWallpaperEnabledChange = () => { },
-  onWallpaperUrlChange = () => { },
-  onWallpaperOpacityChange = () => { }
-}) => {
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
 
 
 
@@ -234,130 +221,76 @@ const ThemesTab = ({
 
 
 
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
   // Curated 4K high-quality wallpapers for the application
-=======
-  // Curated high-quality wallpapers for the application
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
   const curatedWallpapers = [
     {
       id: 1,
       name: 'Mountain Sunset',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'nature'
     },
     {
       id: 2,
       name: 'Ocean Waves',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'nature'
     },
     {
       id: 3,
       name: 'Northern Lights',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'nature'
     },
     {
       id: 4,
       name: 'Starry Night',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'space'
     },
     {
       id: 5,
       name: 'Abstract Gradient',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'abstract'
     },
     {
       id: 6,
       name: 'Minimal Desk',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'minimal'
     },
     {
       id: 7,
       name: 'Forest Path',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'nature'
     },
     {
       id: 8,
       name: 'City Lights',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'urban'
     },
     {
       id: 9,
       name: 'Desert Dunes',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'nature'
     },
     {
       id: 10,
       name: 'Cosmic Nebula',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
       url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=3840&q=90&fm=jpg',
       thumbnail: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=400&q=80',
-=======
-      url: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1920&q=80',
-      thumbnail: 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=300&q=80',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
       category: 'space'
     }
   ];
@@ -815,11 +748,7 @@ const ThemesTab = ({
                 color: '#e5e7eb',
                 fontWeight: '500',
                 marginBottom: '12px',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
                 fontSize: 'var(--font-base)'
-=======
-                fontSize: '14px'
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
               }}>
                 Choose a Wallpaper
               </label>
@@ -870,11 +799,7 @@ const ThemesTab = ({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
                         fontSize: 'var(--font-sm)',
-=======
-                        fontSize: '12px',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
                         color: '#fff'
                       }}>
                         ✓
@@ -887,11 +812,7 @@ const ThemesTab = ({
                       right: 0,
                       background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
                       padding: '6px 8px',
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
                       fontSize: 'var(--font-xs)',
-=======
-                      fontSize: '10px',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
                       color: '#fff',
                       fontWeight: '500'
                     }}>
@@ -901,11 +822,7 @@ const ThemesTab = ({
                 ))}
               </div>
               <div style={{
-<<<<<<< HEAD:src/components/settings/ThemesTab.jsx
                 fontSize: 'var(--font-xs)',
-=======
-                fontSize: '11px',
->>>>>>> master:extension/src/components/settings/ThemesTab.jsx
                 color: 'rgba(255, 255, 255, 0.4)',
                 marginTop: '6px'
               }}>

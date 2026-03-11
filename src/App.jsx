@@ -5,12 +5,7 @@ import { initChromePolyfill } from './services/chromePolyfill';
 initChromePolyfill();
 
 import './App.css'; // MUST BE LAST to override theme backgrounds
-<<<<<<< HEAD:src/App.jsx
 import './components/onboarding/OnboardingTour.css'; // Preload onboarding styles
-=======
-import { CoolDeskContainer } from './components/cooldesk/CoolDeskContainer';
-import { SettingsModal } from './components/popups/SettingsModal';
->>>>>>> master:extension/src/App.jsx
 import './search.css';
 import './styles/bento-layout.css';
 import './styles/components.css';
@@ -31,7 +26,7 @@ import { hasRuntime, onMessage, sendMessage, storageGet, storageRemove, storageS
 import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
 import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import GenericUrlParser from './utils/GenericUrlParser';
-import { getFaviconUrl, safeGetHostname } from './utils/helpers';
+import { getFaviconUrl } from './utils/helpers';
 import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
 
 library.add(
@@ -51,21 +46,6 @@ library.add(
 const SettingsModal = React.lazy(() => import('./components/popups/SettingsModal').then(module => ({ default: module.SettingsModal })));
 const OnboardingTour = React.lazy(() => import('./components/onboarding/OnboardingTour').then(module => ({ default: module.OnboardingTour })));
 
-<<<<<<< HEAD:src/App.jsx
-=======
-import { OnboardingTour } from './components/onboarding/OnboardingTour';
-import categoryManager from './data/categories';
-import { addUrlToWorkspace, getSettings as getSettingsDB, getUIState, listWorkspaces, saveSettings as saveSettingsDB, saveUIState, saveWorkspace, subscribeWorkspaceChanges } from './db/index.js';
-import { useDashboardData } from './hooks/useDashboardData';
-import { useOnboarding } from './hooks/useOnboarding';
-import { getHostDashboard, getHostSettings, getProcesses, hasRuntime, onMessage, sendMessage, setHostSettings, setHostTabs, storageGet, storageRemove, storageSet, tabs } from './services/extensionApi';
-import { p2pSyncService } from './services/p2p/syncService';
-import { createSharedWorkspaceClient } from './services/sharedWorkspaceService.js';
-import { getFaviconUrl } from './utils';
-import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
-import GenericUrlParser from './utils/GenericUrlParser';
-import './utils/realTimeCategorizor'; // Auto-enables real-time categorization@
->>>>>>> master:extension/src/App.jsx
 
 // Simple error boundary to prevent entire app crash due to child errors
 class ErrorBoundary extends React.Component {
@@ -121,12 +101,9 @@ export default function App() {
   // Use Onboarding Hook
   const { shouldShowOnboarding, completeOnboarding, skipOnboarding, startOnboarding } = useOnboarding();
 
-<<<<<<< HEAD:src/App.jsx
   // Sync hook for Electron ↔ Extension synchronization
   const { syncStatus, syncWorkspaces, isElectron, environment } = useSync();
 
-=======
->>>>>>> master:extension/src/App.jsx
   const [savedWorkspaces, setSavedWorkspaces] = useState([])
   const [activeTab, setActiveTab] = useState('workspace') // 'workspace' | 'saved'
   const [activeSection, setActiveSection] = useState(0) // Index for ActivityPanel sections
@@ -833,60 +810,6 @@ export default function App() {
   }, []);
 
 
-<<<<<<< HEAD:src/App.jsx
-=======
-    const pushTabs = async () => {
-      try {
-        const res = await tabs.query({});
-        if (!disposed && res?.ok && Array.isArray(res.tabs)) {
-          await setHostTabs(res.tabs);
-        }
-      } catch { /* noop */ }
-    };
-
-    // Initial push
-    pushTabs();
-
-    // Periodic sync
-    const interval = setInterval(pushTabs, 15000);
-
-    // Event-driven sync
-    const handlers = [];
-    try {
-      if (chrome.tabs?.onCreated?.addListener) {
-        const h = () => pushTabs();
-        chrome.tabs.onCreated.addListener(h); handlers.push(['onCreated', h]);
-      }
-      if (chrome.tabs?.onUpdated?.addListener) {
-        const h = () => pushTabs();
-        chrome.tabs.onUpdated.addListener(h); handlers.push(['onUpdated', h]);
-      }
-      if (chrome.tabs?.onRemoved?.addListener) {
-        const h = () => pushTabs();
-        chrome.tabs.onRemoved.addListener(h); handlers.push(['onRemoved', h]);
-      }
-      if (chrome.tabs?.onActivated?.addListener) {
-        const h = () => pushTabs();
-        chrome.tabs.onActivated.addListener(h); handlers.push(['onActivated', h]);
-      }
-    } catch { }
-
-    return () => {
-      disposed = true;
-      clearInterval(interval);
-      handlers.forEach(([evt, h]) => {
-        try { chrome.tabs?.[evt]?.removeListener(h); } catch { }
-      });
-    };
-  }, []);
-
-  // Initialize P2P Sync Service
-  useEffect(() => {
-    p2pSyncService.init().catch(err => {
-      console.warn('Failed to initialize P2P Sync:', err);
-    });
-  }, []);
->>>>>>> master:extension/src/App.jsx
 
   // Prefill search from URL (?q=...) when opened in side panel or new tab
   useEffect(() => {
@@ -1507,7 +1430,6 @@ export default function App() {
         wallpaperOpacity={wallpaperOpacity}
         pinnedWorkspaces={pinnedWorkspaces}
         onTogglePin={togglePinWorkspace}
-<<<<<<< HEAD:src/App.jsx
         // Note: passing all state/handlers
         workspace={workspace}
         setWorkspace={setWorkspace}
@@ -1516,13 +1438,6 @@ export default function App() {
         setSearch={setSearch}
         focusSearchTick={focusSearchTick}
         setFocusSearchTick={setFocusSearchTick}
-=======
-      />
-
-      <SettingsModal
-        show={showSettings}
-        onClose={() => setShowSettings(false)}
->>>>>>> master:extension/src/App.jsx
         settings={settings}
         setSettings={setSettings}
         showCreateWorkspace={showCreateWorkspace}
