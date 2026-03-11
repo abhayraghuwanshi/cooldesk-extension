@@ -3,9 +3,16 @@
 ## Single Purpose
 CoolDesk is a **productivity enhancement extension** that captures and organizes web content for daily note-taking and workspace management. The extension serves one primary function: to help users collect, categorize, and manage information from their browsing sessions in an organized workspace environment.
 
-##
-# I have already recompiled the scanner for you using the following command:
-C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:exe /out:AppScanner.exe AppScanner.cs /r:System.Drawing.dll /unsafe
+## Building Sidecar Executables
+
+The C# helper script is in `scripts/`. To recompile:
+
+```bash
+# AppScanner (scans installed apps - uses Win32 SHGetFileInfo for icons)
+C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe /target:exe /out:src-tauri\bin\AppScanner-x86_64-pc-windows-msvc.exe scripts\AppScanner.cs /r:System.Drawing.dll /unsafe
+```
+
+Note: Window focusing (AppFocus, BrowserFocus) is now handled by the native Rust module in `src-tauri/src/focus.rs` with cross-platform support (Windows, macOS, Linux).
 
 
 ## Core Functionality
