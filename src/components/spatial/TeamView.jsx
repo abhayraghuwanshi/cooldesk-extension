@@ -11,8 +11,6 @@ import { ManageMembersModal } from '../popups/ManageMembersModal';
 import { PendingRequestsModal } from '../popups/PendingRequestsModal';
 import { ReadNoteModal } from '../popups/ReadNoteModal';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
-import NoticeBoard from './NoticeBoard';
-import TeamContextPanel from './TeamContextPanel';
 
 import { userProfileService } from '../../services/p2p/userProfileService';
 
@@ -966,7 +964,7 @@ const TeamView = React.memo(function TeamView({ team: propTeam }) {
                                     })()}
                                 </div>
                             </div>
-                        </div>
+                        </div >
                     </>
                 )}
                 {/* Share Modal */}
@@ -1008,8 +1006,8 @@ const TeamView = React.memo(function TeamView({ team: propTeam }) {
                         setPendingRequests(prev => prev.filter(r => r.id !== requestId));
                     }}
                 />
-            </div>
-        </div>
+            </div >
+        </div >
     );
 });
 

@@ -1,0 +1,266 @@
+import { faComments, faFolder, faHome, faStickyNote, faTh, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useCallback, useEffect, useState } from 'react';
+import { teamManager } from '../../services/p2p/teamManager';
+import '../../styles/spatial.css';
+
+/**
+ * WorkspaceShell - Spatial container for workspace faces (cube metaphor)
+ *
+ * Manages navigation between:
+ * - Chat (far left) - AI context and conversation
+ * - Workspace (left) - workspace details and management
+ * - Overview (center) - main workspace grid
+ * - Tabs (right) - tab management
+ * - Team (further right) - P2P shared items
+ * - Notes (far right) - deep focus writing
+ */
+export function WorkspaceShell({ children, activeFace = 'overview', onFaceChange, onSearch }) {
+  const [currentFace, setCurrentFace] = useState(() => {
+    // Try to recover state from localStorage
+    const savedFace = localStorage.getItem('cooldesk-active-face');
+    return savedFace || activeFace;
+  });
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [activeTeam, setActiveTeam] = useState(null);
+
+  // Load active team on mount
+  useEffect(() => {
+    teamManager.init().then(() => {
+      const team = teamManager.getTeam(teamManager.activeTeamId);
+      if (team) setActiveTeam(team);
+    });
+
+    return teamManager.subscribe(({ activeTeamId, teams }) => {
+      const team = teams.find(t => t.id === activeTeamId);
+      setActiveTeam(team || null);
+    });
+  }, []);
+
+  // Persist state to localStorage
+  useEffect(() => {
+    localStorage.setItem('cooldesk-active-face', currentFace);
+  }, [currentFace]);
+
+  // Update when parent changes active face (only if strictly different and not just initial mount)
+  useEffect(() => {
+    if (activeFace && activeFace !== 'overview') {
+      setCurrentFace(activeFace);
+    }
+  }, [activeFace]);
+
+  // Navigate to a specific face
+  const navigateToFace = useCallback((face) => {
+    if (face === currentFace || isTransitioning) return;
+
+    setIsTransitioning(true);
+    setCurrentFace(face);
+
+    // Notify parent
+    if (onFaceChange) {
+      onFaceChange(face);
+    }
+
+    // Reset transition lock after animation completes
+    setTimeout(() => {
+      setIsTransitioning(false);
+    }, 360); // Match CSS transition duration
+  }, [currentFace, isTransitioning, onFaceChange]);
+
+  // Keyboard navigation (supports both Ctrl for Windows and Cmd for Mac)
+  useEffect(() => {
+    const handleKeyboard = (e) => {
+      // Check for modifier key (Ctrl on Windows/Linux, Cmd on Mac)
+      const modifierPressed = e.ctrlKey || e.metaKey;
+
+      // Arrow keys with modifier
+      if (modifierPressed && (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+
+        switch (e.key) {
+          case 'ArrowLeft':
+            // Navigate left through faces
+            if (currentFace === 'overview') navigateToFace('workspace');
+            else if (currentFace === 'workspace') navigateToFace('chat');
+            else if (currentFace === 'tabs') navigateToFace('overview');
+            else if (currentFace === 'team') navigateToFace('tabs');
+            else if (currentFace === 'notes') navigateToFace('team');
+            break;
+          case 'ArrowRight':
+            // Navigate right through faces
+            if (currentFace === 'overview') navigateToFace('tabs');
+            else if (currentFace === 'tabs') navigateToFace('team');
+            else if (currentFace === 'team') navigateToFace('notes');
+            else if (currentFace === 'workspace') navigateToFace('overview');
+            else if (currentFace === 'chat') navigateToFace('workspace');
+            break;
+          case 'ArrowDown':
+          case 'ArrowUp':
+            navigateToFace('overview');
+            break;
+          default:
+            break;
+        }
+      }
+
+      // Number keys with modifier (1-6 for direct navigation)
+      if (modifierPressed && ['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+        e.preventDefault();
+        const faceMap = {
+          '1': 'chat',
+          '2': 'workspace',
+          '3': 'overview',
+          '4': 'tabs',
+          '5': 'team',
+          '6': 'notes'
+        };
+        navigateToFace(faceMap[e.key]);
+      }
+
+      // Escape key
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        navigateToFace('overview');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyboard);
+    return () => window.removeEventListener('keydown', handleKeyboard);
+  }, [navigateToFace, currentFace]);
+
+  // Horizontal scroll navigation
+  useEffect(() => {
+    let scrollTimeout;
+    let scrollDelta = 0;
+
+    const handleWheel = (e) => {
+      if (!e.shiftKey && Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
+
+      e.preventDefault();
+      scrollDelta += e.shiftKey ? e.deltaY : e.deltaX;
+      clearTimeout(scrollTimeout);
+
+      scrollTimeout = setTimeout(() => {
+        const threshold = 50;
+
+        if (scrollDelta > threshold) {
+          // Scroll right
+          if (currentFace === 'chat') navigateToFace('workspace');
+          else if (currentFace === 'workspace') navigateToFace('overview');
+          else if (currentFace === 'overview') navigateToFace('tabs');
+          else if (currentFace === 'tabs') navigateToFace('team');
+          else if (currentFace === 'team') navigateToFace('notes');
+        } else if (scrollDelta < -threshold) {
+          // Scroll left
+          if (currentFace === 'notes') navigateToFace('team');
+          else if (currentFace === 'team') navigateToFace('tabs');
+          else if (currentFace === 'tabs') navigateToFace('overview');
+          else if (currentFace === 'overview') navigateToFace('workspace');
+          else if (currentFace === 'workspace') navigateToFace('chat');
+        }
+
+        scrollDelta = 0;
+      }, 100);
+    };
+
+    const container = document.querySelector('.workspace-shell');
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+    }
+
+    return () => {
+      clearTimeout(scrollTimeout);
+      if (container) {
+        container.removeEventListener('wheel', handleWheel);
+      }
+    };
+  }, [navigateToFace, currentFace]);
+
+  // Transform for 6 faces: 0, -16.66, -33.33, -50, -66.66, -83.33
+  const getTransform = () => {
+    switch (currentFace) {
+      case 'chat': return 'translateX(0)';
+      case 'workspace': return 'translateX(-16.666667%)';
+      case 'overview': return 'translateX(-33.333333%)';
+      case 'tabs': return 'translateX(-50%)';
+      case 'team': return 'translateX(-66.666667%)';
+      case 'notes': return 'translateX(-83.333333%)';
+      default: return 'translateX(-33.333333%)';
+    }
+  };
+
+  return (
+    <div className="workspace-shell">
+      {/* Global Search Bar */}
+      {/* Global Search Bar - REPLACED by merged header in CoolDeskContainer */}
+      {/* <div style={{ padding: '0 24px 16px 24px', flexShrink: 0, zIndex: 101 }}>
+        <CoolSearch onSearch={onSearch} />
+      </div> */}
+
+      {/* Face indicator dots */}
+      <div className="face-indicator">
+        <button className={`face-dot ${currentFace === 'chat' ? 'active' : ''}`} onClick={() => navigateToFace('chat')} title="Chat (Ctrl + 1)"><FontAwesomeIcon icon={faComments} className="face-icon" /></button>
+        <button className={`face-dot ${currentFace === 'workspace' ? 'active' : ''}`} onClick={() => navigateToFace('workspace')} title="Workspace (Ctrl + 2)"><FontAwesomeIcon icon={faFolder} className="face-icon" /></button>
+        <button className={`face-dot ${currentFace === 'overview' ? 'active' : ''}`} onClick={() => navigateToFace('overview')} title="Overview (Ctrl + 3)"><FontAwesomeIcon icon={faHome} className="face-icon" /></button>
+        <button className={`face-dot ${currentFace === 'tabs' ? 'active' : ''}`} onClick={() => navigateToFace('tabs')} title="Tabs (Ctrl + 4)"><FontAwesomeIcon icon={faTh} className="face-icon" /></button>
+        <button className={`face-dot ${currentFace === 'team' ? 'active' : ''}`} onClick={() => navigateToFace('team')} title="Team (Ctrl + 5)"><FontAwesomeIcon icon={faUsers} className="face-icon" /></button>
+        <button className={`face-dot ${currentFace === 'notes' ? 'active' : ''}`} onClick={() => navigateToFace('notes')} title="Notes (Ctrl + 6)"><FontAwesomeIcon icon={faStickyNote} className="face-icon" /></button>
+      </div>
+
+      {/* Sliding container */}
+      <div className={`workspace-faces ${isTransitioning ? 'transitioning' : ''}`} style={{ transform: getTransform() }}>
+        {/* We assume 'children' are passed in a specific order or we construct them here if they are static faces */}
+        {/* But wait, 'children' was used before. Let's see how App.jsx passes them. */}
+        {/* Assuming children contains the 3 existing faces: Chat, Workspace, Overview. Notes was hardcoded? No, notes logic was missing in view? */}
+        {/* Actually, let's look at how children are rendered. Using <Face> components? */}
+        {/* The original code just rendered {children}. */}
+        {/* We need to inject the TeamView component into the children or as a new Face */}
+        {/* If children is an array, we can insert into it. */}
+
+        {/* But simply rendering {children} implies the parent (App.jsx) controls the content. */}
+        {/* I should check App.jsx again to see what it passes to WorkspaceShell. */}
+
+        {/* HOWEVER, for now I will render {children} AND my new faces? */}
+        {/* No, standard pattern is to update App.jsx to pass the new face. */}
+        {/* But I can also inject it here if I want to encapsulate it. */}
+
+        {/* Best practice: Update App.jsx to pass the TeamView face. */}
+        {/* BUT I will try to support it here to minimize App.jsx edits if possible. */}
+
+        {/* Let's render children, but ensure we have slots for our new faces? */}
+        {/* If I change App.jsx, I have to be careful. */}
+
+        {children}
+        {/* I'll need to modify App.jsx to include TeamView in the children list */}
+      </div>
+
+      {currentFace === 'overview' && <KeyboardHint />}
+    </div>
+  );
+}
+
+function KeyboardHint() {
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem('cooldesk-spatial-hint-dismissed') === 'true');
+  if (dismissed) return null;
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const modifierKey = isMac ? 'Cmd' : 'Ctrl';
+  return (
+    <div className="keyboard-hint" onClick={() => { localStorage.setItem('cooldesk-spatial-hint-dismissed', 'true'); setDismissed(true); }}>
+      <div className="hint-content">
+        <div className="hint-title">💡 Spatial Navigation</div>
+        <div className="hint-shortcuts">
+          <div style={{ marginBottom: 4 }}>Ctrl + 1-6 to switch views</div>
+          <div>Swipe/Scroll to navigate</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function Face({ index, children, className = '' }) {
+  return (
+    <div className={`workspace-face ${className}`} data-face={index}>
+      {children}
+    </div>
+  );
+}

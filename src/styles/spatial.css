@@ -38,8 +38,8 @@
 }
 
 .workspace-face {
-  flex: 0 0 20%;
-  width: 20%;
+  flex: 0 0 16.666667%;
+  width: 16.666667%;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
