@@ -1,0 +1,542 @@
+/* Performance optimizations */
+.tiptap-editor-container *,
+.tiptap-editor-container *::before,
+.tiptap-editor-container *::after {
+    /* Use GPU acceleration for transforms */
+    will-change: auto;
+}
+
+/* Optimize transitions - only animate specific properties */
+.tiptap-editor-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    /* Font smoothing for premium feel */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Contain layout calculations */
+    contain: layout style;
+}
+
+/* Main Content Area */
+.tiptap-content {
+    flex: 1;
+    overflow-y: auto;
+    outline: none;
+    padding: 0 4px 40px 4px;
+    /* Space for scrolling */
+    /* Optimize scrolling performance */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ProseMirror Core Styles */
+.ProseMirror {
+    outline: none !important;
+    min-height: 100%;
+    padding: 1rem 2rem;
+    /* More horizontal breathing room like Notion */
+    color: var(--text);
+    font-size: var(--font-xl, 16px);
+    /* Slightly larger text */
+    line-height: 1.8;
+    /* More comfortable reading */
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+    color: var(--text-muted);
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    font-style: normal;
+    font-weight: 400;
+    opacity: 0.4;
+}
+
+/* Heading Styles */
+.ProseMirror h1 {
+    font-size: 2.2em;
+    font-weight: 700;
+    margin-top: 2rem;
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
+    color: var(--text);
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.ProseMirror h1:hover {
+    border-color: var(--border-secondary);
+    /* Subtle interaction */
+}
+
+.ProseMirror h2 {
+    font-size: 1.5em;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 0.8rem;
+    color: var(--text);
+    /* Add subtle underline */
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border-secondary);
+}
+
+.ProseMirror h3 {
+    font-size: 1.25em;
+    font-weight: 600;
+    margin-top: 1.2rem;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+}
+
+/* Lists */
+.ProseMirror ul:not([data-type="taskList"]),
+.ProseMirror ol {
+    padding: 0 1.5rem;
+    margin: 0.5rem 0 0.8rem 0;
+}
+
+.ProseMirror ul:not([data-type="taskList"]) li {
+    list-style-type: disc;
+    margin-bottom: 0.4rem;
+    padding-left: 0.2rem;
+    /* Proper bullet spacing */
+}
+
+/* Custom bullet color */
+.ProseMirror ul:not([data-type="taskList"]) li::marker {
+    color: var(--accent-blue);
+}
+
+.ProseMirror ol li {
+    list-style-type: decimal;
+    margin-bottom: 0.4rem;
+    padding-left: 0.2rem;
+}
+
+/* Task Lists (Checkboxes) - Aggressive Reset for Tailwind/Prose */
+ul[data-type="taskList"],
+.ProseMirror ul[data-type="taskList"] {
+    list-style: none !important;
+    list-style-type: none !important;
+    padding: 0 !important;
+    padding-left: 0 !important;
+    margin: 0.5rem 0 !important;
+    margin-left: 0 !important;
+}
+
+/* Hide bullet marker on task list items */
+ul[data-type="taskList"] li::marker,
+.ProseMirror ul[data-type="taskList"] li::marker {
+    content: none !important;
+    display: none !important;
+}
+
+/* Task Items - Flexbox Layout for checkbox + text on same line */
+/* Target li elements inside taskList (they have data-checked attribute) */
+ul[data-type="taskList"]>li,
+.ProseMirror ul[data-type="taskList"]>li {
+    list-style: none !important;
+    list-style-type: none !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    margin-bottom: 0.4rem !important;
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+}
+
+/* Label wrapping the checkbox */
+ul[data-type="taskList"]>li>label {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    margin-top: 0.2rem;
+    width: 20px;
+    height: 20px;
+}
+
+/* Checkbox styling */
+ul[data-type="taskList"] li input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 18px !important;
+    height: 18px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+
+    /* Visual Styles */
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    cursor: pointer !important;
+    border: 2px solid var(--text-muted, #64748B) !important;
+    border-radius: 4px !important;
+    background-color: var(--surface-2, #1e1e1e) !important;
+    position: relative !important;
+    display: inline-block !important;
+    vertical-align: middle !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    pointer-events: auto !important;
+}
+
+ul[data-type="taskList"] li input[type="checkbox"]:hover {
+    border-color: var(--accent-primary, #8B5CF6) !important;
+    background-color: rgba(139, 92, 246, 0.15) !important;
+}
+
+ul[data-type="taskList"] li input[type="checkbox"]:checked {
+    background-color: var(--accent-primary, #8B5CF6) !important;
+    border-color: var(--accent-primary, #8B5CF6) !important;
+}
+
+ul[data-type="taskList"] li input[type="checkbox"]:checked::after {
+    content: '' !important;
+    position: absolute !important;
+    width: 5px !important;
+    height: 9px !important;
+    border: solid white !important;
+    border-width: 0 2px 2px 0 !important;
+    transform: rotate(45deg) !important;
+    top: 1px !important;
+    left: 5px !important;
+    display: block !important;
+}
+
+/* Content div - text area next to checkbox */
+ul[data-type="taskList"]>li>div {
+    flex: 1;
+    min-width: 0;
+}
+
+ul[data-type="taskList"]>li>div p {
+    margin: 0 !important;
+    line-height: 1.6;
+}
+
+
+
+/* Link Styles */
+.ProseMirror a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.ProseMirror a:hover {
+    border-bottom-color: var(--accent-blue);
+}
+
+/* Code Blocks */
+.ProseMirror pre {
+    background: rgba(0, 0, 0, 0.85);
+    /* Deep black with slight transparency */
+    backdrop-filter: blur(8px);
+    /* Blur for wallpaper depth */
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.85em;
+    color: #e5e5e5;
+    /* Light grey/white for text */
+    overflow-x: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    line-height: 1.6;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.ProseMirror pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+}
+
+
+/* Images */
+.ProseMirror img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    margin: 1rem 0;
+    transition: transform 0.2s ease;
+}
+
+.ProseMirror img.ProseMirror-selectednode {
+    outline: 2px solid var(--accent-blue);
+}
+
+/* Inline Code */
+.ProseMirror code {
+    background: rgba(235, 87, 87, 0.1);
+    /* Subtle red tint like Notion */
+    color: #EB5757;
+    border-radius: 4px;
+    padding: 0.2rem 0.4rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+}
+
+/* Blockquotes */
+.ProseMirror blockquote {
+    border-left: 3px solid var(--text);
+    margin: 1rem 0;
+    padding-left: 1rem;
+    font-style: italic;
+    color: var(--text-secondary);
+}
+
+/* Horizontal Rule */
+.ProseMirror hr {
+    border: none;
+    border-top: 1px solid var(--border-secondary);
+    margin: 1.5rem 0;
+}
+
+/* Table Styles */
+.ProseMirror table {
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    overflow: hidden;
+    table-layout: auto;
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid var(--border-primary);
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 14px;
+}
+
+.ProseMirror td,
+.ProseMirror th {
+    border: 1px solid var(--border-secondary);
+    box-sizing: border-box;
+    min-width: 80px;
+    padding: 12px 16px;
+    position: relative;
+    vertical-align: middle;
+    line-height: 1.5;
+}
+
+.ProseMirror td>*,
+.ProseMirror th>* {
+    margin-bottom: 0;
+}
+
+.ProseMirror th {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+    font-weight: 600;
+    text-align: left;
+    color: var(--text);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 14px 16px;
+}
+
+.ProseMirror td {
+    background-color: transparent;
+}
+
+/* Alternating row colors for better readability */
+.ProseMirror tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.ProseMirror tbody tr:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Selected cell */
+.ProseMirror .selectedCell:after {
+    background: rgba(59, 130, 246, 0.15);
+    content: "";
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: 2;
+}
+
+/* Column resize handle */
+.ProseMirror .column-resize-handle {
+    background-color: var(--accent-blue);
+    bottom: -2px;
+    pointer-events: none;
+    position: absolute;
+    right: -2px;
+    top: 0;
+    width: 4px;
+}
+
+/* Table wrapper for resize */
+.ProseMirror .tableWrapper {
+    margin: 1.5rem 0;
+    overflow-x: auto;
+    border-radius: 12px;
+}
+
+/* Resize cursor */
+.ProseMirror.resize-cursor {
+    cursor: ew-resize;
+    cursor: col-resize;
+}
+
+/* Daily Story specific styles */
+.ProseMirror .daily-story {
+    max-width: 100%;
+}
+
+.ProseMirror .daily-story h1 {
+    font-size: 1.8em;
+    margin-bottom: 0.3rem;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.ProseMirror .daily-story h2 {
+    font-size: 1.2em;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.ProseMirror .daily-story hr {
+    margin: 1.5rem 0;
+    border-top: 1px solid var(--border-secondary);
+}
+
+.ProseMirror .daily-story blockquote {
+    background: rgba(139, 92, 246, 0.08);
+    border-left: 4px solid var(--accent-primary, #8B5CF6);
+    padding: 1rem 1.5rem;
+    margin: 1rem 0;
+    border-radius: 0 8px 8px 0;
+    font-style: normal;
+    color: var(--text);
+    line-height: 1.7;
+}
+
+.ProseMirror .daily-story blockquote p {
+    margin: 0;
+}
+
+.ProseMirror .daily-story ul {
+    padding-left: 1.5rem;
+}
+
+.ProseMirror .daily-story li {
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}
+
+.ProseMirror .daily-story small {
+    color: var(--text-muted);
+}
+
+.ProseMirror .daily-story a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.ProseMirror .daily-story a:hover {
+    text-decoration: underline;
+}
+
+/* Floating & Bubble Menus */
+.tiptap-floating-menu,
+.tiptap-bubble-menu {
+    display: flex;
+    align-items: center;
+    background: rgba(20, 20, 25, 0.85);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    gap: 4px;
+    animation: menuFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 50;
+    font-family: 'Inter', sans-serif;
+}
+
+.tiptap-floating-menu button,
+.tiptap-bubble-menu button {
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+}
+
+.tiptap-floating-menu button:hover,
+.tiptap-bubble-menu button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.tiptap-floating-menu button:active,
+.tiptap-bubble-menu button:active {
+    transform: translateY(0);
+}
+
+.tiptap-floating-menu button.is-active,
+.tiptap-bubble-menu button.is-active {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.tiptap-floating-menu .divider,
+.tiptap-bubble-menu .divider {
+    width: 1px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 0 4px;
+    border-radius: 1px;
+}
+
+.tiptap-floating-menu button svg,
+.tiptap-bubble-menu button svg {
+    font-size: 14px;
+}
+
+@keyframes menuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}

@@ -1,12 +1,38 @@
-.vscode
-node_modules/
-dist/
+# Logs
+logs
 *.log
 npm-debug.log*
-pnpm-lock.yaml
-yarn.lock
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+release
+dist-electron
+dist-tauri
+node_modules
+dist
+dist-ssr
+*.local
 
-# Extension subproject
-extension/node_modules/
-extension/dist/
-extension/.vite/
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/capabilities/
+src-tauri/Wix/
+
+# Sidecar Data & Models
+sync-data/
+*.gguf
+sidecar/models/
+sync-data/

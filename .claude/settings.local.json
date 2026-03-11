@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(dir /s /b \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\")",
+      "Bash(findstr:*)",
+      "Bash(node --check:*)",
+      "Bash(du -sh \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\src\":*)",
+      "Bash(tree:*)",
+      "Bash(C:WindowsMicrosoft.NETFramework64v4.0.30319csc.exe /nologo /optimize /out:\"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe\" \"c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.cs\")",
+      "Bash(cmd /c \"dir c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe\")",
+      "Bash(cmd /c \"if exist c:\\\\Users\\\\raghu\\\\CascadeProjects\\\\windsurf-project\\\\extension\\\\AppScanner.exe \\(echo EXISTS\\) else \\(echo NOT FOUND\\)\")",
+      "Bash(grep:*)",
+      "Bash(cargo check:*)",
+      "Bash(./AppScanner.exe)",
+      "Bash(ping:*)",
+      "Bash(curl:*)",
+      "Bash(npm run tauri:*)",
+      "Bash(npx eslint:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(cmd /c \"dir c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\*.json\")",
+      "Bash(cmd /c \"c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\AppScanner.exe 2>c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\scanner_debug.txt 1>c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\scanner_output.json\")",
+      "Bash(cmd /c \"c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\AppScanner.exe --debug 2>c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\win_debug.txt && type c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\win_debug.txt | findstr /i Visible | findstr /i True\")",
+      "Bash(cmd /c \"c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\AppScanner.exe --debug 2>&1 | findstr /i \"\"Desktop DBeaver Chrome Canva Virtual\"\"\")",
+      "Bash(cmd /c \"type c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\debug_output.txt | findstr /i \"\"VirtualDesktop DBeaver Chrome Canva Desktop\"\"\")",
+      "Bash(cmd /c 'c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\AppScanner_test.exe --debug 2>&1 | findstr /C:\"\"[VirtualDesktop]\"\" | head -10')",
+      "Bash(python3:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "c:\\Users\\raghu\\projects\\extension\\src-tauri\\src"
+    ]
+  }
+}

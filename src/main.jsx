@@ -1,0 +1,16 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+
+import './electron-shim'; // Load Tauri/Electron Shim
+import { initChromePolyfill } from './services/chromePolyfill';
+
+// Initialize Polyfill for Electron
+initChromePolyfill();
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)

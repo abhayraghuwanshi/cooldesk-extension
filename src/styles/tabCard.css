@@ -1,0 +1,483 @@
+/* TabCard.css - Spatial tab cards following WorkspaceCard design pattern */
+
+/* ========== TabCard ========== */
+
+
+.cooldesk-tab-card {
+  background: var(--glass-bg, rgba(30, 41, 59, 0.6));
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  /* overflow: hidden; Removed to allow badges to hang out */
+  min-height: 72px;
+  /* Reduced specific height */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* Center content vertically */
+}
+
+.cooldesk-tab-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+      transparent,
+      var(--border-color, rgba(255, 255, 255, 0.3)) 50%,
+      transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.cooldesk-tab-card:hover {
+  transform: translateY(-2px);
+  /* Subtle lift */
+  background: var(--interactive-bg, rgba(30, 41, 59, 0.8));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  border-color: var(--border-hover, rgba(255, 255, 255, 0.2));
+  z-index: 10;
+}
+
+.cooldesk-tab-card:hover::before {
+  opacity: 1;
+}
+
+.cooldesk-tab-card.active {
+  background: var(--active-item-bg, rgba(255, 255, 255, 0.1));
+  border-color: var(--active-border, rgba(255, 255, 255, 0.3));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.cooldesk-tab-card.pinned {
+  background: linear-gradient(135deg, rgba(255, 204, 0, 0.1) 0%, var(--glass-bg, rgba(30, 41, 59, 0.9)) 100%);
+  border-color: rgba(255, 204, 0, 0.2);
+}
+
+/* Pinned badge */
+.tab-pinned-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: linear-gradient(135deg, rgba(255, 204, 0, 0.9), rgba(255, 149, 0, 0.85));
+  color: white;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  box-shadow: 0 2px 8px rgba(255, 204, 0, 0.3);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  z-index: 5;
+}
+
+/* Tab card header */
+.tab-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0;
+  /* Removed margin */
+  width: 100%;
+}
+
+.tab-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Icon colors matching WorkspaceCard */
+.tab-icon.blue {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.1) 100%);
+  color: #60A5FA;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.tab-icon.orange {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(234, 88, 12, 0.1) 100%);
+  color: #FB923C;
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+.tab-icon.brown {
+  background: linear-gradient(135deg, rgba(161, 98, 7, 0.15) 0%, rgba(120, 53, 15, 0.1) 100%);
+  color: #D97706;
+  border-color: rgba(161, 98, 7, 0.2);
+}
+
+.tab-icon.green {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%);
+  color: #4ADE80;
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.tab-icon.purple {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(124, 58, 237, 0.1) 100%);
+  color: #A78BFA;
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.tab-info {
+  flex: 1;
+  min-width: 0;
+  padding-right: 4px;
+  /* Default padding */
+  transition: padding-right 0.2s ease;
+}
+
+/* When actions are visible, minimize text width */
+.cooldesk-tab-card:hover .tab-info {
+  mask-image: linear-gradient(to right, black 70%, transparent 95%);
+  -webkit-mask-image: linear-gradient(to right, black 70%, transparent 95%);
+}
+
+.tab-title {
+  font-size: var(--font-base, 13px);
+  font-weight: 500;
+  color: var(--text-primary, #F1F5F9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.tab-hostname {
+  font-size: var(--font-xs, 10px);
+  color: var(--text-secondary, #94A3B8);
+  font-weight: 400;
+}
+
+/* Tab actions - Absolute Positioning Overlay */
+.tab-actions {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%) translateX(10px);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  border-radius: 8px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 20;
+  pointer-events: none;
+}
+
+.cooldesk-tab-card:hover .tab-actions {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+  pointer-events: auto;
+}
+
+.tab-action-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex: 1;
+}
+
+.tab-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.tab-action-btn.pin-btn:hover {
+  background: rgba(255, 204, 0, 0.15);
+  border-color: rgba(255, 204, 0, 0.3);
+  color: #FCD34D;
+}
+
+.tab-action-btn.close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #F87171;
+}
+
+.tab-action-btn.open-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #60A5FA;
+}
+
+/* ========== TabGroupCard ========== */
+
+.cooldesk-tab-group-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.cooldesk-tab-group-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.cooldesk-tab-group-card.expanded {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(30, 41, 59, 0.9) 100%);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.tab-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tab-group-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Reuse same color classes */
+.tab-group-icon.blue {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.1) 100%);
+  color: #60A5FA;
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.tab-group-icon.orange {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(234, 88, 12, 0.1) 100%);
+  color: #FB923C;
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+.tab-group-icon.brown {
+  background: linear-gradient(135deg, rgba(161, 98, 7, 0.15) 0%, rgba(120, 53, 15, 0.1) 100%);
+  color: #D97706;
+  border-color: rgba(161, 98, 7, 0.2);
+}
+
+.tab-group-icon.green {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(22, 163, 74, 0.1) 100%);
+  color: #4ADE80;
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.tab-group-icon.purple {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(124, 58, 237, 0.1) 100%);
+  color: #A78BFA;
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.tab-group-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tab-group-domain {
+  font-size: var(--font-base, 12px);
+  font-weight: 600;
+  color: var(--text-primary, #F1F5F9);
+  margin-bottom: 4px;
+}
+
+.tab-group-count {
+  font-size: var(--font-xs, 9px);
+  color: var(--text-secondary, #64748B);
+  font-weight: 500;
+}
+
+/* Tab group items */
+.tab-group-tabs {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tab-group-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tab-group-item:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.2);
+  transform: translateX(4px);
+}
+
+.tab-group-item-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-group-item-text {
+  font-size: var(--font-sm, 10px);
+  color: var(--text-primary, #E5E7EB);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* ========== Tab Grid Layout ========== */
+
+.tabs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 4px;
+}
+
+@media (max-width: 768px) {
+  .tabs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Recent and Last Active Styles */
+.cooldesk-tab-card.last-active {
+  border-color: rgba(96, 165, 250, 0.5) !important;
+  background: rgba(59, 130, 246, 0.08) !important;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
+  animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+  0% {
+    border-color: rgba(96, 165, 250, 0.3);
+  }
+
+  50% {
+    border-color: rgba(96, 165, 250, 0.6);
+  }
+
+  100% {
+    border-color: rgba(96, 165, 250, 0.3);
+  }
+}
+
+.tab-recent-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: linear-gradient(135deg, #60A5FA, #3B82F6);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tab-recent-badge span {
+  font-size: 9px;
+}
+
+/* ========== Tab Summary (AI Summarize) ========== */
+
+.tab-summary {
+  position: relative;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.08) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 8px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tab-summary-content {
+  font-size: var(--font-sm, 11px);
+  color: var(--text-primary, #E5E7EB);
+  line-height: 1.5;
+  padding-right: 20px;
+}
+
+.tab-summary-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #94A3B8);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 10px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.tab-summary-close:hover {
+  opacity: 1;
+  color: var(--text-primary, #F1F5F9);
+}
+
+/* Summarize button style */
+.tab-action-btn.summarize-btn:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #A78BFA;
+}
+
+.tab-action-btn.summarize-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

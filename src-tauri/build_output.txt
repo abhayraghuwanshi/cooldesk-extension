@@ -1,0 +1,150 @@
+﻿cargo :     Checking app v0.1.0 (C:\Users\raghu\projects\extension\src-tauri)
+At line:1 char:1
++ cargo check 2>&1 | Out-File -FilePath build_output.txt -Encoding utf8 ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking ap...sion\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+error[E0425]: cannot find value `query` in this scope
+   --> src\sidecar\llm_v2\tools.rs:651:25
+    |
+651 |                         query,
+    |                         ^^^^^ not found in this scope
+
+warning: unused import: `sysinfo::System`
+ --> src\lib.rs:1:5
+  |
+1 | use sysinfo::System;
+  |     ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `serde::Serialize`
+ --> src\lib.rs:3:5
+  |
+3 | use serde::Serialize;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+ --> src\lib.rs:5:5
+  |
+5 | use std::collections::HashMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `delete`
+  --> src\sidecar\server.rs:13:15
+   |
+13 |     routing::{delete, get, post},
+   |               ^^^^^^
+
+warning: unused import: `categorize`
+   --> src\sidecar\handlers.rs:583:45
+    |
+583 | use crate::sidecar::llm::tasks::{summarize, categorize, group_workspaces, suggest_related, enhance_url, 
+suggest_workspaces, parse_command};
+    |                                             ^^^^^^^^^^
+
+warning: unused import: `crate::sidecar::llm_v2::memory::MemoryManager`
+   --> src\sidecar\handlers.rs:803:5
+    |
+803 | use crate::sidecar::llm_v2::memory::MemoryManager;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Path`
+ --> src\sidecar\llm\models.rs:2:17
+  |
+2 | use std::path::{Path, PathBuf};
+  |                 ^^^^
+
+warning: unused import: `MemoryManager`
+ --> src\sidecar\llm_v2\conversation.rs:5:55
+  |
+5 | use super::memory::{ChatMessage, ConversationSession, MemoryManager, SharedMemoryManager};
+  |                                                       ^^^^^^^^^^^^^
+
+warning: unused import: `super::conversation::PromptBuilder`
+ --> src\sidecar\llm_v2\agent.rs:9:5
+  |
+9 | use super::conversation::PromptBuilder;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `ToolResult`
+  --> src\sidecar\llm_v2\agent.rs:11:34
+   |
+11 | use super::tools::{ToolRegistry, ToolResult};
+   |                                  ^^^^^^^^^^
+
+warning: unused import: `conversation::ConversationManager`
+  --> src\sidecar\llm_v2\mod.rs:16:9
+   |
+16 | pub use conversation::ConversationManager;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `ChatMessage`, `ConversationSession`, and `MemoryManager`
+  --> src\sidecar\llm_v2\mod.rs:17:18
+   |
+17 | pub use memory::{MemoryManager, ChatMessage, ConversationSession};
+   |                  ^^^^^^^^^^^^^  ^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::types::*`
+ --> src\sidecar\feedback\patterns.rs:5:5
+  |
+5 | use super::types::*;
+  |     ^^^^^^^^^^^^^^^
+
+warning: unused imports: `FeedbackEvent`, `FeedbackStore`, `SuggestionType`, and `UserAction`
+  --> src\sidecar\mod.rs:14:20
+   |
+14 | pub use feedback::{FeedbackStore, FeedbackEvent, SuggestionType, UserAction};
+   |                    ^^^^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^  ^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> src\sidecar\server.rs:202:13
+    |
+202 |         let mut msg = WsMessage::new("sync-state", serde_json::to_value(&sync_state).unwrap_or_default());
+    |             ----^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+error[E0599]: no method named `to_lowercase` found for enum `std::option::Option<T>` in the current scope
+   --> src\sidecar\llm_v2\tools.rs:348:26
+    |
+348 |                 || a.url.to_lowercase().contains(&query_lower)
+    |                          ^^^^^^^^^^^^ method not found in `std::option::Option<std::string::String>`
+    |
+note: the method `to_lowercase` exists on the type `std::string::String`
+   --> /rustc/01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf\library\alloc\src\str.rs:380:5
+help: consider using `Option::expect` to unwrap the `std::string::String` value, panicking if the value is an 
+`Option::None`
+    |
+348 |                 || a.url.expect("REASON").to_lowercase().contains(&query_lower)
+    |                         +++++++++++++++++
+
+error[E0277]: `std::option::Option<std::string::String>` doesn't implement `std::fmt::Display`
+   --> src\sidecar\llm_v2\tools.rs:362:75
+    |
+362 |                 Some(format!("- {} [{}] (URL: {})", title, activity_type, a.url))
+    |                                               --                          ^^^^^ 
+`std::option::Option<std::string::String>` cannot be formatted with the default formatter
+    |                                               |
+    |                                               required by this formatting parameter
+    |
+    = help: the trait `std::fmt::Display` is not implemented for `std::option::Option<std::string::String>`
+    = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead
+    = note: this error originates in the macro `$crate::__export::format_args` which comes from the expansion of the 
+macro `format` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused variable: `window_height`
+  --> src\lib.rs:72:21
+   |
+72 |                 let window_height = 600.0;
+   |                     ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_window_height`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+Some errors have detailed explanations: E0277, E0425, E0599.
+For more information about an error, try `rustc --explain E0277`.
+warning: `app` (lib) generated 16 warnings
+error: could not compile `app` (lib) due to 3 previous errors; 16 warnings emitted

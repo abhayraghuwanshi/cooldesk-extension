@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/logo-2.png" sizes="256x256" />
+  <link rel="preload" href="/logo-2.png" as="image" type="image/png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New Cool Tab</title>
+  <link rel="stylesheet" href="src/styles/theme.css">
+  <link rel="stylesheet" href="src/styles/components.css">
+  <link rel="stylesheet" href="src/styles/themes/cosmic-aurora.css">
+  <link rel="stylesheet" href="src/styles/themes/sunset-horizon.css">
+  <link rel="stylesheet" href="src/styles/themes/forest-depths.css">
+  <link rel="stylesheet" href="src/styles/themes/minimal-dark.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="src/styles/themes/ocean-depths.css">
+  <link rel="stylesheet" href="src/styles/themes/cherry-blossom.css">
+  <link rel="stylesheet" href="src/styles/themes/arctic-frost.css">
+  <link rel="stylesheet" href="src/styles/themes/volcanic-ember.css">
+  <link rel="stylesheet" href="src/styles/themes/neon-cyberpunk.css">
+  <link rel="stylesheet" href="src/styles/themes/white-cred.css">
+  <link rel="stylesheet" href="src/styles/themes/orange-warm.css">
+  <link rel="stylesheet" href="src/styles/themes/brown-earth.css">
+  <style>
+    body.wallpaper-enabled {
+      background: #000 !important;
+    }
+
+    body.wallpaper-enabled::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-image: var(--wallpaper-url);
+      background-size: cover;
+      background-position: center;
+      opacity: var(--wallpaper-opacity, 0.3);
+      z-index: -2;
+      pointer-events: none;
+    }
+  </style>
+  <style>
+    .popup-wrap.wallpaper-enabled,
+    body.wallpaper-enabled .cooldesk-container {
+      background: transparent !important;
+      box-shadow: none !important;
+    }
+  </style>
+</head>
+
+<body class="bg-ai-midnight-nebula">
+  <script type="module" src="/src/utils/theme-loader.js"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>

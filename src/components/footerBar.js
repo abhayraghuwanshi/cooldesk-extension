@@ -1,0 +1,4305 @@
+﻿// Sider.ai-style Floating Button for Cool-Desk
+import { quickSearch } from '../services/searchService.js';
+
+export function injectFooterBar() {
+  try {
+    const FLAG_ID = 'cooldesk-floating-button';
+    if (document.getElementById(FLAG_ID)) return; // already injected
+
+    // Host + Shadow DOM
+    const host = document.createElement('div');
+    host.id = FLAG_ID;
+    (document.documentElement || document.body).appendChild(host);
+    const shadow = host.attachShadow({ mode: 'open' });
+
+    // Styles
+    const style = document.createElement('style');
+    style.textContent = `
+      :host, * { 
+        all: revert; 
+        box-sizing: border-box;
+      }
+
+      /* Floating Button Container */
+      .floating-container {
+        position: fixed;
+        top: 50%;
+        right: 0px;
+        z-index: 2147483647;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+        cursor: move;
+        user-select: none;
+        transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        transform: translateY(-50%);
+        display: flex;
+        flex-direction: column-reverse;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 8px; /* Hit area extension */
+      }
+
+      .floating-container:hover {
+        z-index: 2147483650; /* Ensure on top when expanded */
+      }
+
+      .floating-container.dragging {
+        transform: translateY(-50%) scale(1.05);
+        opacity: 0.9;
+        cursor: grabbing;
+      }
+
+      /* Main Toggle Button - Refined */
+      .toggle-btn {
+        width: 56px;
+        height: 56px;
+        border-radius: 28px 0 0 28px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-right: none;
+        background: rgba(20, 20, 20, 0.6);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 
+          0 4px 12px rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+        padding-right: 4px;
+        font-family: inherit;
+      }
+
+      .toggle-btn:hover {
+        transform: translateX(-4px);
+        background: rgba(30, 30, 30, 0.7);
+        border-color: rgba(255, 255, 255, 0.25);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      }
+
+      /* Icon */
+      .btn-icon {
+        width: 28px;
+        height: 28px;
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+      }
+
+      .toggle-btn:hover .btn-icon {
+        transform: scale(1.1) rotate(-5deg);
+      }
+
+      /* Hover tooltip */
+      .tooltip {
+        position: absolute;
+        right: 70px;
+        top: 50%;
+        transform: translateY(-50%) translateX(10px);
+        background: rgba(0, 0, 0, 0.85);
+        color: rgba(255, 255, 255, 0.95);
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        backdrop-filter: blur(12px);
+        pointer-events: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        border: 1px solid rgba(255,255,255,0.08);
+      }
+
+      .floating-container:hover .tooltip {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(-50%) translateX(0);
+      }
+
+      /* Action Buttons */
+      .action-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(0,0,0,0.1);
+        color: #333;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        font-size: 18px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        opacity: 0;
+        transform: translateY(10px) scale(0.8);
+        pointer-events: none;
+        margin-right: 12px;
+      }
+
+      .floating-container.expanded .action-btn {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+      }
+      
+      .floating-container.expanded .action-btn:nth-child(1) { transition-delay: 0.05s; }
+      .floating-container.expanded .action-btn:nth-child(2) { transition-delay: 0.1s; }
+      .floating-container.expanded .action-btn:nth-child(3) { transition-delay: 0.15s; }
+
+      .action-btn:hover {
+        transform: scale(1.15) !important;
+        background: #fff;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+      }
+      
+      .action-tooltip {
+        right: 50px;
+        background: rgba(0,0,0,0.8);
+        border-radius: 4px;
+        font-size: 12px;
+        padding: 4px 8px;
+        opacity: 0;
+        position: absolute;
+        pointer-events: none;
+        color: white;
+        transition: opacity 0.2s;
+        white-space: nowrap;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      .action-btn:hover .action-tooltip { opacity: 1; }
+
+      /* Spotlight Modal Styles - Premium Mac Aesthetic */
+      .spotlight-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.2); /* Softer overlay */
+        display: none;
+        z-index: 2147483647;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 15vh;
+        animation: fadeIn 0.2s ease-out;
+      }
+
+      .spotlight-overlay.visible {
+        display: flex;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      .spotlight-container {
+        width: 100%;
+        max-width: 680px; /* Wider */
+        margin: 0 20px;
+        
+        /* Premium Glass Material */
+        background: rgba(22, 22, 24, 0.75);
+        backdrop-filter: blur(40px) saturate(180%);
+        -webkit-backdrop-filter: blur(40px) saturate(180%);
+        
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px; /* Smoother corners */
+        
+        /* Deep, layered shadows */
+        box-shadow:
+          0 0 0 1px rgba(0, 0, 0, 0.5), /* Inner dark stroke */
+          0 20px 50px -12px rgba(0, 0, 0, 0.6),
+          0 0 1px inset rgba(255, 255, 255, 0.1); /* Inner light stroke */
+          
+        overflow: hidden; /* Key for rounded corners */
+        animation: spotlightEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        display: flex;
+        flex-direction: column;
+        color: rgba(255, 255, 255, 0.9);
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', sans-serif;
+      }
+
+      @keyframes spotlightEnter {
+        from { transform: scale(0.96) translateY(10px); opacity: 0; }
+        to { transform: scale(1) translateY(0); opacity: 1; }
+      }
+
+      /* Search Box Area */
+      .spotlight-search-box {
+        padding: 18px 22px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .spotlight-prompt {
+        font-weight: 500;
+        font-size: 22px;
+        background: linear-gradient(135deg, #60a5fa, #a78bfa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        user-select: none;
+        padding-left: 2px;
+      }
+
+      .spotlight-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: #ffffff;
+        font-size: 22px; /* Larger, clearer text */
+        font-family: inherit;
+        font-weight: 300;
+        letter-spacing: -0.01em;
+        caret-color: #60a5fa;
+      }
+
+      .spotlight-input::placeholder {
+        color: rgba(255, 255, 255, 0.3);
+        font-weight: 300;
+      }
+
+      /* Pinned Section */
+      .spotlight-pins {
+        padding: 14px 20px 8px;
+        background: rgba(0, 0, 0, 0.15); /* Subtle dark band */
+      }
+
+      .spotlight-pins-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        padding: 0 4px;
+      }
+
+      .spotlight-pins-title {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      .spotlight-pins-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pin-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        max-width: 160px;
+      }
+
+      .pin-item:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.2);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      }
+
+      .pin-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.9);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      
+      .pin-icon { opacity: 0.9; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+      .pin-icon img { width: 100%; height: 100%; border-radius: 3px; }
+
+      .pin-add {
+        padding: 6px 10px;
+        background: transparent;
+        border: 1px dashed rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 11px;
+        cursor: pointer;
+        display: flex; 
+        align-items: center; 
+        gap: 6px;
+        transition: all 0.2s;
+      }
+      .pin-add:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.4);
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      /* Results List */
+      .spotlight-results {
+        max-height: 420px;
+        overflow-y: auto;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .result-item {
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        border-radius: 8px; /* Mac style rounded highlights */
+        cursor: pointer;
+        transition: background 0.1s ease;
+        border: 1px solid transparent; /* Prevent layout shift */
+        position: relative;
+      }
+
+      /* Selection State - The Blue Highlight */
+      .result-item.selected {
+        background: rgba(255, 255, 255, 0.1); /* Or the Mac Blue: #007AFF with text tweak */
+        /* For "Dark Mode Glass", a light overlay is often preferred over solid blue */
+      }
+      
+      .result-item:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .result-item.selected:hover {
+        background: rgba(255, 255, 255, 0.12); /* Slightly lighter */
+      }
+
+      .result-icon {
+        width: 36px;
+        height: 36px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      }
+      
+      .result-icon img { width: 20px; height: 20px; border-radius: 4px; object-fit: contain; }
+
+      .result-content {
+        flex: 1; /* Take up remaining space */
+        min-width: 0; /* Allow text truncation */
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .result-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.95);
+        display: block;
+        margin-bottom: 2px;
+        letter-spacing: -0.005em;
+      }
+
+      .result-desc {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        display: block;
+        white-space: nowrap; 
+        overflow: hidden; 
+        text-overflow: ellipsis; 
+        max-width: 400px;
+      }
+
+      .result-badge {
+        font-size: 10px;
+        padding: 3px 8px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08); /* Neutral pill */
+        color: rgba(255, 255, 255, 0.6);
+        font-weight: 500;
+        margin-left: 8px; /* Space from content */
+        min-width: 60px; /* Fixed minimum width for consistent alignment */
+        text-align: center; /* Center text within badge */
+        flex-shrink: 0; /* Prevent shrinking */
+        transition: all 0.2s;
+      }
+
+      .pin-btn {
+        font-size: 14px;
+        padding: 4px 8px;
+        margin-left: 8px;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: all 0.2s;
+        flex-shrink: 0; /* Prevent shrinking */
+        width: 28px; /* Fixed width for consistent alignment */
+        text-align: center;
+        border-radius: 4px;
+      }
+
+      .pin-btn:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.1);
+        transform: scale(1.1);
+      }
+      
+      /* Hints on selection */
+      .result-hint {
+        opacity: 0;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.5);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding-left: 12px;
+        transition: opacity 0.2s;
+      }
+      .result-item.selected .result-hint { opacity: 1; }
+      .result-item.selected .result-badge { opacity: 0; display: none; } /* Hide badge to show hint? Or keep both? Keeping badge is better context */
+      
+      /* Re-eval: Keep badge, show hint NEXT to it if space? */
+      /* Let's hide badge on selection to show "Open ↵" clean look */
+      
+      /* Footer - clean status bar */
+      .spotlight-footer {
+        padding: 8px 20px;
+        background: rgba(0, 0, 0, 0.2);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        gap: 20px;
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 11px;
+        font-weight: 500;
+        height: 36px;
+        align-items: center;
+      }
+      
+      .shortcut-hint { display: flex; align-items: center; gap: 6px; }
+      .shortcut-key {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.8);
+        min-width: 20px;
+        text-align: center;
+      }
+      
+      /* Scrollbar */
+      .spotlight-results::-webkit-scrollbar { width: 10px; }
+      .spotlight-results::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 5px;
+        border: 2px solid transparent;
+        background-clip: content-box;
+      }
+      .spotlight-results::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(255, 255, 255, 0.2);
+      }
+      
+      /* AI Actions Section */
+      .spotlight-ai-actions {
+        padding: 4px 22px 16px; /* Optimized spacing */
+        display: flex;
+        gap: 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08); /* Separator from results */
+      }
+      
+      .spotlight-ai-btn {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        font-family: inherit;
+        backdrop-filter: blur(10px);
+        flex: 1; /* Make it stretch nicely */
+        justify-content: center; /* Center content */
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .spotlight-ai-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      
+      .spotlight-ai-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      }
+      
+      .spotlight-ai-btn .btn-shine {
+        position: absolute;
+        top: 0; left: -100%;
+        width: 50%; height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+        transform: skewX(-20deg);
+        transition: 0.5s;
+      }
+      .spotlight-ai-btn:hover .btn-shine {
+        left: 200%;
+        transition: 1s ease-in-out;
+      }
+
+        `;
+
+    // Inject Global Styles for Highlights (Must be in Light DOM)
+    // Always remove and re-add to ensure they are fresh and working
+    const globalStyleId = 'cooldesk-global-styles';
+    const existingStyle = document.getElementById(globalStyleId);
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+
+    const globalStyle = document.createElement('style');
+    globalStyle.id = globalStyleId;
+    globalStyle.textContent = `
+      /* On-Page Highlighting */
+      mark.cooldesk-text-highlight {
+        background-color: #fef08a !important;
+        color: inherit !important;
+        cursor: pointer;
+        border-radius: 2px;
+        transition: background-color 0.2s;
+        box-shadow: 0 0 0 2px rgba(254, 240, 138, 0.3);
+        text-decoration: none;
+        display: inline;
+      }
+      
+      mark.cooldesk-text-highlight:hover {
+        background-color: #fde047 !important; /* Darker yellow */
+        box-shadow: 0 0 0 2px rgba(253, 224, 71, 0.5);
+      }
+    `;
+    document.head.appendChild(globalStyle);
+
+    // Create the floating button structure
+    const container = document.createElement('div');
+    container.className = 'floating-container';
+
+    // Main Toggle Button
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'toggle-btn pulse';
+    toggleBtn.setAttribute('aria-label', 'Open CoolDesk sidebar');
+
+    // Logo image with error fallback
+    const logoImg = document.createElement('img');
+    logoImg.className = 'btn-icon';
+    logoImg.alt = 'CoolDesk Logo';
+    logoImg.style.cssText = `
+      width: 60px;
+      height: 60px;
+      border-radius: 6px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    `;
+
+    // Try to load the logo, fallback to SVG if it fails
+    try {
+      logoImg.src = chrome.runtime.getURL('logo-2.png');
+
+      // Add error handler for fallback
+      logoImg.onerror = () => {
+        console.log('[CoolDesk] Logo failed to load, using fallback icon');
+        // Create fallback SVG icon
+        toggleBtn.innerHTML = `
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px;">
+          <path d="M12,2A2,2 0 0,1 14,4C14,4.74 13.6,5.39 13,5.73V7A1,1 0 0,0 14,8H16A1,1 0 0,0 17,7V5.73C16.4,5.39 16,4.74 16,4A2,2 0 0,1 18,2A2,2 0 0,1 20,4C20,4.74 19.6,5.39 19,5.73V7A3,3 0 0,1 16,10V10.5A1.5,1.5 0 0,0 17.5,12A1.5,1.5 0 0,0 19,10.5A1.5,1.5 0 0,1 20.5,9A1.5,1.5 0 0,1 22,10.5C22,11.38 21.47,12.13 20.66,12.43C20.88,13.07 21,13.76 21,14.5C21,16.06 20.33,17.45 19.24,18.39L17.12,19.95A3,3 0 0,1 14.5,20.5H9.5A3,3 0 0,1 6.88,19.95L4.76,18.39C3.67,17.45 3,16.06 3,14.5C3,13.76 3.12,13.07 3.34,12.43C2.53,12.13 2,11.38 2,10.5A1.5,1.5 0 0,1 3.5,9A1.5,1.5 0 0,1 5,10.5A1.5,1.5 0 0,0 6.5,12A1.5,1.5 0 0,0 8,10.5V10A3,3 0 0,1 5,7V5.73C4.4,5.39 4,4.74 4,4A2,2 0 0,1 6,2A2,2 0 0,1 8,4C8,4.74 7.6,5.39 7,5.73V7A1,1 0 0,0 8,8H10A1,1 0 0,0 11,7V5.73C10.4,5.39 10,4.74 10,4A2,2 0 0,1 12,2Z" />
+        </svg>
+        `;
+      };
+    } catch (e) {
+      console.error('[CoolDesk] Error setting up logo:', e);
+      // Fallback icon
+      toggleBtn.innerHTML = `
+        < svg class="btn-icon" viewBox = "0 0 24 24" fill = "currentColor" style = "width: 24px; height: 24px;" >
+          <path d="M12,2A2,2 0 0,1 14,4C14,4.74 13.6,5.39 13,5.73V7A1,1 0 0,0 14,8H16A1,1 0 0,0 17,7V5.73C16.4,5.39 16,4.74 16,4A2,2 0 0,1 18,2A2,2 0 0,1 20,4C20,4.74 19.6,5.39 19,5.73V7A3,3 0 0,1 16,10V10.5A1.5,1.5 0 0,0 17.5,12A1.5,1.5 0 0,0 19,10.5A1.5,1.5 0 0,1 20.5,9A1.5,1.5 0 0,1 22,10.5C22,11.38 21.47,12.13 20.66,12.43C20.88,13.07 21,13.76 21,14.5C21,16.06 20.33,17.45 19.24,18.39L17.12,19.95A3,3 0 0,1 14.5,20.5H9.5A3,3 0 0,1 6.88,19.95L4.76,18.39C3.67,17.45 3,16.06 3,14.5C3,13.76 3.12,13.07 3.34,12.43C2.53,12.13 2,11.38 2,10.5A1.5,1.5 0 0,1 3.5,9A1.5,1.5 0 0,1 5,10.5A1.5,1.5 0 0,0 6.5,12A1.5,1.5 0 0,0 8,10.5V10A3,3 0 0,1 5,7V5.73C4.4,5.39 4,4.74 4,4A2,2 0 0,1 6,2A2,2 0 0,1 8,4C8,4.74 7.6,5.39 7,5.73V7A1,1 0 0,0 8,8H10A1,1 0 0,0 11,7V5.73C10.4,5.39 10,4.74 10,4A2,2 0 0,1 12,2Z" />
+        </svg >
+        `;
+      return;
+    }
+
+    toggleBtn.appendChild(logoImg);
+    container.appendChild(toggleBtn);
+
+    // --- Action Buttons ---
+
+    // 1. Add Note Button
+    // Helper to create SVG icon
+    const createIcon = (paths) => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', '24');
+      svg.setAttribute('height', '24');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', '#4b5563');
+      svg.setAttribute('stroke-width', '2');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+
+      paths.forEach(d => {
+        let el;
+        if (d.startsWith('line')) {
+          // special case for line command stored as object or string? 
+          // Simpler: Just innerHTML for content, but wrapper is NS.
+          // Actually mixed approach is fine if wrapper is NS.
+          // Let's stick to innerHTML for content if wrapper is NS? 
+          // No, full DOM is safer.
+        }
+      });
+      // Fallback: Just set innerHTML of the NS-created SVG. 
+      // This is often safe if the parent is correct.
+      svg.innerHTML = paths;
+      return svg;
+    };
+
+    // 1. Add Note Button
+    const addNoteBtn = document.createElement('div');
+    addNoteBtn.className = 'action-btn add-note-btn';
+
+    // Create Note Icon
+    const noteIcon = document.createElement('div');
+    noteIcon.textContent = '📝';
+    noteIcon.style.fontSize = '20px';
+    noteIcon.style.lineHeight = '1';
+    addNoteBtn.appendChild(noteIcon);
+
+    addNoteBtn.title = 'Add Sticky Note';
+    addNoteBtn.onclick = (e) => {
+      e.stopPropagation();
+      spawnNewStickyNote();
+    };
+    addNoteBtn.onmousedown = (e) => e.stopPropagation();
+
+    // Tooltip for Note
+    const noteTooltip = document.createElement('div');
+    noteTooltip.className = 'action-tooltip';
+    noteTooltip.textContent = 'Add Note';
+    addNoteBtn.appendChild(noteTooltip);
+
+    container.appendChild(addNoteBtn);
+
+
+    // 2. Highlight Button
+    const highlightBtn = document.createElement('div');
+    highlightBtn.className = 'action-btn highlight-btn';
+
+    // Create Highlight Icon
+    const highlightIcon = document.createElement('div');
+    highlightIcon.textContent = '🖍️';
+    highlightIcon.style.fontSize = '20px';
+    highlightIcon.style.lineHeight = '1';
+    highlightBtn.appendChild(highlightIcon);
+
+    highlightBtn.onclick = async (e) => {
+      e.stopPropagation();
+      const selection = window.getSelection();
+      const text = selection ? selection.toString().trim() : '';
+
+      if (text) {
+        // Instant Save for Highlights
+        try {
+          const note = {
+            id: 'note_' + Date.now(),
+            url: window.location.href,
+            text: text,
+            type: 'highlight',
+            createdAt: Date.now()
+          };
+
+          console.log('[CoolDesk Highlight] Attempting to save note:', note);
+
+          const response = await new Promise(resolve => {
+            chrome.runtime.sendMessage({ action: 'saveUrlNote', note }, resolve);
+          });
+
+          console.log('[CoolDesk Highlight] Save response:', response);
+
+          if (response && response.success) {
+            console.log('[CoolDesk Highlight] Save successful, calling renderStickyNotes...');
+            renderStickyNotes(); // Triggers the inline highlighter
+            showNotification('Text Highlighted!', '#f59e0b');
+            selection.removeAllRanges();
+          } else {
+            console.error('[CoolDesk Highlight] Save failed:', response);
+            throw new Error(response?.error || 'Unknown error');
+          }
+        } catch (err) {
+          console.error('Failed to highlight:', err);
+          showNotification('Failed to save highlight', '#ef4444');
+        }
+      } else {
+        showNotification('Select text to highlight', '#f59e0b');
+      }
+    };
+    highlightBtn.onmousedown = (e) => e.stopPropagation();
+
+    // Tooltip for Highlight
+    const highlightTooltip = document.createElement('div');
+    highlightTooltip.className = 'action-tooltip';
+    highlightTooltip.textContent = 'Highlight Text';
+    highlightBtn.appendChild(highlightTooltip);
+
+    container.appendChild(highlightBtn);
+
+
+    // 3. Scrape Links Button
+    const scrapeBtn = document.createElement('div');
+    scrapeBtn.className = 'action-btn scrape-btn';
+    scrapeBtn.id = 'cooldesk-scrape-btn';
+
+    // Create Link/Scrape Icon
+    const scrapeIcon = document.createElement('div');
+    scrapeIcon.textContent = '🔗';
+    scrapeIcon.style.fontSize = '20px';
+    scrapeIcon.style.lineHeight = '1';
+    scrapeBtn.appendChild(scrapeIcon);
+
+    scrapeBtn.onclick = async (e) => {
+      e.stopPropagation();
+      // Visual feedback
+      scrapeBtn.style.transform = 'scale(0.95)';
+      setTimeout(() => scrapeBtn.style.transform = '', 150);
+
+      // Enter select mode for scraping
+      enterLinkSelectMode(shadow, showNotification);
+    };
+    scrapeBtn.onmousedown = (e) => e.stopPropagation();
+
+    // Tooltip for Scrape
+    const scrapeTooltip = document.createElement('div');
+    scrapeTooltip.className = 'action-tooltip';
+    scrapeTooltip.textContent = 'Scrape Links';
+    scrapeBtn.appendChild(scrapeTooltip);
+
+    container.appendChild(scrapeBtn);
+
+
+
+    // Main Button Tooltip (Adjusted position to avoid overlap)
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip';
+    tooltip.textContent = 'Open CoolDesk';
+    // Override default tooltip position to align with bottom button
+    tooltip.style.cssText = `
+      top: auto;
+      bottom: 25px;
+      transform: translateY(50%);
+    `;
+    container.appendChild(tooltip);
+
+    // Spawn New Sticky Note
+    const spawnNewStickyNote = (initialText = '', initialType = 'text') => {
+      const stickyNote = document.createElement('div');
+      stickyNote.className = 'cooldesk-sticky-note sticky-editor';
+
+      const right = 300;
+      const top = 100;
+
+      stickyNote.style.cssText = `
+      position: fixed;
+      top: ${top}px;
+      right: ${right}px;
+      width: 240px; /* Matched width */
+      min-height: 180px; /* Matched height */
+      background: linear-gradient(135deg, #fef9c3 0%, #fef08a 100%); /* Matched gradient */
+      border-radius: 2px 2px 20px 2px; /* Matched corners */
+      box-shadow: 
+        0 20px 25px -5px rgba(0, 0, 0, 0.1),
+        0 10px 10px -5px rgba(0, 0, 0, 0.04); /* Elevated shadow for active note */
+      z-index: 2147483650;
+      display: flex;
+      flex-direction: column;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; /* Matched font */
+      font-size: 14px;
+      color: #1f2937;
+      transform: rotate(0deg); /* Straight when editing */
+      overflow: hidden;
+      `;
+
+      // Header for consistency
+      // Header for consistency
+      const header = document.createElement('div');
+      header.style.cssText = `
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: #6b7280;
+      background: rgba(255, 255, 255, 0.3);
+      `;
+      const title = initialType === 'highlight' ? 'New Highlight' : 'New Note';
+      const titleColor = initialType === 'highlight' ? '#f59e0b' : '#10b981';
+      header.innerHTML = `<span style="font-weight:600; color:${titleColor};">${title}</span>`;
+
+      const textarea = document.createElement('textarea');
+      textarea.value = initialText || '';
+      textarea.placeholder = 'Type your note here...';
+      textarea.style.cssText = `
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none; /* Auto-resize could be added but fixed for now */
+      padding: 12px;
+      font - family: inherit;
+      font - size: 14px;
+      line - height: 1.5;
+      min - height: 100px;
+      color: #374151;
+      `;
+      textarea.focus();
+
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end; padding: 8px 12px;';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = 'background: transparent; border: none; padding: 4px 8px; cursor: pointer; color: #6b7280; font-size: 12px; font-weight: 500; font-family: inherit;';
+      cancelBtn.onmouseenter = () => cancelBtn.style.color = '#374151';
+      cancelBtn.onmouseleave = () => cancelBtn.style.color = '#6b7280';
+      cancelBtn.onclick = () => stickyNote.remove();
+
+      const saveBtn = document.createElement('button');
+      saveBtn.textContent = 'Save Note';
+      saveBtn.style.cssText = 'background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.05); padding: 4px 12px; border-radius: 12px; cursor: pointer; color: #059669; font-size: 12px; font-weight: 600; font-family: inherit; transition: all 0.2s;';
+      saveBtn.onmouseenter = () => { saveBtn.style.background = '#10b981'; saveBtn.style.color = 'white'; };
+      saveBtn.onmouseleave = () => { saveBtn.style.background = 'rgba(255,255,255,0.5)'; saveBtn.style.color = '#059669'; };
+
+      saveBtn.onclick = async () => {
+        const text = textarea.value.trim();
+        if (!text) return;
+
+        try {
+          const note = {
+            id: 'note_' + Date.now(),
+            url: window.location.href,
+            text: text,
+            type: initialType,
+            createdAt: Date.now()
+          };
+
+          const response = await new Promise(resolve => {
+            chrome.runtime.sendMessage({ action: 'saveUrlNote', note }, resolve);
+          });
+
+          if (response && response.success) {
+            stickyNote.remove();
+            renderStickyNotes(); // Refresh to show the new saved note
+            showNotification('Note saved!', '#10b981');
+          } else {
+            throw new Error(response?.error || 'Unknown error');
+          }
+        } catch (e) {
+          console.error('Failed to save note:', e);
+          showNotification('Failed to save: ' + (e.message || 'Error'), '#ef4444');
+        }
+      };
+
+      btnRow.appendChild(cancelBtn);
+      btnRow.appendChild(saveBtn);
+
+      stickyNote.appendChild(header);
+      stickyNote.appendChild(textarea);
+      stickyNote.appendChild(btnRow);
+
+      shadow.appendChild(stickyNote);
+
+      // Focus
+      setTimeout(() => textarea.focus(), 50);
+
+      return stickyNote;
+    };
+
+    // ... (rest of logic) ...
+
+    // Add elements to shadow DOM
+    shadow.appendChild(style);
+    shadow.appendChild(container);
+
+    // Remove pulse animation after initial display
+    setTimeout(() => {
+      toggleBtn.classList.remove('pulse');
+    }, 6000);
+
+    // Helper: show notification to user
+    const showNotification = (message, color = '#4A90E2', duration = 5000) => {
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 2147483647;
+      background: ${color};
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), 0 2px 10px rgba(0, 0, 0, 0.15);
+      max-width: 350px;
+      word-wrap: break-word;
+      backdrop-filter: blur(10px);
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      `;
+      notification.textContent = message;
+      document.body.appendChild(notification);
+
+      // Animate in
+      setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+      }, 10);
+
+      setTimeout(() => {
+        // Animate out
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 300);
+      }, duration - 300);
+    };
+
+    // Helper: open extension side panel
+    const openSidePanel = async (startVoice = false) => {
+      console.log('[CoolDesk Button] Attempting to open side panel...', startVoice ? '(Voice Mode)' : '');
+
+      // Check if extension context is still valid
+      if (!chrome?.runtime?.id) {
+        console.warn('[CoolDesk Button] Extension context invalidated, cannot communicate with background');
+        // When context is invalidated, we cannot get the extension URL reliably
+        alert('Extension disconnected. Please refresh the page to reconnect and use the extension.');
+        return;
+      }
+
+      try {
+        // Send message immediately in the user gesture context
+        // This preserves the user gesture for the background script
+        console.log('[CoolDesk Button] Sending openSidePanel message with user gesture...');
+
+        const response = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({
+            type: 'openSidePanel',
+            timestamp: Date.now(),
+            fromUserGesture: true,
+            startVoice: startVoice // Flag to auto-start voice
+          }, resolve);
+        });
+
+        // Check for context invalidation error specifically
+        if (chrome.runtime.lastError) {
+          const error = chrome.runtime.lastError.message || chrome.runtime.lastError;
+          console.warn('[CoolDesk Button] Runtime error:', error);
+
+          if (error.includes('context invalidated') || error.includes('Extension context')) {
+            console.log('[CoolDesk Button] Extension context lost, requesting page reload');
+            showNotification('Extension disconnected. Please refresh the page to reconnect.', '#ff4444');
+            return;
+          }
+
+          console.log('[CoolDesk Button] Falling back to tab...');
+          // Fallback to tab for other errors
+          showNotification('Runtime error, opening in new tab...', '#ff8c00', 4000);
+          try {
+            window.open(chrome.runtime.getURL('index.html'), '_blank');
+            showNotification('CoolDesk opened in new tab', '#4CAF50', 3000);
+          } catch (e) {
+            console.error('[CoolDesk Button] Failed to open fallback tab:', e);
+            showNotification('Failed to open CoolDesk. Please try again.', '#ff4444', 5000);
+          }
+          return;
+        }
+
+        console.log('[CoolDesk Button] Background response:', response);
+
+        const ok = response && response.ok !== false;
+        if (!ok) {
+          console.log('[CoolDesk Button] Side panel failed, opening tab instead');
+          console.log('[CoolDesk Button] Error was:', response?.error);
+
+          // Show helpful message about proper side panel usage
+          if (response?.message) {
+            showNotification(response.message, '#ff8c00', 8000);
+          } else {
+            showNotification('Side panel unavailable, opening in new tab...', '#ff8c00', 4000);
+          }
+
+          // Fallback to opening the extension UI in a tab
+          try {
+            window.open(chrome.runtime.getURL('index.html'), '_blank');
+            showNotification('CoolDesk opened in new tab', '#4CAF50', 3000);
+          } catch (e) {
+            console.error('[CoolDesk Button] Failed to open fallback tab:', e);
+            showNotification('Failed to open CoolDesk. Please try again.', '#ff4444', 5000);
+          }
+        } else {
+          console.log('[CoolDesk Button] Request processed successfully');
+          showNotification('CoolDesk side panel opened!', '#4CAF50', 2000);
+        }
+      } catch (e) {
+        console.error('[CoolDesk Button] Error in openSidePanel:', e);
+        console.log('[CoolDesk Button] Direct fallback to tab...');
+        showNotification('Connection error, opening in new tab...', '#ff8c00', 4000);
+        try {
+          window.open(chrome.runtime.getURL('index.html'), '_blank');
+          showNotification('CoolDesk opened in new tab', '#4CAF50', 3000);
+        } catch (e2) {
+          console.error('[CoolDesk Button] Failed to open fallback tab:', e2);
+          showNotification('Failed to open CoolDesk. Please try refreshing the page.', '#ff4444', 5000);
+        }
+      }
+    };
+
+    // --- Spotlight Search Bar (Raycast Style) ---
+    const spotlightOverlay = document.createElement('div');
+    spotlightOverlay.className = 'spotlight-overlay';
+
+    const spotlightContainer = document.createElement('div');
+    spotlightContainer.className = 'spotlight-container';
+
+    spotlightContainer.innerHTML = `
+      <div class="spotlight-search-box">
+        <span class="spotlight-prompt">></span>
+        <input type="text" class="spotlight-input" placeholder="Search tabs, history, workspaces..." spellcheck="false">
+      </div>
+      <div class="spotlight-pins"></div>
+      
+      <div class="spotlight-ai-actions">
+        <button id="spotlight-summarise-btn" class="spotlight-ai-btn">
+          <div class="btn-shine"></div>
+          <span style="font-size: 16px;">✨</span> 
+          <span>Summarise Page</span>
+        </button>
+      </div>
+      
+      <div class="spotlight-results"></div>
+      
+      <div class="spotlight-footer">
+        <div class="shortcut-hint"><span class="shortcut-key">↵</span> Open</div>
+        <div class="shortcut-hint"><span class="shortcut-key">↑↓</span> Navigate</div>
+        <div class="shortcut-hint"><span class="shortcut-key">Esc</span> Close</div>
+        <div class="shortcut-hint" style="margin-left:auto;"><span class="shortcut-key">⌘P</span> Pin</div>
+      </div>
+    `;
+
+    spotlightOverlay.appendChild(spotlightContainer);
+    shadow.appendChild(spotlightOverlay);
+
+    const spotlightInput = spotlightContainer.querySelector('.spotlight-input');
+    const spotlightResults = spotlightContainer.querySelector('.spotlight-results');
+    const spotlightPins = spotlightContainer.querySelector('.spotlight-pins');
+    const summariseBtn = spotlightContainer.querySelector('#spotlight-summarise-btn');
+
+    if (summariseBtn) {
+      summariseBtn.onclick = async () => {
+        toggleSpotlight(); // Close spotlight
+
+        // 1. Show processing note
+        const processingNote = spawnNewStickyNote('Generating summary...', 'text');
+        const textarea = processingNote.querySelector('textarea');
+
+        // 2. Extract content (simplified)
+        const content = document.body.innerText.slice(0, 10000); // Increased context limit
+
+        try {
+          let summary = '';
+
+          // Delegate to Background Service (which handles Nano AI / Fallbacks)
+          try {
+            const response = await new Promise(resolve => {
+              chrome.runtime.sendMessage({
+                type: 'NANO_AI_SUMMARIZE',
+                text: content,
+                maxLength: 500
+              }, resolve);
+            });
+
+            if (response && response.success) {
+              summary = response.summary;
+            } else {
+              console.warn('[Spotlight] Background summary failed:', response?.error);
+            }
+          } catch (err) {
+            console.warn('[Spotlight] Message sending failed:', err);
+          }
+
+          if (!summary) {
+            // Fallback simulation or basic truncation
+            summary = "AI Summary:\n\n" +
+              "• " + document.title + "\n" +
+              "• Key content extracted from " + window.location.hostname + "...\n\n" +
+              "(Note: Native AI model not enabled or available. Please enable Chrome Built-in AI flags.)";
+          }
+
+          // 3. Update note
+          if (textarea) textarea.value = summary;
+
+        } catch (e) {
+          if (textarea) textarea.value = "Failed to generate summary: " + e.message;
+        }
+      };
+    }
+
+    let selectedIndex = -1;
+    let currentResults = [];
+    let pinnedItems = [];
+
+    // Load pinned items from storage
+    const loadPinnedItems = async () => {
+      try {
+        const data = await chrome.storage.local.get('spotlight_pins');
+        pinnedItems = data.spotlight_pins || [];
+        renderPins();
+      } catch (e) {
+        console.warn('[Spotlight] Failed to load pins:', e);
+        pinnedItems = [];
+      }
+    };
+
+    // Save pinned items to storage
+    const savePinnedItems = async () => {
+      try {
+        await chrome.storage.local.set({ spotlight_pins: pinnedItems });
+      } catch (e) {
+        console.warn('[Spotlight] Failed to save pins:', e);
+      }
+    };
+
+    // Add item to pins
+    const addPin = (item) => {
+      if (pinnedItems.length >= 8) {
+        showNotification('Maximum 8 pins allowed', '#f59e0b');
+        return;
+      }
+      if (pinnedItems.some(p => p.url === item.url)) {
+        showNotification('Already pinned', '#64748b');
+        return;
+      }
+      pinnedItems.push({
+        title: item.title || 'Untitled',
+        url: item.url,
+        favicon: item.favicon || item.icon,
+        type: item.type
+      });
+      savePinnedItems();
+      renderPins();
+      showNotification('Pinned!', '#10b981');
+    };
+
+    // Remove item from pins
+    const removePin = (index) => {
+      pinnedItems.splice(index, 1);
+      savePinnedItems();
+      renderPins();
+    };
+
+    // Render pinned items
+    const renderPins = () => {
+      // Always show the section now, so users can pin the current page comfortably
+      spotlightPins.style.display = 'block';
+
+      const getPinIcon = (pin) => {
+        if (pin.favicon && (pin.favicon.startsWith('http') || pin.favicon.startsWith('chrome-extension') || pin.favicon.startsWith('data:'))) {
+          return `<img src="${pin.favicon}" onerror="this.parentNode.innerHTML='🔗';" />`;
+        }
+        return '🔗';
+      };
+
+      const getShortTitle = (title) => {
+        if (!title) return 'Link';
+        return title.length > 12 ? title.slice(0, 12) + '…' : title;
+      };
+
+      // Check if current page is already pinned to avoid duplicates
+      const currentUrl = window.location.href;
+      const isCurrentPinned = pinnedItems.some(p => p.url === currentUrl);
+
+      spotlightPins.innerHTML = `
+        <div class="spotlight-pins-header">
+          <span class="spotlight-pins-title">Pinned Quick Access</span>
+        </div>
+        <div class="spotlight-pins-grid">
+          ${pinnedItems.map((pin, i) => `
+            <div class="pin-item" data-index="${i}" data-url="${pin.url}">
+              <div class="pin-icon">${getPinIcon(pin)}</div>
+              <span class="pin-label">${getShortTitle(pin.title)}</span>
+              <span class="pin-remove" data-index="${i}">×</span>
+            </div>
+          `).join('')}
+          ${(!isCurrentPinned && pinnedItems.length < 8) ? `
+            <div class="pin-add" id="pin-current-page" title="Pin this page">
+              <span style="font-size:14px; line-height:1;">+</span>
+              <span>This Page</span>
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      // Add click listeners for pins
+      spotlightPins.querySelectorAll('.pin-item').forEach(item => {
+        item.onclick = (e) => {
+          if (e.target.classList.contains('pin-remove') || e.target.closest('.pin-remove')) {
+            e.stopPropagation();
+            const idx = parseInt(item.dataset.index);
+            removePin(idx);
+            return;
+          }
+          const url = item.dataset.url;
+          if (url) {
+            // If it's the current page, just close spotlight
+            if (url === window.location.href) {
+              toggleSpotlight();
+              return;
+            }
+            window.open(url, '_blank');
+            toggleSpotlight();
+          }
+        };
+      });
+
+      // Add click listener for "Pin Current"
+      const pinCurrentBtn = spotlightPins.querySelector('#pin-current-page');
+      if (pinCurrentBtn) {
+        pinCurrentBtn.onclick = () => {
+          const title = document.title;
+          const url = window.location.href;
+
+          // Get best favicon
+          let favicon = '';
+          const iconLinks = [
+            document.querySelector('link[rel="icon"]'),
+            document.querySelector('link[rel="shortcut icon"]'),
+            document.querySelector('link[rel="apple-touch-icon"]')
+          ];
+          const link = iconLinks.find(l => l && l.href);
+          if (link) favicon = link.href;
+          else {
+            try {
+              favicon = new URL('/favicon.ico', window.location.origin).href;
+            } catch (e) {
+              favicon = '';
+            }
+          }
+
+          addPin({ title, url, favicon, type: 'page' });
+        };
+      }
+    };
+
+    const toggleSpotlight = () => {
+      const isVisible = spotlightOverlay.classList.toggle('visible');
+      if (isVisible) {
+        spotlightInput.value = '';
+        renderResults([]);
+        loadPinnedItems();
+        setTimeout(() => spotlightInput.focus(), 50);
+      }
+    };
+
+    const renderResults = (results = []) => {
+      console.log('[Spotlight:Content] Rendering results:', results.length);
+      currentResults = results;
+      selectedIndex = -1; // Don't auto-select first item - let user choose with arrow keys
+
+      if (results.length === 0) {
+        spotlightResults.innerHTML = '';
+        return;
+      }
+
+      // Helper to get icon - prefer favicon, fallback to type icon
+      const getResultIcon = (res) => {
+        if (res.favicon && (res.favicon.startsWith('http') || res.favicon.startsWith('chrome-extension') || res.favicon.startsWith('data:'))) {
+          return `<img src="${res.favicon}" onerror="this.style.display='none'; this.parentNode.innerHTML='${res.icon || '🔗'}';" />`;
+        }
+        if (res.icon && (res.icon.startsWith('http') || res.icon.startsWith('chrome-extension') || res.icon.startsWith('data:'))) {
+          return `<img src="${res.icon}" onerror="this.style.display='none'; this.parentNode.innerHTML='🔗';" />`;
+        }
+        return res.icon || '🔗';
+      };
+
+      // Helper to format URL for display
+      const formatUrl = (url) => {
+        if (!url) return '';
+        try {
+          const u = new URL(url);
+          return u.hostname.replace('www.', '') + (u.pathname !== '/' ? u.pathname.slice(0, 30) : '');
+        } catch {
+          return url.slice(0, 40);
+        }
+      };
+
+      // Helper to get badge label
+      const getBadgeLabel = (res) => {
+        if (res.type === 'tab') return 'Tab';
+        if (res.type === 'workspace-url') return 'Saved';
+        if (res.type === 'workspace') return 'Space';
+        if (res.type === 'history') return 'History';
+        if (res.type === 'bookmark') return 'Bookmark';
+        if (res.type === 'command') return 'Command';
+        return res.category || '';
+      };
+
+      spotlightResults.innerHTML = results.map((res, i) => `
+        <div class="result-item ${i === selectedIndex ? 'selected' : ''}" data-index="${i}">
+          <div class="result-icon">
+            ${getResultIcon(res)}
+          </div>
+          <div class="result-content">
+            <span class="result-title">${res.title || 'Untitled'}</span>
+            <span class="result-desc">${res.description || formatUrl(res.url)}</span>
+          </div>
+          <span class="result-badge" data-type="${res.type || ''}">${getBadgeLabel(res)}</span>
+          ${res.url ? `<span class="pin-btn" data-index="${i}" title="Pin this">📌</span>` : ''}
+          <div class="result-hint">
+            <span>Open</span>
+            <span class="shortcut-key">↵</span>
+          </div>
+        </div>
+      `).join('');
+
+      // Add click listeners
+      spotlightResults.querySelectorAll('.result-item').forEach(item => {
+        item.onclick = (e) => {
+          // Handle pin button click
+          if (e.target.classList.contains('pin-btn')) {
+            e.stopPropagation();
+            const idx = parseInt(e.target.dataset.index);
+            if (currentResults[idx]) {
+              addPin(currentResults[idx]);
+            }
+            return;
+          }
+          const idx = parseInt(item.dataset.index);
+          executeResult(currentResults[idx]);
+        };
+      });
+    };
+
+    const executeResult = async (item) => {
+      if (!item) return;
+
+      console.log('[Spotlight:Content] Executing result:', item.title, 'type:', item.type, 'tabId:', item.tabId, 'url:', item.url);
+
+      if (item.command) {
+        chrome.runtime.sendMessage({
+          type: 'EXECUTE_COMMAND',
+          commandValue: item.command
+        }, (response) => {
+          if (response?.success) toggleSpotlight();
+        });
+      } else if (item.tabId !== undefined && item.tabId !== null) {
+        // Use explicit check for tabId since tab ID 0 is falsy but valid
+        console.log('[Spotlight:Content] Jumping to tab:', item.tabId);
+        chrome.runtime.sendMessage({ type: 'JUMP_TO_TAB', tabId: item.tabId }, (response) => {
+          console.log('[Spotlight:Content] JUMP_TO_TAB response:', response);
+        });
+        toggleSpotlight();
+      } else if (item.url) {
+        console.log('[Spotlight:Content] Opening URL in new tab:', item.url);
+        window.open(item.url, '_blank');
+        toggleSpotlight();
+      }
+    };
+
+    spotlightInput.oninput = async () => {
+      const value = spotlightInput.value.trim();
+      console.log('[Spotlight:Content] Input changed:', value);
+      if (!value) {
+        renderResults([]);
+        return;
+      }
+
+      // Use direct search service (no message passing needed)
+      console.log('[Spotlight:Content] Searching directly for:', value);
+      try {
+        // Use AI search for natural language queries (3+ words), otherwise fast keyword search
+        const wordCount = value.split(/\s+/).length;
+        const isNaturalLanguage = wordCount >= 3;
+
+        let results;
+        if (isNaturalLanguage) {
+          console.log('[Spotlight:Content] Using AI semantic search for:', value);
+          results = await naturalLanguageSearch(value, 15);
+        } else {
+          results = await quickSearch(value, 15);
+        }
+
+        // Filter out command type results (old/weird recommendations)
+        const filteredResults = results.filter(r => r.type !== 'command');
+        console.log('[Spotlight:Content] Found', filteredResults.length, 'results (filtered out commands)');
+        renderResults(filteredResults);
+      } catch (e) {
+        console.error('[Spotlight:Content] Search error:', e);
+        renderResults([]);
+      }
+    };
+
+    spotlightInput.onkeydown = (e) => {
+      // CRITICAL: Stop all keyboard events from bubbling to the page
+      // This prevents underlying page elements (GitHub editor, Claude input, etc.)
+      // from capturing keystrokes while the Spotlight search input is focused
+      e.stopPropagation();
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (currentResults.length > 0) {
+          // If nothing selected, select first item. Otherwise, move down.
+          if (selectedIndex === -1) {
+            selectedIndex = 0;
+          } else {
+            selectedIndex = (selectedIndex + 1) % currentResults.length;
+          }
+          updateSelection();
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (currentResults.length > 0) {
+          // If nothing selected, select last item. Otherwise, move up.
+          if (selectedIndex === -1) {
+            selectedIndex = currentResults.length - 1;
+          } else {
+            selectedIndex = (selectedIndex - 1 + currentResults.length) % currentResults.length;
+          }
+          updateSelection();
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedIndex >= 0 && currentResults[selectedIndex]) {
+          console.log('[Spotlight:Content] Executing:', currentResults[selectedIndex].title);
+          executeResult(currentResults[selectedIndex]);
+        } else if (spotlightInput.value.trim()) {
+          // No results or no selection - fall back to default search engine
+          const query = spotlightInput.value.trim();
+          console.log('[Spotlight:Content] No results, opening default search for:', query);
+
+          // Try Chrome's default search engine first
+          if (chrome?.search?.query) {
+            chrome.search.query({
+              text: query,
+              disposition: 'NEW_TAB'
+            });
+          } else {
+            // Fallback to Google
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, '_blank');
+          }
+
+          toggleSpotlight();
+        }
+      } else if (e.key === 'Escape') {
+        toggleSpotlight();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+        // Pin the selected item
+        e.preventDefault();
+        if (selectedIndex >= 0 && currentResults[selectedIndex] && currentResults[selectedIndex].url) {
+          addPin(currentResults[selectedIndex]);
+        }
+      }
+    };
+
+    const updateSelection = () => {
+      const items = spotlightResults.querySelectorAll('.result-item');
+      items.forEach((item, i) => {
+        item.classList.toggle('selected', i === selectedIndex);
+        if (i === selectedIndex) {
+          item.scrollIntoView({ block: 'nearest' });
+        }
+      });
+    };
+
+    spotlightOverlay.onclick = (e) => {
+      if (e.target === spotlightOverlay) toggleSpotlight();
+    };
+
+    // Listen for global command from background
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.type === 'TOGGLE_SPOTLIGHT') {
+        toggleSpotlight();
+      }
+    });
+
+    // Fallback keyboard shortcut for Alt+S
+    window.addEventListener('keydown', (e) => {
+      if (e.altKey && (e.key === 's' || e.key === 'S')) {
+        // Only trigger if not in an input/textarea (unless it's our own spotlight input)
+        const target = e.target;
+        const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
+        if (isInput && target !== spotlightInput) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        toggleSpotlight();
+      }
+    }, true);
+
+    // --- End Spotlight ---
+
+    // Click handler - toggle menu expansion
+    toggleBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Toggle expanded state
+      container.classList.toggle('expanded');
+
+      // Visual feedback
+      toggleBtn.style.transform = 'translateX(-2px) scale(0.95)';
+      setTimeout(() => {
+        toggleBtn.style.transform = '';
+      }, 150);
+    });
+
+    // Double-click handler - open side panel
+    toggleBtn.addEventListener('dblclick', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Prevent double-clicks while processing
+      if (toggleBtn.classList.contains('loading')) return;
+
+      // Add loading state
+      toggleBtn.classList.add('loading');
+
+      // Show immediate feedback that the click was registered
+      showNotification('Opening CoolDesk...', '#4A90E2', 3000);
+
+      try {
+        await openSidePanel();
+      } catch (error) {
+        console.error('[CoolDesk Button] Error in click handler:', error);
+        showNotification('Failed to open CoolDesk. Please try again.', '#ff4444', 5000);
+      } finally {
+        // Remove loading state
+        setTimeout(() => {
+          toggleBtn.classList.remove('loading');
+        }, 500);
+      }
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!host.contains(e.target)) {
+        container.classList.remove('expanded');
+      }
+    });
+
+    // Drag functionality
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+
+    const handleMouseDown = (e) => {
+      // Only start drag if not clicking the button itself
+      if (e.target === toggleBtn || toggleBtn.contains(e.target)) {
+        return;
+      }
+
+      isDragging = true;
+      container.classList.add('dragging');
+
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = container.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleMouseMove = (e) => {
+      if (!isDragging) return;
+
+      const deltaY = e.clientY - startY;
+      let newTop = startTop + deltaY;
+
+      // Keep button within viewport bounds (vertical only)
+      const buttonHeight = 60;
+      const margin = 10;
+
+      newTop = Math.max(margin, Math.min(window.innerHeight - buttonHeight - margin, newTop));
+
+      container.style.top = newTop + 'px';
+      container.style.right = '0px';
+      container.style.transform = 'translateY(-50%)';
+
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    const handleMouseUp = (e) => {
+      if (!isDragging) return;
+
+      isDragging = false;
+      container.classList.remove('dragging');
+
+      // Save vertical position to localStorage
+      try {
+        const rect = container.getBoundingClientRect();
+        localStorage.setItem('cooldesk-button-position', JSON.stringify({
+          top: rect.top
+        }));
+      } catch (e) {
+        console.warn('Could not save button position:', e);
+      }
+
+      e.stopPropagation();
+    };
+
+    // Load saved vertical position
+    try {
+      const savedPosition = localStorage.getItem('cooldesk-button-position');
+      if (savedPosition) {
+        const data = JSON.parse(savedPosition);
+        if (data.top !== undefined) {
+          container.style.top = data.top + 'px';
+          container.style.right = '0px';
+          container.style.transform = 'translateY(-50%)';
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load saved button position:', e);
+    }
+
+    // ... (existing resize/drag logic) ...
+
+    // --- Helper 1: Inline Highlighter (Robust Multi-Node Global Mapping) ---
+    // Store active highlights to re-apply them on DOM changes
+    let activeHighlights = [];
+    let observer = null;
+    let observerTimeout = null;
+
+    // Listen for notifications
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.type === 'SHOW_NOTIFICATION') {
+        showNotification(msg.message, msg.color || '#4A90E2');
+      }
+    });
+
+    const renderInlineHighlight = (note) => {
+      if (!note.text) return;
+
+      try {
+        const searchStr = note.text.trim();
+        if (!searchStr) return;
+
+        // Step 1: Build a global map of all text content
+        const nodeMapping = [];
+        let allText = '';
+
+        const walker = document.createTreeWalker(
+          document.body,
+          NodeFilter.SHOW_TEXT,
+          {
+            acceptNode: (node) => {
+              // Skip empty/whitespace-only (unless it has newlines which might be structural)
+              if (!node.nodeValue.trim() && !node.nodeValue.includes('\n')) return NodeFilter.FILTER_SKIP;
+
+              const parent = node.parentElement;
+              if (!parent) return NodeFilter.FILTER_REJECT;
+
+              // AGGRESSIVE FILTERING: Skip "noise" elements
+              // 1. Script/Style/Form inputs
+              if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION'].includes(parent.tagName)) return NodeFilter.FILTER_REJECT;
+
+              // 2. Interactive elements that usually contain "UI text" not "Content"
+              // (e.g. "Copy Code", "Submit", "Menu")
+              if (['BUTTON', 'svg', 'nav', 'menu'].includes(parent.tagName.toLowerCase())) return NodeFilter.FILTER_REJECT;
+              if (parent.closest('button') || parent.closest('a[role="button"]')) return NodeFilter.FILTER_REJECT;
+
+              // 3. Accessibility hidden content
+              if (parent.getAttribute('aria-hidden') === 'true') return NodeFilter.FILTER_REJECT;
+
+              // 4. Our own elements
+              if (parent.closest('.cooldesk-sticky-note') || parent.closest('#cooldesk-footer-bar') || parent.classList.contains('cooldesk-text-highlight')) return NodeFilter.FILTER_REJECT;
+
+              // Check visibility (expensive but necessary for "visual" search?)
+              if (parent.offsetParent === null) return NodeFilter.FILTER_REJECT;
+
+              return NodeFilter.FILTER_ACCEPT;
+            }
+          },
+          false
+        );
+
+        let currentNode;
+        while (currentNode = walker.nextNode()) {
+          const val = currentNode.nodeValue;
+          nodeMapping.push({
+            node: currentNode,
+            start: allText.length,
+            end: allText.length + val.length,
+            length: val.length,
+            text: val
+          });
+          allText += val;
+        }
+
+        // Step 2: Create a robust regex
+        const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        // Robust Tokenization: Split by ANY whitespace (newlines, tabs, spaces, nbsp)
+        const tokens = searchStr.trim().split(/[\s\u00A0]+/);
+
+        // Rebuild pattern: 
+        // 1. Escape each token
+        // 2. Join with flexible whitespace pattern matching:
+        //    - Standard spaces (\s)
+        //    - Newlines (\n, \r)
+        //    - Non-breaking spaces (\u00A0)
+        //    - Zero or more times (*)
+        const flexibleWhitespace = '[\\s\\n\\r\\u00A0]*';
+        const pattern = tokens.map(escapeRegExp).join(flexibleWhitespace);
+
+        // Handle smart quotes in the final pattern
+        const finalPattern = pattern
+          .replace(/'/g, "['’]")
+          .replace(/"/g, '["“”]');
+
+        const regex = new RegExp(finalPattern, 'gmi');
+
+        // Step 3: Find matches
+        let match;
+        let foundAny = false;
+
+        while ((match = regex.exec(allText)) !== null) {
+          foundAny = true;
+          const globalStart = match.index;
+          const globalEnd = match.index + match[0].length;
+
+          // Step 4: Map back to nodes
+          const affectedNodes = nodeMapping.filter(m =>
+            (m.start < globalEnd) && (m.end > globalStart)
+          );
+
+          if (affectedNodes.length === 0) continue;
+
+          affectedNodes.forEach(m => {
+            const nodeStart = Math.max(0, globalStart - m.start);
+            const nodeEnd = Math.min(m.length, globalEnd - m.start);
+
+            if (nodeEnd > nodeStart) {
+              // Check if already highlighted
+              if (m.node.parentElement && m.node.parentElement.classList.contains('cooldesk-text-highlight') && m.node.parentElement.dataset.id === note.id) {
+                return;
+              }
+
+              try {
+                const range = document.createRange();
+                range.setStart(m.node, nodeStart);
+                range.setEnd(m.node, nodeEnd);
+
+                const mark = document.createElement('span');
+                mark.className = 'cooldesk-text-highlight';
+                mark.dataset.id = note.id;
+                mark.title = 'CoolDesk Highlight';
+
+                // Simple underline style
+                mark.style.textDecoration = 'underline';
+                mark.style.textDecorationColor = '#8b5cf6'; // Violet underline
+                mark.style.textDecorationThickness = '2px';
+                mark.style.textUnderlineOffset = '2px';
+                mark.style.cursor = 'pointer';
+
+                mark.onclick = async (e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  if (confirm('Delete this highlight?')) {
+                    try {
+                      await new Promise(resolve => {
+                        chrome.runtime.sendMessage({ action: 'deleteUrlNote', noteId: note.id }, resolve);
+                      });
+
+                      document.querySelectorAll(`span.cooldesk-text-highlight[data-id="${note.id}"]`).forEach(el => {
+                        const parent = el.parentNode;
+                        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                        parent.removeChild(el);
+                        parent.normalize();
+                      });
+
+                      activeHighlights = activeHighlights.filter(h => h.id !== note.id);
+                      showNotification('Highlight removed', '#4b5563');
+                    } catch (err) {
+                      console.error('Failed to delete highlight:', err);
+                    }
+                  }
+                };
+
+                range.surroundContents(mark);
+              } catch (e) {
+                console.warn('[CoolDesk Highlight] Failed to wrap node:', e);
+              }
+            }
+          });
+        }
+
+        if (foundAny) {
+          console.log('[CoolDesk] Highlight applied for:', searchStr.substring(0, 20) + '...');
+        }
+
+      } catch (e) {
+        console.error('Error rendering inline highlight:', e);
+      }
+    };
+
+    // Mutation Observer to handle dynamic content (ChatGPT streaming)
+    const setupObserver = () => {
+      if (observer) return;
+
+      observer = new MutationObserver((mutations) => {
+        // Debounce: only run if no new mutations for 1s
+        if (observerTimeout) clearTimeout(observerTimeout);
+
+        observerTimeout = setTimeout(() => {
+          if (activeHighlights.length > 0) {
+            // console.log('[CoolDesk] DOM changed, re-applying highlights');
+            activeHighlights.forEach(renderInlineHighlight);
+          }
+        }, 1000);
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+    };
+
+    // --- Helper 2: Sticky Card Renderer ---
+    const renderSingleSticky = (note, index) => {
+      const stickyNote = document.createElement('div');
+      stickyNote.className = 'cooldesk-sticky-note';
+
+      // Stacked positions
+      const initialTop = 100 + (index * 40);
+      const initialRight = 80 + (index * 5);
+
+      stickyNote.style.cssText = `
+        position: fixed;
+        top: ${initialTop}px;
+        right: ${initialRight}px;
+        width: 240px;
+        min-height: ${note.isCollapsed ? '40px' : '180px'};
+        height: ${note.isCollapsed ? 'auto' : ''};
+        background: linear-gradient(135deg, #fef9c3 0%, #fef08a 100%);
+        color: #1f2937;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        z-index: ${2147483645 + index};
+        transition: min-height 0.2s ease, box-shadow 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      `;
+
+      let isCollapsed = !!note.isCollapsed;
+
+      // Note Header
+      const header = document.createElement('div');
+      header.style.cssText = `
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11px;
+        color: #6b7280;
+        background: rgba(255, 255, 255, 0.4);
+        cursor: grab;
+        user-select: none;
+      `;
+
+      // Title Area
+      const titleArea = document.createElement('div');
+      titleArea.style.cssText = 'display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;';
+
+      const toggleIcon = document.createElement('span');
+      toggleIcon.innerHTML = '▼';
+      toggleIcon.style.cssText = `cursor: pointer; font-size: 10px; transition: transform 0.2s; padding: 2px; transform: ${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'};`;
+
+      const titleText = document.createElement('span');
+      titleText.textContent = new Date(note.updatedAt || note.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      titleText.style.cssText = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+
+      titleArea.appendChild(toggleIcon);
+      titleArea.appendChild(titleText);
+
+      const deleteBtn = document.createElement('div');
+      deleteBtn.innerHTML = '×';
+      deleteBtn.title = 'Delete Note';
+      deleteBtn.style.cssText = `cursor: pointer; font-size: 18px; line-height: 1; color: #9ca3af; font-weight: bold; padding: 0 4px; margin-left: 8px;`;
+      deleteBtn.onmouseenter = () => deleteBtn.style.color = '#ef4444';
+      deleteBtn.onmouseleave = () => deleteBtn.style.color = '#9ca3af';
+      deleteBtn.onclick = async (e) => {
+        e.stopPropagation();
+        if (confirm('Delete this note?')) {
+          try {
+            await new Promise(resolve => {
+              chrome.runtime.sendMessage({ action: 'deleteUrlNote', noteId: note.id }, resolve);
+            });
+            stickyNote.style.transform = 'scale(0.9) opacity(0)';
+            setTimeout(() => stickyNote.remove(), 200);
+            showNotification('Note deleted', '#4b5563');
+          } catch (err) {
+            console.error('Failed to delete note:', err);
+          }
+        }
+      };
+
+      header.appendChild(titleArea);
+      header.appendChild(deleteBtn);
+
+      // Textarea
+      const textarea = document.createElement('textarea');
+      textarea.value = note.text || note.description || '';
+      textarea.placeholder = 'Empty note...';
+      textarea.style.cssText = `
+        flex: 1; width: 100%; border: none; background: transparent; resize: none; padding: 12px; font-family: inherit; font-size: 14px; line-height: 1.5; color: #374151; outline: none;
+        display: ${isCollapsed ? 'none' : 'block'}; min-height: 140px;
+      `;
+
+      // Logic
+      const toggleCollapse = (e) => {
+        if (e) e.stopPropagation();
+        isCollapsed = !isCollapsed;
+        if (isCollapsed) {
+          textarea.style.display = 'none';
+          stickyNote.style.minHeight = 'auto';
+          stickyNote.style.height = 'auto';
+          toggleIcon.style.transform = 'rotate(-90deg)';
+          const preview = (note.text || '').split('\n')[0].substring(0, 20);
+          if (preview) titleText.textContent = preview + (note.text.length > 20 ? '...' : '');
+        } else {
+          textarea.style.display = 'block';
+          stickyNote.style.minHeight = '180px';
+          toggleIcon.style.transform = 'rotate(0deg)';
+          titleText.textContent = new Date(note.updatedAt || note.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+      };
+      toggleIcon.onclick = toggleCollapse;
+
+      // Drag
+      let isDragging = false;
+      let startX, startY, initialLeft, initialTopDrag;
+      header.onmousedown = (e) => {
+        if (e.target === deleteBtn || e.target === toggleIcon) return;
+        isDragging = true;
+        header.style.cursor = 'grabbing';
+        stickyNote.style.zIndex = '2147483650';
+        const rect = stickyNote.getBoundingClientRect();
+        startX = e.clientX; startY = e.clientY; initialLeft = rect.left; initialTopDrag = rect.top;
+        e.preventDefault();
+      };
+      const onMouseMove = (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX; const dy = e.clientY - startY;
+        stickyNote.style.right = 'auto'; stickyNote.style.left = `${initialLeft + dx}px`; stickyNote.style.top = `${initialTopDrag + dy}px`;
+      };
+      const onMouseUp = () => { if (isDragging) { isDragging = false; header.style.cursor = 'grab'; } };
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+
+      // Save
+      let originalGenericText = note.text || '';
+      const saveChanges = async () => {
+        const newText = textarea.value.trim();
+        if (newText !== originalGenericText) {
+          try {
+            const updatedNote = { ...note, text: newText, updatedAt: Date.now() };
+            const res = await new Promise(resolve => { chrome.runtime.sendMessage({ action: 'saveUrlNote', note: updatedNote }, resolve); });
+            if (res && res.success) {
+              originalGenericText = newText;
+              showNotification('Note updated', '#10b981', 2000);
+              if (!isCollapsed) titleText.textContent = 'Just now';
+            }
+          } catch (err) { console.error('Error saving:', err); }
+        }
+      };
+      textarea.addEventListener('blur', saveChanges);
+      textarea.addEventListener('keydown', (e) => { if (e.ctrlKey && e.key === 'Enter') textarea.blur(); });
+
+      stickyNote.appendChild(header);
+      stickyNote.appendChild(textarea);
+      stickyNote.onmouseenter = () => { if (!isDragging) { stickyNote.style.zIndex = '2147483650'; stickyNote.style.boxShadow = '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)'; } };
+      stickyNote.onmouseleave = () => { if (!isDragging && document.activeElement !== textarea) { stickyNote.style.zIndex = `${2147483645 + index}`; stickyNote.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)'; } };
+
+      shadow.appendChild(stickyNote);
+    };
+
+    // Sticky Notes Functionality
+    const renderStickyNotes = async () => {
+      try {
+        console.log('[CoolDesk] Fetching notes for URL:', window.location.href);
+        const response = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ action: 'getUrlNotes', url: window.location.href }, resolve);
+        });
+
+        console.log('[CoolDesk] Full Notes Response:', response);
+
+        // Remove existing sticky notes (but preserve open editors if any)
+        const existingNotes = shadow.querySelectorAll('.cooldesk-sticky-note:not(.sticky-editor)');
+        existingNotes.forEach(n => n.remove());
+
+        // Remove existing inline highlights
+        const oldHighlights = document.querySelectorAll('mark.cooldesk-text-highlight');
+        oldHighlights.forEach(mark => {
+          const parent = mark.parentNode;
+          while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+          parent.removeChild(mark);
+        });
+
+        if (response && response.success && response.notes && response.notes.length > 0) {
+          console.log('[CoolDesk] Rendering', response.notes.length, 'notes');
+
+          const stickyNotes = response.notes.filter(n => n.type !== 'highlight');
+          const highlights = response.notes.filter(n => n.type === 'highlight');
+
+          console.log('[CoolDesk] Sticky notes:', stickyNotes.length, stickyNotes);
+          console.log('[CoolDesk] Highlights:', highlights.length, highlights);
+
+          // Store active highlights for observer
+          activeHighlights = highlights;
+          setupObserver();
+
+
+          // Store active highlights for observer
+          activeHighlights = highlights;
+          setupObserver();
+
+          stickyNotes.forEach(renderSingleSticky);
+          highlights.forEach(renderInlineHighlight);
+        } else {
+          console.log('[CoolDesk] No notes to render or fetch failed');
+        }
+      } catch (e) {
+        console.warn('Failed to load sticky notes:', e);
+      }
+    };
+
+
+    // Initial load
+    setTimeout(renderStickyNotes, 1000);
+
+    // Listen for refreshes
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.action === 'refreshNotesCount') {
+        renderStickyNotes();
+      }
+    });
+
+  } catch (e) {
+    console.error('Error injecting CoolDesk floating button:', e);
+  }
+}
+
+/**
+ * ============================================
+ * CLICK-TO-SCRAPE LINK SELECTOR
+ * ============================================
+ * Allows users to click on any link to scrape all similar links
+ */
+
+/**
+ * Predefined Selectors for common platforms
+ * Allows auto-scraping without manual selection
+ */
+const PREDEFINED_SELECTORS = {
+  // GitHub
+  'github.com': [
+    // File list
+    {
+      selector: '.js-navigation-container .js-navigation-item .js-navigation-open[href]',
+      container: '.js-navigation-container',
+      links: '.js-navigation-item .js-navigation-open[href]',
+      description: 'GitHub File List',
+      scrapeLimit: 100
+    },
+    // Issue/PR list
+    {
+      selector: '.js-issue-row .js-navigation-open[href]',
+      container: '.js-navigation-container',
+      links: '.js-issue-row .js-navigation-open[href]',
+      description: 'GitHub Issues/PRs',
+      scrapeLimit: 50
+    }
+  ],
+  // Hacker News
+  'news.ycombinator.com': [
+    {
+      selector: '.athing .titleline > a',
+      container: '#hnmain',
+      links: '.athing .titleline > a',
+      description: 'Hacker News Stories',
+      scrapeLimit: 30
+    }
+  ],
+  // Stack Overflow
+  'stackoverflow.com': [
+    {
+      selector: '.s-post-summary--content-title a.s-link',
+      container: '#questions',
+      links: '.s-post-summary--content-title a.s-link',
+      description: 'StackOverflow Questions',
+      scrapeLimit: 50
+    }
+  ],
+  // YouTube (Generic fallback, hard due to Shadow DOM but worth a try)
+  'youtube.com': [
+    {
+      selector: 'ytd-rich-grid-media #video-title-link',
+      container: 'ytd-rich-grid-renderer',
+      links: '#video-title-link',
+      description: 'YouTube Home Videos',
+      scrapeLimit: 20
+    }
+  ],
+  // Wikipedia
+  'wikipedia.org': [
+    {
+      selector: '#mw-content-text ul li a[href^="/wiki/"]:not(.new)',
+      container: '#mw-content-text',
+      links: 'ul li a[href^="/wiki/"]:not(.new)',
+      description: 'Wikipedia List Links',
+      scrapeLimit: 100
+    }
+  ]
+};
+
+let isSelectMode = false;
+let isSelectionLocked = false;
+let isTableVisible = false; // New state for table view
+let excludedPatterns = new Set(); // New state for path patterns
+let includedPatterns = new Set(); // New state for path patterns (whitelist)
+let manuallyExcludedUrls = new Set(); // New state for individual URL exclusion
+// State for auto-scrape observers
+let autoScrapeObserver = null;
+let lastAutoScrapeUrl = '';
+let autoScrapeTimeout = null;
+let isObserverActive = false;
+let selectOverlay = null;
+let selectTooltip = null;
+let highlightedLink = null;
+let currentShadowRoot = null;
+let currentShowNotification = null;
+let pendingSelectorInfo = null;
+let excludedDomains = new Set();
+let scrapeLimit = 50; // Default limit for scraped items
+let titleSelector = null; // Custom CSS selector for title extraction
+let titleSource = 'auto'; // 'auto', 'selector', 'url'
+
+/**
+ * Get hostname for storage key
+ */
+function getHostKey() {
+  return window.location.hostname.replace(/^www\./, '');
+}
+
+/**
+ * Generate CSS selector for similar links
+ * Strategy: Find the repeating card/item pattern, not just any container
+ */
+function generateLinkSelector(link) {
+  // Strategy 1: Find the card/item wrapper that repeats
+  const cardInfo = findRepeatingCard(link);
+  if (cardInfo) {
+    return cardInfo;
+  }
+
+  // Strategy 2: Find parent container with multiple links
+  const container = findLinkContainer(link);
+  if (!container) {
+    return buildSimpleSelector(link);
+  }
+
+  const containerSelector = buildContainerSelector(container);
+  const linkPattern = buildLinkPattern(link, container);
+
+  return {
+    container: containerSelector,
+    links: linkPattern,
+    full: containerSelector ? `${containerSelector} ${linkPattern}` : linkPattern,
+    sample: {
+      title: extractLinkTitle(link),
+      url: link.href,
+    }
+  };
+}
+
+/**
+ * Find the repeating card/item pattern
+ * Look for parent elements that have siblings with the same structure
+ */
+function findRepeatingCard(link) {
+  let current = link;
+  let depth = 0;
+  const maxDepth = 8; // Don't go too far up
+
+  while (current && current !== document.body && depth < maxDepth) {
+    const parent = current.parentElement;
+    if (!parent) break;
+
+    // Check if this element has siblings with similar structure
+    const siblings = Array.from(parent.children);
+    const similarSiblings = siblings.filter(sibling => {
+      if (sibling === current) return true;
+      // Check if sibling has similar structure (same tag, similar classes)
+      if (sibling.tagName !== current.tagName) return false;
+      // Must contain at least one link
+      if (!sibling.querySelector('a[href]')) return false;
+      // Similar class pattern (at least one shared class)
+      const currentClasses = getMeaningfulClasses(current);
+      const siblingClasses = getMeaningfulClasses(sibling);
+      if (currentClasses.length > 0 && siblingClasses.length > 0) {
+        const shared = currentClasses.filter(c => siblingClasses.includes(c));
+        return shared.length > 0;
+      }
+      return true;
+    });
+
+    // Found repeating pattern with 2+ similar items
+    if (similarSiblings.length >= 2) {
+      // Build selector for the card and its primary link
+      const cardSelector = buildCardSelector(current, parent);
+      const linkInCard = buildLinkInCardSelector(link, current);
+
+      // Verify the selector matches expected count
+      const fullSelector = `${cardSelector} ${linkInCard}`;
+      try {
+        const matches = document.querySelectorAll(fullSelector);
+        // Good if it matches roughly the number of similar siblings
+        if (matches.length >= 2 && matches.length <= similarSiblings.length * 3) {
+          return {
+            container: cardSelector,
+            links: linkInCard,
+            full: fullSelector,
+            cardCount: similarSiblings.length,
+            sample: {
+              title: extractLinkTitle(link),
+              url: link.href,
+            }
+          };
+        }
+      } catch (e) {
+        console.warn('[Scraper] Invalid selector:', fullSelector);
+      }
+    }
+
+    current = parent;
+    depth++;
+  }
+
+  return null;
+}
+
+/**
+ * Build selector for the card element
+ */
+function buildCardSelector(card, parent) {
+  const parts = [];
+
+  // Start with parent selector if it has ID or meaningful class
+  if (parent.id) {
+    parts.push(`#${CSS.escape(parent.id)}`);
+  } else {
+    const parentClasses = getMeaningfulClasses(parent);
+    if (parentClasses.length > 0) {
+      parts.push(`.${CSS.escape(parentClasses[0])}`);
+    }
+  }
+
+  // Add card tag
+  parts.push(card.tagName.toLowerCase());
+
+  // Add card's meaningful classes (max 2)
+  const cardClasses = getMeaningfulClasses(card);
+  if (cardClasses.length > 0) {
+    parts.push(`.${cardClasses.slice(0, 2).map(c => CSS.escape(c)).join('.')}`);
+  }
+
+  // Add data attributes if present (common in React/Vue apps)
+  const dataAttrs = Array.from(card.attributes).filter(a => a.name.startsWith('data-') && a.value);
+  for (const attr of dataAttrs.slice(0, 1)) {
+    // Only use boolean-style data attrs or short values
+    if (!attr.value || attr.value.length < 30) {
+      parts.push(`[${attr.name}]`);
+      break;
+    }
+  }
+
+  return parts.join(' > ');
+}
+
+/**
+ * Build selector for the link within a card
+ */
+function buildLinkInCardSelector(link, card) {
+  // If link is direct child
+  if (link.parentElement === card) {
+    const linkClasses = getMeaningfulClasses(link);
+    if (linkClasses.length > 0) {
+      return `> a.${CSS.escape(linkClasses[0])}[href]`;
+    }
+    return '> a[href]';
+  }
+
+  // Link is nested - try to find its direct container
+  const linkClasses = getMeaningfulClasses(link);
+  if (linkClasses.length > 0) {
+    return `a.${CSS.escape(linkClasses[0])}[href]`;
+  }
+
+  // Check if link has href pattern we can use
+  const href = link.getAttribute('href') || '';
+  if (href.startsWith('/')) {
+    // Internal link - use first path segment as pattern
+    const pathMatch = href.match(/^\/([a-z0-9-]+)/i);
+    if (pathMatch) {
+      return `a[href^="/${pathMatch[1]}"]`;
+    }
+  }
+
+  // Fallback: first link in card
+  return 'a[href]:first-of-type';
+}
+
+/**
+ * Find container with multiple similar links (fallback)
+ */
+function findLinkContainer(link) {
+  let current = link.parentElement;
+  let bestContainer = null;
+  let bestScore = 0;
+
+  while (current && current !== document.body) {
+    const links = current.querySelectorAll('a[href]');
+    const linkCount = links.length;
+
+    if (linkCount >= 3) {
+      const score = linkCount;
+      const isSemanticContainer =
+        current.tagName === 'NAV' ||
+        current.tagName === 'UL' ||
+        current.tagName === 'OL' ||
+        current.getAttribute('role') === 'navigation' ||
+        current.getAttribute('role') === 'menu' ||
+        current.classList.contains('sidebar') ||
+        current.id?.includes('sidebar');
+
+      if (isSemanticContainer && score > bestScore) {
+        bestScore = score;
+        bestContainer = current;
+      } else if (score > bestScore * 1.5) {
+        bestScore = score;
+        bestContainer = current;
+      }
+    }
+    current = current.parentElement;
+  }
+  return bestContainer;
+}
+
+/**
+ * Build selector for container
+ */
+function buildContainerSelector(container) {
+  if (container.id) {
+    return `#${CSS.escape(container.id)}`;
+  }
+
+  const parts = [container.tagName.toLowerCase()];
+
+  const role = container.getAttribute('role');
+  if (role) {
+    parts.push(`[role="${role}"]`);
+    return parts.join('');
+  }
+
+  const meaningfulClasses = getMeaningfulClasses(container);
+  if (meaningfulClasses.length > 0) {
+    parts.push(`.${meaningfulClasses.slice(0, 2).map(c => CSS.escape(c)).join('.')}`);
+  }
+
+  return parts.join('');
+}
+
+/**
+ * Build pattern to match links
+ */
+function buildLinkPattern(link, container) {
+  const listItem = link.closest('li');
+  if (listItem && container.contains(listItem)) {
+    return 'li a[href]';
+  }
+
+  const linkClasses = getMeaningfulClasses(link);
+  if (linkClasses.length > 0) {
+    return `a.${CSS.escape(linkClasses[0])}[href]`;
+  }
+
+  return 'a[href]';
+}
+
+/**
+ * Build simple selector fallback
+ */
+function buildSimpleSelector(link) {
+  const parts = ['a'];
+  const classes = getMeaningfulClasses(link);
+  if (classes.length > 0) {
+    parts.push(`.${classes.slice(0, 2).map(c => CSS.escape(c)).join('.')}`);
+  }
+  parts.push('[href]');
+
+  return {
+    container: null,
+    links: parts.join(''),
+    full: parts.join(''),
+    sample: {
+      title: extractLinkTitle(link),
+      url: link.href,
+    }
+  };
+}
+
+/**
+ * Get meaningful class names (filter utility classes)
+ */
+function getMeaningfulClasses(element) {
+  const classList = Array.from(element.classList || []);
+  const skipPatterns = [
+    /^(p|m|px|py|mx|my|pt|pb|pl|pr|mt|mb|ml|mr)-/,
+    /^(w|h|min|max)-/,
+    /^(flex|grid|block|inline|hidden)/,
+    /^(text|font|bg|border|rounded|shadow)/,
+    /^(hover|focus|active|disabled):/,
+    /^(sm|md|lg|xl|2xl):/,
+    /^_/,
+    /^css-/,
+    /^sc-/,
+    /^[a-z]{1,2}$/,
+  ];
+
+  return classList.filter(cls => {
+    if (cls.length < 2) return false;
+    return !skipPatterns.some(pattern => pattern.test(cls));
+  });
+}
+
+/**
+ * Extract title from link
+ */
+function extractLinkTitle(link) {
+  const strategies = [
+    // 1. Explicit title/aria-label attributes (highest priority)
+    () => link.getAttribute('title'),
+    () => link.getAttribute('aria-label'),
+    () => link.querySelector('[title]')?.getAttribute('title'),
+
+    // 2. Look for project/item name in dedicated elements
+    () => link.querySelector('[class*="project-name"], [class*="projectName"]')?.textContent?.trim(),
+    () => link.querySelector('[class*="repo-name"], [class*="repoName"]')?.textContent?.trim(),
+    () => link.querySelector('[data-testid*="name"], [data-testid*="title"]')?.textContent?.trim(),
+
+    // 3. Headers inside the link
+    () => link.querySelector('h1, h2, h3, h4, h5, h6')?.textContent?.trim(),
+
+    // 4. Common truncate patterns (but validate length)
+    () => {
+      const truncate = link.querySelector('.truncate, [class*="truncate"]');
+      if (truncate) {
+        const text = truncate.textContent?.trim();
+        // Only use if it looks like a real title (not partial)
+        if (text && text.length >= 3 && !text.match(/^[a-z]{1,4}$/)) {
+          return text;
+        }
+      }
+      return null;
+    },
+
+    // 5. First meaningful span/p (skip icons, badges)
+    () => {
+      const spans = link.querySelectorAll('span, p');
+      for (const span of spans) {
+        // Skip if it's likely an icon or badge
+        if (span.querySelector('svg, img')) continue;
+        if (span.classList.contains('sr-only')) continue;
+
+        const text = span.textContent?.trim();
+        // Must be a reasonable title length
+        if (text && text.length >= 3 && text.length < 150) {
+          // Avoid partial words (likely truncated CSS issues)
+          if (!text.match(/^[a-z]{1,4}$/) && !text.match(/^[A-Z][a-z]$/)) {
+            return text;
+          }
+        }
+      }
+      return null;
+    },
+
+    // 6. Full text content (cleaned)
+    () => {
+      const clone = link.cloneNode(true);
+      clone.querySelectorAll('svg, img, .sr-only, [aria-hidden="true"]').forEach(el => el.remove());
+      const text = clone.textContent?.trim().replace(/\s+/g, ' ');
+      if (text && text.length >= 3 && text.length < 200) {
+        return text;
+      }
+      return null;
+    },
+  ];
+
+  for (const strategy of strategies) {
+    try {
+      const title = strategy();
+      if (title && title.trim().length >= 3) {
+        return title.trim().replace(/\s+/g, ' ');
+      }
+    } catch { continue; }
+  }
+  return null;
+}
+
+/**
+ * Extract title from URL as fallback
+ * Useful when DOM title extraction fails
+ */
+function extractTitleFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    const segments = pathname.split('/').filter(Boolean);
+
+    // Get the last meaningful segment (usually the project/item name)
+    for (let i = segments.length - 1; i >= 0; i--) {
+      const seg = segments[i];
+      // Skip UUIDs and numeric IDs
+      if (seg.length === 36 && seg.split('-').length === 5) continue;
+      if (/^\d+$/.test(seg)) continue;
+      if (seg.length < 2) continue;
+
+      // Format: replace hyphens/underscores with spaces, title case
+      return seg
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a DOM-extracted title looks bad/truncated
+ * Returns true if we should use URL title instead
+ */
+function isBadTitle(domTitle, urlTitle) {
+  if (!domTitle) return true;
+
+  const title = domTitle.trim().toLowerCase();
+  const urlLower = urlTitle?.toLowerCase() || '';
+
+  // Too short (likely truncated)
+  if (title.length < 3) return true;
+
+  // Looks like a domain (contains .vercel.app, .netlify.app, etc.)
+  if (title.includes('.vercel.app') || title.includes('.netlify.app') ||
+    title.includes('.github.io') || title.includes('.com') ||
+    title.includes('.app') || title.includes('.dev')) {
+    return true;
+  }
+
+  // Is a substring of the URL title (likely truncated)
+  // e.g., "atecost" is part of "calculatecost-cloud"
+  if (urlLower && urlLower.replace(/[-_\s]/g, '').includes(title.replace(/[-_\s]/g, ''))) {
+    // But only if significantly shorter
+    if (title.length < urlLower.length * 0.6) {
+      return true;
+    }
+  }
+
+  // Single word with no vowels or very few vowels (likely truncated)
+  if (!title.includes(' ')) {
+    const vowels = title.match(/[aeiou]/gi);
+    if (!vowels || vowels.length < title.length * 0.15) {
+      return true;
+    }
+  }
+
+  // All lowercase short string (likely partial)
+  if (title.length < 8 && title === title.toLowerCase() && !title.includes(' ')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Count similar links that would be matched
+ */
+function countSimilarLinks(link) {
+  const selector = generateLinkSelector(link);
+  if (!selector) return 1;
+
+  // If we found a card pattern, return the card count
+  if (selector.cardCount) {
+    return selector.cardCount;
+  }
+
+  try {
+    const matches = document.querySelectorAll(selector.full);
+    // Filter to only count unique URLs
+    const uniqueUrls = new Set();
+    for (const el of matches) {
+      const a = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      if (a && a.href) {
+        uniqueUrls.add(a.href);
+      }
+    }
+    return uniqueUrls.size || matches.length;
+  } catch { return 1; }
+}
+
+/**
+ * Check if URL is a preview/branch deployment (Vercel, Netlify, etc.)
+ */
+function isPreviewDeployment(urlStr) {
+  try {
+    const url = new URL(urlStr);
+    const hostname = url.hostname.toLowerCase();
+    const href = url.href.toLowerCase();
+
+    // Vercel preview patterns: project-git-branch-user.vercel.app
+    if (hostname.includes('.vercel.app') && hostname.includes('-git-')) {
+      return true;
+    }
+
+    // Netlify deploy previews: deploy-preview-123--sitename.netlify.app
+    if (hostname.includes('.netlify.app') && hostname.includes('deploy-preview')) {
+      return true;
+    }
+
+    // Edit/branch URLs often contain these patterns
+    if (href.includes('/edit/') || href.includes('/edt-') ||
+      hostname.includes('-edit-') || hostname.includes('-edt-')) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if this is an external link (different domain than current page)
+ */
+function isExternalLink(urlStr) {
+  try {
+    const url = new URL(urlStr);
+    const linkHost = url.hostname.replace(/^www\./, '').toLowerCase();
+    const currentHost = window.location.hostname.replace(/^www\./, '').toLowerCase();
+
+    // Direct match - same domain
+    if (linkHost === currentHost) return false;
+
+    // Subdomain of current host (e.g., api.example.com)
+    if (linkHost.endsWith('.' + currentHost)) return false;
+
+    // On platform dashboards, links to deployed apps are external
+    // e.g., on vercel.com, *.vercel.app links are deployed sites, not projects
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Scrape links using selector
+ * @param {string} selector - CSS selector for link containers
+ * @param {Set<string>} domainsToExclude - Domains to skip
+ * @param {Object} options - Additional options
+ * @param {string} options.titleSelector - CSS selector for title element within each container
+ * @param {string} options.titleSource - Where to get title: 'auto', 'selector', 'url'
+ */
+function scrapeWithSelector(selector, domainsToExclude = new Set(), options = {}) {
+  const { titleSelector = null, titleSource = 'auto' } = options;
+  const links = [];
+  const seenUrls = new Set();
+
+  try {
+    const elements = document.querySelectorAll(selector);
+    console.log(`[CoolDesk Scraper] Selector "${selector}" matched ${elements.length} elements`);
+    if (titleSelector) {
+      console.log(`[CoolDesk Scraper] Using title selector: "${titleSelector}"`);
+    }
+    if (domainsToExclude.size > 0) {
+      console.log(`[CoolDesk Scraper] Excluding domains:`, Array.from(domainsToExclude));
+    }
+
+    for (const el of elements) {
+      const link = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      if (!link) continue;
+
+      const url = link.href;
+      if (!url || !url.startsWith('http')) continue;
+
+      // Skip external links (different domain)
+      if (isExternalLink(url)) continue;
+
+      // Skip preview/branch deployments (Vercel -git-, Netlify deploy-preview, etc.)
+      if (isPreviewDeployment(url)) continue;
+
+      // Check if domain is excluded by user
+      try {
+        const domain = new URL(url).hostname.replace(/^www\./, '');
+        if (domainsToExclude.has(domain)) continue;
+      } catch { /* ignore */ }
+
+      // Normalize URL (remove trailing slashes, query params for dedup)
+      const normalizedUrl = normalizeUrlForDedup(url);
+      if (seenUrls.has(normalizedUrl)) continue;
+      seenUrls.add(normalizedUrl);
+
+      // Get title based on source preference
+      const card = el.tagName === 'A' ? el.parentElement : el;
+      let title = null;
+
+      if (titleSource === 'url') {
+        // User wants URL-based titles only
+        title = extractTitleFromUrl(url);
+      } else if (titleSource === 'selector' && titleSelector) {
+        // User specified a custom title selector
+        title = extractTitleWithSelector(el, card, titleSelector);
+      } else {
+        // Auto mode: try custom selector first, then fallbacks
+        if (titleSelector) {
+          title = extractTitleWithSelector(el, card, titleSelector);
+        }
+        if (!title) {
+          title = extractLinkTitle(link) || extractCardTitle(card);
+        }
+
+        // URL-based fallback if DOM title looks bad
+        const urlTitle = extractTitleFromUrl(url);
+        if (urlTitle && isBadTitle(title, urlTitle)) {
+          title = urlTitle;
+        }
+      }
+
+      if (!title || title.length < 2) continue;
+
+      // Skip generic/navigation titles
+      const lowerTitle = title.toLowerCase();
+      if (['home', 'back', 'next', 'previous', 'menu', 'skip', 'close'].includes(lowerTitle)) continue;
+
+      links.push({
+        url,
+        title,
+        linkId: extractIdFromUrl(url),
+        platform: detectPlatformName(),
+        scrapedAt: Date.now(),
+      });
+    }
+
+    console.log(`[CoolDesk Scraper] Found ${links.length} unique links (after filtering)`);
+  } catch (error) {
+    console.error('[CoolDesk Scraper] Selector error:', error);
+  }
+  return links;
+}
+
+/**
+ * Extract title using a custom selector
+ * Searches within the element and its parents
+ */
+function extractTitleWithSelector(el, card, titleSelector) {
+  try {
+    // Try within the element first
+    let titleEl = el.querySelector(titleSelector);
+    if (!titleEl && card) {
+      titleEl = card.querySelector(titleSelector);
+    }
+    // Try parent levels
+    if (!titleEl) {
+      let parent = card?.parentElement;
+      for (let i = 0; i < 3 && parent && !titleEl; i++) {
+        titleEl = parent.querySelector(titleSelector);
+        parent = parent.parentElement;
+      }
+    }
+
+    if (titleEl) {
+      const text = titleEl.textContent?.trim();
+      if (text && text.length >= 2 && text.length < 200) {
+        return text;
+      }
+    }
+  } catch (e) {
+    console.warn('[CoolDesk Scraper] Title selector error:', e);
+  }
+  return null;
+}
+
+/**
+ * Normalize URL for deduplication
+ */
+function normalizeUrlForDedup(url) {
+  try {
+    const u = new URL(url);
+    // Remove common tracking params
+    u.searchParams.delete('ref');
+    u.searchParams.delete('utm_source');
+    u.searchParams.delete('utm_medium');
+    u.searchParams.delete('utm_campaign');
+    // Remove hash
+    u.hash = '';
+    // Remove trailing slash
+    let path = u.pathname;
+    if (path.endsWith('/') && path.length > 1) {
+      path = path.slice(0, -1);
+    }
+    return `${u.origin}${path}${u.search}`;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Extract title from card element (not just link)
+ * Searches up to 3 levels of parent elements
+ */
+function extractCardTitle(card) {
+  if (!card) return null;
+
+  // Look for common title patterns in cards
+  const titleSelectors = [
+    // Specific project/item name classes
+    '[class*="project-name"]', '[class*="projectName"]',
+    '[class*="repo-name"]', '[class*="repoName"]',
+    '[class*="item-name"]', '[class*="itemName"]',
+    '[data-testid*="name"]', '[data-testid*="title"]',
+    // Headers
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    // Generic title/name classes
+    '[class*="title"]', '[class*="name"]', '[class*="heading"]',
+    // Truncate (but with validation)
+    '.truncate', '[class*="truncate"]',
+    'strong', 'b',
+  ];
+
+  // Search in card and up to 2 parent levels
+  let searchElement = card;
+  for (let level = 0; level < 3 && searchElement; level++) {
+    for (const selector of titleSelectors) {
+      try {
+        const el = searchElement.querySelector(selector);
+        if (el) {
+          const text = el.textContent?.trim();
+          // Validate: must be reasonable length, not a partial word
+          if (text && text.length >= 3 && text.length < 200) {
+            // Skip if it looks like truncated garbage (1-4 lowercase letters)
+            if (!text.match(/^[a-z]{1,4}$/)) {
+              return text;
+            }
+          }
+        }
+      } catch { /* invalid selector, skip */ }
+    }
+    searchElement = searchElement.parentElement;
+  }
+
+  return null;
+}
+
+/**
+ * Extract ID from URL
+ */
+function extractIdFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    const segments = pathname.split('/').filter(Boolean);
+
+    // UUID
+    for (const seg of segments) {
+      if (seg.length === 36 && seg.split('-').length === 5) return seg;
+    }
+    // Numeric
+    for (const seg of segments) {
+      if (/^\d+$/.test(seg) && seg.length < 20) return seg;
+    }
+    return segments[segments.length - 1] || pathname;
+  } catch { return url; }
+}
+
+/**
+ * Detect platform name
+ */
+function detectPlatformName() {
+  const hostname = getHostKey();
+  const platforms = {
+    'github.com': 'GitHub', 'gitlab.com': 'GitLab', 'vercel.com': 'Vercel',
+    'netlify.com': 'Netlify', 'console.cloud.google.com': 'Google Cloud',
+    'console.firebase.google.com': 'Firebase', 'notion.so': 'Notion',
+    'linear.app': 'Linear', 'figma.com': 'Figma', 'render.com': 'Render',
+    'railway.app': 'Railway', 'supabase.com': 'Supabase',
+  };
+  for (const [domain, name] of Object.entries(platforms)) {
+    if (hostname.includes(domain.split('.')[0])) return name;
+  }
+  return hostname.split('.')[0].charAt(0).toUpperCase() + hostname.split('.')[0].slice(1);
+}
+
+/**
+ * Save selector for domain with filters
+ */
+async function saveSelectorForDomain(selectorInfo) {
+  const hostKey = getHostKey();
+  try {
+    const result = await chrome.storage.local.get('domainSelectors');
+    const selectors = result.domainSelectors || {};
+
+    // Create new config object
+    const newConfig = {
+      selector: selectorInfo.full,
+      container: selectorInfo.container,
+      links: selectorInfo.links,
+      sample: selectorInfo.sample,
+      savedAt: Date.now(),
+      // Save filters
+      excludedDomains: Array.from(selectorInfo.excludedDomains || []),
+      excludedPatterns: Array.from(selectorInfo.excludedPatterns || []),
+      includedPatterns: Array.from(selectorInfo.includedPatterns || []),
+      scrapeLimit: selectorInfo.scrapeLimit || 0,
+      // Title extraction settings
+      titleSelector: selectorInfo.titleSelector || null,
+      titleSource: selectorInfo.titleSource || 'auto', // 'auto', 'selector', 'url'
+    };
+
+    selectors[hostKey] = newConfig;
+
+    await chrome.storage.local.set({ domainSelectors: selectors });
+    console.log(`[CoolDesk Scraper] Saved selector & filters for ${hostKey}:`, newConfig);
+  } catch (error) {
+    console.error('[CoolDesk Scraper] Failed to save selector:', error);
+  }
+}
+
+/**
+ * Process raw links with filters
+ * Centralized logic for filtering links by domain, pattern, and limit
+ */
+function processScrapedLinks(rawLinks, settings = {}) {
+  const {
+    excludedDomains = new Set(),
+    excludedPatterns = new Set(),
+    includedPatterns = new Set(),
+    scrapeLimit = 0
+  } = settings;
+
+  // Ensure sets
+  const exDomains = excludedDomains instanceof Set ? excludedDomains : new Set(excludedDomains);
+  const exPatterns = excludedPatterns instanceof Set ? excludedPatterns : new Set(excludedPatterns);
+  const inPatterns = includedPatterns instanceof Set ? includedPatterns : new Set(includedPatterns);
+
+  // 1. Filter by Domain
+  let filtered = rawLinks.filter(l => {
+    try {
+      const domain = new URL(l.url).hostname.replace(/^www\./, '');
+      if (exDomains.size > 0 && exDomains.has(domain)) return false;
+      return true;
+    } catch { return false; }
+  });
+
+  // 2. Filter by Pattern
+
+  // A. Whitelist (Included Patterns) - Strict Include
+  if (inPatterns.size > 0) {
+    filtered = filtered.filter(l => {
+      // Must match at least one included pattern
+      for (const pattern of inPatterns) {
+        if (urlMatchesPattern(l.url, pattern)) return true;
+      }
+      return false;
+    });
+  }
+
+  // B. Blacklist (Excluded Patterns)
+  if (exPatterns.size > 0) {
+    filtered = filtered.filter(l => {
+      for (const pattern of exPatterns) {
+        if (urlMatchesPattern(l.url, pattern)) return false;
+      }
+      return true;
+    });
+  }
+
+  // 3. Apply Limit (slice from end for newest/most relevant usually)
+  const total = filtered.length;
+  if (scrapeLimit > 0 && total > scrapeLimit) {
+    filtered = filtered.slice(-scrapeLimit);
+  }
+
+  return {
+    links: filtered,
+    totalAvailable: total,
+    finalCount: filtered.length
+  };
+}
+
+/**
+ * Create select mode overlay
+ */
+function createSelectOverlay(shadowRoot) {
+  // Tooltip at top
+  selectTooltip = document.createElement('div');
+  selectTooltip.id = 'cooldesk-scrape-tooltip';
+  selectTooltip.style.cssText = `
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: white;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    z-index: 2147483647;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    display: flex;
+    gap: 16px;
+    border: 1px solid rgba(255,255,255,0.1);
+    min-width: 320px;
+    max-width: 480px;
+    backdrop-filter: blur(12px);
+  `;
+  selectTooltip.innerHTML = `
+    <span style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 20px;">🎯</span>
+      <span>Click on any link to scrape similar links</span>
+    </span>
+    <button id="cooldesk-scrape-cancel" style="
+      background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: transform 0.2s, box-shadow 0.2s;
+    ">Cancel (Esc)</button>
+  `;
+
+  shadowRoot.appendChild(selectTooltip);
+
+  // Initial render content placeholder
+  selectTooltip.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 20px;">🎯</span>
+      <div>
+        <div style="font-weight: 600;">Link Selector Mode</div>
+        <div style="font-size: 12px; opacity: 0.8;">Hover links to preview • Click to lock & filter</div>
+      </div>
+    </div>
+    <button id="cooldesk-scrape-cancel" style="
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-left: 16px;
+    ">Exit (Esc)</button>
+  `;
+
+  // Cancel button handler
+  const cancelBtn = selectTooltip.querySelector('#cooldesk-scrape-cancel');
+  cancelBtn.onmouseenter = () => {
+    cancelBtn.style.transform = 'scale(1.05)';
+    cancelBtn.style.boxShadow = '0 4px 12px rgba(255,71,87,0.4)';
+  };
+  cancelBtn.onmouseleave = () => {
+    cancelBtn.style.transform = '';
+    cancelBtn.style.boxShadow = '';
+  };
+  cancelBtn.onclick = (e) => {
+    e.stopPropagation();
+    exitLinkSelectMode();
+  };
+}
+
+/**
+ * Remove select overlay
+ */
+function removeSelectOverlay() {
+  if (selectTooltip) {
+    selectTooltip.remove();
+    selectTooltip = null;
+  }
+}
+
+/**
+ * Extract domain info for preview
+ */
+function extractDomainsPreview(selectorInfo) {
+  try {
+    const elements = document.querySelectorAll(selectorInfo.full);
+    const domains = new Map(); // domain -> count
+
+    for (const el of elements) {
+      const link = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      if (!link || !link.href) continue;
+
+      try {
+        const url = new URL(link.href);
+        const domain = url.hostname.replace(/^www\./, '');
+        domains.set(domain, (domains.get(domain) || 0) + 1);
+      } catch { continue; }
+    }
+
+    // Sort by count descending
+    return Array.from(domains.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5); // Top 5 domains
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Extract URL pattern from selector
+ */
+function extractUrlPattern(selectorInfo) {
+  try {
+    const elements = document.querySelectorAll(selectorInfo.full);
+    if (elements.length === 0) return null;
+
+    // Get first few URLs to detect pattern
+    const urls = [];
+    for (const el of Array.from(elements).slice(0, 5)) {
+      const link = el.tagName === 'A' ? el : el.querySelector('a[href]');
+      if (link && link.href) {
+        try {
+          const u = new URL(link.href);
+          urls.push(u.pathname);
+        } catch { continue; }
+      }
+    }
+
+    if (urls.length === 0) return null;
+
+    // Find common pattern
+    const first = urls[0];
+    const parts = first.split('/').filter(Boolean);
+
+    if (parts.length >= 2) {
+      // Check if first part is consistent
+      const firstParts = urls.map(u => u.split('/').filter(Boolean)[0]);
+      const allSame = firstParts.every(p => p === parts[0]);
+
+      if (allSame) {
+        return `/${parts[0]}/...`;
+      }
+    }
+
+    return first.length > 30 ? first.substring(0, 30) + '...' : first;
+  } catch {
+    return null;
+  }
+}
+
+
+
+
+
+/**
+ * Check if URL matches a pattern key (supporting * wildcards)
+ */
+function urlMatchesPattern(urlStr, patternKey) {
+  try {
+    const url = new URL(urlStr);
+    const urlSegments = url.pathname.split('/').filter(Boolean);
+    const patternSegments = patternKey.split('/').filter(Boolean);
+
+    if (urlSegments.length !== patternSegments.length) return false;
+
+    for (let i = 0; i < patternSegments.length; i++) {
+      const p = patternSegments[i];
+      const u = urlSegments[i];
+      if (p !== '*' && p !== u) return false;
+    }
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * Analyze URL path patterns using statistical variance
+ */
+function analyzePathPatterns(links) {
+  try {
+    const parsed = links.map(l => {
+      try {
+        return new URL(l.url).pathname.split('/').filter(Boolean);
+      } catch { return []; }
+    }).filter(p => p.length > 0);
+
+    if (parsed.length === 0) return [];
+
+    const maxDepth = Math.max(...parsed.map(p => p.length));
+    const variableIndices = new Set();
+    const total = parsed.length;
+
+    // Detect variable positions
+    for (let i = 0; i < maxDepth; i++) {
+      const values = parsed.map(p => p[i]).filter(v => v !== undefined);
+      const unique = new Set(values);
+
+      // Heuristics for "Variable Segment":
+      // 1. Looks like an ID (UUID, Long Number, Hash)
+      // 2. High Cardinality (> 3 unique values AND > 10% of total)
+      // 3. (Optional) If we consistently see different slugs
+
+      let isIdLike = false;
+      // Check sample of values for ID-traits
+      const sample = Array.from(unique).slice(0, 5);
+      if (sample.some(s => /^[0-9a-f]{8}-[0-9a-f]{4}/.test(s) || (/^\d+$/.test(s) && s.length > 3))) {
+        isIdLike = true;
+      }
+
+      const uniqueRatio = unique.size / (values.length || 1);
+
+      if (isIdLike || (unique.size > 2 && uniqueRatio > 0.1)) {
+        variableIndices.add(i);
+      }
+    }
+
+    // specific hack: if index 0 is high variance? maybe keeps it?
+    // usually we want to group by resource. 
+
+    const patterns = new Map();
+    parsed.forEach(segments => {
+      // Reconstruct path with wildcards
+      const keyParts = segments.map((s, i) => variableIndices.has(i) ? '*' : s);
+      const key = '/' + keyParts.join('/');
+      patterns.set(key, (patterns.get(key) || 0) + 1);
+    });
+
+    return Array.from(patterns.entries()).sort((a, b) => b[1] - a[1]);
+  } catch (e) {
+    console.warn('Pattern analysis failed', e);
+    return [];
+  }
+}
+
+/**
+ * Render usage stats and actions in tooltip
+ */
+function renderTooltipContent(link, selectorInfo, domains, includedCount, title, urlPattern) {
+  if (!selectTooltip) return;
+
+  // Defaults
+  let finalLinks = [];
+  let finalCount = includedCount || 0;
+  let showPatterns = false;
+  let domainsHtml = '';
+  let patternsHtml = '';
+  let titleSourceHtml = '';
+  let tableHtml = '';
+  let totalAvailable = 0;
+
+  try {
+    // Ensure state sets exist
+    if (!excludedDomains) excludedDomains = new Set();
+    if (!excludedPatterns) excludedPatterns = new Set();
+    if (!includedPatterns) includedPatterns = new Set();
+
+    if (selectorInfo && selectorInfo.full) {
+      // 1. Filter by Domain first (with title options)
+      const domainFilteredLinks = scrapeWithSelector(selectorInfo.full, excludedDomains, {
+        titleSelector: titleSelector,
+        titleSource: titleSource,
+      });
+
+      // 2. Analyze Patterns
+      const patterns = analyzePathPatterns(domainFilteredLinks);
+      showPatterns = patterns.length > 1;
+
+      // Use centralized processing
+      const processed = processScrapedLinks(domainFilteredLinks, {
+        excludedDomains: excludedDomains,
+        excludedPatterns: excludedPatterns,
+        includedPatterns: includedPatterns,
+        scrapeLimit: scrapeLimit
+      });
+
+      finalLinks = processed.links;
+      totalAvailable = processed.totalAvailable;
+      finalCount = processed.finalCount;
+
+      // --- Generate Filter HTML ---
+
+      // A. Domain Filters
+      if (domains.length > 0) {
+        // Show if not locked OR if multiple domains exist (so you can filter)
+        if (!isSelectionLocked || domains.length > 1) {
+          const domainItems = domains.map(([domain, cnt]) => {
+            const isChecked = !excludedDomains.has(domain);
+            const shortDomain = domain.length > 26 ? domain.substring(0, 24) + '...' : domain;
+            return `
+                <label data-domain="${domain}" class="cooldesk-domain-item" style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 6px 8px;
+                    background: ${isChecked ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.03)'};
+                    border: 1px solid ${isChecked ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255,255,255,0.08)'};
+                    border-radius: 6px;
+                    font-size: 11px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    user-select: none;
+                    opacity: ${isChecked ? '1' : '0.6'};
+                ">
+                    <input type="checkbox" ${isChecked ? 'checked' : ''} data-domain="${domain}" style="
+                    width: 14px; height: 14px; cursor: pointer; accent-color: #10b981; outline: none;
+                    "/>
+                    <span style="flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">${shortDomain}</span>
+                    <span style="opacity: 0.6;">${cnt}</span>
+                </label>
+                `;
+          }).join('');
+
+          domainsHtml = `
+                <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 10px; opacity: 0.7; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Filter Domains
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto;">
+                    ${domainItems}
+                </div>
+                </div>
+            `;
+        }
+      }
+
+      // B. Pattern Filters
+      if (showPatterns) {
+        const patternItems = patterns.map(([pattern, cnt]) => {
+          const isChecked = !excludedPatterns.has(pattern);
+          return `
+              <label data-pattern="${pattern}" class="cooldesk-pattern-item" style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 8px;
+                background: ${isChecked ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255,255,255,0.03)'};
+                border: 1px solid ${isChecked ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255,255,255,0.08)'};
+                border-radius: 6px;
+                font-size: 11px;
+                cursor: pointer;
+                transition: all 0.2s;
+                user-select: none;
+                opacity: ${isChecked ? '1' : '0.6'};
+              ">
+                <input type="checkbox" ${isChecked ? 'checked' : ''} data-pattern="${pattern}" style="
+                  width: 14px; height: 14px; cursor: pointer; accent-color: #6366f1; outline: none;
+                "/>
+                <div style="flex: 1; overflow: hidden;">
+                  <div style="white-space: nowrap; text-overflow: ellipsis; font-family: monospace; color: #a5b4fc;">${pattern}</div>
+                </div>
+                <span style="opacity: 0.6;">${cnt}</span>
+              </label>
+          `;
+        }).join('');
+
+        patternsHtml = `
+          <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 10px; opacity: 0.7; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;">
+               <span>Filter URL Patterns</span>
+               ${isSelectionLocked ? `<a href="#" id="cooldesk-reset-patterns" style="color: #a5b4fc; text-decoration: none;">Reset</a>` : ''}
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px; max-height: 140px; overflow-y: auto;">
+              ${patternItems}
+            </div>
+          </div>
+        `;
+      }
+
+      // C. Title Source Selector (only when locked)
+      if (isSelectionLocked) {
+        titleSourceHtml = `
+          <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 10px; opacity: 0.7; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+              Title Source
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <label style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: ${titleSource === 'auto' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${titleSource === 'auto' ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255,255,255,0.1)'}; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                <input type="radio" name="titleSource" value="auto" ${titleSource === 'auto' ? 'checked' : ''} style="width: 12px; height: 12px; accent-color: #6366f1;"/>
+                Auto
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: ${titleSource === 'url' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${titleSource === 'url' ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255,255,255,0.1)'}; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                <input type="radio" name="titleSource" value="url" ${titleSource === 'url' ? 'checked' : ''} style="width: 12px; height: 12px; accent-color: #6366f1;"/>
+                From URL
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: ${titleSource === 'selector' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${titleSource === 'selector' ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255,255,255,0.1)'}; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                <input type="radio" name="titleSource" value="selector" ${titleSource === 'selector' ? 'checked' : ''} style="width: 12px; height: 12px; accent-color: #6366f1;"/>
+                Custom Selector
+              </label>
+            </div>
+            ${titleSource === 'selector' ? `
+              <div style="margin-top: 8px;">
+                <input id="cooldesk-title-selector" type="text" placeholder="CSS selector (e.g. h3, .title, [data-name])" value="${titleSelector || ''}" style="
+                  width: 100%;
+                  padding: 6px 8px;
+                  background: rgba(0,0,0,0.2);
+                  border: 1px solid rgba(255,255,255,0.1);
+                  border-radius: 4px;
+                  color: white;
+                  font-size: 11px;
+                  font-family: monospace;
+                  outline: none;
+                  box-sizing: border-box;
+                "/>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      // D. Table View
+      if (isTableVisible && isSelectionLocked) {
+        const rows = finalLinks.slice(0, 100).map((l, i) => `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding: 6px; font-size: 11px; opacity: 0.7;">${i + 1}</td>
+            <td style="padding: 6px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;" title="${l.title}">${l.title || 'No Title'}</td>
+            <td style="padding: 6px; font-size: 11px; color: #60a5fa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;" title="${l.url}">${l.url}</td>
+          </tr>
+        `).join('');
+
+        tableHtml = `
+          <div style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <strong style="font-size: 12px;">Data Preview (${finalLinks.length})</strong>
+              <div style="display: flex; gap: 8px;">
+                <button id="cooldesk-export-csv" style="padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 4px; font-size: 10px; cursor: pointer;">CSV</button>
+                <button id="cooldesk-export-json" style="padding: 4px 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 4px; font-size: 10px; cursor: pointer;">JSON</button>
+              </div>
+            </div>
+            <div style="max-height: 250px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+              <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead style="position: sticky; top: 0; background: #1f2937;">
+                  <tr>
+                    <th style="padding: 6px; font-size: 10px; color: #9ca3af; width: 30px;">#</th>
+                    <th style="padding: 6px; font-size: 10px; color: #9ca3af;">Title</th>
+                    <th style="padding: 6px; font-size: 10px; color: #9ca3af;">URL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows}
+                </tbody>
+              </table>
+              ${finalLinks.length > 100 ? '<div style="padding: 8px; text-align: center; font-size: 10px; opacity: 0.5;">Showing first 100 rows</div>' : ''}
+            </div>
+          </div>
+        `;
+        selectTooltip.style.maxWidth = '650px';
+      } else {
+        selectTooltip.style.maxWidth = '480px';
+      }
+    }
+  } catch (err) {
+    console.error('[CoolDesk] Error calculating tooltip stats:', err);
+    // Continue with defaults so at least basic info is shown
+  }
+
+  // --- Render to DOM ---
+  const headerColor = isSelectionLocked ? '#10b981' : '#60a5fa';
+  const headerIcon = isSelectionLocked ? '🔒' : '🎯';
+  const headerText = isSelectionLocked ? 'Selection Locked' : 'Preview Mode';
+
+  selectTooltip.innerHTML = `
+      <div style="flex: 1; min-width: 0;">
+        <div style="
+          font-weight: 600; 
+          margin-bottom: 8px; 
+          display: flex; 
+          align-items: center; 
+          gap: 8px; 
+          color: ${headerColor}; 
+          text-transform: uppercase; 
+          letter-spacing: 0.5px; 
+          font-size: 11px;
+        ">
+          <span style="font-size: 14px;">${headerIcon}</span>
+          <span>${headerText}</span>
+        </div>
+        
+        <div style="margin-bottom: 8px;">
+          <div style="font-size: 15px; font-weight: 600; color: white; display: flex; align-items: center; gap: 8px;">
+             ${title.length > 40 ? title.substring(0, 40) + '...' : title}
+          </div>
+        </div>
+
+        <div style="
+          background: rgba(0,0,0,0.2);
+          padding: 10px;
+          border-radius: 8px;
+          margin-bottom: 4px;
+          border: 1px solid rgba(255,255,255,0.05);
+        ">
+          <div style="font-size: 13px; margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <strong style="color: white; font-size: 16px;">${finalCount}</strong> 
+              <span style="opacity: 0.8;">links</span>
+              ${scrapeLimit > 0 && finalCount < totalAvailable ? `<span style="opacity: 0.5; font-size: 11px;">(of ${totalAvailable})</span>` : ''}
+              ${domains.length > 0 ? `<span style="opacity: 0.5; font-size: 11px; margin-left: 4px;">from ${domains.length} domains</span>` : ''}
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;">
+              <span style="font-size: 10px; opacity: 0.7; text-transform: uppercase;">Limit</span>
+              <input id="cooldesk-scrape-limit" type="number" min="0" step="10" value="${scrapeLimit}" style="
+                width: 40px;
+                background: transparent;
+                border: none;
+                color: white;
+                font-family: inherit;
+                font-size: 11px;
+                text-align: right;
+                outline: none;
+                padding: 0;
+              " title="Set to 0 for unlimited" />
+            </div>
+          </div>
+          
+          ${urlPattern ? `
+          <div style="font-size: 11px; opacity: 0.6; margin-top: 4px; display: flex; gap: 6px;">
+            <span style="color: #a78bfa;">Pattern:</span> 
+            <code style="font-family: 'Menlo', monospace;">${urlPattern}</code>
+          </div>
+          ` : ''}
+        </div>
+
+        ${domainsHtml}
+        ${patternsHtml}
+        ${titleSourceHtml}
+        ${tableHtml}
+      </div>
+      
+      <div style="
+        display: flex; 
+        flex-direction: column; 
+        gap: 8px; 
+        margin-left: 16px; 
+        padding-left: 16px; 
+        border-left: 1px solid rgba(255,255,255,0.1);
+        justify-content: flex-start;
+      ">
+        ${isSelectionLocked ? `
+          <button id="cooldesk-scrape-confirm" class="cooldesk-btn-primary" style="
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            transition: transform 0.1s;
+          ">Confirm & Send</button>
+          
+          <button id="cooldesk-toggle-table" style="
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+          ">
+            <span>${isTableVisible ? 'Hide Table' : 'Show Table'}</span>
+          </button>
+
+          <button id="cooldesk-scrape-unlock" style="
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            opacity: 0.8;
+          ">Unlock / Edit</button>
+        ` : `
+          <div style="
+            font-size: 11px; 
+            opacity: 0.5; 
+            text-align: center; 
+            font-style: italic;
+            max-width: 80px;
+          ">
+            Click link<br>to lock<br>& filter
+          </div>
+        `}
+        
+        <button id="cooldesk-scrape-cancel" style="
+          background: transparent;
+          border: none;
+          color: #ff4757;
+          padding: 4px;
+          cursor: pointer;
+          font-size: 12px;
+          margin-top: ${isSelectionLocked ? '4px' : '8px'};
+          opacity: 0.8;
+          text-decoration: underline;
+        ">Cancel Mode</button>
+      </div>
+    `;
+
+  // --- Attach Listeners ---
+
+  // Checkboxes for Domains
+  selectTooltip.querySelectorAll('.cooldesk-domain-item input').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const domain = checkbox.dataset.domain;
+      if (checkbox.checked) excludedDomains.delete(domain);
+      else excludedDomains.add(domain);
+      // Recalculate
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    });
+  });
+
+  // Checkboxes for Patterns
+  selectTooltip.querySelectorAll('.cooldesk-pattern-item input').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const pattern = checkbox.dataset.pattern;
+      if (checkbox.checked) excludedPatterns.delete(pattern);
+      else excludedPatterns.add(pattern);
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    });
+  });
+
+  // Reset Patterns
+  const resetPatternsBtn = selectTooltip.querySelector('#cooldesk-reset-patterns');
+  if (resetPatternsBtn) {
+    resetPatternsBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      excludedPatterns.clear();
+      includedPatterns.clear();
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    };
+  }
+
+  // Export Buttons
+  const csvBtn = selectTooltip.querySelector('#cooldesk-export-csv');
+  if (csvBtn) {
+    csvBtn.onclick = (e) => {
+      e.stopPropagation();
+      const csv = 'Title,URL\n' + finalLinks.map(l => `"${(l.title || '').replace(/"/g, '""')}","${l.url}"`).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `scraped_links_${Date.now()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  }
+
+  const jsonBtn = selectTooltip.querySelector('#cooldesk-export-json');
+  if (jsonBtn) {
+    jsonBtn.onclick = (e) => {
+      e.stopPropagation();
+      const blob = new Blob([JSON.stringify(finalLinks, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `scraped_links_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+  }
+
+  // Toggle Table
+  const toggleTableBtn = selectTooltip.querySelector('#cooldesk-toggle-table');
+  if (toggleTableBtn) {
+    toggleTableBtn.onclick = (e) => {
+      e.stopPropagation();
+      isTableVisible = !isTableVisible;
+      renderTooltipContent(link, selectorInfo, domains, finalCount, title, urlPattern);
+    };
+  }
+
+  // Limit Input
+  const limitInput = selectTooltip.querySelector('#cooldesk-scrape-limit');
+  if (limitInput) {
+    limitInput.onchange = (e) => {
+      e.stopPropagation();
+      const val = parseInt(e.target.value, 10);
+      scrapeLimit = isNaN(val) ? 0 : val;
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    };
+    limitInput.onclick = (e) => e.stopPropagation();
+    limitInput.onkeydown = (e) => e.stopPropagation(); // Allow typing
+  }
+
+  // Title Source Radio Buttons
+  const titleSourceRadios = selectTooltip.querySelectorAll('input[name="titleSource"]');
+  titleSourceRadios.forEach(radio => {
+    radio.onchange = (e) => {
+      e.stopPropagation();
+      titleSource = e.target.value;
+      // Re-render to show/hide selector input and refresh data
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    };
+    radio.onclick = (e) => e.stopPropagation();
+  });
+
+  // Title Selector Input
+  const titleSelectorInput = selectTooltip.querySelector('#cooldesk-title-selector');
+  if (titleSelectorInput) {
+    titleSelectorInput.onchange = (e) => {
+      e.stopPropagation();
+      titleSelector = e.target.value.trim() || null;
+      // Re-render to update preview with new selector
+      renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+    };
+    titleSelectorInput.onclick = (e) => e.stopPropagation();
+    titleSelectorInput.onkeydown = (e) => {
+      e.stopPropagation();
+      // Refresh on Enter
+      if (e.key === 'Enter') {
+        titleSelector = e.target.value.trim() || null;
+        renderTooltipContent(link, selectorInfo, domains, 0, title, urlPattern);
+      }
+    };
+  }
+
+  // Cancel
+  const cancelBtn = selectTooltip.querySelector('#cooldesk-scrape-cancel');
+  if (cancelBtn) {
+    cancelBtn.onclick = (e) => {
+      e.stopPropagation();
+      exitLinkSelectMode();
+    };
+  }
+
+  // Unlock
+  const unlockBtn = selectTooltip.querySelector('#cooldesk-scrape-unlock');
+  if (unlockBtn) {
+    unlockBtn.onclick = (e) => {
+      e.stopPropagation();
+      isSelectionLocked = false;
+      isTableVisible = false; // Reset table
+      highlightLink(link);
+    };
+  }
+
+  // Confirm
+  const confirmBtn = selectTooltip.querySelector('#cooldesk-scrape-confirm');
+  if (confirmBtn) {
+    confirmBtn.onclick = (e) => {
+      e.stopPropagation();
+
+      // Add filters to selector info for saving (Convert Sets to Arrays for JSON/Messaging)
+      const saveInfo = {
+        ...selectorInfo,
+        excludedDomains: Array.from(excludedDomains),
+        excludedPatterns: Array.from(excludedPatterns),
+        includedPatterns: Array.from(includedPatterns),
+        scrapeLimit: scrapeLimit,
+        titleSelector: titleSelector,
+        titleSource: titleSource,
+      };
+
+      // Auto-save the config with filters!
+      saveSelectorForDomain(saveInfo);
+
+      // Use filtered links (finalLinks) instead of re-scraping
+      const results = finalLinks;
+
+      if (currentShowNotification) {
+        currentShowNotification(`✓ Scraped ${results.length} links!`, '#10b981');
+      }
+
+      // Send updated config to background
+      sendScrapedLinks(results, saveInfo);
+
+      // Exit
+      setTimeout(() => exitLinkSelectMode(), 500);
+    };
+  }
+}
+
+/**
+ * Remove link highlight
+ */
+function unhighlightLink() {
+  if (highlightedLink) {
+    highlightedLink.style.outline = '';
+    highlightedLink.style.outlineOffset = '';
+    highlightedLink.style.backgroundColor = '';
+    highlightedLink.style.borderRadius = '';
+    highlightedLink = null;
+  }
+}
+
+/**
+ * Highlight link on hover (or update if locked)
+ */
+function highlightLink(element) {
+  // If locked, we only update if it is the same link (re-render)
+  // or do nothing if trying to highlight new link
+  if (isSelectionLocked) {
+    if (element !== highlightedLink) return;
+  } else {
+    // Normal hover mode: unhighlight previous
+    unhighlightLink();
+  }
+
+  const link = element?.tagName === 'A' ? element : element?.closest('a');
+  if (!link) return;
+
+  highlightedLink = link;
+  const isLocked = isSelectionLocked;
+
+  // Styles
+  link.style.outline = isLocked ? '3px solid #10b981' : '3px solid #60a5fa'; // Green if locked, Blue if hover
+  link.style.outlineOffset = '2px';
+  link.style.backgroundColor = isLocked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(96, 165, 250, 0.15)';
+  link.style.borderRadius = '4px';
+
+  // Update tooltip with preview
+  const title = extractLinkTitle(link) || 'No title';
+  const selectorInfo = generateLinkSelector(link);
+  pendingSelectorInfo = selectorInfo;
+  const domains = extractDomainsPreview(selectorInfo);
+  const urlPattern = extractUrlPattern(selectorInfo);
+
+  // Calculate count excluding excluded domains
+  const includedCount = domains
+    .filter(([domain]) => !excludedDomains.has(domain))
+    .reduce((sum, [, cnt]) => sum + cnt, 0);
+
+  renderTooltipContent(link, selectorInfo, domains, includedCount, title, urlPattern);
+}
+
+/**
+ * Handle mouse move in select mode
+ */
+function handleSelectMouseMove(e) {
+  if (!isSelectMode) return;
+
+  // If locked, prevent hovering other links
+  if (isSelectionLocked) return;
+
+  const element = document.elementFromPoint(e.clientX, e.clientY);
+
+  // Optimize: prevent re-processing if still on the same link
+  const link = element?.tagName === 'A' ? element : element?.closest('a');
+  if (link && link === highlightedLink) return;
+
+  if (element && !selectTooltip?.contains(element)) {
+    highlightLink(element);
+  }
+}
+
+/**
+ * Check if event source is internal (our UI)
+ */
+function checkIsInternal(e) {
+  try {
+    const path = e.composedPath();
+    return path.some(el => {
+      // Check for our specific elements
+      if (el === selectTooltip) return true;
+      if (el instanceof Element && el.id === 'cooldesk-floating-button') return true;
+
+      // Check containment if tooltip exists
+      if (selectTooltip && el instanceof Node && selectTooltip.contains(el)) return true;
+
+      return false;
+    });
+  } catch (err) {
+    return false; // Fail safe: assume external if check fails
+  }
+}
+
+/**
+ * Blocking handler for non-click mouse events
+ */
+function handleBlocker(e) {
+  if (!isSelectMode) return;
+
+  if (checkIsInternal(e)) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+}
+
+/**
+ * Handle click in select mode
+ */
+function handleSelectClick(e) {
+  if (!isSelectMode) return;
+
+  // 1. Check if internal UI click (allow default behavior like checkboxes)
+  if (checkIsInternal(e)) return;
+
+  // 2. Prevent Navigation/Action absolutely
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+
+  // 3. Locked Logic (return after blocking)
+  if (isSelectionLocked) {
+    if (selectTooltip) {
+      // Visual pulse
+      selectTooltip.style.transition = 'transform 0.1s';
+      selectTooltip.style.transform = 'translateX(-50%) scale(1.02)';
+      setTimeout(() => selectTooltip.style.transform = 'translateX(-50%) scale(1)', 100);
+    }
+    return;
+  }
+
+  const element = document.elementFromPoint(e.clientX, e.clientY);
+  const link = element?.tagName === 'A' ? element : element?.closest('a');
+
+  if (!link) {
+    // Just block clicks on non-links silently
+    return;
+  }
+
+  // LOCK SELECTION
+  isSelectionLocked = true;
+
+  // Load saved title settings for this domain (if any)
+  loadTitleSettings().then(() => {
+    highlightLink(link); // Re-render in locked state with loaded settings
+  });
+
+  if (currentShowNotification) {
+    currentShowNotification('Selection Locked. Review & Confirm.', '#10b981', 3000);
+  }
+}
+
+/**
+ * Load saved title settings from storage
+ */
+async function loadTitleSettings() {
+  try {
+    const hostKey = getHostKey();
+    const result = await chrome.storage.local.get('domainSelectors');
+    const selectors = result.domainSelectors || {};
+    const config = selectors[hostKey];
+
+    if (config) {
+      titleSelector = config.titleSelector || null;
+      titleSource = config.titleSource || 'auto';
+      console.log(`[CoolDesk Scraper] Loaded title settings: source=${titleSource}, selector=${titleSelector}`);
+    }
+  } catch (error) {
+    console.warn('[CoolDesk Scraper] Failed to load title settings:', error);
+  }
+}
+
+/**
+ * Handle keydown in select mode
+ */
+function handleSelectKeyDown(e) {
+  if (!isSelectMode) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    exitLinkSelectMode();
+  }
+}
+
+/**
+ * Send scraped links to background
+ */
+/**
+ * Send scraped links to background
+ */
+async function sendScrapedLinks(links, selectorInfo) {
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'SCRAPED_LINKS',
+      data: {
+        success: true,
+        platform: detectPlatformName(),
+        hostname: getHostKey(),
+        links,
+        selector: selectorInfo,
+        scrapedAt: Date.now(),
+      }
+    });
+    console.log(`[CoolDesk Scraper] Sent ${links.length} links to background`);
+  } catch (error) {
+    console.error('[CoolDesk Scraper] Failed to send links:', error);
+
+    // Handle context invalidation (common during dev/updates)
+    const isInvalidated = error.message && error.message.includes('Extension context invalidated');
+
+    if (isInvalidated) {
+      const msg = 'Extension updated. Please refresh the page.';
+      if (currentShowNotification) {
+        currentShowNotification(msg, '#ef4444', 0); // 0 or long duration
+      } else {
+        // Fallback for auto-scrape or missing notifier
+        console.warn('[CoolDesk] ' + msg);
+      }
+    } else {
+      if (currentShowNotification) {
+        currentShowNotification('Failed to send data. Check console.', '#ef4444');
+      }
+    }
+  }
+}
+
+/**
+ * Enter link select mode
+ */
+function enterLinkSelectMode(shadowRoot, showNotification) {
+  if (isSelectMode) return;
+
+  isSelectMode = true;
+  currentShadowRoot = shadowRoot;
+  currentShowNotification = showNotification;
+
+  createSelectOverlay(shadowRoot);
+
+  // Add event listeners to document (capture phase for maximum priority)
+  document.addEventListener('mousemove', handleSelectMouseMove, true);
+  document.addEventListener('click', handleSelectClick, true);
+  document.addEventListener('mousedown', handleBlocker, true);
+  document.addEventListener('mouseup', handleBlocker, true);
+  document.addEventListener('keydown', handleSelectKeyDown, true);
+
+  console.log('[CoolDesk Scraper] Select mode activated');
+}
+
+/**
+ * Exit link select mode
+ */
+function exitLinkSelectMode() {
+  if (!isSelectMode) return;
+
+  isSelectMode = false;
+  isSelectionLocked = false;
+  isTableVisible = false;
+  excludedPatterns.clear();
+  includedPatterns.clear();
+  manuallyExcludedUrls.clear();
+  unhighlightLink();
+  removeSelectOverlay();
+
+  document.removeEventListener('mousemove', handleSelectMouseMove, true);
+  document.removeEventListener('click', handleSelectClick, true);
+  document.removeEventListener('mousedown', handleBlocker, true);
+  document.removeEventListener('mouseup', handleBlocker, true);
+  document.removeEventListener('keydown', handleSelectKeyDown, true);
+
+  currentShadowRoot = null;
+  currentShowNotification = null;
+  pendingSelectorInfo = null;
+  excludedDomains.clear();
+  titleSelector = null;
+  titleSource = 'auto';
+
+  console.log('[CoolDesk Scraper] Select mode deactivated');
+}
+
+/**
+ * Auto-scrape if saved selector exists or predefined config matches
+ */
+async function autoScrapeIfConfigured() {
+  try {
+    const hostKey = getHostKey();
+
+    // 1. Check Saved Configs (Higher priority)
+    const result = await chrome.storage.local.get('domainSelectors');
+    const selectors = result.domainSelectors || {};
+    let config = selectors[hostKey];
+    let source = 'saved';
+
+    // 2. Check Predefined Configs (Fallback)
+    if (!config) {
+      // Check exact match or loop for partial match logic if needed
+      // For now, strict domain matching
+      const predefinedEntry = Object.entries(PREDEFINED_SELECTORS).find(([domain]) => hostKey.endsWith(domain));
+      if (predefinedEntry) {
+        // Use the first predefined selector for this domain
+        config = predefinedEntry[1][0];
+        source = 'predefined';
+      }
+    }
+
+    if (!config) return null;
+
+    console.log(`[CoolDesk Scraper] Auto-scraping ${hostKey} using ${source} config`, config);
+
+    // Wait for page to load dynamic content
+    await new Promise(resolve => setTimeout(resolve, 2500));
+
+    // Scrape raw with title options
+    const rawLinks = scrapeWithSelector(config.selector, new Set(), {
+      titleSelector: config.titleSelector || null,
+      titleSource: config.titleSource || 'auto',
+    });
+
+    if (rawLinks.length === 0) {
+      console.log('[CoolDesk Scraper] No links found with auto-config');
+      return null;
+    }
+
+    // Apply Filters (Saved or Default)
+    const processed = processScrapedLinks(rawLinks, {
+      excludedDomains: config.excludedDomains || [],
+      excludedPatterns: config.excludedPatterns || [],
+      includedPatterns: config.includedPatterns || [],
+      scrapeLimit: config.scrapeLimit || 0
+    });
+
+    const links = processed.links;
+
+    if (links.length > 0) {
+      console.log(`[CoolDesk Scraper] Auto-scraped ${links.length} links (${processed.totalAvailable} raw)`);
+
+      // If using predefined, we might want to save it? 
+      // Maybe not, let user decide to customize.
+
+      sendScrapedLinks(links, config);
+    }
+
+    // Setup persistent observers for SPA navigation and dynamic updates
+    if (!isObserverActive) {
+      setupAutoScrapeObservers(config);
+    }
+
+    return links;
+  } catch (error) {
+    console.error('[CoolDesk Scraper] Auto-scrape failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Setup observers for dynamic content changes
+ */
+function setupAutoScrapeObservers(config) {
+  if (isObserverActive) return;
+  isObserverActive = true;
+  lastAutoScrapeUrl = window.location.href;
+
+  console.log('[CoolDesk Scraper] Setting up dynamic observers for', config.container || 'document');
+
+  const debouncedScrape = () => {
+    if (autoScrapeTimeout) clearTimeout(autoScrapeTimeout);
+    autoScrapeTimeout = setTimeout(() => {
+      console.log('[CoolDesk Scraper] Dynamic update detected, re-scraping...');
+      autoScrapeIfConfigured();
+    }, 4000); // 4s debounce to allow titles to settle
+  };
+
+  // 1. URL Change Polling (reliable for SPAs)
+  setInterval(() => {
+    if (window.location.href !== lastAutoScrapeUrl) {
+      lastAutoScrapeUrl = window.location.href;
+      console.log('[CoolDesk Scraper] URL changed, triggering scrape...');
+      debouncedScrape();
+    }
+  }, 2000);
+
+  // 2. DOM Mutation Observer (for sidebar updates/renames)
+  if (config.container || config.selector) {
+    try {
+      // Use container if available, else try to find common parent of selector
+      const targetSelector = config.container || 'body';
+      const targetNode = document.querySelector(targetSelector) || document.body;
+
+      autoScrapeObserver = new MutationObserver((mutations) => {
+        // Filter for meaningful changes (text updates or added nodes)
+        const meaningful = mutations.some(m =>
+          m.type === 'childList' ||
+          (m.type === 'characterData' && m.target.parentNode.tagName !== 'STYLE' && m.target.parentNode.tagName !== 'SCRIPT')
+        );
+
+        if (meaningful) {
+          debouncedScrape();
+        }
+      });
+
+      autoScrapeObserver.observe(targetNode, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: false
+      });
+      console.log('[CoolDesk Scraper] DOM Observer attached to', targetSelector);
+    } catch (e) {
+      console.warn('[CoolDesk Scraper] Failed to attach DOM observer:', e);
+    }
+  }
+}
+
+// Auto-scrape on page load (after a delay)
+if (typeof window !== 'undefined') {
+  const initAutoScrape = () => {
+    if ('requestIdleCallback' in window) {
+      // Wait for idle time, with a max timeout
+      requestIdleCallback(() => {
+        // Still keep a small delay to ensure rendering is settled
+        setTimeout(autoScrapeIfConfigured, 3000);
+      }, { timeout: 10000 });
+    } else {
+      // Fallback
+      setTimeout(autoScrapeIfConfigured, 4000);
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAutoScrape);
+  } else {
+    initAutoScrape();
+  }
+}
+
+export default injectFooterBar;
