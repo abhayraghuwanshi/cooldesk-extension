@@ -60,11 +60,20 @@ export async function recordFeedbackEvent({
 export async function recordSearchSelection(item, displayedAtMs) {
     const responseTimeMs = displayedAtMs ? Date.now() - displayedAtMs : undefined;
 
+    // For apps, use dedicated app launch tracking (affects search ranking)
+    if (item.type === 'app') {
+        return recordAppLaunch(item.name || item.title, 'accepted', responseTimeMs);
+    }
+
+    // For URLs/saved links, use dedicated URL click tracking (affects search ranking)
+    if (item.type === 'url' || item.type === 'savedLink' || item.type === 'history' || item.type === 'bookmark') {
+        return recordUrlClick(item.url, item.title, 'accepted', responseTimeMs);
+    }
+
     // Determine suggestion type based on item type
     let suggestionType = 'related_resource';
     if (item.type === 'workspace') suggestionType = 'workspace_group';
     else if (item.type === 'tab') suggestionType = 'tab_category';
-    else if (item.type === 'app') suggestionType = 'related_resource';
 
     return recordFeedbackEvent({
         suggestionType,
@@ -72,6 +81,62 @@ export async function recordSearchSelection(item, displayedAtMs) {
         suggestionContent: item.url || item.name || item.title,
         responseTimeMs
     });
+}
+
+/**
+ * Record app launch feedback (for RL-based search ranking)
+ * This improves app search results over time based on usage patterns
+ * @param {string} appName - Name of the app (e.g., "Chrome", "Visual Studio Code")
+ * @param {string} [action='accepted'] - 'accepted' (launched), 'rejected' (dismissed), 'ignored' (timeout)
+ * @param {number} [responseTimeMs] - Time from showing result to action
+ */
+export async function recordAppLaunch(appName, action = 'accepted', responseTimeMs) {
+    if (!appName) return false;
+
+    try {
+        const response = await fetch(`${SIDECAR_URL}/feedback/app-launch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                app_name: appName,
+                action,
+                response_time_ms: responseTimeMs
+            })
+        });
+        return response.ok;
+    } catch (e) {
+        console.debug('[Feedback] Failed to record app launch:', e.message);
+        return false;
+    }
+}
+
+/**
+ * Record URL click feedback (for RL-based saved links ranking)
+ * This improves URL/saved link search results over time based on usage patterns
+ * @param {string} url - URL that was clicked
+ * @param {string} [title] - Optional page title for context
+ * @param {string} [action='accepted'] - 'accepted' (clicked), 'rejected' (dismissed), 'ignored' (timeout)
+ * @param {number} [responseTimeMs] - Time from showing result to action
+ */
+export async function recordUrlClick(url, title, action = 'accepted', responseTimeMs) {
+    if (!url) return false;
+
+    try {
+        const response = await fetch(`${SIDECAR_URL}/feedback/url-click`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url,
+                title,
+                action,
+                response_time_ms: responseTimeMs
+            })
+        });
+        return response.ok;
+    } catch (e) {
+        console.debug('[Feedback] Failed to record URL click:', e.message);
+        return false;
+    }
 }
 
 /**
@@ -274,6 +339,8 @@ export default {
     recordFeedbackEvent,
     recordSearchSelection,
     recordSearchIgnored,
+    recordAppLaunch,
+    recordUrlClick,
     recordUrlWorkspace,
     suggestWorkspaceForUrl,
     recordGroupingFeedback,

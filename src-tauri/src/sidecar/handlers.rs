@@ -1,6 +1,7 @@
 // HTTP and WebSocket request handlers
 
 use crate::sidecar::data::*;
+use crate::sidecar::feedback::SuggestionStats;
 use crate::sidecar::storage::{save_data, ChangeTracker};
 use crate::sidecar::sync::*;
 use crate::system::RunningApp;
@@ -203,6 +204,28 @@ pub struct SearchQuery {
     pub limit: Option<usize>,
 }
 
+/// Calculate RL-based boost for an app based on feedback history
+/// Returns a score boost (0-15 points) based on acceptance rate and usage
+fn calculate_rl_boost(app_name: &str, app_stats: &std::collections::HashMap<String, SuggestionStats>) -> u32 {
+    let key = app_name.to_lowercase().trim().replace(".exe", "").replace(" ", "_");
+
+    if let Some(stats) = app_stats.get(&key) {
+        if stats.total_shown == 0 {
+            return 0;
+        }
+
+        // Boost based on acceptance rate (max 10 points)
+        let acceptance_boost = (stats.acceptance_rate() * 10.0) as u32;
+
+        // Small boost for frequently used apps (max 5 points, log scale)
+        let usage_boost = ((stats.total_shown as f64).ln().min(5.0)) as u32;
+
+        acceptance_boost + usage_boost
+    } else {
+        0
+    }
+}
+
 /// Port of the JS fuzzyScore function — returns 0-100
 fn fuzzy_score(text: &str, query: &str) -> u32 {
     if text.is_empty() || query.is_empty() { return 0; }
@@ -256,6 +279,17 @@ pub async fn search_apps(Query(params): Query<SearchQuery>) -> Json<serde_json::
     let query = params.q.unwrap_or_default();
     let limit = params.limit.unwrap_or(20);
 
+    // Load app feedback stats for RL-based boosting
+    let app_stats = {
+        let store_mutex = get_feedback_store().await;
+        let store_guard = store_mutex.lock().await;
+        if let Some(store) = store_guard.as_ref() {
+            store.get_all_app_stats().await
+        } else {
+            std::collections::HashMap::new()
+        }
+    };
+
     // Try the populated AppMatcher cache first (full installed + running list)
     let cached = crate::APP_CACHE.read().ok()
         .map(|c| c.clone())
@@ -298,7 +332,8 @@ pub async fn search_apps(Query(params): Query<SearchQuery>) -> Json<serde_json::
             let is_visible = app["isVisible"].as_bool().unwrap_or(false);
             let cloaked    = app["cloaked"].as_i64().unwrap_or(0);
 
-            let score: u32 = if is_running {
+            // Base score from running/visibility status
+            let base_score: u32 = if is_running {
                 if is_visible && cloaked == 0 { match_score.max(85) + 15 }
                 else if cloaked > 0           { match_score.max(80) + 12 }
                 else                          { match_score.max(75) + 10 }
@@ -306,14 +341,19 @@ pub async fn search_apps(Query(params): Query<SearchQuery>) -> Json<serde_json::
                 match_score.min(75)
             };
 
+            // Apply RL boost based on user feedback history
+            let rl_boost = calculate_rl_boost(name, &app_stats);
+            let score = (base_score + rl_boost).min(100);
+
             Some(serde_json::json!({
                 "id": app["id"], "name": name, "title": title,
                 "titles": app["titles"],
                 "path": app["path"], "pid": app["pid"], "hwnd": app["hwnd"],
-                "score": score.min(100),
+                "score": score,
                 "isRunning": is_running, "isVisible": is_visible,
                 "cloaked": cloaked, "isOnCurrentDesktop": app["isOnCurrentDesktop"],
                 "icon": app["icon"], "source": app["source"],
+                "rlBoost": rl_boost,
             }))
         }).collect()
     } else {
@@ -321,14 +361,24 @@ pub async fn search_apps(Query(params): Query<SearchQuery>) -> Json<serde_json::
         source = "live";
         let apps = crate::system::get_all_desktop_apps_info().await;
         apps.iter().filter_map(|a| {
-            let score = fuzzy_score(&a.name, &query).max(fuzzy_score(&a.title, &query));
-            if score == 0 && !query.is_empty() { return None; }
+            let base_score = fuzzy_score(&a.name, &query).max(fuzzy_score(&a.title, &query));
+            if base_score == 0 && !query.is_empty() { return None; }
+
+            // Apply RL boost
+            let rl_boost = calculate_rl_boost(&a.name, &app_stats);
+            let score = if query.is_empty() {
+                (100u32 + rl_boost).min(100)
+            } else {
+                (base_score + rl_boost).min(100)
+            };
+
             Some(serde_json::json!({
                 "id": a.id, "name": a.name, "title": a.title,
                 "path": a.path, "pid": a.pid,
-                "score": if query.is_empty() { 100u32 } else { score.min(100) },
+                "score": score,
                 "isRunning": true, "isVisible": true, "cloaked": 0,
                 "isOnCurrentDesktop": a.is_on_current_desktop,
+                "rlBoost": rl_boost,
             }))
         }).collect()
     };
@@ -1214,7 +1264,7 @@ use crate::sidecar::feedback::{
 use crate::sidecar::data::{
     FeedbackEventRequest, FeedbackStatsResponse, UrlGroupingFeedbackRequest,
     WorkspaceSuggestionRequest, WorkspaceSuggestionResponse, ScoredSuggestion,
-    RecordUrlWorkspaceRequest, UrlAffinityResponse, RelatedUrl,
+    RecordUrlWorkspaceRequest, UrlAffinityResponse, RelatedUrl, AppLaunchRequest,
 };
 
 lazy_static! {
@@ -1247,6 +1297,7 @@ fn parse_suggestion_type(s: &str) -> SuggestionType {
         "tool_result" | "toolresult" => SuggestionType::ToolResult,
         "tab_category" | "tabcategory" => SuggestionType::TabCategory,
         "workspace_name" | "workspacename" => SuggestionType::WorkspaceName,
+        "app_launch" | "applaunch" => SuggestionType::AppLaunch,
         _ => SuggestionType::WorkspaceGroup,
     }
 }
@@ -1458,6 +1509,76 @@ pub async fn feedback_save() -> StatusCode {
         }
     } else {
         StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+/// Record app launch feedback (for RL-based search ranking)
+pub async fn feedback_app_launch(
+    Json(req): Json<AppLaunchRequest>,
+) -> Json<SuccessResponse> {
+    let action = parse_user_action(&req.action);
+
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        // Record to app-specific stats for search ranking
+        store.record_app_launch(&req.app_name, &action, req.response_time_ms).await;
+
+        // Also record as a general feedback event for analytics
+        let event = FeedbackEvent::new(
+            SuggestionType::AppLaunch,
+            action,
+            req.app_name.clone(),
+        ).with_response_time(req.response_time_ms.unwrap_or(0));
+
+        store.record_event(event).await;
+
+        // Save periodically
+        let count = store.event_count().await;
+        if count % 10 == 0 {
+            let _ = store.save().await;
+        }
+
+        log::info!("[Feedback] Recorded app launch: {} -> {}", req.app_name, req.action);
+        Json(SuccessResponse { success: true })
+    } else {
+        Json(SuccessResponse { success: false })
+    }
+}
+
+/// Record URL click feedback (for RL-based saved links ranking)
+pub async fn feedback_url_click(
+    Json(req): Json<UrlClickRequest>,
+) -> Json<SuccessResponse> {
+    let action = parse_user_action(&req.action);
+
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        // Record to URL-specific stats for search ranking
+        store.record_url_click(&req.url, &action, req.response_time_ms).await;
+
+        // Also record as a general feedback event for analytics
+        let event = FeedbackEvent::new(
+            SuggestionType::UrlClick,
+            action,
+            req.url.clone(),
+        ).with_response_time(req.response_time_ms.unwrap_or(0));
+
+        store.record_event(event).await;
+
+        // Save periodically
+        let count = store.event_count().await;
+        if count % 10 == 0 {
+            let _ = store.save().await;
+        }
+
+        log::info!("[Feedback] Recorded URL click: {} -> {}", req.url, req.action);
+        Json(SuccessResponse { success: true })
+    } else {
+        Json(SuccessResponse { success: false })
     }
 }
 

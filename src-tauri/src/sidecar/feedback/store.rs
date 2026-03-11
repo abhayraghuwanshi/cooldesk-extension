@@ -284,6 +284,62 @@ impl FeedbackStore {
         let state = self.state.read().await;
         state.clone()
     }
+
+    /// Record an app launch (for search ranking feedback)
+    pub async fn record_app_launch(&self, app_name: &str, action: &UserAction, response_time_ms: Option<i64>) {
+        let mut state = self.state.write().await;
+        let key = normalize_app_name(app_name);
+
+        let stats = state.app_stats.entry(key).or_insert_with(SuggestionStats::default);
+        stats.record(action, response_time_ms);
+
+        log::debug!("[Feedback] Recorded app launch: {} -> {:?}", app_name, action);
+    }
+
+    /// Get stats for a specific app
+    pub async fn get_app_stats(&self, app_name: &str) -> SuggestionStats {
+        let state = self.state.read().await;
+        let key = normalize_app_name(app_name);
+        state.app_stats.get(&key).cloned().unwrap_or_default()
+    }
+
+    /// Get all app stats (for batch ranking)
+    pub async fn get_all_app_stats(&self) -> std::collections::HashMap<String, SuggestionStats> {
+        let state = self.state.read().await;
+        state.app_stats.clone()
+    }
+
+    /// Record a URL click (for search ranking feedback)
+    pub async fn record_url_click(&self, url: &str, action: &UserAction, response_time_ms: Option<i64>) {
+        let mut state = self.state.write().await;
+        let key = normalize_url(url);
+
+        let stats = state.url_stats.entry(key.clone()).or_insert_with(SuggestionStats::default);
+        stats.record(action, response_time_ms);
+
+        log::debug!("[Feedback] Recorded URL click: {} -> {:?}", key, action);
+    }
+
+    /// Get stats for a specific URL
+    pub async fn get_url_stats(&self, url: &str) -> SuggestionStats {
+        let state = self.state.read().await;
+        let key = normalize_url(url);
+        state.url_stats.get(&key).cloned().unwrap_or_default()
+    }
+
+    /// Get all URL stats (for batch ranking)
+    pub async fn get_all_url_stats(&self) -> std::collections::HashMap<String, SuggestionStats> {
+        let state = self.state.read().await;
+        state.url_stats.clone()
+    }
+}
+
+/// Normalize app name for consistent lookup
+fn normalize_app_name(name: &str) -> String {
+    name.to_lowercase()
+        .trim()
+        .replace(".exe", "")
+        .replace(" ", "_")
 }
 
 /// Normalize URL for comparison (extract domain + path, remove tracking params)

@@ -18,6 +18,10 @@ pub enum SuggestionType {
     TabCategory,
     /// Workspace name suggestion
     WorkspaceName,
+    /// App launched from search
+    AppLaunch,
+    /// URL/link clicked from search or saved links
+    UrlClick,
 }
 
 /// User actions on suggestions (implicit feedback signals)
@@ -308,6 +312,12 @@ pub struct FeedbackState {
     pub events: Vec<FeedbackEvent>,
     /// Stats by suggestion type
     pub stats_by_type: std::collections::HashMap<String, SuggestionStats>,
+    /// Stats per app (keyed by normalized app name)
+    #[serde(default)]
+    pub app_stats: std::collections::HashMap<String, SuggestionStats>,
+    /// Stats per URL (keyed by normalized URL)
+    #[serde(default)]
+    pub url_stats: std::collections::HashMap<String, SuggestionStats>,
     /// URL co-occurrence data
     pub url_co_occurrences: Vec<UrlCoOccurrence>,
     /// Workspace patterns

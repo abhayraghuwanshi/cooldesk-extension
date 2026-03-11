@@ -541,6 +541,38 @@ pub struct RecordUrlWorkspaceRequest {
     pub workspace_name: String,
 }
 
+/// Request to record app launch feedback
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppLaunchRequest {
+    /// App name (e.g., "Chrome", "Visual Studio Code")
+    pub app_name: String,
+    /// User action: "accepted" (launched), "rejected" (dismissed), "ignored" (timeout)
+    #[serde(default = "default_accepted")]
+    pub action: String,
+    /// Optional response time in ms (time from showing result to user action)
+    pub response_time_ms: Option<i64>,
+}
+
+fn default_accepted() -> String {
+    "accepted".to_string()
+}
+
+/// Request to record URL click feedback
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UrlClickRequest {
+    /// URL that was clicked
+    pub url: String,
+    /// Optional title for context
+    pub title: Option<String>,
+    /// User action: "accepted" (clicked), "rejected" (dismissed), "ignored" (timeout)
+    #[serde(default = "default_accepted")]
+    pub action: String,
+    /// Optional response time in ms
+    pub response_time_ms: Option<i64>,
+}
+
 /// Response for URL affinity query
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

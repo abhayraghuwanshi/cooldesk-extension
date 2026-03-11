@@ -168,6 +168,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/feedback/suggest-workspace", post(feedback_suggest_workspace))
         .route("/feedback/events", get(feedback_get_events))
         .route("/feedback/save", post(feedback_save))
+        .route("/feedback/app-launch", post(feedback_app_launch))
+        .route("/feedback/url-click", post(feedback_url_click))
         .layer(cors)
         .with_state(state);
 

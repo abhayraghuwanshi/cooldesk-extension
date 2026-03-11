@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
 import { isElectronApp } from '../../services/environmentDetector.js';
-import { recordFeedbackEvent } from '../../services/feedbackService.js';
+import { recordAppLaunch } from '../../services/feedbackService.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
@@ -405,13 +405,8 @@ export function WorkspaceList({
                     e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.1)';
                 }}
                 onClick={async () => {
-                    // Record feedback for RAG learning
-                    recordFeedbackEvent({
-                        suggestionType: 'related_resource',
-                        action: 'accepted',
-                        suggestionContent: app.name || app.path,
-                        contextWorkspace: activeMode !== 'all' ? modeConfigs[activeMode]?.label : undefined
-                    }).catch(() => { });
+                    // Record app launch for RL-based search ranking
+                    recordAppLaunch(app.name).catch(() => { });
 
                     if (isRunning && window.electronAPI?.focusApp && app.pid) {
                         await window.electronAPI.focusApp(app.pid, app.name);
@@ -662,12 +657,8 @@ export function WorkspaceList({
                                                     <div
                                                         key={app.id || app.name}
                                                         onClick={async () => {
-                                                            // Track app launch for feedback
-                                                            recordFeedbackEvent({
-                                                                suggestionType: 'related_resource',
-                                                                action: 'accepted',
-                                                                suggestionContent: app.name || app.path
-                                                            }).catch(() => { });
+                                                            // Track app launch for RL-based search ranking
+                                                            recordAppLaunch(app.name).catch(() => { });
                                                             if (window.electronAPI?.launchApp && app.path) await window.electronAPI.launchApp(app.path);
                                                         }}
                                                         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '16px 12px', borderRadius: '16px', transition: 'all 0.2s', background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(148, 163, 184, 0.1)' }}
