@@ -93,6 +93,9 @@ public class AppScanner {
     static IVirtualDesktopManager vdManager = null;
 
     static void Main(string[] args) {
+        // IMPORTANT: Force UTF-8 output so Rust's read_to_string() can parse it
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+
         foreach (var arg in args) {
             if (arg == "--debug") debug = true;
         }
