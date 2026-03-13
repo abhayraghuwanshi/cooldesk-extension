@@ -185,9 +185,30 @@ export function GlobalSpotlight() {
         // Pre-warm the search cache so history/workspace results are ready for first search
         refreshElectronCache().catch(() => { });
 
-        // Listen for spotlight-shown event from Electron (when Alt+K is pressed)
+        // Subscribe to tabs-updated events (like TabManagement does)
+        let unsubscribeTabs = null;
         if (window.electronAPI?.subscribe) {
-            const unsubscribe = window.electronAPI.subscribe('spotlight-shown', () => {
+            unsubscribeTabs = window.electronAPI.subscribe('tabs-updated', (updatedTabs) => {
+                console.log('[Spotlight] tabs-updated event received:', updatedTabs?.length);
+                // Reload context items when tabs change
+                loadContextItems();
+            });
+        }
+
+        // Subscribe to running apps updates (like TabManagement does)
+        let unsubscribeApps = null;
+        if (window.electronAPI?.getRunningApps) {
+            unsubscribeApps = runningAppsService.subscribe(({ runningApps, installedApps }) => {
+                console.log('[Spotlight] runningApps updated:', runningApps?.length);
+                // Reload context items when apps change
+                loadContextItems();
+            });
+        }
+
+        // Listen for spotlight-shown event from Electron (when Alt+K is pressed)
+        let unsubscribeSpotlight = null;
+        if (window.electronAPI?.subscribe) {
+            unsubscribeSpotlight = window.electronAPI.subscribe('spotlight-shown', () => {
                 console.log('[Spotlight] spotlight-shown event received');
                 // Reset state and focus input
                 setQuery('');
@@ -201,13 +222,14 @@ export function GlobalSpotlight() {
 
                 handleFocus();
             });
-            return () => {
-                unsubscribe();
-                window.removeEventListener('focus', handleFocus);
-            };
         }
 
-        return () => window.removeEventListener('focus', handleFocus);
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            if (unsubscribeTabs) unsubscribeTabs();
+            if (unsubscribeApps) unsubscribeApps();
+            if (unsubscribeSpotlight) unsubscribeSpotlight();
+        };
     }, []);
 
 
