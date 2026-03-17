@@ -8,6 +8,7 @@ import {
   faChevronUp,
   faCloud,
   faCode,
+  faDesktop,
   faExternalLinkAlt,
   faFilm,
   faFlask,
@@ -140,8 +141,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
   const [showDrafts, setShowDrafts] = useState(false);
   const activePopover = popoverState.index;
 
-  const { name, urls = [], description, icon = 'folder' } = workspace;
+  const { name, urls = [], apps = [], description, icon = 'folder' } = workspace;
   const urlCount = urls.length;
+  const appCount = apps.length;
+  const totalCount = urlCount + appCount;
 
   const colorClass = ICON_COLORS[Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % ICON_COLORS.length];
   const normalizedName = name.toLowerCase().trim();
@@ -541,7 +544,9 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     const addBtnSpace = onAddUrl ? itemFullWidth : 0;
 
     // Check if we can fit EVERYTHING including the Add button natively on one line
-    const maxAllowedItems = groupedItems.length;
+    // Include both URL groups and apps in total count
+    const totalItems = groupedItems.length + apps.length;
+    const maxAllowedItems = totalItems;
     let widthForEverything = maxAllowedItems * itemFullWidth - gap + addBtnSpace;
 
     // Safety buffer to prevent rounding issues causing accidental overflow
@@ -549,7 +554,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
 
     if (maxAllowedItems > 0 && widthForEverything <= safeContainerWidth) {
       // Everything fits perfectly, including the + Add button
-      setVisibleCount(groupedItems.length);
+      setVisibleCount(totalItems);
       return;
     }
 
@@ -570,8 +575,8 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
     }
 
     // Never show more than length - 1, since if we show length, we'd have no overflow and wouldn't need expand btn
-    setVisibleCount(Math.max(0, Math.min(count, Math.max(0, groupedItems.length - 1))));
-  }, [groupedItems, compact, onAddUrl]);
+    setVisibleCount(Math.max(0, Math.min(count, Math.max(0, totalItems - 1))));
+  }, [groupedItems, apps, compact, onAddUrl]);
 
   // Recalculate on mount and resize
   useEffect(() => {
@@ -622,7 +627,10 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
           <div className="compact-workspace-info" style={{ marginTop: showAll ? '12px' : '0' }}>
             <div className="compact-workspace-name">{name}</div>
             <div className="compact-workspace-count">
-              {urlCount} URL{urlCount !== 1 ? 's' : ''}
+              {urlCount > 0 && <span>{urlCount} URL{urlCount !== 1 ? 's' : ''}</span>}
+              {urlCount > 0 && appCount > 0 && <span style={{ margin: '0 4px' }}>•</span>}
+              {appCount > 0 && <span style={{ color: '#22C55E' }}>{appCount} App{appCount !== 1 ? 's' : ''}</span>}
+              {totalCount === 0 && <span>Empty</span>}
             </div>
           </div>
 
@@ -686,8 +694,34 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               );
             })}
 
+            {/* App Icons - Distinct green styling */}
+            {apps.slice(0, showAll ? apps.length : Math.max(0, visibleCount - groupedItems.length)).map((app, idx) => (
+              <div
+                key={`app-${idx}`}
+                className="compact-url-icon compact-app-icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Launch or focus the app
+                  if (window.electronAPI?.launchApp && app.path) {
+                    window.electronAPI.launchApp(app.path);
+                  }
+                }}
+                title={app.name}
+                style={{
+                  border: '2px solid rgba(34, 197, 94, 0.4)',
+                  background: 'rgba(34, 197, 94, 0.1)'
+                }}
+              >
+                {app.icon ? (
+                  <img src={app.icon} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+                ) : (
+                  <FontAwesomeIcon icon={faDesktop} style={{ color: '#22C55E', fontSize: '18px' }} />
+                )}
+              </div>
+            ))}
+
             {/* Inline Add URL Button */}
-            {onAddUrl && (showAll || (groupedItems.length <= visibleCount)) && (
+            {onAddUrl && (showAll || ((groupedItems.length + apps.length) <= visibleCount)) && (
               <div
                 className="compact-url-icon"
                 style={{
@@ -706,7 +740,7 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             )}
 
             {/* Expand/Collapse Button */}
-            {groupedItems.length > visibleCount && (
+            {(groupedItems.length + apps.length) > visibleCount && (
               <div
                 className="compact-more-btn"
                 onClick={(e) => {
@@ -766,7 +800,11 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
             </div>
             <div className="workspace-info">
               <div className="workspace-name">{name}</div>
-              <div className="workspace-count">{urlCount} URL{urlCount !== 1 ? 's' : ''}</div>
+              <div className="workspace-count">
+                {urlCount > 0 && <span>{urlCount} URL{urlCount !== 1 ? 's' : ''}</span>}
+                {urlCount > 0 && appCount > 0 && <span> • </span>}
+                {appCount > 0 && <span style={{ color: '#22C55E' }}>{appCount} App{appCount !== 1 ? 's' : ''}</span>}
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -994,6 +1032,73 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 </li>
               )}
             </ul>
+          )}
+
+          {/* Apps Section - Green themed */}
+          {apps.length > 0 && (
+            <div className="workspace-apps-section" style={{ marginTop: '8px' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginBottom: '6px',
+                color: '#22C55E',
+                fontSize: '11px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                <FontAwesomeIcon icon={faDesktop} style={{ fontSize: '10px' }} />
+                Apps ({apps.length})
+              </div>
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                {apps.map((app, idx) => (
+                  <div
+                    key={idx}
+                    className="workspace-app-chip"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.electronAPI?.launchApp && app.path) {
+                        window.electronAPI.launchApp(app.path);
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 10px',
+                      borderRadius: '8px',
+                      background: 'rgba(34, 197, 94, 0.1)',
+                      border: '1px solid rgba(34, 197, 94, 0.3)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      fontSize: '12px',
+                      color: '#E2E8F0'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
+                      e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.5)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
+                      e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                    }}
+                    title={`Launch ${app.name}`}
+                  >
+                    {app.icon ? (
+                      <img src={app.icon} alt="" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
+                    ) : (
+                      <FontAwesomeIcon icon={faDesktop} style={{ color: '#22C55E', fontSize: '12px' }} />
+                    )}
+                    <span>{app.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Upcoming (Draft) URLs — collapsible section */}

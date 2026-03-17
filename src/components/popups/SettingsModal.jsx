@@ -71,8 +71,8 @@ export function SettingsModal({
   // --- Constants & Config ---
   const TABS = [
     { id: 'general', label: 'General', icon: faCog, component: null },
-    // Unified AI Models tab - show in desktop app (combines Local + Cloud AI)
-    ...(isDesktopApp ? [{ id: 'ai-models', label: 'AI Models', icon: faRocket, component: AIModelsTab }] : []),
+    // Local AI tab - show in desktop app only
+    ...(isDesktopApp ? [{ id: 'ai-models', label: 'Local AI', icon: faRocket, component: AIModelsTab }] : []),
     // Teams tab - only show in desktop app
     ...(isDesktopApp ? [{ id: 'teams', label: 'Teams (P2P)', icon: faUsers, component: TeamsTab }] : []),
     { id: 'themes', label: 'Aesthetics', icon: faPalette, component: ThemesTab },
@@ -1015,22 +1015,10 @@ export function SettingsModal({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
                 <section>
                   <div style={{ marginBottom: 20 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>AI Configuration</h3>
-                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Configure local on-device AI or cloud-based AI services.</p>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#fff' }}>Local AI</h3>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Configure on-device AI for categorization, summarization, and smart features.</p>
                   </div>
-                  <AIModelsTab
-                    localSettings={localSettings}
-                    setLocalSettings={setLocalSettings}
-                    markEdited={markEdited}
-                    basicSaved={basicSaved}
-                    setBasicSaved={setBasicSaved}
-                    suggesting={suggesting}
-                    error={error}
-                    setError={setError}
-                    handleSuggestCategories={handleSuggestCategories}
-                    saveSettingsDB={saveSettings}
-                    storageSet={storageSet}
-                  />
+                  <AIModelsTab />
                 </section>
 
                 <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />

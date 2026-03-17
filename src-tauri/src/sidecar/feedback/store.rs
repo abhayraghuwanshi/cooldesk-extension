@@ -332,6 +332,71 @@ impl FeedbackStore {
         let state = self.state.read().await;
         state.url_stats.clone()
     }
+
+    /// Record an app-workspace association (when app is added to or used with a workspace)
+    pub async fn record_app_workspace(&self, app_name: &str, app_path: &str, workspace_name: &str) {
+        let mut state = self.state.write().await;
+
+        let normalized_path = app_path.to_lowercase();
+        let normalized_workspace = workspace_name.to_lowercase();
+        let key = format!("{}|{}", normalized_path, normalized_workspace);
+
+        // Find existing or create new association
+        if let Some(assoc) = state.app_workspace_associations.iter_mut().find(|a| a.key() == key) {
+            assoc.count += 1;
+            assoc.last_seen = chrono::Utc::now().timestamp_millis();
+        } else {
+            state.app_workspace_associations.push(AppWorkspaceAssociation::new(
+                normalize_app_name(app_name),
+                normalized_path,
+                normalized_workspace,
+            ));
+        }
+
+        log::debug!("[Feedback] Recorded app-workspace: {} -> {}", app_name, workspace_name);
+    }
+
+    /// Suggest apps for a given workspace based on learned associations
+    pub async fn suggest_apps_for_workspace(&self, workspace_name: &str, limit: usize) -> Vec<(String, String, f64)> {
+        let state = self.state.read().await;
+        let normalized_workspace = workspace_name.to_lowercase();
+
+        let mut suggestions: Vec<(String, String, f64)> = state
+            .app_workspace_associations
+            .iter()
+            .filter(|a| a.workspace_name == normalized_workspace)
+            .map(|a| (a.app_name.clone(), a.app_path.clone(), a.score()))
+            .collect();
+
+        // Sort by score descending
+        suggestions.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        suggestions.truncate(limit);
+        suggestions
+    }
+
+    /// Suggest workspaces for a given app based on learned associations
+    pub async fn suggest_workspaces_for_app(&self, app_path: &str, limit: usize) -> Vec<(String, f64)> {
+        let state = self.state.read().await;
+        let normalized_path = app_path.to_lowercase();
+
+        let mut suggestions: Vec<(String, f64)> = state
+            .app_workspace_associations
+            .iter()
+            .filter(|a| a.app_path == normalized_path)
+            .map(|a| (a.workspace_name.clone(), a.score()))
+            .collect();
+
+        // Sort by score descending
+        suggestions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        suggestions.truncate(limit);
+        suggestions
+    }
+
+    /// Get all app-workspace associations (for debugging/analysis)
+    pub async fn get_all_app_workspace_associations(&self) -> Vec<AppWorkspaceAssociation> {
+        let state = self.state.read().await;
+        state.app_workspace_associations.clone()
+    }
 }
 
 /// Normalize app name for consistent lookup

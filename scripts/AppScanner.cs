@@ -73,6 +73,7 @@ public class AppScanner {
         public string path;
         public string source;
         public string iconBase64;
+        public string category; // Start Menu folder category
         public uint pid;
         public bool isRunning;
         public int cloaked;
@@ -133,7 +134,8 @@ public class AppScanner {
                 Console.Write("\"id\":\"installed-" + EscapeJson(app.name) + "\",");
                 Console.Write("\"name\":\"" + EscapeJson(app.name) + "\",");
                 Console.Write("\"path\":\"" + EscapeJson(app.path) + "\",");
-                Console.Write("\"source\":\"" + app.source + "\"");
+                Console.Write("\"source\":\"" + app.source + "\",");
+                Console.Write("\"category\":\"" + EscapeJson(app.category ?? "Other") + "\"");
                 if (!string.IsNullOrEmpty(app.iconBase64)) {
                     Console.Write(",\"icon\":\"data:image/png;base64," + app.iconBase64 + "\"");
                 }
@@ -229,12 +231,23 @@ public class AppScanner {
 
                     if (ShouldSkip(name)) continue;
 
+                    // Extract category from Start Menu folder structure
+                    string category = "Other";
+                    string relativePath = lnkFile.Substring(startPath.Length).TrimStart('\\');
+                    string folderPart = Path.GetDirectoryName(relativePath);
+                    if (!string.IsNullOrEmpty(folderPart)) {
+                        // Use the top-level folder as category (e.g., "Microsoft Office Tools" or "Games")
+                        int sep = folderPart.IndexOf('\\');
+                        category = sep > 0 ? folderPart.Substring(0, sep) : folderPart;
+                    }
+
                     string key = name.ToLower();
                     if (!apps.ContainsKey(key)) {
-                        apps[key] = new AppInfo { 
-                            name = name, 
-                            path = target, 
+                        apps[key] = new AppInfo {
+                            name = name,
+                            path = target,
                             source = "startmenu",
+                            category = category,
                             iconBase64 = ExtractIconAsBase64(target)
                         };
                     }

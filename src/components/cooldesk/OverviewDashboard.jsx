@@ -165,7 +165,8 @@ const OverviewDashboard = memo(function OverviewDashboard({
             overflowX: 'hidden',
             borderRadius: 16,
             border: '1px solid transparent',
-            paddingRight: '4px'
+            paddingRight: '4px',
+            marginTop: '24px'
         }}>
             {/* Left Column: Workspaces + Notes */}
             <div className="overview-left-column">

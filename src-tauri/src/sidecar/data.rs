@@ -587,3 +587,65 @@ pub struct RelatedUrl {
     pub url: String,
     pub affinity: f64,
 }
+
+/// Request to record app-workspace association
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordAppWorkspaceRequest {
+    /// App name (display name)
+    pub app_name: String,
+    /// App path (unique identifier)
+    pub app_path: String,
+    /// Workspace name this app is associated with
+    pub workspace_name: String,
+}
+
+/// Request to suggest apps for a workspace
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestAppsRequest {
+    /// Workspace name to get app suggestions for
+    pub workspace_name: String,
+    /// Maximum number of suggestions
+    #[serde(default = "default_app_suggestion_count")]
+    pub count: usize,
+}
+
+fn default_app_suggestion_count() -> usize {
+    10
+}
+
+/// Response for app suggestions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSuggestionResponse {
+    pub suggestions: Vec<SuggestedApp>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestedApp {
+    pub app_name: String,
+    pub app_path: String,
+    pub score: f64,
+}
+
+/// Request to suggest workspaces for an app
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestWorkspacesForAppRequest {
+    /// App path to get workspace suggestions for
+    pub app_path: String,
+    /// Optional app name for context
+    #[serde(default)]
+    pub app_name: Option<String>,
+    /// Maximum number of suggestions
+    #[serde(default = "default_workspace_for_app_count")]
+    pub count: usize,
+}
+
+fn default_workspace_for_app_count() -> usize {
+    5
+}
+
+// Note: Reuses WorkspaceSuggestionResponse and ScoredSuggestion from above

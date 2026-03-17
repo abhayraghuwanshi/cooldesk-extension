@@ -262,6 +262,43 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
       const allRegularNotes = Array.isArray(rawRegularNotes) ? rawRegularNotes : [];
       const allUrlNotes = Array.isArray(rawUrlNotes) ? rawUrlNotes : [];
 
+      // 0. Clean up duplicate templates (from previous bug with Date.now() IDs)
+      const templateNotes = allRegularNotes.filter(n => n.folder === 'Templates');
+      const seenTemplateTitles = new Map();
+      const duplicateIds = [];
+
+      for (const note of templateNotes) {
+        if (seenTemplateTitles.has(note.title)) {
+          // Keep the newer one, delete the older
+          const existing = seenTemplateTitles.get(note.title);
+          const existingTime = existing.updatedAt || existing.createdAt || 0;
+          const currentTime = note.updatedAt || note.createdAt || 0;
+
+          if (currentTime > existingTime) {
+            duplicateIds.push(existing.id);
+            seenTemplateTitles.set(note.title, note);
+          } else {
+            duplicateIds.push(note.id);
+          }
+        } else {
+          seenTemplateTitles.set(note.title, note);
+        }
+      }
+
+      // Delete duplicates
+      if (duplicateIds.length > 0) {
+        console.log('[NotesCanvas] Cleaning up', duplicateIds.length, 'duplicate template(s)');
+        for (const id of duplicateIds) {
+          await dbDeleteNote(id).catch(() => { });
+        }
+        // Remove from allRegularNotes array
+        for (let i = allRegularNotes.length - 1; i >= 0; i--) {
+          if (duplicateIds.includes(allRegularNotes[i].id)) {
+            allRegularNotes.splice(i, 1);
+          }
+        }
+      }
+
       // 1. Handle Default Templates initialization
       if (allRegularNotes.filter(n => n.folder === 'Templates').length === 0 && !settings?.defaultNotesCreated) {
         console.log('[NotesCanvas] Creating default templates...');
@@ -272,8 +309,16 @@ const NotesCanvas = memo(function NotesCanvas({ workspaceId }) {
           if (key === 'blank') continue;
 
           try {
+            // Use deterministic ID to prevent duplicates on re-runs
+            const templateId = `template_default_${key}`;
+
+            // Skip if this template already exists
+            if (allRegularNotes.some(n => n.id === templateId)) {
+              continue;
+            }
+
             const defaultTemplateNote = {
-              id: `template_default_${key}_${Date.now()}`,
+              id: templateId,
               title: template.name,
               text: template.getContent(),
               folder: 'Templates',

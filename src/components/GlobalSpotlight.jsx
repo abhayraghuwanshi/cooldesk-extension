@@ -806,49 +806,65 @@ export function GlobalSpotlight() {
         const isSearching = !!query.trim();
 
         // Build complete navigable list depending on state
+        // Visual order: Context Items → Pinned Items → Results
         // If searching: Only Results
-        // If not searching: Pins + Context Items
-        const totalPins = isSearching ? 0 : pinnedItems.length;
         const totalContext = isSearching ? 0 : contextItems.length;
+        const totalPins = isSearching ? 0 : pinnedItems.length;
         const totalResults = results.length;
-        const totalItems = totalPins + totalContext + totalResults;
+        const totalItems = totalContext + totalPins + totalResults;
 
-        // Current selected index in flat list
+        // Current selected index in flat list (following visual order: context → pins → results)
+        // selectedPinIndex >= pinnedItems.length means a context item is selected
+        // selectedPinIndex 0 to pinnedItems.length-1 means a pin is selected
         let currentIndex = -1;
-        if (selectedPinIndex >= 0 && !isSearching) {
-            currentIndex = selectedPinIndex;
+        if (selectedPinIndex >= pinnedItems.length && !isSearching) {
+            // Context item selected - visual position is (selectedPinIndex - pinnedItems.length)
+            currentIndex = selectedPinIndex - pinnedItems.length;
+        } else if (selectedPinIndex >= 0 && selectedPinIndex < pinnedItems.length && !isSearching) {
+            // Pin selected - visual position is totalContext + selectedPinIndex
+            currentIndex = totalContext + selectedPinIndex;
         } else if (selectedIndex >= 0) {
-            currentIndex = totalPins + totalContext + selectedIndex;
+            currentIndex = totalContext + totalPins + selectedIndex;
         }
 
-        // Navigation handlers
+        // Navigation handlers - follow visual order: Context → Pins → Results
         if (e.key === 'ArrowDown' && totalItems > 0) {
             e.preventDefault();
             const nextIndex = currentIndex + 1;
 
             // If at end or not started, wrap/start
             if (currentIndex === -1) {
-                // Start at top
-                if (totalPins > 0) setSelectedPinIndex(0);
-                else if (totalContext > 0) setSelectedPinIndex(0); // Context shares pin index logic if sequential
-                else setSelectedIndex(0);
-            } else if (nextIndex < totalItems) {
-                // Determine what the next index maps to
-                if (nextIndex < totalPins + totalContext) {
-                    setSelectedPinIndex(nextIndex);
+                // Start at top (first context item, then first pin, then first result)
+                if (totalContext > 0) {
+                    setSelectedPinIndex(pinnedItems.length); // Context items start after pins in selectedPinIndex
                     setSelectedIndex(-1);
-                } else {
-                    setSelectedPinIndex(-1);
-                    setSelectedIndex(nextIndex - totalPins - totalContext);
-                }
-            } else {
-                // Loop back to start? Or stop? Let's stop at end like native macOS Spotlight, or loop?
-                // Users said "spam down key", implying they want to move.
-                // Let's loop back to top for convenience
-                if (totalPins > 0) {
+                } else if (totalPins > 0) {
                     setSelectedPinIndex(0);
                     setSelectedIndex(-1);
-                } else if (totalContext > 0) {
+                } else {
+                    setSelectedIndex(0);
+                }
+            } else if (nextIndex < totalItems) {
+                // Map nextIndex to the right section
+                if (nextIndex < totalContext) {
+                    // Still in context items
+                    setSelectedPinIndex(pinnedItems.length + nextIndex);
+                    setSelectedIndex(-1);
+                } else if (nextIndex < totalContext + totalPins) {
+                    // In pins section
+                    setSelectedPinIndex(nextIndex - totalContext);
+                    setSelectedIndex(-1);
+                } else {
+                    // In results section
+                    setSelectedPinIndex(-1);
+                    setSelectedIndex(nextIndex - totalContext - totalPins);
+                }
+            } else {
+                // Loop back to top
+                if (totalContext > 0) {
+                    setSelectedPinIndex(pinnedItems.length);
+                    setSelectedIndex(-1);
+                } else if (totalPins > 0) {
                     setSelectedPinIndex(0);
                     setSelectedIndex(-1);
                 } else {
@@ -860,36 +876,50 @@ export function GlobalSpotlight() {
             const nextIndex = currentIndex - 1;
 
             if (currentIndex === -1) {
-                // Start at bottom
-                setSelectedIndex(totalResults - 1);
-                setSelectedPinIndex(-1);
+                // Start at bottom (last result, or last pin, or last context)
+                if (totalResults > 0) {
+                    setSelectedPinIndex(-1);
+                    setSelectedIndex(totalResults - 1);
+                } else if (totalPins > 0) {
+                    setSelectedPinIndex(totalPins - 1);
+                    setSelectedIndex(-1);
+                } else if (totalContext > 0) {
+                    setSelectedPinIndex(pinnedItems.length + totalContext - 1);
+                    setSelectedIndex(-1);
+                }
             } else if (nextIndex >= 0) {
-                if (nextIndex < totalPins + totalContext) {
-                    setSelectedPinIndex(nextIndex);
+                if (nextIndex < totalContext) {
+                    setSelectedPinIndex(pinnedItems.length + nextIndex);
+                    setSelectedIndex(-1);
+                } else if (nextIndex < totalContext + totalPins) {
+                    setSelectedPinIndex(nextIndex - totalContext);
                     setSelectedIndex(-1);
                 } else {
                     setSelectedPinIndex(-1);
-                    setSelectedIndex(nextIndex - totalPins - totalContext);
+                    setSelectedIndex(nextIndex - totalContext - totalPins);
                 }
             } else {
                 // Loop to bottom
                 if (totalResults > 0) {
                     setSelectedPinIndex(-1);
                     setSelectedIndex(totalResults - 1);
-                } else {
-                    setSelectedPinIndex(totalPins + totalContext - 1);
+                } else if (totalPins > 0) {
+                    setSelectedPinIndex(totalPins - 1);
+                    setSelectedIndex(-1);
+                } else if (totalContext > 0) {
+                    setSelectedPinIndex(pinnedItems.length + totalContext - 1);
                     setSelectedIndex(-1);
                 }
             }
         } else if (e.key === 'Enter') {
             e.preventDefault();
             if (currentIndex >= 0 && currentIndex < totalItems) {
-                if (currentIndex < totalPins) {
-                    handleSelect(pinnedItems[currentIndex]);
-                } else if (currentIndex < totalPins + totalContext) {
-                    handleSelect(contextItems[currentIndex - totalPins]);
+                if (currentIndex < totalContext) {
+                    handleSelect(contextItems[currentIndex]);
+                } else if (currentIndex < totalContext + totalPins) {
+                    handleSelect(pinnedItems[currentIndex - totalContext]);
                 } else {
-                    handleSelect(results[currentIndex - totalPins - totalContext]);
+                    handleSelect(results[currentIndex - totalContext - totalPins]);
                 }
             } else if (query.startsWith('http')) {
                 handleSelect({ url: query, type: 'url' });
@@ -901,15 +931,16 @@ export function GlobalSpotlight() {
             handleClose();
         } else if (e.key === 'p' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
-            if (currentIndex >= totalPins + totalContext && selectedIndex >= 0) {
+            if (currentIndex >= totalContext + totalPins && selectedIndex >= 0) {
                 togglePin(results[selectedIndex]);
             }
-        } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isSearching && currentIndex < totalPins && currentIndex >= 0) {
+        } else if ((e.key === 'Delete' || e.key === 'Backspace') && !isSearching && currentIndex >= totalContext && currentIndex < totalContext + totalPins) {
             e.preventDefault();
-            removePin(currentIndex);
+            const pinIndex = currentIndex - totalContext;
+            removePin(pinIndex);
             // Adjust selection after removal
             const maxPinIndex = totalPins - 2; // -1 for removed, -1 for 0-index
-            if (maxPinIndex >= 0) setSelectedPinIndex(Math.min(currentIndex, maxPinIndex));
+            if (maxPinIndex >= 0) setSelectedPinIndex(Math.min(pinIndex, maxPinIndex));
             else setSelectedPinIndex(-1);
         }
 
@@ -943,7 +974,7 @@ export function GlobalSpotlight() {
         handleClose();
 
         // Record feedback for RAG (fire-and-forget, non-blocking)
-        recordSearchSelection(item, resultsDisplayedAtRef.current).catch(() => {});
+        recordSearchSelection(item, resultsDisplayedAtRef.current).catch(() => { });
 
         // For tabs, switch to the existing tab instead of opening new
         if (item.type === 'tab') {
@@ -1138,7 +1169,7 @@ export function GlobalSpotlight() {
                         spellCheck={false}
                     />
                     {loading && <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>}
-
+                    {/* 
                     <button
                         className={`spotlight-deep-btn ${deepSearch ? 'active' : ''}`}
                         onClick={() => setDeepSearch(!deepSearch)}
@@ -1146,7 +1177,7 @@ export function GlobalSpotlight() {
                         title="Toggle Deep Search"
                     >
                         ✨ Deep
-                    </button>
+                    </button> */}
                     <button
                         className="spotlight-close-btn"
                         onClick={handleClose}

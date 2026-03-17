@@ -335,6 +335,96 @@ export function calculateFeedbackBoost(item, relatedUrls = []) {
     return Math.max(0.5, Math.min(2.0, boost)); // Clamp between 0.5x and 2x
 }
 
+// ==========================================
+// App-Workspace Association Learning
+// ==========================================
+
+/**
+ * Record that an app was added to/used with a workspace
+ * @param {string} appName - Display name of the app
+ * @param {string} appPath - Path to the app (unique identifier)
+ * @param {string} workspaceName - The workspace it's associated with
+ */
+export async function recordAppWorkspace(appName, appPath, workspaceName) {
+    if (!appPath || !workspaceName) return false;
+
+    try {
+        const response = await fetch(`${SIDECAR_URL}/feedback/app-workspace`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                app_name: appName,
+                app_path: appPath,
+                workspace_name: workspaceName
+            })
+        });
+        return response.ok;
+    } catch (e) {
+        console.debug('[Feedback] Failed to record app-workspace:', e.message);
+        return false;
+    }
+}
+
+/**
+ * Get app suggestions for a workspace based on learned patterns
+ * @param {string} workspaceName - The workspace to get suggestions for
+ * @param {number} [count=10] - Number of suggestions to return
+ * @returns {Promise<Array<{app_name: string, app_path: string, score: number}>>}
+ */
+export async function suggestAppsForWorkspace(workspaceName, count = 10) {
+    if (!workspaceName) return [];
+
+    try {
+        const response = await fetch(`${SIDECAR_URL}/feedback/suggest-apps`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                workspace_name: workspaceName,
+                count
+            })
+        });
+
+        if (!response.ok) return [];
+
+        const data = await response.json();
+        return data.suggestions || [];
+    } catch (e) {
+        console.debug('[Feedback] Failed to get app suggestions:', e.message);
+        return [];
+    }
+}
+
+/**
+ * Get workspace suggestions for an app based on learned patterns
+ * @param {string} appPath - The app path to get workspace suggestions for
+ * @param {string} [appName] - Optional app name for context
+ * @param {number} [count=5] - Number of suggestions to return
+ * @returns {Promise<Array<{workspace_name: string, score: number}>>}
+ */
+export async function suggestWorkspacesForApp(appPath, appName, count = 5) {
+    if (!appPath) return [];
+
+    try {
+        const response = await fetch(`${SIDECAR_URL}/feedback/suggest-workspaces-for-app`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                app_path: appPath,
+                app_name: appName,
+                count
+            })
+        });
+
+        if (!response.ok) return [];
+
+        const data = await response.json();
+        return data.suggestions || [];
+    } catch (e) {
+        console.debug('[Feedback] Failed to get workspace suggestions for app:', e.message);
+        return [];
+    }
+}
+
 export default {
     recordFeedbackEvent,
     recordSearchSelection,
@@ -349,5 +439,8 @@ export default {
     getFeedbackStats,
     getRecentEvents,
     saveFeedbackState,
-    calculateFeedbackBoost
+    calculateFeedbackBoost,
+    recordAppWorkspace,
+    suggestAppsForWorkspace,
+    suggestWorkspacesForApp
 };

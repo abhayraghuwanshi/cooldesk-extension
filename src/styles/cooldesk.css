@@ -1201,7 +1201,39 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   opacity: 1;
 }
 
+/* Apps Section in Workspace Card */
+.workspace-apps-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(34, 197, 94, 0.2);
+}
 
+.workspace-app-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: var(--font-sm, 12px);
+  color: var(--text-primary, #E2E8F0);
+}
+
+.workspace-app-chip:hover {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2);
+}
+
+.workspace-app-chip img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
 
 /* Add URL button and form */
 .workspace-add-url-btn {
@@ -2344,6 +2376,25 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   font-size: calc(var(--font-5xl) * 0.4);
   color: #60a5fa;
   background: rgba(96, 165, 250, 0.15);
+}
+
+/* App Icon in Compact View - Green Theme */
+.compact-app-icon {
+  border: 2px solid rgba(34, 197, 94, 0.4) !important;
+  background: rgba(34, 197, 94, 0.1) !important;
+}
+
+.compact-app-icon:hover {
+  border-color: rgba(34, 197, 94, 0.7) !important;
+  background: rgba(34, 197, 94, 0.2) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.compact-app-icon img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
 }
 
 /* Grouped URL Pill / Now Circle with Badge */

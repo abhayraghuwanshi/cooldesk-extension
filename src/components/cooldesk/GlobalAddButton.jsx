@@ -31,6 +31,7 @@ export function GlobalAddButton({
   onOpen: externalOnOpen,
   onClose: externalOnClose,
   initialWorkspace,
+  onOpenAIManager,
   ...rest
 }) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -44,18 +45,8 @@ export function GlobalAddButton({
   const [selectedWorkspace, setSelectedWorkspace] = useState(null);
   const [urlInput, setUrlInput] = useState('');
   const [urlTitle, setUrlTitle] = useState('');
-  const [workspaceName, setWorkspaceName] = useState('');
-  const [workspaceIcon, setWorkspaceIcon] = useState('folder');
   const [noteText, setNoteText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-
-  // AI Workspace Suggestion States
-  const [isSuggestingLinks, setIsSuggestingLinks] = useState(false);
-  const [suggestedLinks, setSuggestedLinks] = useState([]);
-  const [selectedSuggestedLinks, setSelectedSuggestedLinks] = useState(new Set());
-  const [aiSuggestionError, setAiSuggestionError] = useState('');
-  const [suggestedWorkspaceNames, setSuggestedWorkspaceNames] = useState([]);
-  const [isSuggestingName, setIsSuggestingName] = useState(false);
 
   // Multi-Select URL States
   const [selectedUrls, setSelectedUrls] = useState(new Set());
@@ -272,19 +263,13 @@ export function GlobalAddButton({
   const resetForm = () => {
     setUrlInput('');
     setUrlTitle('');
-    setWorkspaceName('');
-    setWorkspaceIcon('folder');
     setNoteText('');
     setSearchQuery('');
     setSelectedWorkspace(null);
     setBrowseMode('tabs');
-    setSuggestedLinks([]);
-    setSelectedSuggestedLinks(new Set());
     setSelectedUrls(new Set());
-    setAiSuggestionError('');
     setAiCommand('');
     setAiUrlError('');
-    setSuggestedWorkspaceNames([]);
     setAutoCategorizedWorkspace(null);
     setAutoGroupPreview(null);
     setConfidenceScore(null);
@@ -332,122 +317,6 @@ export function GlobalAddButton({
         });
       }
       handleClose();
-    }
-  };
-
-  const handleCreateWorkspace = async () => {
-    if (workspaceName.trim()) {
-      const urlsToAdd = suggestedLinks.filter(link => selectedSuggestedLinks.has(link.url));
-
-      try {
-        const newWorkspace = await onCreateWorkspace?.({
-          name: workspaceName,
-          icon: workspaceIcon,
-          urls: []
-        });
-
-        // If the parent component returns the new workspace (or its ID), we add the URLs
-        if (newWorkspace && newWorkspace.id && urlsToAdd.length > 0) {
-          for (const link of urlsToAdd) {
-            await onAddUrlToWorkspace?.(newWorkspace.id, link);
-          }
-        } else if (urlsToAdd.length > 0) {
-          console.warn("Could not add suggested links because workspace creation did not return the new workspace object/ID.");
-        }
-      } catch (err) {
-        console.error("Error creating workspace or adding suggested links:", err);
-      }
-      handleClose();
-    }
-  };
-
-  const handleSuggestWorkspaceLinks = async () => {
-    if (!workspaceName.trim()) return;
-
-    setIsSuggestingLinks(true);
-    setAiSuggestionError('');
-    setSuggestedLinks([]);
-    setSelectedSuggestedLinks(new Set());
-
-    try {
-      // Combine open tabs, history, and bookmarks into a searchable pool
-      const searchPool = [];
-      const seenUrls = new Set();
-
-      const addToPool = (items) => {
-        items.forEach(item => {
-          if (item.url && !seenUrls.has(item.url) && !item.url.startsWith('chrome://')) {
-            seenUrls.add(item.url);
-            searchPool.push({
-              url: item.url,
-              title: item.title || safeGetHostname(item.url),
-              favicon: item.favicon
-            });
-          }
-        });
-      };
-
-      addToPool(openTabs);
-      addToPool(historyItems.slice(0, 10000)); // Limit history to recent
-
-      if (searchPool.length === 0) {
-        setAiSuggestionError('No browser history or tabs found to suggest from.');
-        setIsSuggestingLinks(false);
-        return;
-      }
-
-      // Use NanoAI to find relevant links
-      const prompt = `Find links related to the workspace category: "${workspaceName}"`;
-      const rankedResults = await NanoAIService.naturalLanguageSearch(prompt, searchPool, 10);
-
-      if (rankedResults && rankedResults.length > 0 && rankedResults[0]._aiMatched) {
-        setSuggestedLinks(rankedResults);
-        // Auto-select top 5 suggestions
-        const newSelection = new Set();
-        rankedResults.slice(0, 5).forEach(link => newSelection.add(link.url));
-        setSelectedSuggestedLinks(newSelection);
-      } else {
-        setAiSuggestionError(`Could not find links strongly related to "${workspaceName}".`);
-      }
-
-    } catch (err) {
-      console.error("Error suggesting workspace links:", err);
-      setAiSuggestionError('AI suggestion failed. ' + err.message);
-    } finally {
-      setIsSuggestingLinks(false);
-    }
-  };
-
-  const handleAutoSuggestWorkspaceName = async () => {
-    if (openTabs.length === 0) {
-      setAiSuggestionError('Open some tabs first to get workspace suggestions.');
-      return;
-    }
-
-    setIsSuggestingName(true);
-    setAiSuggestionError('');
-
-    try {
-      const suggestions = await LocalAIService.suggestWorkspaces(openTabs.slice(0, 10));
-      if (suggestions && suggestions.length > 0) {
-        setSuggestedWorkspaceNames(suggestions);
-      } else {
-        setAiSuggestionError('Could not find a cohesive workspace name for these tabs.');
-      }
-    } catch (err) {
-      console.error("Error suggesting workspace name:", err);
-      // Fallback to legacy NanoAI prompt if LocalAI fails
-      try {
-        const text = openTabs.slice(0, 5).map(t => t.title).join(', ');
-        const prompt = `Based on these tabs: ${text}, suggest 3 short (2-3 word) workspace names as a JSON array ["Name 1", "Name 2", "Name 3"]`;
-        const result = await NanoAIService.prompt(prompt);
-        const match = result.match(/\[.*\]/);
-        if (match) setSuggestedWorkspaceNames(JSON.parse(match[0]));
-      } catch (e) {
-        setAiSuggestionError('AI suggestion failed.');
-      }
-    } finally {
-      setIsSuggestingName(false);
     }
   };
 
@@ -925,7 +794,14 @@ export function GlobalAddButton({
                 ].map(({ key, icon, label }) => (
                   <button
                     key={key}
-                    onClick={() => setMode(key)}
+                    onClick={() => {
+                      if (key === 'workspace' && onOpenAIManager) {
+                        handleClose();
+                        onOpenAIManager();
+                      } else {
+                        setMode(key);
+                      }
+                    }}
                     style={{
                       padding: '10px 20px',
                       borderRadius: '8px',
@@ -1508,360 +1384,6 @@ export function GlobalAddButton({
                   >
                     <FontAwesomeIcon icon={faCheck} />
                     {selectedUrls.size > 1 ? `Add ${selectedUrls.size} items to ${selectedWorkspace?.name || 'Workspace'}` : `Add to ${selectedWorkspace?.name || 'Workspace'}`}
-                  </button>
-                </div>
-              )}
-
-              {/* Create Workspace Form */}
-              {mode === 'workspace' && (
-                <div className="add-form">
-                  <h2 style={{
-                    fontSize: '24px',
-                    fontWeight: 700,
-                    color: '#f1f5f9',
-                    marginBottom: '24px',
-                    background: 'linear-gradient(135deg, #f1f5f9 0%, #94a3b8 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}>
-                    <FontAwesomeIcon icon={faStar} style={{ fontSize: '20px', color: '#a855f7' }} />
-                    Create New Workspace
-                  </h2>
-
-                  <div className="form-group" style={{ marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <label style={{
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: '#94a3b8',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                      }}>Workspace Name</label>
-
-                      <button
-                        onClick={handleAutoSuggestWorkspaceName}
-                        disabled={isSuggestingName}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#a855f7',
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <FontAwesomeIcon icon={faMagicWandSparkles} spin={isSuggestingName} />
-                        {isSuggestingName ? 'Magic...' : 'Auto-Suggest'}
-                      </button>
-                    </div>
-
-                    {suggestedWorkspaceNames.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
-                        {suggestedWorkspaceNames.map((name, i) => (
-                          <button
-                            key={i}
-                            onClick={() => setWorkspaceName(name)}
-                            style={{
-                              padding: '4px 10px',
-                              borderRadius: '6px',
-                              background: 'rgba(168, 85, 247, 0.1)',
-                              border: '1px solid rgba(168, 85, 247, 0.2)',
-                              color: '#d8b4fe',
-                              fontSize: '11px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    <input
-                      type="text"
-                      value={workspaceName}
-                      onChange={(e) => setWorkspaceName(e.target.value)}
-                      placeholder="e.g., Work Projects, Personal, Research"
-                      autoFocus
-                      style={{
-                        width: '100%',
-                        padding: '12px 16px',
-                        borderRadius: '12px',
-                        background: 'rgba(30, 41, 59, 0.6)',
-                        border: '2px solid rgba(148, 163, 184, 0.2)',
-                        color: '#f1f5f9',
-                        fontSize: '14px',
-                        outline: 'none',
-                        transition: 'all 0.2s ease',
-                        fontFamily: 'inherit'
-                      }}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = '#8b5cf6';
-                        e.target.style.background = 'rgba(30, 41, 59, 0.8)';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-                        e.target.style.background = 'rgba(30, 41, 59, 0.6)';
-                      }}
-                    />
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: '32px' }}>
-                    <label style={{
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: '#94a3b8',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                      marginBottom: '12px',
-                      display: 'block'
-                    }}>Icon</label>
-                    <div style={{
-                      display: 'flex',
-                      gap: '12px'
-                    }}>
-                      {[
-                        { key: 'folder', icon: faFolder },
-                        { key: 'folder-open', icon: faFolderOpen },
-                        { key: 'link', icon: faLink }
-                      ].map(({ key, icon }) => (
-                        <button
-                          key={key}
-                          onClick={() => setWorkspaceIcon(key)}
-                          style={{
-                            flex: 1,
-                            padding: '16px',
-                            borderRadius: '12px',
-                            background: workspaceIcon === key
-                              ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(236, 72, 153, 0.3) 100%)'
-                              : 'rgba(30, 41, 59, 0.6)',
-                            border: workspaceIcon === key
-                              ? '2px solid #8b5cf6'
-                              : '2px solid rgba(148, 163, 184, 0.2)',
-                            color: workspaceIcon === key ? '#a855f7' : '#cbd5e1',
-                            cursor: 'pointer',
-                            fontSize: '24px',
-                            transition: 'all 0.2s ease'
-                          }}
-                          onMouseEnter={(e) => {
-                            if (workspaceIcon !== key) {
-                              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.8)';
-                              e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.4)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (workspaceIcon !== key) {
-                              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.6)';
-                              e.currentTarget.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-                            }
-                          }}
-                        >
-                          <FontAwesomeIcon icon={icon} />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* AI Link Suggestions */}
-                  <div className="form-group" style={{ marginBottom: '32px' }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: '12px'
-                    }}>
-                      <label style={{
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: '#94a3b8',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}>
-                        <FontAwesomeIcon icon={faStar} style={{ fontSize: '11px', color: '#a855f7' }} />
-                        Smart Populate
-                      </label>
-
-                      <button
-                        onClick={handleSuggestWorkspaceLinks}
-                        disabled={isSuggestingLinks || !workspaceName.trim()}
-                        style={{
-                          background: isSuggestingLinks ? 'transparent' : 'rgba(168, 85, 247, 0.15)',
-                          border: '1px solid rgba(168, 85, 247, 0.3)',
-                          borderRadius: '8px',
-                          padding: '6px 12px',
-                          color: '#d8b4fe',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          cursor: isSuggestingLinks || !workspaceName.trim() ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          transition: 'all 0.2s',
-                          opacity: !workspaceName.trim() ? 0.5 : 1
-                        }}
-                        onMouseEnter={e => {
-                          if (!isSuggestingLinks && workspaceName.trim()) {
-                            e.currentTarget.style.background = 'rgba(168, 85, 247, 0.25)';
-                          }
-                        }}
-                        onMouseLeave={e => {
-                          if (!isSuggestingLinks && workspaceName.trim()) {
-                            e.currentTarget.style.background = 'rgba(168, 85, 247, 0.15)';
-                          }
-                        }}
-                      >
-                        {isSuggestingLinks ? (
-                          <>
-                            <div className="spinner" style={{ width: '12px', height: '12px', border: '2px solid rgba(216, 180, 254, 0.3)', borderTopColor: '#d8b4fe', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                            Analyzing...
-                          </>
-                        ) : (
-                          <>✨ Suggest Links</>
-                        )}
-                      </button>
-                    </div>
-
-                    {aiSuggestionError && (
-                      <div style={{
-                        padding: '10px 14px',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.2)',
-                        borderRadius: '8px',
-                        color: '#f87171',
-                        fontSize: '13px',
-                        marginBottom: '12px'
-                      }}>
-                        {aiSuggestionError}
-                      </div>
-                    )}
-
-                    {suggestedLinks.length > 0 && (
-                      <div style={{
-                        maxHeight: '220px',
-                        overflowY: 'auto',
-                        background: 'rgba(15, 23, 42, 0.4)',
-                        border: '1px solid rgba(148, 163, 184, 0.1)',
-                        borderRadius: '12px',
-                        padding: '8px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '4px'
-                      }}>
-                        {suggestedLinks.map((link, idx) => {
-                          const isSelected = selectedSuggestedLinks.has(link.url);
-                          return (
-                            <button
-                              key={idx}
-                              onClick={() => {
-                                const next = new Set(selectedSuggestedLinks);
-                                if (isSelected) next.delete(link.url);
-                                else next.add(link.url);
-                                setSelectedSuggestedLinks(next);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                padding: '10px',
-                                borderRadius: '8px',
-                                background: isSelected ? 'rgba(168, 85, 247, 0.1)' : 'transparent',
-                                border: isSelected ? '1px solid rgba(168, 85, 247, 0.3)' : '1px solid transparent',
-                                cursor: 'pointer',
-                                textAlign: 'left',
-                                transition: 'all 0.2s'
-                              }}
-                              onMouseEnter={e => {
-                                if (!isSelected) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                              }}
-                              onMouseLeave={e => {
-                                if (!isSelected) e.currentTarget.style.background = 'transparent';
-                              }}
-                            >
-                              <div style={{
-                                width: '18px',
-                                height: '18px',
-                                borderRadius: '4px',
-                                border: isSelected ? 'none' : '2px solid rgba(148, 163, 184, 0.4)',
-                                background: isSelected ? '#a855f7' : 'transparent',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexShrink: 0
-                              }}>
-                                {isSelected && <FontAwesomeIcon icon={faCheck} style={{ color: 'white', fontSize: '10px' }} />}
-                              </div>
-                              <div style={{ flex: 1, overflow: 'hidden' }}>
-                                <div style={{
-                                  fontSize: '13px',
-                                  color: isSelected ? '#f1f5f9' : '#cbd5e1',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  fontWeight: isSelected ? '500' : '400'
-                                }}>{link.title}</div>
-                                <div style={{
-                                  fontSize: '11px',
-                                  color: '#64748b',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis'
-                                }}>{safeGetHostname(link.url)}</div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={handleCreateWorkspace}
-                    disabled={!workspaceName.trim()}
-                    style={{
-                      width: '100%',
-                      padding: '14px 24px',
-                      borderRadius: '14px',
-                      background: !workspaceName.trim()
-                        ? 'rgba(71, 85, 105, 0.4)'
-                        : 'linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%)',
-                      border: 'none',
-                      color: !workspaceName.trim() ? '#64748b' : 'white',
-                      fontSize: '15px',
-                      fontWeight: 600,
-                      cursor: !workspaceName.trim() ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '10px',
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      boxShadow: !workspaceName.trim()
-                        ? 'none'
-                        : '0 4px 16px rgba(139, 92, 246, 0.4)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (workspaceName.trim()) {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.6)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = workspaceName.trim()
-                        ? '0 4px 16px rgba(139, 92, 246, 0.4)'
-                        : 'none';
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faCheck} />
-                    Create Workspace
                   </button>
                 </div>
               )}

@@ -131,7 +131,7 @@ fn run_inference(
     // Build chat template prompt
     let system_msg = LlamaChatMessage::new(
         "system".to_string(),
-        "You are CoolDesk AI, a helpful desktop assistant. Be concise and direct.".to_string(),
+        "You are CoolDesk AI, a precise assistant for categorization, summarization, and organization tasks. Always follow instructions exactly. Be concise - respond with only what is asked, no extra explanation.".to_string(),
     )
     .map_err(|e| format!("Failed to create system message: {:?}", e))?;
 

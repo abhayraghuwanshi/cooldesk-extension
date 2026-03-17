@@ -304,6 +304,52 @@ pub struct WorkspacePattern {
     pub last_updated: i64,
 }
 
+/// App-Workspace association for learning which apps belong to which workspaces
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppWorkspaceAssociation {
+    /// Normalized app name (lowercase, no .exe)
+    pub app_name: String,
+    /// App path for unique identification
+    pub app_path: String,
+    /// Workspace name this app is associated with
+    pub workspace_name: String,
+    /// Number of times this association was recorded
+    pub count: u32,
+    /// Last time this association was recorded
+    pub last_seen: i64,
+}
+
+impl AppWorkspaceAssociation {
+    pub fn new(app_name: String, app_path: String, workspace_name: String) -> Self {
+        Self {
+            app_name,
+            app_path,
+            workspace_name,
+            count: 1,
+            last_seen: chrono::Utc::now().timestamp_millis(),
+        }
+    }
+
+    /// Key for deduplication
+    pub fn key(&self) -> String {
+        format!("{}|{}", self.app_path.to_lowercase(), self.workspace_name.to_lowercase())
+    }
+
+    /// Score for ranking (higher = stronger association)
+    pub fn score(&self) -> f64 {
+        // Recency factor: decay over 30 days
+        let now = chrono::Utc::now().timestamp_millis();
+        let age_days = (now - self.last_seen) as f64 / (24.0 * 60.0 * 60.0 * 1000.0);
+        let recency_factor = (-age_days / 30.0).exp();
+
+        // Count factor: logarithmic scaling
+        let count_factor = (self.count as f64 + 1.0).ln();
+
+        count_factor * recency_factor
+    }
+}
+
 /// Persistent feedback state
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -322,6 +368,9 @@ pub struct FeedbackState {
     pub url_co_occurrences: Vec<UrlCoOccurrence>,
     /// Workspace patterns
     pub workspace_patterns: Vec<WorkspacePattern>,
+    /// App-workspace associations for suggesting apps to workspaces
+    #[serde(default)]
+    pub app_workspace_associations: Vec<AppWorkspaceAssociation>,
     /// Global stats
     pub total_events: u64,
     /// Last save timestamp

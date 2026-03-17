@@ -861,12 +861,60 @@ pub struct DownloadModelRequest {
     pub model_name: String,
 }
 
-pub async fn llm_download(Json(req): Json<DownloadModelRequest>) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    if download_model(&req.model_name).await.is_ok() {
-        Ok(Json(SuccessResponse { success: true }))
-    } else {
-        Ok(Json(SuccessResponse { success: false }))
-    }
+pub async fn llm_download(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<DownloadModelRequest>,
+) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let model_name = req.model_name.clone();
+    let model_name_for_callback = req.model_name.clone();
+    let broadcast_sender = state.ws_broadcast.clone();
+    let state_clone = state.clone();
+
+    // Spawn download in background so we can return immediately
+    tokio::spawn(async move {
+        // Create a progress callback that broadcasts to WebSocket clients
+        let progress_callback: Box<dyn Fn(u64, u64) + Send + Sync> = Box::new(move |downloaded, total| {
+            let progress = if total > 0 {
+                (downloaded * 100) / total
+            } else {
+                0
+            };
+
+            let msg = serde_json::json!({
+                "type": "llm-download-progress",
+                "payload": {
+                    "modelName": model_name_for_callback,
+                    "progress": progress,
+                    "downloaded": downloaded,
+                    "total": total
+                }
+            });
+
+            if let Ok(json) = serde_json::to_string(&msg) {
+                let _ = broadcast_sender.send(json);
+            }
+        });
+
+        match download_model(&model_name, Some(progress_callback)).await {
+            Ok(_) => {
+                // Send completion message
+                state_clone.broadcast("llm-download-complete", serde_json::json!({
+                    "modelName": model_name,
+                    "success": true
+                }));
+            }
+            Err(e) => {
+                log::error!("[LLM] Download failed: {}", e);
+                state_clone.broadcast("llm-download-error", serde_json::json!({
+                    "modelName": model_name,
+                    "error": e
+                }));
+            }
+        }
+    });
+
+    // Return immediately - progress/completion via WebSocket
+    Ok(Json(SuccessResponse { success: true }))
 }
 
 pub async fn llm_summarize(Json(req): Json<SummarizeRequest>) -> Json<ChatResponse> {
@@ -1254,6 +1302,48 @@ pub async fn v2_clear_memory(
 }
 
 // ==========================================
+// Simple Agent (Context-Injection Model)
+// ==========================================
+
+use crate::sidecar::llm_v2::SimpleAgent;
+
+/// Request for simple agent chat
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SimpleChatRequest {
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}
+
+/// Simple chat - context-injection approach (no tool routing)
+/// This endpoint injects user data as context and lets the LLM respond naturally.
+pub async fn v2_simple_chat(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SimpleChatRequest>,
+) -> Json<serde_json::Value> {
+    let simple_agent = SimpleAgent::new(state.sync_data.clone());
+
+    match simple_agent.chat(&req.message).await {
+        response if response.ok => {
+            Json(serde_json::json!({
+                "ok": true,
+                "response": response.response,
+                "actions": response.actions,
+                "requestId": req.request_id,
+            }))
+        }
+        response => {
+            Json(serde_json::json!({
+                "ok": false,
+                "error": response.error.unwrap_or_else(|| "Unknown error".to_string()),
+                "requestId": req.request_id,
+            }))
+        }
+    }
+}
+
+// ==========================================
 // Feedback/RL Handlers
 // ==========================================
 
@@ -1265,6 +1355,8 @@ use crate::sidecar::data::{
     FeedbackEventRequest, FeedbackStatsResponse, UrlGroupingFeedbackRequest,
     WorkspaceSuggestionRequest, WorkspaceSuggestionResponse, ScoredSuggestion,
     RecordUrlWorkspaceRequest, UrlAffinityResponse, RelatedUrl, AppLaunchRequest,
+    RecordAppWorkspaceRequest, SuggestAppsRequest, AppSuggestionResponse, SuggestedApp,
+    SuggestWorkspacesForAppRequest,
 };
 
 lazy_static! {
@@ -1579,6 +1671,82 @@ pub async fn feedback_url_click(
         Json(SuccessResponse { success: true })
     } else {
         Json(SuccessResponse { success: false })
+    }
+}
+
+/// Record app-workspace association (for learning which apps belong to which workspaces)
+pub async fn feedback_record_app_workspace(
+    Json(req): Json<RecordAppWorkspaceRequest>,
+) -> Json<SuccessResponse> {
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        store.record_app_workspace(&req.app_name, &req.app_path, &req.workspace_name).await;
+
+        // Save periodically
+        let count = store.event_count().await;
+        if count % 10 == 0 {
+            let _ = store.save().await;
+        }
+
+        log::info!("[Feedback] Recorded app-workspace: {} -> {}", req.app_name, req.workspace_name);
+        Json(SuccessResponse { success: true })
+    } else {
+        Json(SuccessResponse { success: false })
+    }
+}
+
+/// Suggest apps for a workspace based on learned associations
+pub async fn feedback_suggest_apps(
+    Json(req): Json<SuggestAppsRequest>,
+) -> Json<AppSuggestionResponse> {
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        let suggestions = store.suggest_apps_for_workspace(&req.workspace_name, req.count).await;
+
+        Json(AppSuggestionResponse {
+            suggestions: suggestions
+                .into_iter()
+                .map(|(name, path, score)| SuggestedApp {
+                    app_name: name,
+                    app_path: path,
+                    score,
+                })
+                .collect(),
+        })
+    } else {
+        Json(AppSuggestionResponse {
+            suggestions: Vec::new(),
+        })
+    }
+}
+
+/// Suggest workspaces for an app based on learned associations
+pub async fn feedback_suggest_workspaces_for_app(
+    Json(req): Json<SuggestWorkspacesForAppRequest>,
+) -> Json<WorkspaceSuggestionResponse> {
+    let store_mutex = get_feedback_store().await;
+    let store_guard = store_mutex.lock().await;
+
+    if let Some(store) = store_guard.as_ref() {
+        let suggestions = store.suggest_workspaces_for_app(&req.app_path, req.count).await;
+
+        Json(WorkspaceSuggestionResponse {
+            suggestions: suggestions
+                .into_iter()
+                .map(|(name, score)| ScoredSuggestion {
+                    workspace_name: name,
+                    score,
+                })
+                .collect(),
+        })
+    } else {
+        Json(WorkspaceSuggestionResponse {
+            suggestions: Vec::new(),
+        })
     }
 }
 

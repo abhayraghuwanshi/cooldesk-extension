@@ -26,7 +26,9 @@
       "Bash(cmd /c \"c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\AppScanner.exe --debug 2>&1 | findstr /i \"\"Desktop DBeaver Chrome Canva Virtual\"\"\")",
       "Bash(cmd /c \"type c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\debug_output.txt | findstr /i \"\"VirtualDesktop DBeaver Chrome Canva Desktop\"\"\")",
       "Bash(cmd /c 'c:\\\\Users\\\\raghu\\\\projects\\\\extension\\\\AppScanner_test.exe --debug 2>&1 | findstr /C:\"\"[VirtualDesktop]\"\" | head -10')",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(node test/test_simple_chat.js)",
+      "Bash(taskkill //F //IM app.exe)"
     ],
     "deny": [],
     "ask": [],

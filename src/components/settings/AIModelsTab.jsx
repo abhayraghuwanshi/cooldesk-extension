@@ -1,16 +1,13 @@
 /**
- * Unified AI Models Tab - Settings Component
- * Combines Local AI (Tauri/Electron sidecar) and Cloud AI (Gemini API) configuration
+ * Local AI Models Tab - Settings Component
+ * Manages on-device LLM for categorization, summarization, and smart features
  */
 
 import {
     faBolt,
-    faCheckCircle,
     faChevronDown,
     faCircleNotch,
-    faCloud,
     faDownload,
-    faExclamationTriangle,
     faMemory,
     faMicrochip,
     faRocket,
@@ -41,23 +38,8 @@ async function sidecarPost(path, data = {}) {
     return res.json();
 }
 
-export default function AIModelsTab({
-    localSettings,
-    setLocalSettings,
-    markEdited,
-    basicSaved,
-    setBasicSaved,
-    suggesting,
-    error: parentError,
-    setError: setParentError,
-    handleSuggestCategories,
-    saveSettingsDB,
-    storageSet
-}) {
+export default function AIModelsTab() {
     const isDesktopApp = isElectronApp();
-
-    // AI Provider mode: 'local' or 'cloud'
-    const [aiMode, setAiMode] = useState('cloud');
 
     // Local AI State
     const [status, setStatus] = useState(null);
@@ -70,7 +52,6 @@ export default function AIModelsTab({
     const [gpuEnabled, setGpuEnabled] = useState(false);
     const [gpuLayers, setGpuLayers] = useState(99);
     const [localAiExpanded, setLocalAiExpanded] = useState(true);
-    const [cloudAiExpanded, setCloudAiExpanded] = useState(true);
 
     // Check sidecar availability on mount (for desktop apps)
     useEffect(() => {
@@ -117,6 +98,24 @@ export default function AIModelsTab({
                                 setLoadingModel(null);
                                 loadStatus();
                                 loadModels();
+                            } else if (data.type === 'llm-download-complete') {
+                                // Download finished - clear progress and refresh
+                                const completedModel = data.payload?.modelName;
+                                setDownloadProgress(prev => {
+                                    const copy = { ...prev };
+                                    delete copy[completedModel];
+                                    return copy;
+                                });
+                                loadModels();
+                            } else if (data.type === 'llm-download-error') {
+                                // Download failed
+                                const failedModel = data.payload?.modelName;
+                                setDownloadProgress(prev => {
+                                    const copy = { ...prev };
+                                    delete copy[failedModel];
+                                    return copy;
+                                });
+                                setError(data.payload?.error || 'Download failed');
                             } else if (data.type === 'llm-error') {
                                 setError(data.payload?.error || 'Unknown error');
                                 setLoadingModel(null);
@@ -170,15 +169,11 @@ export default function AIModelsTab({
         setError('');
         setDownloadProgress(prev => ({ ...prev, [modelName]: 0 }));
         try {
-            const result = await sidecarPost('/llm/download', { modelName });
-            if (result && !result.ok && result.error) {
-                setError(result.error || 'Download failed');
-            } else {
-                loadModels();
-            }
+            // Fire-and-forget - returns immediately, progress/completion via WebSocket
+            await sidecarPost('/llm/download', { modelName });
+            // Progress updates and completion/error come via WebSocket
         } catch (e) {
-            setError(e.message);
-        } finally {
+            setError('Failed to start download: ' + e.message);
             setDownloadProgress(prev => {
                 const copy = { ...prev };
                 delete copy[modelName];
@@ -216,109 +211,12 @@ export default function AIModelsTab({
         }
     };
 
-    // Cloud AI handlers
-    const handleSaveCloudSettings = async () => {
-        setParentError?.('');
-        const key = String(localSettings?.geminiApiKey || '').trim();
-
-        const payload = {
-            geminiApiKey: key,
-            modelName: String(localSettings?.modelName || 'gemini-1.5-flash').trim(),
-            visitCountThreshold: Number(localSettings?.visitCountThreshold) || 0,
-            historyDays: Number(localSettings?.historyDays) || 30,
-            aiProvider: 'cloud',
-        };
-
-        try {
-            await Promise.all([
-                saveSettingsDB?.(payload),
-                storageSet?.(payload),
-            ]);
-            setBasicSaved?.(true);
-        } catch (e) {
-            setParentError?.(String(e?.message || e) || 'Failed to save settings');
-        }
-    };
-
     const modelList = Object.entries(models).filter(([k]) => !k.startsWith('error'));
-
-    const inputStyle = {
-        padding: '14px 18px',
-        background: 'rgba(255, 255, 255, 0.08)',
-        border: '1px solid rgba(255, 255, 255, 0.15)',
-        borderRadius: '12px',
-        color: '#e5e7eb',
-        fontSize: '14px',
-        outline: 'none',
-        transition: 'all 0.2s ease',
-        width: '100%'
-    };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-            {/* AI Mode Selector - Only show if desktop app with sidecar available */}
-            {isDesktopApp && sidecarAvailable && (
-                <div style={{
-                    display: 'flex',
-                    gap: 12,
-                    padding: 4,
-                    background: 'rgba(255,255,255,0.03)',
-                    borderRadius: 14,
-                    border: '1px solid rgba(255,255,255,0.06)'
-                }}>
-                    <button
-                        onClick={() => setAiMode('local')}
-                        style={{
-                            flex: 1,
-                            padding: '12px 20px',
-                            borderRadius: 10,
-                            border: 'none',
-                            background: aiMode === 'local'
-                                ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(59, 130, 246, 0.2))'
-                                : 'transparent',
-                            color: aiMode === 'local' ? '#a78bfa' : '#9ca3af',
-                            fontSize: 14,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 8,
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <FontAwesomeIcon icon={faMicrochip} />
-                        Local AI (On-Device)
-                    </button>
-                    <button
-                        onClick={() => setAiMode('cloud')}
-                        style={{
-                            flex: 1,
-                            padding: '12px 20px',
-                            borderRadius: 10,
-                            border: 'none',
-                            background: aiMode === 'cloud'
-                                ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(34, 197, 94, 0.2))'
-                                : 'transparent',
-                            color: aiMode === 'cloud' ? '#60a5fa' : '#9ca3af',
-                            fontSize: 14,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 8,
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <FontAwesomeIcon icon={faCloud} />
-                        Cloud AI (Gemini)
-                    </button>
-                </div>
-            )}
-
             {/* Error Display */}
-            {(error || parentError) && (
+            {error && (
                 <div style={{
                     padding: '12px 16px',
                     borderRadius: 12,
@@ -327,12 +225,12 @@ export default function AIModelsTab({
                     color: '#f87171',
                     fontSize: 13
                 }}>
-                    {error || parentError}
+                    {error}
                 </div>
             )}
 
             {/* LOCAL AI SECTION */}
-            {isDesktopApp && (aiMode === 'local' || !sidecarAvailable) && (
+            {isDesktopApp && (
                 <div style={{
                     background: 'rgba(255,255,255,0.02)',
                     borderRadius: 16,
@@ -397,7 +295,7 @@ export default function AIModelsTab({
 
                             {sidecarAvailable === false && (
                                 <div style={{ textAlign: 'center', padding: 32, color: 'rgba(255,255,255,0.5)' }}>
-                                    <FontAwesomeIcon icon={faCloud} style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }} />
+                                    <FontAwesomeIcon icon={faServer} style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }} />
                                     <h4 style={{ margin: '0 0 8px 0', color: '#fff', fontWeight: 600 }}>Desktop App Required</h4>
                                     <p style={{ margin: 0, fontSize: 13 }}>
                                         Local AI models are only available in the CoolDesk desktop app.
@@ -566,198 +464,20 @@ export default function AIModelsTab({
                 </div>
             )}
 
-            {/* CLOUD AI SECTION */}
-            {(aiMode === 'cloud' || !isDesktopApp || !sidecarAvailable) && (
-                <div style={{
-                    background: 'rgba(255,255,255,0.02)',
-                    borderRadius: 16,
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    overflow: 'hidden'
-                }}>
-                    {/* Section Header */}
-                    <div
-                        onClick={() => setCloudAiExpanded(!cloudAiExpanded)}
-                        style={{
-                            padding: '16px 20px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 12,
-                            cursor: 'pointer',
-                            borderBottom: cloudAiExpanded ? '1px solid rgba(255,255,255,0.06)' : 'none'
-                        }}
-                    >
-                        <div style={{
-                            width: 40, height: 40, borderRadius: 12,
-                            background: basicSaved
-                                ? 'linear-gradient(135deg, #22c55e, #16a34a)'
-                                : 'linear-gradient(135deg, #3b82f6, #6366f1)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: '#fff'
-                        }}>
-                            <FontAwesomeIcon icon={faCloud} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#fff' }}>
-                                Cloud AI (Gemini)
-                            </h3>
-                            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
-                                {basicSaved
-                                    ? `Configured: ${localSettings?.modelName || 'gemini-1.5-flash'}`
-                                    : 'API key required'}
-                            </div>
-                        </div>
-                        <FontAwesomeIcon
-                            icon={faChevronDown}
-                            style={{
-                                color: '#9ca3af',
-                                transition: 'transform 0.2s',
-                                transform: cloudAiExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
-                            }}
-                        />
-                    </div>
-
-                    {cloudAiExpanded && (
-                        <div style={{ padding: 20 }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                {/* API Key Input */}
-                                <label style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 600, color: '#e5e7eb' }}>Gemini API Key</span>
-                                    <input
-                                        value={localSettings?.geminiApiKey || ''}
-                                        onChange={(e) => {
-                                            setLocalSettings?.({ ...localSettings, geminiApiKey: e.target.value, aiProvider: 'cloud' });
-                                            markEdited?.();
-                                        }}
-                                        placeholder="Enter your Gemini API key..."
-                                        type="password"
-                                        style={inputStyle}
-                                    />
-                                    <span style={{ fontSize: 11, color: '#6b7280' }}>
-                                        Get your API key from{' '}
-                                        <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>
-                                            Google AI Studio
-                                        </a>
-                                    </span>
-                                </label>
-
-                                {/* Model Selection */}
-                                <label style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 600, color: '#e5e7eb' }}>Model</span>
-                                    <select
-                                        value={localSettings?.modelName || 'gemini-1.5-flash'}
-                                        onChange={(e) => {
-                                            setLocalSettings?.({ ...localSettings, modelName: e.target.value });
-                                            markEdited?.();
-                                        }}
-                                        style={{ ...inputStyle, cursor: 'pointer' }}
-                                    >
-                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Fast)</option>
-                                        <option value="gemini-1.5-pro">Gemini 1.5 Pro (Powerful)</option>
-                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Latest)</option>
-                                    </select>
-                                </label>
-
-                                {/* History Lookback */}
-                                <label style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 600, color: '#e5e7eb' }}>History Lookback</span>
-                                    <select
-                                        value={Number(localSettings?.historyDays) || 30}
-                                        onChange={(e) => {
-                                            setLocalSettings?.({ ...localSettings, historyDays: Number(e.target.value) });
-                                            markEdited?.();
-                                        }}
-                                        style={{ ...inputStyle, cursor: 'pointer' }}
-                                    >
-                                        <option value={7}>Last 7 days</option>
-                                        <option value={30}>Last 30 days</option>
-                                        <option value={90}>Last 90 days</option>
-                                    </select>
-                                </label>
-
-                                {/* Action Buttons */}
-                                <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-                                    <button
-                                        onClick={handleSaveCloudSettings}
-                                        style={{
-                                            padding: '12px 24px',
-                                            borderRadius: 10,
-                                            border: 'none',
-                                            background: '#22c55e',
-                                            color: '#fff',
-                                            fontSize: 13,
-                                            fontWeight: 600,
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 8
-                                        }}
-                                    >
-                                        <FontAwesomeIcon icon={faCheckCircle} />
-                                        Save Settings
-                                    </button>
-
-                                    <button
-                                        onClick={handleSuggestCategories}
-                                        disabled={suggesting || !String(localSettings?.geminiApiKey || '').trim()}
-                                        style={{
-                                            padding: '12px 24px',
-                                            borderRadius: 10,
-                                            border: 'none',
-                                            background: suggesting || !String(localSettings?.geminiApiKey || '').trim()
-                                                ? 'rgba(255,255,255,0.05)'
-                                                : 'linear-gradient(135deg, #667eea, #764ba2)',
-                                            color: suggesting || !String(localSettings?.geminiApiKey || '').trim() ? '#9ca3af' : '#fff',
-                                            fontSize: 13,
-                                            fontWeight: 600,
-                                            cursor: suggesting || !String(localSettings?.geminiApiKey || '').trim() ? 'not-allowed' : 'pointer',
-                                            opacity: suggesting || !String(localSettings?.geminiApiKey || '').trim() ? 0.6 : 1,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 8
-                                        }}
-                                    >
-                                        <FontAwesomeIcon icon={faRocket} spin={suggesting} />
-                                        {suggesting ? 'Generating...' : 'AI Suggest Workspaces'}
-                                    </button>
-
-                                    {basicSaved && (
-                                        <div style={{
-                                            fontSize: 12, color: '#4ade80', fontWeight: 500,
-                                            display: 'flex', alignItems: 'center', gap: 6
-                                        }}>
-                                            <FontAwesomeIcon icon={faCheckCircle} /> Saved
-                                        </div>
-                                    )}
-
-                                    {!basicSaved && localSettings?.geminiApiKey && (
-                                        <div style={{
-                                            fontSize: 12, color: '#fbbf24', fontWeight: 500,
-                                            display: 'flex', alignItems: 'center', gap: 6
-                                        }}>
-                                            <FontAwesomeIcon icon={faExclamationTriangle} /> Unsaved
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
             {/* Info Section */}
             <div style={{
                 padding: 16,
-                background: 'rgba(59, 130, 246, 0.08)',
+                background: 'rgba(139, 92, 246, 0.08)',
                 borderRadius: 12,
-                border: '1px solid rgba(59, 130, 246, 0.15)',
+                border: '1px solid rgba(139, 92, 246, 0.15)',
                 fontSize: 13,
                 color: 'rgba(255,255,255,0.7)'
             }}>
-                <strong style={{ color: '#60a5fa' }}>How AI features work:</strong>
+                <strong style={{ color: '#a78bfa' }}>Local AI Features:</strong>
                 <ul style={{ margin: '8px 0 0 0', paddingLeft: 20, lineHeight: 1.6 }}>
-                    <li><strong>Local AI:</strong> Models run 100% on your device - private, offline-capable</li>
-                    <li><strong>Cloud AI:</strong> Uses Google Gemini API - faster, more powerful</li>
-                    <li>Powers: URL categorization, workspace suggestions, smart search</li>
+                    <li><strong>Private:</strong> All processing happens on your device - no data sent to cloud</li>
+                    <li><strong>Offline:</strong> Works without internet connection once model is downloaded</li>
+                    <li><strong>Powers:</strong> URL categorization, summarization, workspace suggestions, smart search</li>
                 </ul>
             </div>
         </div>

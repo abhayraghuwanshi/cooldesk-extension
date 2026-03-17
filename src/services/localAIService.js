@@ -335,6 +335,48 @@ export async function suggestWorkspaces(urls) {
 }
 
 /**
+ * Normalize an LLM group-workspaces response to the expected schema.
+ * Handles cases where the model returns alternative field names.
+ * Expected: { groups: [{ name, description, items: [1,2,...] }], suggestions: [] }
+ */
+function normalizeGroupResponse(parsed, itemsStr) {
+    // Already correct format
+    if (parsed.groups && Array.isArray(parsed.groups)) {
+        return parsed;
+    }
+
+    // "suggested_links": [[url, title], ...] — LLM misunderstood the task.
+    // Convert each link to a named group using position-based indices.
+    if (parsed.suggested_links && Array.isArray(parsed.suggested_links)) {
+        console.warn('[LocalAI] LLM returned suggested_links instead of groups — normalizing');
+        // Build one group per suggested link by matching hostname to the items string
+        const lines = (itemsStr || '').split('\n').filter(Boolean);
+        const groups = parsed.suggested_links
+            .map(([url, title], idx) => {
+                try {
+                    const hostname = new URL(url).hostname.replace(/^www\./, '');
+                    // Find matching line index (1-based) in the items string
+                    const matchIdx = lines.findIndex(l => l.toLowerCase().includes(hostname));
+                    const itemIdx = matchIdx >= 0 ? matchIdx + 1 : idx + 1;
+                    return { name: title || hostname, description: url, items: [itemIdx] };
+                } catch {
+                    return { name: title || url, description: url, items: [idx + 1] };
+                }
+            })
+            .filter(g => g.items[0] <= lines.length || lines.length === 0);
+        return { groups, suggestions: [] };
+    }
+
+    // "workspaces" alias
+    if (parsed.workspaces && Array.isArray(parsed.workspaces)) {
+        return { groups: parsed.workspaces, suggestions: parsed.suggestions || [] };
+    }
+
+    console.warn('[LocalAI] Unrecognized group response schema, keys:', Object.keys(parsed));
+    return { groups: [], suggestions: [] };
+}
+
+/**
  * Group browsing items into smart workspace categories
  * @param {string} items - Formatted string of browsing items
  * @param {string} context - External context (workspace URLs, etc.)
@@ -348,16 +390,26 @@ export async function groupWorkspaces(items, context = '', customPrompt = null) 
         customPrompt
     }, 90000); // 90s timeout for complex grouping
 
-    // Parse the JSON response from LLM
+    if (!result.ok) {
+        throw new Error(result.error || 'LLM group workspaces failed');
+    }
+
+    // Parse the JSON response from LLM (tasks.rs already strips markdown fences)
     if (result.result) {
+        let parsed = null;
         try {
-            const jsonMatch = result.result.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
+            // Try direct parse first (tasks.rs returns clean JSON)
+            parsed = JSON.parse(result.result);
+        } catch (_) {
+            // Fallback: extract JSON object with regex
+            try {
+                const objMatch = result.result.match(/\{[\s\S]*\}/);
+                if (objMatch) parsed = JSON.parse(objMatch[0]);
+            } catch (e) {
+                console.warn('[LocalAI] Failed to parse group response:', e);
             }
-        } catch (e) {
-            console.warn('[LocalAI] Failed to parse group response:', e);
         }
+        if (parsed) return normalizeGroupResponse(parsed, items);
     }
     return { groups: [], suggestions: [] };
 }
@@ -695,4 +747,44 @@ export function resetAgentSession() {
  */
 export function getCurrentAgentSessionId() {
     return currentAgentSessionId;
+}
+
+// ==========================================
+// SIMPLE AGENT API (Context-Injection)
+// ==========================================
+
+/**
+ * Chat with the simple agent (no tool routing, context-injection model)
+ * This endpoint passes user data as context and lets the LLM respond naturally.
+ *
+ * @param {string} message - User message
+ * @returns {Promise<{ok: boolean, response: string, actions: Array, error?: string}>}
+ */
+export async function simpleChat(message) {
+    const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log('[LocalAI] simpleChat called, requestId:', requestId);
+
+    try {
+        const response = await fetch(`${SIDECAR_HTTP_URL}/llm/v2/simple-chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message,
+                requestId
+            })
+        });
+
+        console.log('[LocalAI] simpleChat response status:', response.status);
+
+        if (!response.ok) {
+            throw new Error(`Simple chat request failed: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('[LocalAI] simpleChat result:', result);
+        return result;
+    } catch (err) {
+        console.error('[LocalAI] simpleChat error:', err);
+        throw err;
+    }
 }

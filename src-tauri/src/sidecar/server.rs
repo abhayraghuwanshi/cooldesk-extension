@@ -159,6 +159,8 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/llm/v2/chat", post(v2_chat))
         .route("/llm/v2/memory", get(v2_get_memory).post(v2_add_memory))
         .route("/llm/v2/memory/clear", post(v2_clear_memory))
+        // Simple Agent endpoint (context-injection, no tool routing)
+        .route("/llm/v2/simple-chat", post(v2_simple_chat))
         // Feedback/RL endpoints
         .route("/feedback/event", post(feedback_record_event))
         .route("/feedback/stats", get(feedback_get_stats))
@@ -170,6 +172,9 @@ pub async fn start_server() -> Result<(), Box<dyn std::error::Error + Send + Syn
         .route("/feedback/save", post(feedback_save))
         .route("/feedback/app-launch", post(feedback_app_launch))
         .route("/feedback/url-click", post(feedback_url_click))
+        .route("/feedback/app-workspace", post(feedback_record_app_workspace))
+        .route("/feedback/suggest-apps", post(feedback_suggest_apps))
+        .route("/feedback/suggest-workspaces-for-app", post(feedback_suggest_workspaces_for_app))
         .layer(cors)
         .with_state(state);
 

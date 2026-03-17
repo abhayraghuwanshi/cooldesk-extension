@@ -18,6 +18,7 @@ struct InstalledApp {
     name: String,
     path: String,
     source: String,
+    category: Option<String>,
     icon: Option<String>,
 }
 
@@ -56,6 +57,8 @@ struct AppEntry {
     #[serde(rename = "type")]
     app_type: String,
     source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
     #[serde(rename = "isRunning")]
     is_running: bool,
     pid: u32,
@@ -292,6 +295,7 @@ fn main() {
                     path: app.path.clone(),
                     app_type: "app".to_string(),
                     source: app.source.clone(),
+                    category: app.category.clone(),
                     is_running: false,
                     pid: 0,
                     hwnd: 0,
@@ -326,6 +330,7 @@ fn main() {
                     path: app.path.clone(),
                     app_type: "app".to_string(),
                     source: app.source.clone(),
+                    category: app.category.clone(),
                     is_running: true,
                     pid: win.pid,
                     hwnd,
@@ -346,6 +351,7 @@ fn main() {
                         path: app.path.clone(),
                         app_type: "app".to_string(),
                         source: app.source.clone(),
+                        category: app.category.clone(),
                         is_running: true,
                         pid: win.pid,
                         hwnd: wt.hwnd,
@@ -366,6 +372,7 @@ fn main() {
                 path: app.path.clone(),
                 app_type: "app".to_string(),
                 source: app.source.clone(),
+                category: app.category.clone(),
                 is_running: false,
                 pid: 0,
                 hwnd: 0,
@@ -397,6 +404,7 @@ fn main() {
                     path: w.path.clone(),
                     app_type: "app".to_string(),
                     source: "running".to_string(),
+                    category: None,
                     is_running: true,
                     pid: w.pid,
                     hwnd,
@@ -416,6 +424,7 @@ fn main() {
                         path: w.path.clone(),
                         app_type: "app".to_string(),
                         source: "running".to_string(),
+                        category: None,
                         is_running: true,
                         pid: w.pid,
                         hwnd: wt.hwnd,

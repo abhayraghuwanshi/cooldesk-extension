@@ -2,12 +2,14 @@ import { faGear } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
+import { addUrlToWorkspace, deleteWorkspace, saveWorkspace } from '../../db/unified-api';
 import { isElectronApp } from '../../services/environmentDetector';
 import '../../styles/cooldesk.css';
 import '../../styles/global-add.css';
 import '../../styles/spatial.css';
 import '../../styles/tabCard.css';
 import { Face, WorkspaceShell } from '../spatial/WorkspaceShell';
+import AIWorkspaceManager from './AIWorkspaceManager';
 import { CoolSearch } from './CoolSearch';
 import { GlobalAddButton } from './GlobalAddButton';
 import { OverviewDashboard } from './OverviewDashboard';
@@ -55,15 +57,76 @@ export function CoolDeskContainer({
   });
 
   const handleOpenAddModal = (workspace = null) => {
-    setAddModalState({
-      isOpen: true,
-      initialWorkspace: workspace
-    });
+    handleOpenAIManager(workspace);
   };
 
   const handleCloseAddModal = () => {
     setAddModalState(prev => ({ ...prev, isOpen: false }));
   };
+
+  // AI Workspace Manager State
+  const [aiManagerState, setAiManagerState] = useState({
+    isOpen: false,
+    initialWorkspace: null
+  });
+
+  const handleOpenAIManager = useCallback((workspace = null) => {
+    setAiManagerState({
+      isOpen: true,
+      initialWorkspace: workspace
+    });
+  }, []);
+
+  const handleCloseAIManager = useCallback(() => {
+    setAiManagerState(prev => ({ ...prev, isOpen: false }));
+  }, []);
+
+  const handleAIManagerSave = useCallback(async (workspaceData) => {
+    try {
+      // Save workspace to database
+      await saveWorkspace(workspaceData);
+
+      // Add URLs to the workspace URL index
+      if (workspaceData.urls?.length > 0) {
+        for (const urlItem of workspaceData.urls) {
+          await addUrlToWorkspace(urlItem.url, workspaceData.id, {
+            title: urlItem.title,
+            favicon: urlItem.favicon,
+            status: 'active'
+          });
+        }
+      }
+
+      console.log('[CoolDesk] Workspace saved via AI Manager:', workspaceData.name);
+    } catch (err) {
+      console.error('[CoolDesk] Failed to save workspace:', err);
+      throw err;
+    }
+  }, []);
+
+  const handleAIManagerDelete = useCallback(async (workspaceId) => {
+    try {
+      await deleteWorkspace(workspaceId);
+      console.log('[CoolDesk] Workspace deleted:', workspaceId);
+    } catch (err) {
+      console.error('[CoolDesk] Failed to delete workspace:', err);
+      throw err;
+    }
+  }, []);
+
+  // Keyboard shortcut for AI Workspace Manager (Cmd/Ctrl+Shift+K)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
+        e.preventDefault();
+        if (!aiManagerState.isOpen) {
+          handleOpenAIManager(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [aiManagerState.isOpen, handleOpenAIManager]);
 
   // Tab management state
   const [tabs, setTabs] = useState([]);
@@ -439,6 +502,7 @@ export function CoolDeskContainer({
                       pinnedWorkspaces={pinnedWorkspaces}
                       onTogglePin={onTogglePin}
                       onAddUrl={handleOpenAddModal}
+                      onEditWorkspace={handleOpenAIManager}
                     />
                   </Suspense>
                 </div>
@@ -467,6 +531,7 @@ export function CoolDeskContainer({
               onAddNote={onAddNote}
               pinnedWorkspaces={pinnedWorkspaces}
               onAddUrl={handleOpenAddModal}
+              onEditWorkspace={handleOpenAIManager}
             />
           </Face>
         )}
@@ -515,7 +580,18 @@ export function CoolDeskContainer({
         onOpen={() => handleOpenAddModal(null)}
         onClose={handleCloseAddModal}
         initialWorkspace={addModalState.initialWorkspace}
+        onOpenAIManager={() => handleOpenAIManager(null)}
         data-onboarding="global-add-btn"
+      />
+
+      {/* AI Workspace Manager - Two-column AI-powered workspace management */}
+      <AIWorkspaceManager
+        workspaces={savedWorkspaces}
+        onSave={handleAIManagerSave}
+        onDelete={handleAIManagerDelete}
+        isOpen={aiManagerState.isOpen}
+        onClose={handleCloseAIManager}
+        initialWorkspace={aiManagerState.initialWorkspace}
       />
     </div >
   );

@@ -1,11 +1,15 @@
 /**
- * Real-time URL categorization on tab changes
+ * Real-time URL and App categorization
+ * - URL categorization: Runs in browser extension context via chrome.tabs API
+ * - App categorization: Uses feedback-based learning from workspace associations
+ *
  * Optimized with in-memory caching, debouncing, and idle-time processing
  */
 
 import { needsReclassification } from '../data/appstoreVersion.js';
 import categoryManager from '../data/categories.js';
 import { getUrlRecord, listWorkspaces, upsertUrl } from '../db/index.js';
+import { recordAppWorkspace, suggestWorkspacesForApp } from '../services/feedbackService.js';
 import { NanoAIService } from '../services/nanoAIService.js';
 import GenericUrlParser from './GenericUrlParser.js';
 
@@ -495,13 +499,114 @@ if (browserAPI) {
   }, 1000); // slight delay to let background start up
 }
 
+// ==========================================
+// App Categorization (Feedback-based)
+// ==========================================
+
+// Cache for app-workspace suggestions to avoid repeated API calls
+const appWorkspaceCache = new Map();
+const APP_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get workspace suggestions for an app based on learned patterns
+ * Uses the feedback system to find which workspaces the app is commonly used with
+ *
+ * @param {string} appPath - Path to the app executable
+ * @param {string} [appName] - Optional app name for better context
+ * @param {number} [limit=3] - Maximum number of suggestions
+ * @returns {Promise<Array<{workspace_name: string, score: number}>>}
+ */
+export async function categorizeApp(appPath, appName, limit = 3) {
+  if (!appPath) return [];
+
+  // Check cache first
+  const cacheKey = appPath.toLowerCase();
+  const cached = appWorkspaceCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < APP_CACHE_TTL) {
+    return cached.suggestions;
+  }
+
+  try {
+    const suggestions = await suggestWorkspacesForApp(appPath, appName, limit);
+
+    // Cache the result
+    appWorkspaceCache.set(cacheKey, {
+      suggestions,
+      timestamp: Date.now()
+    });
+
+    // Clean old cache entries periodically
+    if (appWorkspaceCache.size > 100) {
+      const now = Date.now();
+      for (const [key, value] of appWorkspaceCache.entries()) {
+        if (now - value.timestamp > APP_CACHE_TTL) {
+          appWorkspaceCache.delete(key);
+        }
+      }
+    }
+
+    return suggestions;
+  } catch (e) {
+    console.debug('[RealTime] Error categorizing app:', e.message);
+    return [];
+  }
+}
+
+/**
+ * Record that an app was used with a specific workspace
+ * This improves future workspace suggestions for the app
+ *
+ * @param {string} appPath - Path to the app executable
+ * @param {string} appName - Display name of the app
+ * @param {string} workspaceName - Name of the workspace
+ */
+export async function recordAppUsage(appPath, appName, workspaceName) {
+  if (!appPath || !workspaceName) return;
+
+  try {
+    await recordAppWorkspace(appName, appPath, workspaceName);
+    console.debug(`[RealTime] Recorded app usage: ${appName} -> ${workspaceName}`);
+
+    // Invalidate cache for this app
+    appWorkspaceCache.delete(appPath.toLowerCase());
+  } catch (e) {
+    console.debug('[RealTime] Error recording app usage:', e.message);
+  }
+}
+
+/**
+ * Get the best matching workspace for an app (highest score)
+ * Returns null if no confident match is found (score < 0.3)
+ *
+ * @param {string} appPath - Path to the app executable
+ * @param {string} [appName] - Optional app name
+ * @returns {Promise<{workspace_name: string, score: number} | null>}
+ */
+export async function getBestWorkspaceForApp(appPath, appName) {
+  const suggestions = await categorizeApp(appPath, appName, 1);
+
+  if (suggestions.length === 0) return null;
+
+  const best = suggestions[0];
+  // Only return if confidence is above threshold
+  return best.score >= 0.3 ? best : null;
+}
+
 // Export for console/debugging
 try {
   if (typeof window !== 'undefined') {
     window.realTimeCategorizor = {
       setup: setupRealTimeCategorizor,
       categorizeNow: categorizeCurrentTab,
-      cacheStats: () => ({ workspaces: workspaceCache.size, sessionUrls: sessionUrlCache.size })
+      cacheStats: () => ({
+        workspaces: workspaceCache.size,
+        sessionUrls: sessionUrlCache.size,
+        appSuggestions: appWorkspaceCache.size
+      }),
+      // App categorization
+      categorizeApp,
+      recordAppUsage,
+      getBestWorkspaceForApp
     };
   }
 } catch (e) { }

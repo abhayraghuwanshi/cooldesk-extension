@@ -17,9 +17,141 @@ import { isNaturalLanguageQuery, naturalLanguageSearch } from '../../services/se
 import { VoiceCommandProcessor } from '../../services/voiceCommandProcessor.js';
 import { ExpandedSearchPanel } from './ExpandedSearchPanel.jsx';
 
-// Separate cache outside component to persist across re-mounts if needed, 
+// Separate cache outside component to persist across re-mounts if needed,
 // though component state is usually fine. Let's use component state but allow ref fetching.
 // Actually, let's keep it simple with refs inside component.
+
+// Simple markdown renderer for chat messages
+function renderMarkdown(text) {
+  if (!text) return null;
+
+  // Split by lines to handle block elements
+  const lines = text.split('\n');
+  const elements = [];
+
+  lines.forEach((line, lineIdx) => {
+    // Handle bullet points
+    if (line.match(/^[-*]\s+/)) {
+      const content = line.replace(/^[-*]\s+/, '');
+      elements.push(
+        <div key={lineIdx} style={{ display: 'flex', gap: '8px', marginLeft: '8px' }}>
+          <span style={{ color: '#8B5CF6' }}>•</span>
+          <span>{renderInlineMarkdown(content)}</span>
+        </div>
+      );
+    }
+    // Handle headers (##)
+    else if (line.match(/^##\s+/)) {
+      const content = line.replace(/^##\s+/, '');
+      elements.push(
+        <div key={lineIdx} style={{ fontWeight: 700, fontSize: '15px', marginTop: '8px', marginBottom: '4px', color: '#E2E8F0' }}>
+          {content}
+        </div>
+      );
+    }
+    // Handle headers (#)
+    else if (line.match(/^#\s+/)) {
+      const content = line.replace(/^#\s+/, '');
+      elements.push(
+        <div key={lineIdx} style={{ fontWeight: 700, fontSize: '16px', marginTop: '8px', marginBottom: '4px', color: '#F1F5F9' }}>
+          {content}
+        </div>
+      );
+    }
+    // Empty line = paragraph break
+    else if (line.trim() === '') {
+      elements.push(<div key={lineIdx} style={{ height: '8px' }} />);
+    }
+    // Regular line with inline formatting
+    else {
+      elements.push(
+        <div key={lineIdx}>{renderInlineMarkdown(line)}</div>
+      );
+    }
+  });
+
+  return <>{elements}</>;
+}
+
+// Handle inline markdown (**bold**, *italic*, `code`, [links](url))
+function renderInlineMarkdown(text) {
+  if (!text) return null;
+
+  const parts = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    // Bold: **text** (must check first, before italic)
+    const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+    // Code: `text`
+    const codeMatch = remaining.match(/`([^`]+)`/);
+    // Link: [text](url)
+    const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
+    // Italic: *text* (single asterisk, not part of **)
+    // Use a simpler approach - match *word* but exclude **
+    let italicMatch = null;
+    const italicTest = remaining.match(/\*([^*]+)\*/);
+    if (italicTest) {
+      // Make sure this isn't inside a ** pair
+      const beforeMatch = remaining.slice(0, remaining.indexOf(italicTest[0]));
+      const afterPos = remaining.indexOf(italicTest[0]) + italicTest[0].length;
+      if (!beforeMatch.endsWith('*') && (afterPos >= remaining.length || remaining[afterPos] !== '*')) {
+        italicMatch = italicTest;
+      }
+    }
+
+    // Find the earliest match
+    const matches = [
+      boldMatch && { type: 'bold', match: boldMatch, index: remaining.indexOf(boldMatch[0]) },
+      italicMatch && { type: 'italic', match: italicMatch, index: remaining.indexOf(italicMatch[0]) },
+      codeMatch && { type: 'code', match: codeMatch, index: remaining.indexOf(codeMatch[0]) },
+      linkMatch && { type: 'link', match: linkMatch, index: remaining.indexOf(linkMatch[0]) },
+    ].filter(Boolean).sort((a, b) => a.index - b.index);
+
+    if (matches.length === 0) {
+      parts.push(remaining);
+      break;
+    }
+
+    const first = matches[0];
+
+    // Add text before match
+    if (first.index > 0) {
+      parts.push(remaining.slice(0, first.index));
+    }
+
+    // Add formatted element
+    if (first.type === 'bold') {
+      parts.push(<strong key={key++} style={{ fontWeight: 700, color: '#F1F5F9' }}>{first.match[1]}</strong>);
+    } else if (first.type === 'italic') {
+      parts.push(<em key={key++} style={{ fontStyle: 'italic', color: '#CBD5E1' }}>{first.match[1]}</em>);
+    } else if (first.type === 'code') {
+      parts.push(
+        <code key={key++} style={{
+          background: 'rgba(139, 92, 246, 0.15)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontFamily: 'monospace',
+          fontSize: '13px',
+          color: '#C4B5FD'
+        }}>{first.match[1]}</code>
+      );
+    } else if (first.type === 'link') {
+      parts.push(
+        <a key={key++} href={first.match[2]} target="_blank" rel="noopener noreferrer" style={{
+          color: '#818CF8',
+          textDecoration: 'underline',
+          textUnderlineOffset: '2px'
+        }}>{first.match[1]}</a>
+      );
+    }
+
+    remaining = remaining.slice(first.index + first.match[0].length);
+  }
+
+  return <>{parts}</>;
+}
 
 export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placeholder = "Search or type / for commands...", isDesktopApp = false }) {
   const [searchValue, setSearchValue] = useState('');
@@ -1337,36 +1469,25 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
               }
             }
 
-            // Chat with the v2 Agent API (supports tools like web search, workspace search, etc.)
-            console.log('[AI Agent] Sending prompt:', prompt);
-            const result = await LocalAI.agentChat(prompt);
-            console.log('[AI Agent] Response:', result);
+            // Use Simple Agent (context-injection model - no tool routing)
+            // The agent receives user data as context and responds naturally
+            console.log('[AI Simple] Sending prompt:', prompt);
+            const result = await LocalAI.simpleChat(prompt);
+            console.log('[AI Simple] Response:', result);
 
             if (result.ok) {
-              // Build response with tool usage info
-              let responseContent = result.response || 'No response received';
-
-              // Show which tools were used (if any)
-              if (result.toolsUsed && result.toolsUsed.length > 0) {
-                const uniqueTools = [...new Set(result.toolsUsed)];
-                const toolLabels = uniqueTools.map(t => {
-                  switch (t) {
-                    case 'web_search': return '🌐 Web Search';
-                    case 'search_workspaces': return '📁 Workspaces';
-                    case 'search_notes': return '📝 Notes';
-                    case 'get_recent_activity': return '🕐 Activity';
-                    case 'get_pinned_items': return '📌 Pins';
-                    default: return t;
-                  }
-                });
-                responseContent = `*Tools used: ${toolLabels.join(', ')}*\n\n${responseContent}`;
-              }
-
+              const responseContent = result.response || 'No response received';
               setAiChatMessages(prev => [...prev, { role: 'assistant', content: responseContent }]);
+
+              // Handle any actions the AI suggested (e.g., add_url, create_workspace)
+              if (result.actions && result.actions.length > 0) {
+                console.log('[AI Simple] Actions suggested:', result.actions);
+                // TODO: Implement action execution (add to workspace, etc.)
+              }
             } else {
               setAiChatMessages(prev => [
                 ...prev,
-                { role: 'error', content: result.error || 'Failed to get response from AI agent' }
+                { role: 'error', content: result.error || 'Failed to get response from AI' }
               ]);
             }
 
@@ -1826,55 +1947,26 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
       position: 'relative',
       zIndex: 10002 // Ensure container is above other elements
     }}>
-      {/* AI Chat - Futuristic Holographic Design */}
+      {/* AI Chat - Clean Design */}
       {activePill?.prefix === '/ai' && aiChatMessages.length > 0 && (
         <div className="ai-chat-panel" style={{
           marginBottom: '12px',
           maxHeight: '500px',
-          overflowY: 'auto',
-          overflowX: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
-          background: 'linear-gradient(165deg, rgba(10, 10, 20, 0.97) 0%, rgba(15, 10, 30, 0.98) 50%, rgba(5, 15, 25, 0.99) 100%)',
+          background: 'linear-gradient(165deg, rgba(15, 15, 25, 0.98) 0%, rgba(20, 15, 35, 0.99) 100%)',
           backdropFilter: 'blur(40px) saturate(180%)',
           WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-          border: '1px solid transparent',
-          borderRadius: '24px',
+          border: '1px solid rgba(139, 92, 246, 0.2)',
+          borderRadius: '20px',
           boxShadow: `
-            0 0 0 1px rgba(139, 92, 246, 0.15),
-            0 0 60px -20px rgba(139, 92, 246, 0.4),
-            0 30px 60px -30px rgba(0, 0, 0, 0.7),
+            0 0 40px -15px rgba(139, 92, 246, 0.3),
+            0 20px 40px -20px rgba(0, 0, 0, 0.5),
             inset 0 1px 0 rgba(255, 255, 255, 0.05)
           `,
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none'
+          overflow: 'hidden'
         }}>
-          {/* Animated gradient border */}
-          <div style={{
-            position: 'absolute',
-            inset: '-1px',
-            borderRadius: '24px',
-            background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.5), rgba(59, 130, 246, 0.3), rgba(236, 72, 153, 0.3), rgba(139, 92, 246, 0.5))',
-            backgroundSize: '300% 300%',
-            animation: 'gradientShift 8s ease infinite',
-            zIndex: -1,
-            opacity: 0.6,
-            filter: 'blur(1px)'
-          }} />
-
-          {/* Inner glow effect */}
-          <div style={{
-            position: 'absolute',
-            top: '0',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '80%',
-            height: '120px',
-            background: 'radial-gradient(ellipse at center, rgba(139, 92, 246, 0.15) 0%, transparent 70%)',
-            pointerEvents: 'none',
-            zIndex: 0
-          }} />
 
           {/* Chat Header - Minimalist Floating */}
           <div style={{
@@ -2007,14 +2099,19 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
             </button>
           </div>
 
-          {/* Messages Container */}
+          {/* Messages Container - Scrollable */}
           <div style={{
             display: 'flex',
             flexDirection: 'column',
             padding: '24px',
             gap: '24px',
             position: 'relative',
-            zIndex: 1
+            zIndex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            maxHeight: '400px',
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'rgba(139, 92, 246, 0.3) transparent'
           }}>
             {aiChatMessages.map((msg, idx) => (
               <div
@@ -2116,7 +2213,9 @@ export function CoolSearch({ onSearch, onWorkspaceNavigate, onNavigate, placehol
                         animation: 'shimmer 3s ease-in-out infinite'
                       }} />
                     )}
-                    <span style={{ position: 'relative', zIndex: 1 }}>{msg.content}</span>
+                    <span style={{ position: 'relative', zIndex: 1 }}>
+                      {renderMarkdown(msg.content)}
+                    </span>
                   </div>
 
                   {/* Timestamp */}

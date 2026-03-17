@@ -438,6 +438,11 @@ Most relevant (numbers only):`;
     async groupWorkspaces(items, context = '', customPrompt = null) {
         if (!items || items.length === 0) return { groups: [], suggestions: [] };
 
+        // Resolve availability before choosing code path to avoid mid-call path switching
+        if (this._availability === 'unknown') {
+            await this.init();
+        }
+
         if (this._availability === 'local') {
             return LocalAIService.groupWorkspaces(items, context, customPrompt);
         }
@@ -465,7 +470,12 @@ Grouping result:`;
             // Extract JSON from result
             const jsonMatch = result.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
+                const parsed = JSON.parse(jsonMatch[0]);
+                // Normalize: handle alternative schemas (e.g. suggested_links, workspaces)
+                if (parsed.groups && Array.isArray(parsed.groups)) return parsed;
+                if (parsed.workspaces && Array.isArray(parsed.workspaces)) {
+                    return { groups: parsed.workspaces, suggestions: parsed.suggestions || [] };
+                }
             }
             return { groups: [], suggestions: [] };
         } catch (e) {

@@ -82,6 +82,13 @@ export const VALIDATION_SCHEMAS = {
                 maxItems: 500
             }
         },
+        apps: {
+            [ValidationRules.TYPE]: 'array',
+            [ValidationRules.ARRAY]: {
+                itemType: 'object',
+                maxItems: 100
+            }
+        },
         context: {
             [ValidationRules.TYPE]: 'object'
         }
