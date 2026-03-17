@@ -2,16 +2,16 @@
  * ExtensionApp.jsx - Lightweight App for Chrome Extension
  * Only includes Overview page - excludes heavy app dependencies like TipTap, YJS, etc.
  */
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 
 import './App.css';
 import './search.css';
 import './styles/bento-layout.css';
 import './styles/components.css';
+import './styles/cooldesk.css';
 import './styles/theme.css';
 import './styles/themes/components-vars.css';
 import './styles/wallpaper-enhancements.css';
-import './styles/cooldesk.css';
 
 // FontAwesome - minimal icons only
 import { library } from '@fortawesome/fontawesome-svg-core';
@@ -24,10 +24,9 @@ import { initializeFontSize, setAndSaveFontSize } from './utils/fontUtils';
 import { getFaviconUrl } from './utils/helpers';
 
 // Extension-only components
-import { OverviewDashboard } from './components/cooldesk/OverviewDashboard';
-import { CoolSearch } from './components/cooldesk/CoolSearch';
-import { GlobalAddButton } from './components/cooldesk/GlobalAddButton';
 import logo from '../logo-2.png';
+import { CoolSearch } from './components/cooldesk/CoolSearch';
+import { OverviewDashboard } from './components/cooldesk/OverviewDashboard';
 
 // Lazy load settings (not needed immediately)
 const SettingsModal = React.lazy(() => import('./components/popups/SettingsModal').then(module => ({ default: module.SettingsModal })));
@@ -317,7 +316,7 @@ export default function ExtensionApp() {
             <div className="header-right">
               <button className="cooldesk-settings-btn" onClick={() => setShowSettings(true)} title="Settings">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                  <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
                 </svg>
               </button>
             </div>
@@ -334,11 +333,11 @@ export default function ExtensionApp() {
         </div>
 
         {/* Global Add Button */}
-        <GlobalAddButton
+        {/* <GlobalAddButton
           workspaces={savedWorkspaces}
           onCreateWorkspace={handleCreateWorkspace}
           onAddUrlToWorkspace={handleAddUrlToWorkspace}
-        />
+        /> */}
 
         {/* Settings Modal */}
         {showSettings && (

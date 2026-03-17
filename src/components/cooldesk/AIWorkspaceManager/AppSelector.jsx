@@ -4,12 +4,14 @@ import {
   faLightbulb,
   faPlay,
   faPlus,
+  faRobot,
   faSearch
 } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useState, useMemo, useEffect } from 'react';
 import { runningAppsService } from '../../../services/runningAppsService';
 import { suggestAppsForWorkspace } from '../../../services/feedbackService';
+import { getPendingSuggestions } from '../../../services/appCategorizationService';
 
 const SOURCES = [
   { key: 'suggested', icon: faLightbulb, label: 'Suggested' },
@@ -47,6 +49,7 @@ export default function AppSelector({
   }, []);
 
   // Fetch suggested apps based on workspace name
+  // Falls back to AI-categorized suggestions (from appCategorizationService) when feedback has no data yet
   useEffect(() => {
     if (!workspaceName) {
       setSuggestedApps([]);
@@ -56,20 +59,38 @@ export default function AppSelector({
     setIsSuggestedLoading(true);
     suggestAppsForWorkspace(workspaceName, 20)
       .then(suggestions => {
-        // Convert suggestions to app format, merging with installed apps for icons
-        const suggestedWithIcons = suggestions.map(s => {
-          // Find matching installed app for icon
-          const installed = installedApps.find(
-            a => a.path?.toLowerCase() === s.app_path?.toLowerCase()
-          );
-          return {
-            name: s.app_name || installed?.name || 'Unknown App',
-            path: s.app_path,
-            icon: installed?.icon || null,
-            score: s.score
-          };
-        });
-        setSuggestedApps(suggestedWithIcons);
+        if (suggestions.length > 0) {
+          // Feedback service has data — use it
+          const suggestedWithIcons = suggestions.map(s => {
+            const installed = installedApps.find(
+              a => a.path?.toLowerCase() === s.app_path?.toLowerCase()
+            );
+            return {
+              name: s.app_name || installed?.name || 'Unknown App',
+              path: s.app_path,
+              icon: installed?.icon || null,
+              score: s.score
+            };
+          });
+          setSuggestedApps(suggestedWithIcons);
+        } else {
+          // No feedback data yet — fall back to AI categorization cache
+          const pending = getPendingSuggestions();
+          const aiApps = pending[workspaceName] || [];
+          // Enrich with icons from installed apps
+          const enriched = aiApps.map(a => {
+            const installed = installedApps.find(
+              i => i.path?.toLowerCase() === a.path?.toLowerCase()
+            );
+            return {
+              name: a.name,
+              path: a.path,
+              icon: installed?.icon || a.icon || null,
+              _aiCategorized: true
+            };
+          });
+          setSuggestedApps(enriched);
+        }
       })
       .catch(() => setSuggestedApps([]))
       .finally(() => setIsSuggestedLoading(false));
@@ -222,7 +243,12 @@ export default function AppSelector({
                   {source === 'running' && app.title && app.title !== app.name && (
                     <span className="awm-url-domain">{app.title}</span>
                   )}
-                  {source === 'suggested' && app.score && (
+                  {source === 'suggested' && app._aiCategorized && (
+                    <span className="awm-url-domain" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8b5cf6' }}>
+                      <FontAwesomeIcon icon={faRobot} style={{ fontSize: '10px' }} /> AI suggested
+                    </span>
+                  )}
+                  {source === 'suggested' && app.score && !app._aiCategorized && (
                     <span className="awm-url-domain">
                       Score: {app.score.toFixed(2)}
                     </span>

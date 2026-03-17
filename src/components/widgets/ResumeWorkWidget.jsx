@@ -94,7 +94,9 @@ export function ResumeWorkWidget() {
     const [hoveredUrl, setHoveredUrl] = useState(null);
 
     useEffect(() => {
-        loadLastSession();
+        let isMounted = true;
+        loadLastSession(isMounted);
+        return () => { isMounted = false; };
     }, []);
 
     // Format duration for display
@@ -132,7 +134,7 @@ export function ResumeWorkWidget() {
         }
     }
 
-    async function loadLastSession() {
+    async function loadLastSession(isMounted = true) {
         try {
             // Look back 6 hours to capture more context
             const sessions = await getActiveSessions(6 * 60 * 60 * 1000);
@@ -309,6 +311,7 @@ export function ResumeWorkWidget() {
                 const noteCount = session.metadata?.noteIds?.length || 0;
                 const highlightCount = session.metadata?.highlightIds?.length || 0;
 
+                if (!isMounted) return;
                 setLastSession({
                     ...session,
                     allUrls,
@@ -322,23 +325,25 @@ export function ResumeWorkWidget() {
                 });
 
                 // Try to get AI summary
-                fetchAiSummary(allUrls, topCategories);
+                fetchAiSummary(allUrls, topCategories, isMounted);
             } else {
-                setLastSession(null);
+                if (isMounted) setLastSession(null);
             }
         } catch (error) {
             console.error('[ResumeWorkWidget] Failed to load session:', error);
         } finally {
-            setLoading(false);
+            if (isMounted) setLoading(false);
         }
     }
 
-    async function fetchAiSummary(urls, categories) {
+    async function fetchAiSummary(urls, categories, isMounted = true) {
         try {
+            if (!isMounted) return;
             setAiLoading(true);
 
             // First check if NanoAI is available
             const statusResponse = await chrome.runtime.sendMessage({ type: 'NANO_AI_STATUS' });
+            if (!isMounted) return;
             if (!statusResponse?.success || statusResponse?.availability !== 'available') {
                 console.debug('[ResumeWorkWidget] NanoAI not available');
                 return;
@@ -367,22 +372,29 @@ export function ResumeWorkWidget() {
                 }
             });
 
+            if (!isMounted) return;
+
             if (response?.summary) {
                 setAiSummary(response.summary);
             }
 
-            // Update URLs with AI-generated descriptions
-            if (response?.descriptions && lastSession) {
-                const updatedUrls = lastSession.allUrls.map((item, idx) => ({
-                    ...item,
-                    aiDescription: response.descriptions[idx] || null
-                }));
-                setLastSession(prev => ({ ...prev, allUrls: updatedUrls }));
+            // Update URLs with AI-generated descriptions using functional update to avoid stale closure
+            if (response?.descriptions) {
+                setLastSession(prev => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        allUrls: prev.allUrls.map((item, idx) => ({
+                            ...item,
+                            aiDescription: response.descriptions[idx] || null
+                        }))
+                    };
+                });
             }
         } catch (error) {
             console.debug('[ResumeWorkWidget] AI summary unavailable:', error.message);
         } finally {
-            setAiLoading(false);
+            if (isMounted) setAiLoading(false);
         }
     }
 

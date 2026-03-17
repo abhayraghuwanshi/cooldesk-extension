@@ -397,6 +397,11 @@ export const VALIDATION_SCHEMAS = {
         returnVisits: {
             [ValidationRules.TYPE]: 'number',
             [ValidationRules.MIN_VALUE]: 0
+        },
+        // Sub-URL tracking: most-visited paths/subdomains under the base domain
+        // e.g. ["r/cooldesk", "r/programming"] for reddit.com
+        topSubUrls: {
+            [ValidationRules.TYPE]: 'array'
         }
     },
 

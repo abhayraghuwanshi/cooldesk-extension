@@ -1,7 +1,8 @@
-import { faBriefcase, faGamepad, faGraduationCap } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faDesktop, faGamepad, faGraduationCap, faRobot, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
+import { clearWorkspaceSuggestions } from '../../services/appCategorizationService.js';
 import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
@@ -62,9 +63,11 @@ export function WorkspaceList({
     onWorkspaceClick,
     activeWorkspaceId,
     expandedWorkspaceId,
-    pinnedWorkspaces = [], // New prop
-    onTogglePin,            // New prop
-    onAddUrl               // New prop
+    pinnedWorkspaces = [],
+    onTogglePin,
+    onAddUrl,
+    appSuggestions = {},        // { [workspaceName]: [{ name, path, icon }] }
+    onAddAppsToWorkspace        // (workspaceName, apps[]) => void
 }) {
     // Load view mode from localStorage, default to 'list'
     const [viewMode, setViewMode] = useState(() => {
@@ -82,9 +85,47 @@ export function WorkspaceList({
     const [popoverState, setPopoverState] = useState({ id: null, rect: null });
     const [hoveredBookmark, setHoveredBookmark] = useState(null);
     const [bookmarkLimit, setBookmarkLimit] = useState(20);
-    const [isShareModalOpen, setIsShareModalOpen] = useState(false); // New state
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [activeMode, setActiveMode] = useState('all');
     const [isPending, startTransition] = useTransition();
+    // Track which workspace app banners have been dismissed in this session
+    const [dismissedBanners, setDismissedBanners] = useState(new Set());
+
+    const handleDismissAppBanner = useCallback((workspaceName) => {
+        setDismissedBanners(prev => new Set([...prev, workspaceName]));
+        clearWorkspaceSuggestions(workspaceName);
+    }, []);
+
+    const handleAddApps = useCallback((workspaceName) => {
+        const apps = appSuggestions[workspaceName] || [];
+        if (apps.length > 0 && onAddAppsToWorkspace) {
+            onAddAppsToWorkspace(workspaceName, apps);
+        }
+        setDismissedBanners(prev => new Set([...prev, workspaceName]));
+        clearWorkspaceSuggestions(workspaceName);
+    }, [appSuggestions, onAddAppsToWorkspace]);
+
+    // Banners to show: workspace has suggestions, not dismissed, and apps aren't already in workspace
+    const visibleBanners = useMemo(() => {
+        return Object.entries(appSuggestions)
+            .filter(([wsName, apps]) => {
+                if (!apps?.length) return false;
+                if (dismissedBanners.has(wsName)) return false;
+                // Check workspace exists
+                const ws = savedWorkspaces.find(w => w.name === wsName);
+                if (!ws) return false;
+                // Filter out apps already in the workspace
+                const existingPaths = new Set((ws.apps || []).map(a => a.path?.toLowerCase()));
+                const newApps = apps.filter(a => !existingPaths.has(a.path?.toLowerCase()));
+                return newApps.length > 0;
+            })
+            .map(([wsName, apps]) => {
+                const ws = savedWorkspaces.find(w => w.name === wsName);
+                const existingPaths = new Set((ws?.apps || []).map(a => a.path?.toLowerCase()));
+                const newApps = apps.filter(a => !existingPaths.has(a.path?.toLowerCase()));
+                return { workspaceName: wsName, apps: newApps };
+            });
+    }, [appSuggestions, dismissedBanners, savedWorkspaces]);
 
     const handleModeChange = useCallback((mode) => {
         startTransition(() => {
@@ -353,6 +394,68 @@ export function WorkspaceList({
                 paddingRight: '4px',
                 minHeight: 0 // Crucial for nested flex scrolling
             }}>
+                {/* App Suggestion Banners */}
+                {visibleBanners.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {visibleBanners.map(({ workspaceName, apps }) => (
+                            <div key={workspaceName} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                padding: '10px 14px',
+                                background: 'var(--bg-secondary, rgba(139, 92, 246, 0.08))',
+                                border: '1px solid rgba(139, 92, 246, 0.25)',
+                                borderRadius: '10px',
+                                fontSize: '12px',
+                                color: 'var(--text-primary, #e2e8f0)'
+                            }}>
+                                <FontAwesomeIcon icon={faRobot} style={{ color: '#8b5cf6', flexShrink: 0, fontSize: '13px' }} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <span style={{ color: '#8b5cf6', fontWeight: 600 }}>{workspaceName}</span>
+                                    <span style={{ color: 'var(--text-secondary, #94a3b8)', margin: '0 4px' }}>—</span>
+                                    <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>
+                                        {apps.slice(0, 3).map(a => a.name).join(', ')}
+                                        {apps.length > 3 && ` +${apps.length - 3} more`}
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                    <button
+                                        onClick={() => handleAddApps(workspaceName)}
+                                        style={{
+                                            padding: '4px 10px',
+                                            background: '#8b5cf6',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: '6px',
+                                            fontSize: '11px',
+                                            fontWeight: 600,
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        <FontAwesomeIcon icon={faDesktop} style={{ marginRight: '4px', fontSize: '10px' }} />
+                                        Add {apps.length} app{apps.length !== 1 ? 's' : ''}
+                                    </button>
+                                    <button
+                                        onClick={() => handleDismissAppBanner(workspaceName)}
+                                        style={{
+                                            padding: '4px 6px',
+                                            background: 'transparent',
+                                            color: 'var(--text-secondary, #64748b)',
+                                            border: '1px solid rgba(100,116,139,0.3)',
+                                            borderRadius: '6px',
+                                            fontSize: '11px',
+                                            cursor: 'pointer'
+                                        }}
+                                        title="Dismiss"
+                                    >
+                                        <FontAwesomeIcon icon={faTimes} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {savedWorkspaces.length > 0 ? (
                     <>
                         {/* Pinned Workspaces Section */}

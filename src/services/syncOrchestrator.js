@@ -354,8 +354,8 @@ class SyncOrchestrator {
             // FIRST: Push tabs immediately - this is what users see first in the app
             if (isExtension()) {
                 console.log('[SyncOrchestrator] Pushing tabs FIRST (highest priority)...');
-                this.syncLocalTabs(); // Tabs first!
-                // Removed redundant 1s/3s retries - they cause excessive sync traffic
+                // Initial sync with retry - service worker may not have chrome.tabs ready immediately
+                this._initialTabSync();
             }
 
             // THEN: Full sync for other data (workspaces, notes, etc.) - runs in background
@@ -379,9 +379,13 @@ class SyncOrchestrator {
 
         // Also sync tabs specifically every 30 seconds for reliability
         if (isExtension()) {
-            this.tabSyncInterval = setInterval(() => {
+            this.tabSyncInterval = setInterval(async () => {
                 if (isHostSyncEnabled()) {
-                    this.syncLocalTabs();
+                    try {
+                        await this.syncLocalTabs();
+                    } catch (e) {
+                        // Already logged in syncLocalTabs, just prevent unhandled rejection
+                    }
                 }
             }, 30000);
         }
@@ -413,9 +417,13 @@ class SyncOrchestrator {
                     ? SYNC_THROTTLE_MS - timeSinceLastSync + 100
                     : 2000; // 2s debounce (up from 1s)
 
-                this.tabDebounceTimer = setTimeout(() => {
+                this.tabDebounceTimer = setTimeout(async () => {
                     lastTabSync = Date.now();
-                    this.syncLocalTabs();
+                    try {
+                        await this.syncLocalTabs();
+                    } catch (e) {
+                        // Already logged in syncLocalTabs
+                    }
                 }, delay);
             };
 
@@ -585,6 +593,33 @@ class SyncOrchestrator {
     }
 
     /**
+     * Initial tab sync with retry logic
+     * Service workers may not have chrome.tabs ready immediately on startup
+     */
+    async _initialTabSync() {
+        const maxRetries = 3;
+        const delays = [0, 500, 1500]; // Immediate, then 500ms, then 1.5s
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            if (delays[attempt] > 0) {
+                await new Promise(r => setTimeout(r, delays[attempt]));
+            }
+
+            try {
+                console.log(`[SyncOrchestrator] Initial tab sync attempt ${attempt + 1}/${maxRetries}`);
+                await this.syncLocalTabs(true); // Force sync, bypass change detection
+                console.log('[SyncOrchestrator] Initial tab sync successful');
+                return; // Success, exit retry loop
+            } catch (e) {
+                console.warn(`[SyncOrchestrator] Initial tab sync attempt ${attempt + 1} failed:`, e.message);
+                if (attempt === maxRetries - 1) {
+                    console.error('[SyncOrchestrator] All initial tab sync attempts failed');
+                }
+            }
+        }
+    }
+
+    /**
      * Detect browser type from user agent
      */
     detectBrowser() {
@@ -598,15 +633,25 @@ class SyncOrchestrator {
 
     /**
      * Sync local tabs to remote
+     * @param {boolean} force - Force sync even if no changes detected (for initial sync)
      */
-    async syncLocalTabs() {
-        if (!isHostSyncEnabled()) return;
+    async syncLocalTabs(force = false) {
+        if (!isHostSyncEnabled()) {
+            console.log('[SyncOrchestrator] syncLocalTabs: host sync disabled');
+            return;
+        }
         // Only sync tabs from extension context, not Electron
-        if (!isExtension()) return;
+        if (!isExtension()) {
+            console.log('[SyncOrchestrator] syncLocalTabs: not extension context');
+            return;
+        }
 
         try {
             const tabs = await chrome.tabs.query({});
-            if (!Array.isArray(tabs)) return;
+            if (!Array.isArray(tabs)) {
+                console.warn('[SyncOrchestrator] syncLocalTabs: chrome.tabs.query returned non-array:', tabs);
+                return;
+            }
 
             const browser = this.detectBrowser();
 
@@ -623,17 +668,22 @@ class SyncOrchestrator {
                 }));
 
             // Skip sync if no tabs changed (compare count as quick check)
-            if (this._lastTabCount === cleanTabs.length && this._lastTabUrls === cleanTabs.map(t => t.url).join('|')) {
+            // But force sync if explicitly requested (initial sync)
+            if (!force && this._lastTabCount === cleanTabs.length && this._lastTabUrls === cleanTabs.map(t => t.url).join('|')) {
                 return; // No change, skip sync
             }
             this._lastTabCount = cleanTabs.length;
             this._lastTabUrls = cleanTabs.map(t => t.url).join('|');
 
             if (cleanTabs.length > 0) {
+                console.log(`[SyncOrchestrator] Pushing ${cleanTabs.length} tabs to server${force ? ' (forced)' : ''}`);
                 await this.pushChanges('tabs', cleanTabs);
+            } else {
+                console.log('[SyncOrchestrator] syncLocalTabs: no valid tabs to sync');
             }
         } catch (e) {
             console.warn('[SyncOrchestrator] Failed to sync local tabs:', e);
+            throw e; // Re-throw so callers can handle retry
         }
     }
 

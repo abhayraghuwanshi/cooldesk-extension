@@ -4,6 +4,8 @@ import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import logo from '../../../logo-2.png';
 import { addUrlToWorkspace, deleteWorkspace, saveWorkspace } from '../../db/unified-api';
 import { isElectronApp } from '../../services/environmentDetector';
+import { runningAppsService } from '../../services/runningAppsService';
+import { getPendingSuggestions } from '../../services/appCategorizationService';
 import '../../styles/cooldesk.css';
 import '../../styles/global-add.css';
 import '../../styles/spatial.css';
@@ -42,6 +44,67 @@ export function CoolDeskContainer({
 }) {
   // Detect if running in Tauri/Electron app
   const isDesktopApp = isElectronApp();
+
+  // App suggestions from AI categorization (loaded from localStorage + updated after seeding)
+  const [appSuggestions, setAppSuggestions] = useState(() => getPendingSuggestions());
+
+  // Subscribe to installed apps for seeding
+  const [installedApps, setInstalledApps] = useState([]);
+  useEffect(() => {
+    const unsubscribe = runningAppsService.subscribe(({ installedApps: apps }) => {
+      setInstalledApps(apps || []);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Run AI app categorization on first launch (or when apps/workspaces change)
+  useEffect(() => {
+    if (!isDesktopApp) return; // Only relevant in desktop app where sidecar runs
+    if (!savedWorkspaces.length || !installedApps.length) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const [LocalAI, { runSeedingIfNeeded }] = await Promise.all([
+          import('../../services/localAIService'),
+          import('../../services/appCategorizationService')
+        ]);
+        const available = await LocalAI.isAvailable();
+        if (cancelled || !available) return;
+
+        const result = await runSeedingIfNeeded(installedApps, savedWorkspaces, LocalAI.simpleChat);
+        if (!cancelled && result) {
+          // New suggestions were generated — refresh the banner state
+          setAppSuggestions(getPendingSuggestions());
+        }
+      } catch (e) {
+        console.warn('[CoolDesk] App seeding failed:', e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [isDesktopApp, savedWorkspaces, installedApps]);
+
+  // Handler: add AI-suggested apps to a workspace
+  const handleAddAppsToWorkspace = useCallback(async (workspaceName, apps) => {
+    const workspace = savedWorkspaces.find(w => w.name === workspaceName);
+    if (!workspace) return;
+
+    const existingPaths = new Set((workspace.apps || []).map(a => a.path?.toLowerCase()));
+    const newApps = apps.filter(a => !existingPaths.has(a.path?.toLowerCase()));
+    if (!newApps.length) return;
+
+    try {
+      const updatedWorkspace = {
+        ...workspace,
+        apps: [...(workspace.apps || []), ...newApps]
+      };
+      await saveWorkspace(updatedWorkspace);
+      console.log(`[CoolDesk] Added ${newApps.length} apps to workspace "${workspaceName}"`);
+    } catch (err) {
+      console.error('[CoolDesk] Failed to add apps to workspace:', err);
+    }
+  }, [savedWorkspaces]);
 
   const [expandedWorkspace, setExpandedWorkspace] = useState(null);
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
@@ -503,6 +566,8 @@ export function CoolDeskContainer({
                       onTogglePin={onTogglePin}
                       onAddUrl={handleOpenAddModal}
                       onEditWorkspace={handleOpenAIManager}
+                      appSuggestions={appSuggestions}
+                      onAddAppsToWorkspace={handleAddAppsToWorkspace}
                     />
                   </Suspense>
                 </div>
@@ -570,19 +635,21 @@ export function CoolDeskContainer({
         )}
       </WorkspaceShell>
 
-      {/* Global Add Button - Outside spatial shell */}
-      <GlobalAddButton
-        workspaces={savedWorkspaces}
-        onCreateWorkspace={onCreateWorkspace}
-        onAddUrlToWorkspace={onAddUrlToWorkspace}
-        onAddNote={onAddNote}
-        isOpen={addModalState.isOpen}
-        onOpen={() => handleOpenAddModal(null)}
-        onClose={handleCloseAddModal}
-        initialWorkspace={addModalState.initialWorkspace}
-        onOpenAIManager={() => handleOpenAIManager(null)}
-        data-onboarding="global-add-btn"
-      />
+      {/* Global Add Button - Desktop App Only */}
+      {isDesktopApp && (
+        <GlobalAddButton
+          workspaces={savedWorkspaces}
+          onCreateWorkspace={onCreateWorkspace}
+          onAddUrlToWorkspace={onAddUrlToWorkspace}
+          onAddNote={onAddNote}
+          isOpen={addModalState.isOpen}
+          onOpen={() => handleOpenAddModal(null)}
+          onClose={handleCloseAddModal}
+          initialWorkspace={addModalState.initialWorkspace}
+          onOpenAIManager={() => handleOpenAIManager(null)}
+          data-onboarding="global-add-btn"
+        />
+      )}
 
       {/* AI Workspace Manager - Two-column AI-powered workspace management */}
       <AIWorkspaceManager

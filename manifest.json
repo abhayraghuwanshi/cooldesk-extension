@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "New Tab by Cooldesk - Start Smarter",
+  "name": "New Tab by Cooldesk",
   "version": "1.0.7",
   "action": {
     "default_title": "Open CoolDesk"
@@ -34,7 +34,7 @@
     "http://*/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.unsplash.com wss://signaling-server.raghuwanshi-abhay405.workers.dev http://localhost:5173 ws://localhost:5173 http://127.0.0.1:4545 ws://127.0.0.1:4545 http://localhost:4545 ws://localhost:4545; frame-src https://www.google.com"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.unsplash.com http://127.0.0.1:4545 ws://127.0.0.1:4545 http://localhost:4545 ws://localhost:4545; frame-src https://www.google.com"
   },
   "web_accessible_resources": [
     {

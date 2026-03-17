@@ -156,10 +156,10 @@ fn run_inference(
         &formatted_prompt[..formatted_prompt.len().min(200)]
     );
 
-    // Create context
+    // Create context - 8192 tokens for larger prompts (Qwen 7B supports up to 32K)
     let ctx_params = LlamaContextParams::default()
-        .with_n_ctx(std::num::NonZeroU32::new(4096))
-        .with_n_batch(4096)
+        .with_n_ctx(std::num::NonZeroU32::new(8192))
+        .with_n_batch(2048)
         .with_n_threads(4)
         .with_n_threads_batch(4);
 
@@ -175,7 +175,7 @@ fn run_inference(
     log::info!("[LLM Engine] Prompt tokenized: {} tokens", tokens.len());
 
     // Create batch and add tokens
-    let mut batch = LlamaBatch::new(4096, 1);
+    let mut batch = LlamaBatch::new(8192, 1);
 
     let last_idx = tokens.len() as i32 - 1;
     for (i, token) in tokens.iter().enumerate() {

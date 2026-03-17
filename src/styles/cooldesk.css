@@ -132,6 +132,11 @@
   transform: scale(1.05);
 }
 
+.cooldesk-settings-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* Workspace Selector */
 .workspace-selector {
   position: relative;
@@ -2705,7 +2710,7 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   overflow: visible;
   padding-right: 4px;
   scrollbar-width: thin;
-  scrollbar-color: var(--primary-color, rgba(139, 92, 246, 0.4)) transparent;
+  scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
 }
 
 .overview-dashboard-grid::-webkit-scrollbar {
@@ -2718,13 +2723,12 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 }
 
 .overview-dashboard-grid::-webkit-scrollbar-thumb {
-  background: var(--primary-color, rgba(139, 92, 246, 0.4));
+  background: rgba(148, 163, 184, 0.2);
   border-radius: 3px;
-  opacity: 0.6;
 }
 
 .overview-dashboard-grid::-webkit-scrollbar-thumb:hover {
-  background: var(--secondary-color, rgba(139, 92, 246, 0.6));
+  background: rgba(148, 163, 184, 0.4);
 }
 
 .overview-left-column {
@@ -2771,9 +2775,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   }
 
   .overview-activity-column {
+    height: 500px;
     min-height: 300px;
     max-height: none;
-    /* Remove max-height constraint on smaller screens */
     flex: 1;
   }
 
@@ -2807,9 +2811,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   }
 
   .overview-activity-column {
+    height: 450px;
     min-height: 250px;
     max-height: none;
-    /* Remove max-height constraint */
     flex: 1;
   }
 }
@@ -2865,9 +2869,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
 
   .overview-activity-column {
     display: flex;
+    height: 400px;
     min-height: 300px;
     max-height: none;
-    /* Remove max-height constraint */
     margin-bottom: 20px;
   }
 
@@ -2953,9 +2957,9 @@ textarea.cooldesk-search-textarea::-webkit-scrollbar-thumb:hover {
   }
 
   .overview-activity-column {
+    height: 420px;
     min-height: 200px;
     max-height: none;
-    /* Remove max-height constraint */
     border-radius: 12px;
   }
 }

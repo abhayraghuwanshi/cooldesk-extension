@@ -27,10 +27,12 @@ export function useAISuggestions(tabs, workspaces) {
   // This hook no longer auto-fires — the parent calls generateSuggestions directly.
 
   /**
-   * @param {string} customPrompt  - user's typed prompt (empty string for auto-generate)
-   * @param {string} memoryContext - enriched hint string from useMemory.loadMemoryContext
+   * @param {string} customPrompt      - user's typed prompt (empty string for auto-generate)
+   * @param {string} memoryContext     - enriched hint string from useMemory.loadMemoryContext
+   * @param {Object|null} workspaceContext - current workspace being edited/created (id, name, description, urls)
+   * @param {string} syncContext       - cleaned user data from sidecar (workspaces + activity)
    */
-  const generateSuggestions = useCallback(async (customPrompt, memoryContext = '') => {
+  const generateSuggestions = useCallback(async (customPrompt, memoryContext = '', workspaceContext = null, syncContext = '') => {
     console.log('[useAISuggestions] generateSuggestions called', { customPrompt, tabsCount: tabs.length });
 
     // Require tabs for auto-generation, but allow explicit prompts even with no tabs
@@ -60,9 +62,42 @@ export function useAISuggestions(tabs, workspaces) {
             .join('\n')
         : '(No browser tabs available)';
 
-      // Build prompt for workspace grouping AND URL suggestions
-      const prompt = customPrompt
-        ? `${customPrompt}
+      // Build prompt — three cases:
+      // 1. Workspace-context prompt: user asked something specific about a known workspace
+      // 2. Custom prompt: user typed a free-form prompt (no workspace context)
+      // 3. Auto-generate: no prompt, group open tabs
+      let prompt;
+
+      // Shared context block prepended to all prompts when available
+      const contextBlock = syncContext
+        ? `User context:\n${syncContext}\n\n`
+        : (memoryContext ? `Context: ${memoryContext}\n\n` : '');
+
+      if (workspaceContext?.name && customPrompt) {
+        // Case 1: suggest relevant URLs for a specific workspace
+        const existingUrls = (workspaceContext.urls || [])
+          .slice(0, 8)
+          .map(u => `- ${u.title || safeGetHostname(u.url)} (${safeGetHostname(u.url)})`)
+          .join('\n') || '(none yet)';
+
+        const tabsSection = tabs.length > 0
+          ? `\nOpen tabs for context:\n${tabsForGrouping}`
+          : '';
+
+        prompt = `${contextBlock}Workspace: "${workspaceContext.name}"${workspaceContext.description ? ` — ${workspaceContext.description}` : ''}
+Current URLs in workspace:
+${existingUrls}${tabsSection}
+
+User request: ${customPrompt}
+
+Suggest 4-6 relevant websites to add to the "${workspaceContext.name}" workspace. Include tools, docs, APIs, or resources directly related to this topic.
+
+Return JSON only:
+{"groups": [{"name": "${workspaceContext.name}", "description": "Relevant resources", "items": [], "suggestedUrls": [{"url": "https://example.com", "title": "Site Name", "reason": "Why it fits this workspace"}]}]}`;
+
+      } else if (customPrompt) {
+        // Case 2: free-form prompt — group tabs with user's framing
+        prompt = `${contextBlock}${customPrompt}
 
 Tabs:
 ${tabsForGrouping}
@@ -70,14 +105,18 @@ ${tabsForGrouping}
 Group these tabs into 2-4 workspaces. For each workspace, suggest 3-4 popular related websites.
 
 Return JSON only:
-{"groups": [{"name": "Name", "description": "Brief desc", "items": [1,2], "suggestedUrls": [{"url": "https://example.com", "title": "Site Name", "reason": "Why useful"}]}]}`
-        : `Tabs:
+{"groups": [{"name": "Name", "description": "Brief desc", "items": [1,2], "suggestedUrls": [{"url": "https://example.com", "title": "Site Name", "reason": "Why useful"}]}]}`;
+
+      } else {
+        // Case 3: auto-generate from open tabs
+        prompt = `${contextBlock}Tabs:
 ${tabsForGrouping}
 
 Group these into 2-4 logical workspaces. For each workspace, suggest 3-4 popular related websites that would be useful.
 
 Return JSON only:
 {"groups": [{"name": "Name", "description": "Brief desc", "items": [1,2], "suggestedUrls": [{"url": "https://example.com", "title": "Site Name", "reason": "Why useful"}]}]}`;
+      }
 
       // Use simple chat endpoint
       console.log('[useAISuggestions] Calling simpleChat...');
@@ -156,10 +195,13 @@ Return JSON: {"workspace": "Best Workspace Name", "confidence": 0.8}`;
   }, [workspaces]);
 
   /**
-   * Suggest related URLs for a workspace based on its current URLs.
-   * Uses caching to avoid repeated AI calls.
+   * Suggest related URLs for a workspace based on user's ACTUAL browsing history.
+   * Only suggests URLs the user has actually visited.
+   * @param {Object} workspace - The workspace to suggest for
+   * @param {Array} userHistory - User's browser history
+   * @param {Array} userBookmarks - User's bookmarks
    */
-  const suggestRelatedUrls = useCallback(async (workspace) => {
+  const suggestRelatedUrls = useCallback(async (workspace, userHistory = [], userBookmarks = []) => {
     try {
       const workspaceUrls = workspace.urls?.map(u => ({
         url: u.url,
@@ -167,6 +209,46 @@ Return JSON: {"workspace": "Best Workspace Name", "confidence": 0.8}`;
       })) || [];
 
       if (workspaceUrls.length === 0) return [];
+
+      // Build set of existing URLs in workspace
+      const existingUrls = new Set(workspaceUrls.map(u => u.url?.toLowerCase()));
+
+      // Combine history and bookmarks, filter out existing
+      const candidateUrls = [];
+      const seenUrls = new Set();
+
+      // Add from history (most recent/frequent)
+      userHistory.forEach(h => {
+        const urlLower = h.url?.toLowerCase();
+        if (h.url && !existingUrls.has(urlLower) && !seenUrls.has(urlLower)) {
+          seenUrls.add(urlLower);
+          candidateUrls.push({
+            url: h.url,
+            title: h.title || safeGetHostname(h.url),
+            source: 'history',
+            visitCount: h.visitCount || 1
+          });
+        }
+      });
+
+      // Add from bookmarks
+      userBookmarks.forEach(b => {
+        const urlLower = b.url?.toLowerCase();
+        if (b.url && !existingUrls.has(urlLower) && !seenUrls.has(urlLower)) {
+          seenUrls.add(urlLower);
+          candidateUrls.push({
+            url: b.url,
+            title: b.title || safeGetHostname(b.url),
+            source: 'bookmark'
+          });
+        }
+      });
+
+      // If no candidates, return empty
+      if (candidateUrls.length === 0) {
+        console.log('[useAISuggestions] No candidate URLs from history/bookmarks');
+        return [];
+      }
 
       // Check cache first
       const cacheKey = getCacheKey(workspace);
@@ -176,7 +258,7 @@ Return JSON: {"workspace": "Best Workspace Name", "confidence": 0.8}`;
         return cached.suggestions;
       }
 
-      // Check if request is already pending (dedup concurrent calls)
+      // Check if request is already pending
       if (pendingRequests.current.has(cacheKey)) {
         console.log('[useAISuggestions] Request already pending for:', workspace.name);
         return pendingRequests.current.get(cacheKey);
@@ -184,19 +266,28 @@ Return JSON: {"workspace": "Best Workspace Name", "confidence": 0.8}`;
 
       // Create the request promise
       const requestPromise = (async () => {
-        // Simple prompt: ask AI to suggest related URLs based on workspace theme
-        const urlList = workspaceUrls
-          .slice(0, 10)
+        // Format workspace URLs
+        const workspaceList = workspaceUrls
+          .slice(0, 8)
           .map(u => `- ${u.title} (${safeGetHostname(u.url)})`)
           .join('\n');
 
+        // Format candidate URLs (from user's actual history)
+        const candidateList = candidateUrls
+          .slice(0, 30) // Limit candidates
+          .map((u, i) => `${i + 1}. ${u.title} (${safeGetHostname(u.url)})`)
+          .join('\n');
+
         const prompt = `Workspace "${workspace.name}" contains:
-${urlList}
+${workspaceList}
 
-Suggest 3-5 related websites that would fit this workspace. Return JSON only:
-{"suggestions": [{"url": "https://...", "title": "Site name", "reason": "Why it fits"}]}`;
+From the user's browsing history below, pick 3-5 URLs that would fit this workspace:
+${candidateList}
 
-        console.log('[useAISuggestions] suggestRelatedUrls for:', workspace.name);
+Return JSON with indices from the list above:
+{"picks": [{"index": 1, "reason": "Brief reason why it fits"}]}`;
+
+        console.log('[useAISuggestions] suggestRelatedUrls for:', workspace.name, 'with', candidateUrls.length, 'candidates');
         const result = await LocalAIService.simpleChat(prompt);
 
         let suggestions = [];
@@ -204,12 +295,22 @@ Suggest 3-5 related websites that would fit this workspace. Return JSON only:
           const jsonMatch = result.response.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
-            suggestions = (parsed.suggestions || []).map(s => ({
-              url: s.url,
-              title: s.title,
-              reason: s.reason,
-              _aiSuggested: true
-            })).filter(s => s.url);
+            suggestions = (parsed.picks || [])
+              .map(pick => {
+                const idx = pick.index - 1;
+                if (idx >= 0 && idx < candidateUrls.length) {
+                  const candidate = candidateUrls[idx];
+                  return {
+                    url: candidate.url,
+                    title: candidate.title,
+                    reason: pick.reason || `From your ${candidate.source}`,
+                    source: candidate.source,
+                    _aiSuggested: true
+                  };
+                }
+                return null;
+              })
+              .filter(Boolean);
           }
         }
 
@@ -237,6 +338,23 @@ Suggest 3-5 related websites that would fit this workspace. Return JSON only:
     }
   }, []);
 
+  /**
+   * Classify installed desktop apps into workspaces using local AI.
+   * Thin wrapper around appCategorizationService — uses the same simpleChat fn.
+   */
+  const classifyAppsToWorkspaces = useCallback(async (installedApps, targetWorkspaces) => {
+    try {
+      const isAvailable = await LocalAIService.isAvailable();
+      if (!isAvailable) return {};
+
+      const { classifyAppsToWorkspaces: classify } = await import('../../../services/appCategorizationService');
+      return await classify(installedApps, targetWorkspaces, LocalAIService.simpleChat);
+    } catch (err) {
+      console.error('[useAISuggestions] classifyAppsToWorkspaces error:', err);
+      return {};
+    }
+  }, []);
+
   return {
     aiPrompt,
     setAiPrompt: handlePromptChange,
@@ -245,6 +363,7 @@ Suggest 3-5 related websites that would fit this workspace. Return JSON only:
     error,
     generateSuggestions,
     classifyUrl,
-    suggestRelatedUrls
+    suggestRelatedUrls,
+    classifyAppsToWorkspaces
   };
 }

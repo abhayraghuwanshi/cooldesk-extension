@@ -15,6 +15,47 @@ function cleanUrl(url) {
     }
 }
 
+// Extract a meaningful sub-URL label from a full URL.
+// Used to track which parts of a domain the user actually visits.
+//   reddit.com/r/cooldesk      → "r/cooldesk"
+//   mail.google.com/...        → "mail.google.com"
+//   github.com/user/repo       → "user/repo"
+//   youtube.com/watch?v=xxx    → null  (not meaningful)
+function extractSubUrl(url) {
+    try {
+        const u = new URL(url);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+
+        const parts = getUrlParts(url);
+        const baseDomain = parts?.key ? new URL(parts.key).hostname : u.hostname;
+        const host = u.hostname.replace(/^www\./, '');
+
+        // Case 1: meaningful subdomain (mail.google.com, docs.google.com, etc.)
+        if (host !== baseDomain) {
+            return host; // e.g. "mail.google.com"
+        }
+
+        // Case 2: meaningful path segments
+        const pathParts = u.pathname.split('/').filter(Boolean);
+        if (pathParts.length === 0) return null;
+
+        // Skip UUIDs, long hashes, numeric IDs — they are page-specific, not structural
+        const isGeneric = (s) => /^[a-f0-9-]{12,}$/i.test(s) || /^\d{6,}$/.test(s);
+        const meaningful = pathParts.filter(s => !isGeneric(s));
+
+        if (meaningful.length >= 2) {
+            return meaningful.slice(0, 2).join('/'); // "r/cooldesk", "user/repo"
+        }
+        if (meaningful.length === 1 && meaningful[0].length > 2) {
+            return meaningful[0]; // e.g. "explore"
+        }
+
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 // Helper function to initialize activity data structure
 function initActivityData(url = '') {
     let domain = '';
@@ -40,7 +81,8 @@ function initActivityData(url = '') {
         domain: domain,
         pageType: '', // 'article', 'tool', 'dashboard', etc.
         firstVisit: Date.now(),
-        visitDays: new Set() // Set of day strings (YYYY-MM-DD) for return visit tracking
+        visitDays: new Set(), // Set of day strings (YYYY-MM-DD) for return visit tracking
+        subUrls: {} // Map of sub-path/subdomain → visit count (e.g. "r/cooldesk": 12)
     };
 }
 
@@ -268,7 +310,12 @@ async function flushActivityBatch() {
                 clicks: Number(payload.clicks) || 0,
                 forms: Number(payload.forms) || 0,
                 visitCount: payload.visitCount || 1,
-                returnVisits: payload.returnVisits || 0
+                returnVisits: payload.returnVisits || 0,
+                // Top sub-URLs by visit count (e.g. ["r/cooldesk", "r/programming"])
+                topSubUrls: Object.entries(payload.subUrls || {})
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)
+                    .map(([u]) => u)
             });
         } catch (e) {
             // If write fails, keep it dirty for next round
@@ -873,12 +920,25 @@ export async function handleActivityMessage(msg, sender) {
         activityData[cleaned].forms = Math.max(activityData[cleaned].forms || 0, richMetrics.forms);
         activityData[cleaned].lastVisit = now;
 
+        // Track which sub-paths/subdomains are actually visited under this base domain
+        const subUrl = extractSubUrl(sender.tab.url);
+        if (subUrl) {
+            if (!activityData[cleaned].subUrls) activityData[cleaned].subUrls = {};
+            activityData[cleaned].subUrls[subUrl] = (activityData[cleaned].subUrls[subUrl] || 0) + 1;
+        }
+
         // Track visit days for qualification
         const currentDay = new Date(now).toISOString().split('T')[0];
         if (!activityData[cleaned].visitDays) {
             activityData[cleaned].visitDays = new Set();
         }
         activityData[cleaned].visitDays.add(currentDay);
+
+        // Derive top sub-URLs from the accumulated map (sorted by visit count, top 5)
+        const topSubUrls = Object.entries(activityData[cleaned].subUrls || {})
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([u]) => u);
 
         // Use consistent ID: tabSessionId ensures same tab+URL+day = same record (upsert)
         // This prevents database bloat from repeated heartbeats
@@ -894,7 +954,8 @@ export async function handleActivityMessage(msg, sender) {
                 duration: richMetrics.timeSpent,
                 wasVisible: richMetrics.visibleTime > 0,
                 hadFocus: richMetrics.engagementScore > 20
-            }
+            },
+            topSubUrls
         });
 
         activityDirty.add(cleaned);

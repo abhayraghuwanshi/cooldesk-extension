@@ -6,7 +6,7 @@ import { useSync } from '../../hooks/useSync'; // Added hook
 import { getSyncStatus } from '../../services/conditionalSync';
 import { isElectronApp } from '../../services/environmentDetector';
 import { sendMessage, storageGet, storageSet } from '../../services/extensionApi';
-import { loadSyncConfig } from '../../services/syncConfig';
+import { loadSyncConfig, toggleHostSync } from '../../services/syncConfig';
 import { setAndSaveFontFamily, setAndSaveFontSize } from '../../utils/fontUtils';
 import AIModelsTab from '../settings/AIModelsTab';
 import ExportData from '../settings/ExportData';
@@ -45,6 +45,7 @@ export function SettingsModal({
   const [fontFamily, setFontFamily] = useState('system');
   const [syncConfig, setSyncConfig] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
+  const [hostSyncEnabled, setHostSyncEnabled] = useState(true);
   const [syncConfigLoading, setSyncConfigLoading] = useState(false);
   const [sessionTrackingEnabled, setSessionTrackingEnabled] = useState(true);
 
@@ -208,8 +209,18 @@ export function SettingsModal({
       const status = getSyncStatus();
       setSyncConfig(config);
       setSyncStatus(status);
+      setHostSyncEnabled(config.enableHostSync !== false);
     } finally {
       setSyncConfigLoading(false);
+    }
+  };
+
+  const handleToggleHostSync = async (enabled) => {
+    try {
+      await toggleHostSync(enabled);
+      setHostSyncEnabled(enabled);
+    } catch (err) {
+      setError('Failed to toggle host sync');
     }
   };
 
@@ -288,21 +299,24 @@ export function SettingsModal({
     }
   };
 
-  const handleCheckForUpdates = () => {
+  const handleCheckForUpdates = async () => {
     if (!chrome.runtime?.requestUpdateCheck) {
       setError('Update check not available in this environment');
       return;
     }
-    chrome.runtime.requestUpdateCheck((status, details) => {
+    try {
+      const { status, version } = await chrome.runtime.requestUpdateCheck();
       if (status === 'update_available') {
         setUpdateAvailable(true);
-        setError(`Update available: v${details.version}`);
+        setError(`Update available: v${version}`);
       } else if (status === 'no_update') {
         setError('You are running the latest version');
       } else if (status === 'throttled') {
         setError('Update check throttled. Try again later.');
       }
-    });
+    } catch (e) {
+      setError('Update check failed');
+    }
   };
 
   const handleInstallUpdate = () => {
@@ -689,7 +703,31 @@ export function SettingsModal({
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {/* Sync Status - NEW */}
+                    {/* Host Sync Toggle */}
+                    <label style={{
+                      display: 'flex', alignItems: 'center', gap: 16,
+                      padding: 16, background: 'rgba(255,255,255,0.03)', borderRadius: 12,
+                      cursor: 'pointer', border: '1px solid rgba(255,255,255,0.04)',
+                      transition: 'all 0.2s', color: '#fff'
+                    }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={hostSyncEnabled}
+                        onChange={e => handleToggleHostSync(e.target.checked)}
+                        style={{ width: 18, height: 18, accentColor: '#3b82f6' }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 500 }}>Enable Host Sync</div>
+                        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+                          Sync data with the CoolDesk desktop app over WebSocket (port 4545)
+                        </div>
+                      </div>
+                    </label>
+
+                    {/* Sync Status */}
                     <div style={{
                       padding: 16,
                       background: 'rgba(255,255,255,0.03)',
@@ -697,24 +735,27 @@ export function SettingsModal({
                       border: '1px solid rgba(255,255,255,0.04)',
                       display: 'flex',
                       justifyContent: 'space-between',
-                      alignItems: 'center'
+                      alignItems: 'center',
+                      opacity: hostSyncEnabled ? 1 : 0.4
                     }}>
                       <div>
                         <div style={{ fontWeight: 500, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
                           Host Connection
                           <span style={{
                             width: 8, height: 8, borderRadius: '50%',
-                            background: syncStatus?.hostAvailable ? '#4ade80' : (syncStatus?.hostAvailable === false ? '#ef4444' : '#fbbf24'),
-                            boxShadow: syncStatus?.hostAvailable ? '0 0 8px rgba(74, 222, 128, 0.5)' : 'none'
+                            background: !hostSyncEnabled ? '#64748b' : syncStatus?.hostAvailable ? '#4ade80' : (syncStatus?.hostAvailable === false ? '#ef4444' : '#fbbf24'),
+                            boxShadow: hostSyncEnabled && syncStatus?.hostAvailable ? '0 0 8px rgba(74, 222, 128, 0.5)' : 'none'
                           }} />
                         </div>
                         <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
-                          {syncStatus?.hostAvailable
-                            ? 'Connected to Desktop App'
-                            : (syncStatus?.hostAvailable === false ? 'Disconnected (Is the app running?)' : 'Checking connection...')}
+                          {!hostSyncEnabled
+                            ? 'Host sync is disabled'
+                            : syncStatus?.hostAvailable
+                              ? 'Connected to Desktop App'
+                              : (syncStatus?.hostAvailable === false ? 'Disconnected (Is the app running?)' : 'Checking connection...')}
                         </div>
                       </div>
-                      {syncStatus?.hostAvailable === false && (
+                      {hostSyncEnabled && !syncStatus?.hostAvailable && (
                         <button
                           onClick={() => loadSettingsSync()}
                           style={{

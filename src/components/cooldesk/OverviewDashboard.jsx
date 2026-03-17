@@ -5,7 +5,6 @@ import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { sortWorkspacesByActivity } from '../../utils/ranking.js';
 import { ResumeWorkWidget } from '../widgets/ResumeWorkWidget';
-import { PomodoroWidget } from './PomodoroWidget';
 import { WorkspaceCard } from './WorkspaceCard';
 
 // Lazy load ActivityFeed as it's not critical for LCP (Largest Contentful Paint)
@@ -112,9 +111,14 @@ const OverviewDashboard = memo(function OverviewDashboard({
                 if (isMounted) {
                     setRecentWorkspaces(topWorkspaces);
                     setIsLoading(false);
-                    // Update cache
-                    localStorage.setItem(cacheKey, JSON.stringify(topWorkspaces));
-                    localStorage.setItem(cacheHashKey, workspacesHash);
+                    try {
+                        localStorage.setItem(cacheKey, JSON.stringify(topWorkspaces));
+                        localStorage.setItem(cacheHashKey, workspacesHash);
+                    } catch (e) {
+                        // Quota exceeded — clear stale cache and continue without caching
+                        localStorage.removeItem(cacheKey);
+                        localStorage.removeItem(cacheHashKey);
+                    }
                 }
             } catch (error) {
                 console.error('Error sorting workspaces:', error);
@@ -127,14 +131,19 @@ const OverviewDashboard = memo(function OverviewDashboard({
         };
 
         // Defer this heavy task to avoid blocking transition animations if this component mounts during a slide
-        // Uses requestIdleCallback if available, or a small timeout
+        let idleCallbackId = null;
+        let timeoutId = null;
         if (window.requestIdleCallback) {
-            window.requestIdleCallback(() => loadRecentWorkspaces(), { timeout: 2000 });
+            idleCallbackId = window.requestIdleCallback(() => loadRecentWorkspaces(), { timeout: 2000 });
         } else {
-            setTimeout(loadRecentWorkspaces, 100);
+            timeoutId = setTimeout(loadRecentWorkspaces, 100);
         }
 
-        return () => { isMounted = false; };
+        return () => {
+            isMounted = false;
+            if (idleCallbackId) window.cancelIdleCallback(idleCallbackId);
+            if (timeoutId) clearTimeout(timeoutId);
+        };
     }, [workspacesHash]); // Depend on hash, not array reference, to avoid loops if array is recreated but identical
 
     // Use recent workspaces if loaded, otherwise fallback or empty
@@ -173,26 +182,6 @@ const OverviewDashboard = memo(function OverviewDashboard({
                 {/* Resume Work Widget - Shows last active session */}
                 <ResumeWorkWidget />
 
-                {/* Pomodoro Widget Section - Desktop App Only */}
-                {isDesktopApp && (
-                    <div className="    " style={{ marginTop: '24px' }}>
-                        <h3 style={{
-                            fontSize: 'var(--font-2xl, 20px)',
-                            fontWeight: 600,
-                            color: 'var(--text-secondary, #94A3B8)',
-                            fontFamily: defaultFontFamily,
-                            marginBottom: '12px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                        }}>
-                            Focus Timer
-                        </h3>
-                        <PomodoroWidget />
-                    </div>
-                )}
                 {/* Workspaces Section */}
                 <div>
                     <div style={{
@@ -274,7 +263,7 @@ const OverviewDashboard = memo(function OverviewDashboard({
                                     isActive={activeWorkspaceId === workspace.id}
                                     compact={true}
                                     isPinned={pinnedWorkspaces.includes(workspace.name)}
-                                    onAddUrl={onAddUrl}
+                                    onAddUrl={isDesktopApp ? onAddUrl : undefined}
                                     data-onboarding="workspace-card"
                                 />
                             ))

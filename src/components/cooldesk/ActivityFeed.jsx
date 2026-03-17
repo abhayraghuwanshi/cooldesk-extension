@@ -521,7 +521,6 @@ export function ActivityFeed() {
     const groupedFeedItems = useMemo(() => {
         const filtered = feedItems.filter(item => {
             if (activeTab === 'all') return true;
-            if (activeTab === 'chats') return item.type === 'chat';
             if (activeTab === 'tabs') return item.type === 'tab';
             if (activeTab === 'apps') return item.type === 'app';
             return false;
@@ -849,6 +848,7 @@ export function ActivityFeed() {
                                 color: '#94A3B8'
                             }}
                             title={`${quickLinks.length - visibleFavCount} more favorites`}
+                            onClick={() => setVisibleFavCount(quickLinks.length)}
                             onMouseEnter={e => {
                                 e.currentTarget.style.background = 'rgba(148, 163, 184, 0.25)';
                                 e.currentTarget.style.color = '#E5E7EB';
@@ -886,19 +886,12 @@ export function ActivityFeed() {
                         gap: '4px',
                         position: 'relative'
                     }}>
-                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps'] : ['all', 'chats', 'tabs']).map(tab => (
+                        {(isDesktopApp ? ['all', 'chats', 'tabs', 'apps'] : ['all', 'tabs']).map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
                                 style={{
                                     padding: '8px 16px',
-                                    // background: activeTab === tab
-                                    //     ? 'linear-gradient(135deg, rgba(96, 165, 250, 0.25), rgba(59, 130, 246, 0.15))'
-                                    //     : 'transparent',
-                                    // border: activeTab === tab
-                                    //     ? '1px solid rgba(96, 165, 250, 0.8)'
-                                    //     : '1px solid transparent',
-                                    // borderRadius: '10px',
                                     color: activeTab === tab ? '#60A5FA' : '#94A3B8',
                                     fontSize: '12px',
                                     fontWeight: activeTab === tab ? 600 : 500,
