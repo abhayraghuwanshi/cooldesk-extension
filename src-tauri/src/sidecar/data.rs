@@ -456,13 +456,13 @@ pub struct V2SessionSummary {
 
 /// Request to record a feedback event
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct FeedbackEventRequest {
     /// Type of suggestion
     pub suggestion_type: String,
     /// User action: accepted, rejected, modified, ignored, previewed, undone
     pub action: String,
-    /// The suggestion content
+    /// The suggestion content (optional — may be absent if item has no url/name)
+    #[serde(default)]
     pub suggestion_content: String,
     /// Current workspace context
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -494,7 +494,6 @@ pub struct FeedbackStatsResponse {
 
 /// Request to record URL grouping feedback
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UrlGroupingFeedbackRequest {
     /// First URL
     pub url1: String,
@@ -506,7 +505,6 @@ pub struct UrlGroupingFeedbackRequest {
 
 /// Request to get workspace suggestions
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct WorkspaceSuggestionRequest {
     pub url: String,
     pub title: String,
@@ -534,7 +532,6 @@ pub struct ScoredSuggestion {
 
 /// Request to record URL-workspace association
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct RecordUrlWorkspaceRequest {
     pub url: String,
     pub title: String,
@@ -543,7 +540,6 @@ pub struct RecordUrlWorkspaceRequest {
 
 /// Request to record app launch feedback
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct AppLaunchRequest {
     /// App name (e.g., "Chrome", "Visual Studio Code")
     pub app_name: String,
@@ -560,7 +556,6 @@ fn default_accepted() -> String {
 
 /// Request to record URL click feedback
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UrlClickRequest {
     /// URL that was clicked
     pub url: String,
@@ -590,7 +585,6 @@ pub struct RelatedUrl {
 
 /// Request to record app-workspace association
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct RecordAppWorkspaceRequest {
     /// App name (display name)
     pub app_name: String,
@@ -602,7 +596,6 @@ pub struct RecordAppWorkspaceRequest {
 
 /// Request to suggest apps for a workspace
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SuggestAppsRequest {
     /// Workspace name to get app suggestions for
     pub workspace_name: String,
@@ -632,7 +625,6 @@ pub struct SuggestedApp {
 
 /// Request to suggest workspaces for an app
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SuggestWorkspacesForAppRequest {
     /// App path to get workspace suggestions for
     pub app_path: String,

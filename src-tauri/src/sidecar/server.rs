@@ -287,24 +287,14 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
 
     log::info!("[Sidecar] WebSocket client disconnected: {}", client_id);
 
-    // Automatically purge the disconnected client's tabs to display accurate live-connected counts
-    let mut data = state.sync_data.write().await;
-    let ws_device_id = format!("ws-{}", client_id);
-    let mut removed = data.device_tabs_map.remove(&ws_device_id).is_some();
-    
-    // Also remove via persistent device_id if we have a mapping
-    if let Some(p_id) = data.client_to_device.remove(&client_id) {
-        if data.device_tabs_map.remove(&p_id).is_some() {
-            removed = true;
-        }
-    }
-
-    if removed {
-        data.tabs = recompute_aggregated_tabs(&data.device_tabs_map);
-        data.last_updated.insert("tabs".to_string(), chrono::Utc::now().timestamp_millis());
-        let tabs_payload = serde_json::to_value(&data.tabs).unwrap_or_default();
-        drop(data);
-        state.save_and_broadcast("tabs", tabs_payload).await;
+    // Only clean up the client_to_device mapping on disconnect — do NOT clear tabs.
+    // Chrome service workers frequently suspend and resume, triggering spurious disconnect
+    // events. Clearing tabs on disconnect would cause the Tauri app to briefly see 0 tabs
+    // every time the service worker sleeps. The extension always pushes fresh tabs on
+    // reconnect, so stale entries in device_tabs_map are overwritten automatically.
+    {
+        let mut data = state.sync_data.write().await;
+        data.client_to_device.remove(&client_id);
     }
 }
 

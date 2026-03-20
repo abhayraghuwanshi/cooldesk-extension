@@ -378,7 +378,15 @@ pub use platform::*;
 /// Similar to the original AppFocus.exe CLI interface
 pub fn focus_window(hwnd: Option<isize>, pid: Option<u32>, process_name: Option<&str>) -> FocusResult<()> {
     if let Some(h) = hwnd {
-        return focus_window_by_hwnd(h);
+        let result = focus_window_by_hwnd(h);
+        match result {
+            Ok(()) => return Ok(()),
+            // PlatformNotSupported means hwnd focus isn't available (e.g. macOS where
+            // we store CGWindowID in hwnd but can't activate by it directly).
+            // Fall through to the PID / name approach instead.
+            Err(FocusError::PlatformNotSupported) => {}
+            Err(e) => return Err(e),
+        }
     }
 
     if let Some(p) = pid {
