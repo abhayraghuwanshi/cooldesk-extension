@@ -297,7 +297,26 @@ export function TabManagement() {
         // Enrich running apps with icons from installed apps using utility
         const enrichedApps = enrichRunningAppsWithIcons(apps, installedApps);
 
-        // Filter out browsers, cooldesk, and tray/background-only processes
+        // macOS system process filter
+        const systemExactNames = new Set([
+          // Windows system processes
+          'svchost', 'csrss', 'smss', 'wininit', 'winlogon', 'services', 'lsass',
+          'registry', 'system', 'idle', 'dwm', 'conhost', 'ctfmon', 'spoolsv',
+          'taskhostw', 'sihost', 'runtimebroker', 'applicationframehost',
+          'searchindexer', 'searchhost', 'securityhealthsystray',
+          // macOS system UI processes
+          'windowserver', 'dock', 'controlcenter', 'notificationcenter',
+          'spotlight', 'loginwindow', 'textinputswitcher', 'accessibilityuiserver',
+          'cursoruiviewservice', 'nsattributedstringagent', 'webthumbnailextension',
+          'linkednotesuitservice', 'securityprivacyextension',
+        ]);
+        const isMacSystemProcess = (name) =>
+          name.startsWith('com.apple.') ||
+          name.includes('.xpc.') ||
+          (name.endsWith('helper') && !name.includes(' ')) ||
+          (name.endsWith('agent') && !name.includes(' '));
+
+        // Filter out browsers, cooldesk, and system processes
         const filteredApps = enrichedApps.filter(app => {
           const appName = (app.name || '').toLowerCase();
 
@@ -322,10 +341,17 @@ export function TabManagement() {
             appName.includes('wry');
           if (isCoolDesk) return false;
 
-          // Skip tray/background windows: hidden (isVisible=false) and not cloaked by
-          // virtual desktop (cloaked=2). These are system trays, not focusable apps.
-          const isTrayOnly = app.isVisible === false && (app.cloaked || 0) !== 2;
-          if (isTrayOnly) return false;
+          // Skip macOS system processes
+          if (systemExactNames.has(appName)) return false;
+          if (isMacSystemProcess(appName)) return false;
+
+          // Skip tray/background windows on Windows only (macOS apps are often invisible
+          // but still valid — e.g. background menu-bar apps with cloaked=0)
+          const isMacStyle = app.source === 'macos' || (!app.hwnd && app.pid);
+          if (!isMacStyle) {
+            const isTrayOnly = app.isVisible === false && (app.cloaked || 0) !== 2;
+            if (isTrayOnly) return false;
+          }
 
           return true;
         });
