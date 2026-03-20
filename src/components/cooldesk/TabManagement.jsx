@@ -2,6 +2,8 @@ import { faBrain, faClock, faDesktop, faSync, faTasks, faToggleOff, faToggleOn }
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { recordFeedbackEvent } from '../../services/feedbackService.js';
+import { getHostTabs } from '../../services/extensionApi.js';
+import { syncOrchestrator } from '../../services/syncOrchestrator.js';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import { enrichRunningAppsWithIcons, getBaseDomainFromUrl } from '../../utils/helpers.js';
 import { scoreAndSortTabs } from '../../utils/tabScoring.js';
@@ -282,6 +284,27 @@ export function TabManagement() {
     };
 
     fetchInitial();
+
+    // Tauri app mode: no electronAPI, no chrome.tabs — fetch via HTTP and subscribe to WS sync
+    if (!window.electronAPI && !chrome?.tabs?.query) {
+      getHostTabs().then(res => {
+        if (res.ok && res.tabs?.length) {
+          setTabs(res.tabs.map(tab => ({ ...tab, browser: tab.browser || 'other' })));
+          setTabsLoading(false);
+        }
+      }).catch(() => {});
+
+      const unsubTabs = syncOrchestrator.on('tabs-synced', (updatedTabs) => {
+        if (Array.isArray(updatedTabs) && updatedTabs.length) {
+          setTabs(updatedTabs.map(tab => ({ ...tab, browser: tab.browser || 'other' })));
+          setTabsLoading(false);
+        }
+      });
+      return () => {
+        if (removeListener) removeListener();
+        unsubTabs?.();
+      };
+    }
 
     return () => {
       if (removeListener) removeListener();

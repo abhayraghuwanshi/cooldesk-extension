@@ -40,12 +40,14 @@ pub fn load_data() -> SyncData {
         Ok(content) => {
             match serde_json::from_str::<SyncData>(&content) {
                 Ok(mut data) => {
-                    log::info!("[Sidecar] Loaded sync data from disk: {} notes, {} workspaces, {} urls, {} pins, {} urlNotes",
+                    log::info!("[Sidecar] Loaded sync data from disk: {} notes, {} workspaces, {} urls, {} pins, {} urlNotes, {} tabs (cached)",
                         data.notes.len(), data.workspaces.len(), data.urls.len(),
-                        data.pins.len(), data.url_notes.len());
-                    // Clear transient data
+                        data.pins.len(), data.url_notes.len(), data.tabs.len());
+                    // Clear runtime-only maps (not persisted)
                     data.device_tabs_map.clear();
-                    data.tabs.clear();
+                    data.client_to_device.clear();
+                    // NOTE: tabs are intentionally kept so the app shows last-known tabs
+                    // immediately on startup. The extension will push fresh tabs on reconnect.
                     data
                 }
                 Err(e) => {
