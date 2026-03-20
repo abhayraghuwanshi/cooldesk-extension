@@ -352,7 +352,6 @@ export function TabManagement() {
             appName.includes('firefox') ||
             appName.includes('opera') ||
             appName.includes('vivaldi') ||
-            appName.includes('safari') ||
             appName.includes('arc');
           if (isBrowser) return false;
 

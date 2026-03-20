@@ -514,13 +514,57 @@ fn get_installed_apps() -> Vec<InstalledApp> {
     apps
 }
 
+// ── Windowless process detection ──────────────────────────────────────────────
+
+/// Add running .app processes that have no CGWindowList windows (background apps
+/// like Music.app, Photos.app, etc. that may run without a visible window).
+/// These are needed so AppMatcher can mark them as `isRunning: true`.
+fn add_windowless_app_processes(windows: &mut Vec<WindowEntry>) {
+    let pids_with_windows: std::collections::HashSet<u32> =
+        windows.iter().map(|w| w.pid).collect();
+
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    for (pid, process) in sys.processes() {
+        let pid_u32 = pid.as_u32();
+        if pids_with_windows.contains(&pid_u32) {
+            continue;
+        }
+
+        let exe_path = process
+            .exe()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // Only include .app bundle processes (skips kernel threads, daemons, etc.)
+        if !exe_path.contains(".app/Contents/MacOS/") {
+            continue;
+        }
+
+        let exe_name = process.name().to_string();
+
+        windows.push(WindowEntry {
+            pid: pid_u32,
+            exe_name,
+            path: exe_path,
+            titles: vec![],
+            is_visible: false,
+            cloaked: 0,
+            is_on_current_desktop: false,
+            desktop_id: None,
+        });
+    }
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 fn main() {
     let debug = std::env::args().any(|a| a == "--debug");
 
     let raw_windows = get_raw_windows();
-    let windows = build_window_entries(raw_windows);
+    let mut windows = build_window_entries(raw_windows);
+    add_windowless_app_processes(&mut windows);
     let installed = get_installed_apps();
 
     if debug {
