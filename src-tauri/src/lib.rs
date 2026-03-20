@@ -223,6 +223,17 @@ pub fn run() {
           }
       });
 
+      // Hide main window on close instead of quitting, show on dock click
+      if let Some(main_window) = app.get_webview_window("main") {
+          let win = main_window.clone();
+          main_window.on_window_event(move |event| {
+              if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                  api.prevent_close();
+                  win.hide().unwrap();
+              }
+          });
+      }
+
       // Register Global Shortcut
       let handle = app.handle().clone();
       app.handle().plugin(
@@ -240,7 +251,19 @@ pub fn run() {
 
       Ok(())
     })
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|app_handle, event| {
+        // On macOS, clicking the dock icon when all windows are hidden
+        // fires RunEvent::Reopen — show the main window again.
+        if let tauri::RunEvent::Reopen { has_visible_windows, .. } = event {
+            if !has_visible_windows {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        }
+    });
 }
 
