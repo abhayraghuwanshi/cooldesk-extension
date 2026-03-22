@@ -15,22 +15,39 @@
 //! Without it kCGWindowName is absent; we fall back to the owner-app name so
 //! the matcher can still associate windows with installed apps.
 
+// This binary is macOS-only; stub main for other platforms
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    eprintln!("scanner_mac is only supported on macOS");
+    std::process::exit(1);
+}
+
+#[cfg(target_os = "macos")]
 use std::collections::HashMap;
+#[cfg(target_os = "macos")]
 use std::ffi::{CStr, CString, c_void};
+#[cfg(target_os = "macos")]
 use std::os::raw::{c_char, c_int};
+#[cfg(target_os = "macos")]
 use std::path::Path;
 
+#[cfg(target_os = "macos")]
 use serde::Serialize;
+#[cfg(target_os = "macos")]
 use sysinfo::{Pid, System};
+
+// All macOS-specific code below is cfg-guarded
 
 // ── Output structures (same schema as Windows AppScanner) ─────────────────────
 
+#[cfg(target_os = "macos")]
 #[derive(Serialize)]
 struct ScannerOutput {
     installed: Vec<InstalledApp>,
     windows: Vec<WindowEntry>,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Serialize, Clone)]
 struct InstalledApp {
     id: String,
@@ -41,12 +58,14 @@ struct InstalledApp {
     icon: Option<String>,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Serialize)]
 struct WindowTitle {
     hwnd: i64,
     text: String,
 }
 
+#[cfg(target_os = "macos")]
 #[derive(Serialize)]
 struct WindowEntry {
     pid: u32,
@@ -67,22 +86,37 @@ struct WindowEntry {
 
 // ── CoreFoundation / CoreGraphics FFI ─────────────────────────────────────────
 
+#[cfg(target_os = "macos")]
 type CFTypeRef = *const c_void;
+#[cfg(target_os = "macos")]
 type CFArrayRef = *const c_void;
+#[cfg(target_os = "macos")]
 type CFDictionaryRef = *const c_void;
+#[cfg(target_os = "macos")]
 type CFStringRef = *const c_void;
+#[cfg(target_os = "macos")]
 type CFNumberRef = *const c_void;
+#[cfg(target_os = "macos")]
 type CFBooleanRef = *const c_void;
+#[cfg(target_os = "macos")]
 type CFIndex = isize;
+#[cfg(target_os = "macos")]
 type CGWindowID = u32;
+#[cfg(target_os = "macos")]
 type CGWindowListOption = u32;
 
+#[cfg(target_os = "macos")]
 const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
+#[cfg(target_os = "macos")]
 const K_CG_WINDOW_LIST_OPTION_ALL: CGWindowListOption = 0;
+#[cfg(target_os = "macos")]
 const K_CG_WINDOW_LIST_EXCLUDE_DESKTOP: CGWindowListOption = 16;
+#[cfg(target_os = "macos")]
 const K_CG_NULL_WINDOW_ID: CGWindowID = 0;
+#[cfg(target_os = "macos")]
 const K_CF_NUMBER_SINT32_TYPE: c_int = 3;
 
+#[cfg(target_os = "macos")]
 #[link(name = "CoreFoundation", kind = "framework")]
 extern "C" {
     fn CFArrayGetCount(array: CFArrayRef) -> CFIndex;
@@ -110,6 +144,7 @@ extern "C" {
     fn CFStringGetMaximumSizeForEncoding(length: CFIndex, encoding: u32) -> CFIndex;
 }
 
+#[cfg(target_os = "macos")]
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {
     fn CGWindowListCopyWindowInfo(
@@ -120,6 +155,7 @@ extern "C" {
 
 // ── CF helper functions ───────────────────────────────────────────────────────
 
+#[cfg(target_os = "macos")]
 unsafe fn cf_str_to_rust(s: CFStringRef) -> Option<String> {
     if s.is_null() {
         return None;
@@ -135,6 +171,7 @@ unsafe fn cf_str_to_rust(s: CFStringRef) -> Option<String> {
     }
 }
 
+#[cfg(target_os = "macos")]
 unsafe fn make_cf_key(key: &str) -> CFStringRef {
     let cstr = CString::new(key).unwrap_or_default();
     CFStringCreateWithCString(
@@ -144,6 +181,7 @@ unsafe fn make_cf_key(key: &str) -> CFStringRef {
     )
 }
 
+#[cfg(target_os = "macos")]
 unsafe fn dict_string(dict: CFDictionaryRef, key: &str) -> Option<String> {
     let cf_key = make_cf_key(key);
     if cf_key.is_null() {
@@ -157,6 +195,7 @@ unsafe fn dict_string(dict: CFDictionaryRef, key: &str) -> Option<String> {
     cf_str_to_rust(v as CFStringRef)
 }
 
+#[cfg(target_os = "macos")]
 unsafe fn dict_i32(dict: CFDictionaryRef, key: &str) -> Option<i32> {
     let cf_key = make_cf_key(key);
     if cf_key.is_null() {
@@ -179,6 +218,7 @@ unsafe fn dict_i32(dict: CFDictionaryRef, key: &str) -> Option<i32> {
     }
 }
 
+#[cfg(target_os = "macos")]
 unsafe fn dict_bool(dict: CFDictionaryRef, key: &str) -> Option<bool> {
     let cf_key = make_cf_key(key);
     if cf_key.is_null() {
@@ -194,6 +234,7 @@ unsafe fn dict_bool(dict: CFDictionaryRef, key: &str) -> Option<bool> {
 
 // ── Window enumeration via CGWindowListCopyWindowInfo ─────────────────────────
 
+#[cfg(target_os = "macos")]
 struct RawWindow {
     window_id: i64,
     pid: u32,
@@ -203,6 +244,7 @@ struct RawWindow {
     is_onscreen: bool,
 }
 
+#[cfg(target_os = "macos")]
 fn get_raw_windows() -> Vec<RawWindow> {
     let mut result = Vec::new();
     unsafe {
@@ -253,6 +295,7 @@ fn get_raw_windows() -> Vec<RawWindow> {
 
 // ── Build WindowEntry list from raw CGWindowList data ─────────────────────────
 
+#[cfg(target_os = "macos")]
 fn build_window_entries(raw: Vec<RawWindow>) -> Vec<WindowEntry> {
     let mut sys = System::new_all();
     sys.refresh_all();
@@ -331,6 +374,7 @@ fn build_window_entries(raw: Vec<RawWindow>) -> Vec<WindowEntry> {
 /// Read a single <string> value from a plaintext/XML Info.plist without pulling
 /// in a plist crate.  Handles both `<string>val</string>` on the same line and
 /// multi-line values.  Good enough for standard Apple-generated plists.
+#[cfg(target_os = "macos")]
 fn plist_string(plist_path: &Path, key: &str) -> Option<String> {
     let content = std::fs::read_to_string(plist_path).ok()?;
     let needle = format!("<key>{}</key>", key);
@@ -348,6 +392,7 @@ fn plist_string(plist_path: &Path, key: &str) -> Option<String> {
 
 /// Parse an ICNS file and return the bytes of the smallest embedded PNG entry.
 /// Modern macOS ICNS files embed raw PNG data in entries like ic07/ic13/ic14.
+#[cfg(target_os = "macos")]
 fn extract_png_from_icns(path: &Path) -> Option<Vec<u8>> {
     let data = std::fs::read(path).ok()?;
     if data.len() < 8 || &data[0..4] != b"icns" {
@@ -384,6 +429,7 @@ fn extract_png_from_icns(path: &Path) -> Option<Vec<u8>> {
 
 /// Resolve the .icns path from Info.plist and extract the smallest embedded PNG,
 /// returning it as a `data:image/png;base64,...` string.
+#[cfg(target_os = "macos")]
 fn extract_icon_base64(app_path: &Path, plist: &Path) -> Option<String> {
     let resources = app_path.join("Contents/Resources");
 
@@ -406,6 +452,7 @@ fn extract_icon_base64(app_path: &Path, plist: &Path) -> Option<String> {
 }
 
 /// Inline base64 encoder — avoids a crate dependency in this standalone binary.
+#[cfg(target_os = "macos")]
 fn base64_encode(data: &[u8]) -> String {
     const TABLE: &[u8; 64] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -423,6 +470,7 @@ fn base64_encode(data: &[u8]) -> String {
     out
 }
 
+#[cfg(target_os = "macos")]
 fn scan_app_dir(dir: &Path, source: &str) -> Vec<InstalledApp> {
     let mut apps = Vec::new();
     let entries = match std::fs::read_dir(dir) {
@@ -483,6 +531,7 @@ fn scan_app_dir(dir: &Path, source: &str) -> Vec<InstalledApp> {
     apps
 }
 
+#[cfg(target_os = "macos")]
 fn get_installed_apps() -> Vec<InstalledApp> {
     let mut apps: Vec<InstalledApp> = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -519,6 +568,7 @@ fn get_installed_apps() -> Vec<InstalledApp> {
 /// Add running .app processes that have no CGWindowList windows (background apps
 /// like Music.app, Photos.app, etc. that may run without a visible window).
 /// These are needed so AppMatcher can mark them as `isRunning: true`.
+#[cfg(target_os = "macos")]
 fn add_windowless_app_processes(windows: &mut Vec<WindowEntry>) {
     let pids_with_windows: std::collections::HashSet<u32> =
         windows.iter().map(|w| w.pid).collect();
@@ -559,6 +609,7 @@ fn add_windowless_app_processes(windows: &mut Vec<WindowEntry>) {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+#[cfg(target_os = "macos")]
 fn main() {
     let debug = std::env::args().any(|a| a == "--debug");
 

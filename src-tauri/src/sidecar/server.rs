@@ -247,7 +247,7 @@ async fn handle_ws_connection(socket: WebSocket, state: Arc<AppState>) {
         log::info!("[Sidecar] SyncStatePayload notes count: {}", sync_state.notes.len());
 
         // Include clientId in the message so client can identify itself
-        let mut msg = WsMessage::new("sync-state", serde_json::to_value(&sync_state).unwrap_or_default());
+        let msg = WsMessage::new("sync-state", serde_json::to_value(&sync_state).unwrap_or_default());
         // Add clientId to the message
         let mut msg_json = serde_json::to_value(&msg).unwrap_or_default();
         if let Some(obj) = msg_json.as_object_mut() {

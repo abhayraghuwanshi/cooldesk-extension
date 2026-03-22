@@ -449,6 +449,7 @@ pub async fn get_focused_app_info() -> Option<RunningApp> {
                 });
             }
         }
+        return None;
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     None
