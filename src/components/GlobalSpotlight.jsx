@@ -302,16 +302,31 @@ export function GlobalSpotlight() {
 
             // Exact process names that are pure system noise (no user value)
             const systemExactNames = new Set([
+                // Windows system processes
                 'svchost', 'csrss', 'smss', 'wininit', 'winlogon', 'services', 'lsass',
                 'registry', 'system', 'idle', 'dwm', 'conhost', 'ctfmon', 'spoolsv',
                 'taskhostw', 'sihost', 'runtimebroker', 'applicationframehost',
-                'searchindexer', 'searchhost', 'securityhealthsystray'
+                'searchindexer', 'searchhost', 'securityhealthsystray',
+                // macOS system UI processes
+                'windowserver', 'dock', 'controlcenter', 'notificationcenter',
+                'spotlight', 'loginwindow', 'textinputswitcher', 'accessibilityuiserver',
+                'cursoruiviewservice', 'nsattributedstringagent', 'webthumbnailextension',
+                'linkednotesuitservice', 'securityprivacyextension',
             ]);
-            // Browser exe names (shown as tabs instead, not apps)
-            const browserNames = new Set([
-                'chrome', 'msedge', 'firefox', 'brave', 'opera', 'vivaldi', 'iexplore', 'chromium',
-                'safari', 'waterfox', 'librewolf', 'thorium', 'arc', 'floorp', 'zen'
-            ]);
+            // macOS system process patterns — filter by name prefix/content
+            const isMacSystemProcess = (name) =>
+                name.startsWith('com.apple.') ||   // reverse-DNS = system XPC service
+                name.includes('.xpc.') ||           // XPC helper process
+                (name.endsWith('helper') && !name.includes(' ')) ||  // bare lowercase helpers
+                (name.endsWith('agent') && !name.includes(' '));     // bare lowercase agents
+            // Browser keywords — matched via substring so macOS full names like
+            // "Google Chrome", "Brave Browser", "Microsoft Edge" are also caught.
+            const browserKeywords = [
+                'chrome', 'msedge', 'edge', 'firefox', 'brave', 'opera', 'vivaldi',
+                'iexplore', 'chromium', 'safari', 'waterfox', 'librewolf', 'thorium',
+                'arc', 'floorp', 'zen'
+            ];
+            const isBrowserApp = (name) => browserKeywords.some(k => name.includes(k));
             // CoolDesk app names to exclude (we are the app, don't show ourselves)
             const coolDeskNames = new Set([
                 'cooldesk', 'cool desk', 'cool-desk', 'tauri', 'webview', 'wry'
@@ -324,19 +339,24 @@ export function GlobalSpotlight() {
 
                     if (usedIds.has(name)) return false;
 
-                    // Skip known system noise processes (exact name match)
+                    // Skip known system noise processes (exact name match or macOS patterns)
                     if (systemExactNames.has(name)) return false;
+                    if (isMacSystemProcess(name)) return false;
 
                     // Skip browsers (tabs are shown separately)
-                    if (browserNames.has(name)) return false;
+                    if (isBrowserApp(name)) return false;
 
                     // Filter the spotlight/cooldesk app itself
                     if (coolDeskNames.has(name)) return false;
                     // Also check partial matches for cooldesk variants
                     if (name.includes('cooldesk') || name.includes('cool-desk') || name.includes('tauri')) return false;
 
-                    // Filter tray/background windows (invisible and not on another virtual desktop)
-                    if (a.isVisible === false && (a.cloaked || 0) !== 2) return false;
+                    // Filter tray/background windows.
+                    // Windows: cloaked===2 means "on another virtual desktop" — keep those.
+                    // macOS:   cloaked is always 0, so treat any running app as showable
+                    //          regardless of isVisible (many macOS apps sit in background).
+                    const isMacStyle = a.source === 'applications' || a.source === 'system_applications' || a.source === 'user_applications';
+                    if (a.isVisible === false && !isMacStyle && (a.cloaked || 0) !== 2) return false;
 
                     // Filter obvious noise: log windows, tray windows
                     if (title.endsWith(' log') || title === 'temp window' || title.endsWith('trayiconwindow')) return false;
@@ -350,7 +370,7 @@ export function GlobalSpotlight() {
                     const freqB = frequentApps[(b.name || '').toLowerCase()] || 0;
                     return freqB - freqA;
                 })
-                .slice(0, 6)
+                .slice(0, 4)
                 .map(a => ({ ...a, type: 'app', description: 'Running', isRunning: true }));
 
             console.log('[Spotlight] Active apps after filter:', activeApps.length, activeApps.map(a => `${a.name}(icon:${!!a.icon})`));
@@ -366,7 +386,7 @@ export function GlobalSpotlight() {
 
                 // Skip browsers (they're shown as tabs instead) and cooldesk
                 const appNameLower = appName.toLowerCase().replace(/\.exe$/i, '');
-                if (browserNames.has(appNameLower) || systemExactNames.has(appNameLower) || coolDeskNames.has(appNameLower)) continue;
+                if (isBrowserApp(appNameLower) || systemExactNames.has(appNameLower) || coolDeskNames.has(appNameLower)) continue;
                 if (appNameLower.includes('cooldesk') || appNameLower.includes('tauri')) continue;
 
                 // Find app in installed apps with flexible matching
@@ -382,7 +402,7 @@ export function GlobalSpotlight() {
                 if (app) {
                     // Skip if this app's name is a system process, browser, or cooldesk
                     const installedExe = (app.path || '').split(/[\/\\]/).pop()?.toLowerCase().replace(/\.exe$/i, '') || '';
-                    if (browserNames.has(installedExe) || systemExactNames.has(installedExe) || coolDeskNames.has(installedExe)) continue;
+                    if (isBrowserApp(installedExe) || systemExactNames.has(installedExe) || coolDeskNames.has(installedExe)) continue;
                     if (installedExe.includes('cooldesk') || installedExe.includes('tauri')) continue;
 
                     usedIds.add(appName.toLowerCase());

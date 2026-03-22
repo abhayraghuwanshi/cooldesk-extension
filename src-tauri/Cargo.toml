@@ -22,7 +22,7 @@ tauri-build = { version = "2.5.4", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.10.0", features = [] }
+tauri = { version = "2.10.0", features = ["macos-private-api"] }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
 sysinfo = "0.30"
@@ -58,6 +58,10 @@ tempfile = "3.10"
 [[bin]]
 name = "matcher"
 path = "src/bin/matcher.rs"
+
+[[bin]]
+name = "scanner_mac"
+path = "src/bin/scanner_mac.rs"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
