@@ -468,11 +468,79 @@ export function WorkspaceList({
                     </div>
                 )}
 
+                {/* Mode Selector - Always Visible */}
+                <div style={{
+                    marginBottom: '20px',
+                    padding: '0 4px'
+                }}>
+                    <div className="mode-selector-container">
+                        <button
+                            className={`mode-item ${activeMode === 'all' ? 'active' : ''}`}
+                            onClick={() => handleModeChange('all')}
+                            title="All Workspaces"
+                        >
+                            <span className="mode-icon">
+                                <span style={{ fontSize: '14px', fontWeight: 700 }}>ALL</span>
+                            </span>
+                            {activeMode === 'all' && <span className="mode-label">All</span>}
+                        </button>
+
+                        {Object.entries(modeConfigs).map(([key, config]) => {
+                            const isActive = activeMode === key;
+                            return (
+                                <button
+                                    key={key}
+                                    className={`mode-item ${isActive ? 'active' : ''}`}
+                                    onClick={() => handleModeChange(key)}
+                                    title={config.label}
+                                    style={{
+                                        '--mode-color': config.theme
+                                    }}
+                                >
+                                    <span className="mode-icon">
+                                        <FontAwesomeIcon icon={config.icon} />
+                                    </span>
+                                    {isActive && <span className="mode-label">{config.label}</span>}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Active Mode Greeting */}
+                    <div style={{
+                        height: (activeMode !== 'all' && activeMode !== 'apps') ? '30px' : '0',
+                        overflow: 'hidden',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        opacity: (activeMode !== 'all' && activeMode !== 'apps') ? 1 : 0,
+                        transform: (activeMode !== 'all' && activeMode !== 'apps') ? 'translateY(0)' : 'translateY(-10px)',
+                        marginTop: (activeMode !== 'all' && activeMode !== 'apps') ? '8px' : '0'
+                    }}>
+                        {activeMode !== 'all' && activeMode !== 'apps' && modeConfigs[activeMode] && (
+                            <div style={{
+                                fontSize: '13px',
+                                color: modeConfigs[activeMode].theme,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontWeight: 500,
+                                paddingLeft: '4px'
+                            }}>
+                                <span style={{
+                                    width: '6px',
+                                    height: '6px',
+                                    borderRadius: '50%',
+                                    background: modeConfigs[activeMode].theme,
+                                    display: 'inline-block'
+                                }}></span>
+                                {modeConfigs[activeMode].behavior.greeting}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 {/* Apps Mode - Show AppGrid */}
                 {activeMode === 'apps' && (
                     <AppGrid
-                        viewMode={viewMode}
-                        showRecent={true}
                         onAppLaunch={(app) => {
                             console.log('[WorkspaceList] App launched:', app.name);
                         }}
@@ -565,77 +633,6 @@ export function WorkspaceList({
                                             </span>
                                         )}
                                     </h3>
-                                </div>
-
-                                {/* Mode Filters */}
-                                {/* Mode Selector - Premium Redesign */}
-                                <div style={{
-                                    marginBottom: '20px',
-                                    padding: '0 4px'
-                                }}>
-                                    <div className="mode-selector-container">
-                                        <button
-                                            className={`mode-item ${activeMode === 'all' ? 'active' : ''}`}
-                                            onClick={() => handleModeChange('all')}
-                                            title="All Workspaces"
-                                        >
-                                            <span className="mode-icon">
-                                                <span style={{ fontSize: '14px', fontWeight: 700 }}>ALL</span>
-                                            </span>
-                                            {activeMode === 'all' && <span className="mode-label">All</span>}
-                                        </button>
-
-                                        {Object.entries(modeConfigs).map(([key, config]) => {
-                                            const isActive = activeMode === key;
-                                            return (
-                                                <button
-                                                    key={key}
-                                                    className={`mode-item ${isActive ? 'active' : ''}`}
-                                                    onClick={() => handleModeChange(key)}
-                                                    title={config.label}
-                                                    style={{
-                                                        '--mode-color': config.theme
-                                                    }}
-                                                >
-                                                    <span className="mode-icon">
-                                                        <FontAwesomeIcon icon={config.icon} />
-                                                    </span>
-                                                    {isActive && <span className="mode-label">{config.label}</span>}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-
-                                    {/* Active Mode Greeting */}
-                                    <div style={{
-                                        height: activeMode !== 'all' ? '30px' : '0',
-                                        overflow: 'hidden',
-                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                        opacity: activeMode !== 'all' ? 1 : 0,
-                                        transform: activeMode !== 'all' ? 'translateY(0)' : 'translateY(-10px)',
-                                        marginTop: activeMode !== 'all' ? '8px' : '0'
-                                    }}>
-                                        {activeMode !== 'all' && (
-                                            <div style={{
-                                                fontSize: '13px',
-                                                color: modeConfigs[activeMode].theme,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '6px',
-                                                fontWeight: 500,
-                                                paddingLeft: '4px'
-                                            }}>
-                                                <span style={{
-                                                    width: '6px',
-                                                    height: '6px',
-                                                    borderRadius: '50%',
-                                                    background: modeConfigs[activeMode].theme,
-                                                    display: 'inline-block'
-                                                }}></span>
-                                                {modeConfigs[activeMode].behavior.greeting}
-                                            </div>
-                                        )}
-                                    </div>
                                 </div>
 
                                 <div

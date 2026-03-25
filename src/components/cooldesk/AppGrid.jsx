@@ -1,285 +1,225 @@
 /**
  * AppGrid - Unified Local + Web Apps Display
- * Shows all apps grouped by category with usage tracking
+ * Shows all apps grouped by category with WorkspaceCard-style design
  */
 /* global chrome */
 
-import { faDesktop, faGlobe, faRocket, faClock, faFire } from '@fortawesome/free-solid-svg-icons';
+import {
+    faChevronDown,
+    faChevronUp,
+    faCode,
+    faDesktop,
+    faFilm,
+    faGamepad,
+    faGlobe,
+    faGraduationCap,
+    faMusic,
+    faNewspaper,
+    faPaintBrush,
+    faPlane,
+    faRocket,
+    faShoppingBag,
+    faTools,
+    faWallet,
+    faComments,
+    faHeartPulse,
+    faBox
+} from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { runningAppsService } from '../../services/runningAppsService.js';
 import { categorizeApp, STANDARD_CATEGORIES } from '../../services/appCategorizationService.js';
-import { defaultFontFamily } from '../../utils/fontUtils';
 
-// Category icons mapping
-const CATEGORY_ICONS = {
-    'Developer Tools': '💻',
-    'Browsers': '🌐',
-    'Communication': '💬',
-    'Music': '🎵',
-    'Video': '🎬',
-    'Graphics & Design': '🎨',
-    'Games': '🎮',
-    'Productivity': '📊',
-    'Finance': '💰',
-    'Education': '📚',
-    'News': '📰',
-    'Health & Fitness': '💪',
-    'Travel': '✈️',
-    'Shopping': '🛒',
-    'Utilities': '🔧',
-    'Other': '📦'
+// Category to FontAwesome icon mapping
+const CATEGORY_FA_ICONS = {
+    'Developer Tools': faCode,
+    'Browsers': faGlobe,
+    'Communication': faComments,
+    'Music': faMusic,
+    'Video': faFilm,
+    'Graphics & Design': faPaintBrush,
+    'Games': faGamepad,
+    'Productivity': faDesktop,
+    'Finance': faWallet,
+    'Education': faGraduationCap,
+    'News': faNewspaper,
+    'Health & Fitness': faHeartPulse,
+    'Travel': faPlane,
+    'Shopping': faShoppingBag,
+    'Utilities': faTools,
+    'Other': faBox
 };
 
-function AppIcon({ app, size = 32 }) {
-    const [imgError, setImgError] = useState(false);
+// Category color classes (matching WorkspaceCard)
+const CATEGORY_COLORS = {
+    'Developer Tools': 'purple',
+    'Browsers': 'blue',
+    'Communication': 'green',
+    'Music': 'orange',
+    'Video': 'orange',
+    'Graphics & Design': 'purple',
+    'Games': 'green',
+    'Productivity': 'blue',
+    'Finance': 'green',
+    'Education': 'blue',
+    'News': 'orange',
+    'Health & Fitness': 'green',
+    'Travel': 'blue',
+    'Shopping': 'orange',
+    'Utilities': 'brown',
+    'Other': 'brown'
+};
 
-    if (app.icon && !imgError) {
-        return (
-            <img
-                src={app.icon}
-                alt={app.name}
-                style={{
-                    width: size,
-                    height: size,
-                    borderRadius: 6,
-                    objectFit: 'cover'
-                }}
-                onError={() => setImgError(true)}
-            />
-        );
-    }
+function CategorySection({ category, apps, onLaunch }) {
+    const icon = CATEGORY_FA_ICONS[category] || faBox;
+    const colorClass = CATEGORY_COLORS[category] || 'brown';
+    const iconsContainerRef = useRef(null);
+    const [visibleCount, setVisibleCount] = useState(5); // Start conservative
+    const [showAll, setShowAll] = useState(false);
 
-    // Fallback icon
-    return (
-        <div style={{
-            width: size,
-            height: size,
-            borderRadius: 6,
-            background: app.type === 'local'
-                ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
-                : 'linear-gradient(135deg, #3b82f6, #0ea5e9)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontSize: size * 0.45
-        }}>
-            <FontAwesomeIcon icon={app.type === 'local' ? faDesktop : faGlobe} />
-        </div>
-    );
-}
+    // Calculate how many icons fit in the container (matching WorkspaceCard logic)
+    useEffect(() => {
+        const calculateVisible = () => {
+            if (!iconsContainerRef.current) return;
+            const container = iconsContainerRef.current;
+            let containerWidth = container.offsetWidth;
 
-function AppCard({ app, onLaunch, compact = false }) {
-    const handleClick = useCallback(() => {
-        onLaunch?.(app);
-    }, [app, onLaunch]);
+            // Account for padding
+            const computedStyle = window.getComputedStyle(container);
+            containerWidth -= (parseFloat(computedStyle.paddingLeft || '0') + parseFloat(computedStyle.paddingRight || '0'));
 
-    if (compact) {
-        return (
-            <button
-                onClick={handleClick}
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '6px 10px',
-                    background: 'var(--bg-secondary, rgba(30, 41, 59, 0.5))',
-                    border: '1px solid var(--border-color, rgba(148, 163, 184, 0.1))',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    width: '100%',
-                    textAlign: 'left',
-                    transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg-hover, rgba(51, 65, 85, 0.5))';
-                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.3)';
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'var(--bg-secondary, rgba(30, 41, 59, 0.5))';
-                    e.currentTarget.style.borderColor = 'var(--border-color, rgba(148, 163, 184, 0.1))';
-                }}
-            >
-                <AppIcon app={app} size={24} />
-                <span style={{
-                    flex: 1,
-                    fontSize: '12px',
-                    color: 'var(--text-primary, #e2e8f0)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                }}>
-                    {app.name}
-                </span>
-                <FontAwesomeIcon
-                    icon={app.type === 'local' ? faDesktop : faGlobe}
-                    style={{
-                        fontSize: '10px',
-                        color: 'var(--text-tertiary, #64748b)',
-                        opacity: 0.6
-                    }}
-                />
-            </button>
-        );
-    }
+            if (containerWidth <= 0) return;
+
+            // Icon size + gap (matching CSS: calc(var(--font-5xl) * 1.5) ≈ 48px + 12px gap)
+            const iconWidth = 48;
+            const gap = 12;
+            const expandBtnWidth = 48; // Reserve space for expand button
+
+            const availableWidth = containerWidth - expandBtnWidth;
+            const count = Math.max(2, Math.floor((availableWidth + gap) / (iconWidth + gap)));
+
+            setVisibleCount(count);
+        };
+
+        // Initial calculation after render
+        setTimeout(calculateVisible, 50);
+
+        const observer = new ResizeObserver(calculateVisible);
+        if (iconsContainerRef.current) {
+            observer.observe(iconsContainerRef.current);
+        }
+        return () => observer.disconnect();
+    }, []);
+
+    const hasMore = apps.length > visibleCount;
+    const displayApps = showAll ? apps : apps.slice(0, hasMore ? visibleCount : apps.length);
 
     return (
-        <button
-            onClick={handleClick}
-            style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px',
-                background: 'var(--bg-secondary, rgba(30, 41, 59, 0.5))',
-                border: '1px solid var(--border-color, rgba(148, 163, 184, 0.1))',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                minWidth: '80px',
-                transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--bg-hover, rgba(51, 65, 85, 0.5))';
-                e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.3)';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'var(--bg-secondary, rgba(30, 41, 59, 0.5))';
-                e.currentTarget.style.borderColor = 'var(--border-color, rgba(148, 163, 184, 0.1))';
-                e.currentTarget.style.transform = 'translateY(0)';
-            }}
+        <div
+            className={`cooldesk-workspace-card compact`}
+            style={{ position: 'relative' }}
         >
-            <AppIcon app={app} size={40} />
-            <span style={{
-                fontSize: '11px',
-                color: 'var(--text-primary, #e2e8f0)',
-                textAlign: 'center',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                width: '100%',
-                maxWidth: '70px'
-            }}>
-                {app.name}
-            </span>
-            {app.usageCount > 0 && (
-                <span style={{
-                    fontSize: '9px',
-                    color: 'var(--text-tertiary, #64748b)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '3px'
-                }}>
-                    <FontAwesomeIcon icon={faFire} style={{ fontSize: '8px' }} />
-                    {app.usageCount}
-                </span>
-            )}
-        </button>
-    );
-}
+            <div className="compact-card-inner" style={{ alignItems: showAll ? 'flex-start' : 'center' }}>
+                {/* Category Icon */}
+                <div className={`compact-workspace-icon workspace-icon ${colorClass}`}>
+                    <FontAwesomeIcon icon={icon} />
+                </div>
 
-function CategorySection({ category, apps, onLaunch, expanded, onToggle, compact }) {
-    const icon = CATEGORY_ICONS[category] || '📦';
-    const localCount = apps.filter(a => a.type === 'local').length;
-    const webCount = apps.filter(a => a.type === 'web').length;
+                {/* Category Info */}
+                <div className="compact-workspace-info" style={{ marginTop: showAll ? '12px' : '0' }}>
+                    <div className="compact-workspace-name">{category}</div>
+                    <div className="compact-workspace-count">
+                        <span>{apps.length} App{apps.length !== 1 ? 's' : ''}</span>
+                    </div>
+                </div>
 
-    return (
-        <div style={{
-            background: 'var(--bg-card, rgba(15, 23, 42, 0.6))',
-            border: '1px solid var(--border-color, rgba(148, 163, 184, 0.1))',
-            borderRadius: '12px',
-            overflow: 'hidden'
-        }}>
-            {/* Category Header */}
-            <button
-                onClick={onToggle}
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    width: '100%',
-                    padding: '12px 14px',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    borderBottom: expanded ? '1px solid var(--border-color, rgba(148, 163, 184, 0.1))' : 'none'
-                }}
-            >
-                <span style={{ fontSize: '18px' }}>{icon}</span>
-                <span style={{
-                    flex: 1,
-                    textAlign: 'left',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    color: 'var(--text-primary, #e2e8f0)'
-                }}>
-                    {category}
-                </span>
-                <span style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '11px',
-                    color: 'var(--text-tertiary, #64748b)'
-                }}>
-                    {localCount > 0 && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <FontAwesomeIcon icon={faDesktop} style={{ fontSize: '10px' }} />
-                            {localCount}
-                        </span>
-                    )}
-                    {webCount > 0 && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <FontAwesomeIcon icon={faGlobe} style={{ fontSize: '10px' }} />
-                            {webCount}
-                        </span>
-                    )}
-                </span>
-                <span style={{
-                    fontSize: '12px',
-                    color: 'var(--text-tertiary, #64748b)',
-                    transform: expanded ? 'rotate(180deg)' : 'rotate(0)',
-                    transition: 'transform 0.2s ease'
-                }}>
-                    ▼
-                </span>
-            </button>
-
-            {/* Apps Grid */}
-            {expanded && (
-                <div style={{
-                    padding: '12px',
-                    display: compact ? 'flex' : 'grid',
-                    flexDirection: compact ? 'column' : undefined,
-                    gridTemplateColumns: compact ? undefined : 'repeat(auto-fill, minmax(80px, 1fr))',
-                    gap: compact ? '6px' : '10px'
-                }}>
-                    {apps.map(app => (
-                        <AppCard
-                            key={app.id}
-                            app={app}
-                            onLaunch={onLaunch}
-                            compact={compact}
-                        />
+                {/* App Icons */}
+                <div
+                    ref={iconsContainerRef}
+                    className="compact-icons-container"
+                    style={{
+                        flexWrap: showAll ? 'wrap' : 'nowrap',
+                        overflow: showAll ? 'visible' : 'hidden',
+                        minWidth: 0,
+                        flex: 1
+                    }}
+                >
+                    {displayApps.map((app, idx) => (
+                        <div
+                            key={app.id || idx}
+                            className="compact-url-icon compact-app-icon"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onLaunch?.(app);
+                            }}
+                            title={app.name}
+                            style={{
+                                border: app.isRunning
+                                    ? '2px solid rgba(34, 197, 94, 0.6)'
+                                    : '1px solid rgba(255, 255, 255, 0.08)',
+                                background: app.isRunning
+                                    ? 'rgba(34, 197, 94, 0.15)'
+                                    : 'rgba(255, 255, 255, 0.05)'
+                            }}
+                        >
+                            {app.icon ? (
+                                <img
+                                    src={app.icon}
+                                    alt=""
+                                    style={{ width: '24px', height: '24px', objectFit: 'contain', borderRadius: '4px' }}
+                                    onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                />
+                            ) : null}
+                            <div
+                                className="letter-avatar"
+                                style={{
+                                    display: app.icon ? 'none' : 'flex',
+                                    background: app.type === 'web' ? '#3B82F6' : '#8B5CF6',
+                                    width: '24px',
+                                    height: '24px',
+                                    borderRadius: '4px',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    color: '#fff'
+                                }}
+                            >
+                                {app.name?.charAt(0)?.toUpperCase() || '?'}
+                            </div>
+                        </div>
                     ))}
                 </div>
-            )}
+
+                {/* Expand/Collapse Button - Outside overflow container */}
+                {(hasMore || showAll) && (
+                    <div
+                        className="compact-more-btn"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setShowAll(!showAll);
+                        }}
+                        title={showAll ? 'Collapse' : `Show all ${apps.length} apps`}
+                        style={{
+                            flexShrink: 0,
+                            marginLeft: '8px'
+                        }}
+                    >
+                        <FontAwesomeIcon icon={showAll ? faChevronUp : faChevronDown} style={{ fontSize: '16px' }} />
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
 
-export function AppGrid({
-    viewMode = 'grid', // 'grid' | 'list'
-    showRecent = true,
-    onAppLaunch,
-    maxRecentApps = 8
-}) {
+export function AppGrid({ onAppLaunch }) {
     const [apps, setApps] = useState([]);
     const [groupedApps, setGroupedApps] = useState({});
     const [loading, setLoading] = useState(true);
-    const [expandedCategories, setExpandedCategories] = useState(new Set(['Developer Tools', 'Browsers', 'Productivity']));
     const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'local' | 'web'
 
     // Initialize and load apps using runningAppsService (same as GlobalSpotlight)
@@ -368,14 +308,6 @@ export function AppGrid({
         return filtered;
     }, [groupedApps, activeFilter]);
 
-    // Recent apps (sorted by lastUsed)
-    const recentApps = useMemo(() => {
-        return [...apps]
-            .filter(a => a.lastUsed)
-            .sort((a, b) => b.lastUsed - a.lastUsed)
-            .slice(0, maxRecentApps);
-    }, [apps, maxRecentApps]);
-
     // Handle app launch
     const handleLaunch = useCallback(async (app) => {
         console.log('[AppGrid] Launching app:', app.name, app.path);
@@ -403,17 +335,6 @@ export function AppGrid({
         onAppLaunch?.(app);
     }, [onAppLaunch]);
 
-    const toggleCategory = useCallback((category) => {
-        setExpandedCategories(prev => {
-            const next = new Set(prev);
-            if (next.has(category)) {
-                next.delete(category);
-            } else {
-                next.add(category);
-            }
-            return next;
-        });
-    }, []);
 
     if (loading) {
         return (
@@ -430,7 +351,6 @@ export function AppGrid({
         );
     }
 
-    const compact = viewMode === 'list';
     const totalApps = apps.length;
     const localApps = apps.filter(a => a.type === 'local').length;
     const webApps = apps.filter(a => a.type === 'web').length;
@@ -451,7 +371,6 @@ export function AppGrid({
                     fontSize: '16px',
                     fontWeight: 600,
                     color: 'var(--text-primary, #e2e8f0)',
-                    fontFamily: defaultFontFamily,
                     margin: 0,
                     display: 'flex',
                     alignItems: 'center',
@@ -507,44 +426,6 @@ export function AppGrid({
                 </div>
             </div>
 
-            {/* Recent Apps */}
-            {showRecent && recentApps.length > 0 && (
-                <div style={{
-                    background: 'var(--bg-card, rgba(15, 23, 42, 0.6))',
-                    border: '1px solid var(--border-color, rgba(148, 163, 184, 0.1))',
-                    borderRadius: '12px',
-                    padding: '12px'
-                }}>
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        marginBottom: '10px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: 'var(--text-secondary, #94a3b8)'
-                    }}>
-                        <FontAwesomeIcon icon={faClock} style={{ fontSize: '11px' }} />
-                        Recent
-                    </div>
-                    <div style={{
-                        display: 'flex',
-                        gap: '8px',
-                        overflowX: 'auto',
-                        paddingBottom: '4px'
-                    }}>
-                        {recentApps.map(app => (
-                            <AppCard
-                                key={app.id}
-                                app={app}
-                                onLaunch={handleLaunch}
-                                compact={false}
-                            />
-                        ))}
-                    </div>
-                </div>
-            )}
-
             {/* Categories */}
             <div style={{
                 display: 'flex',
@@ -560,9 +441,6 @@ export function AppGrid({
                             category={category}
                             apps={categoryApps}
                             onLaunch={handleLaunch}
-                            expanded={expandedCategories.has(category)}
-                            onToggle={() => toggleCategory(category)}
-                            compact={compact}
                         />
                     ))
                 }

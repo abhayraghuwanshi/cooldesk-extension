@@ -35,7 +35,8 @@ const TYPE_CONFIG = {
   history: { icon: faClock, label: 'History', color: '#a78bfa' },
   bookmark: { icon: faBookmark, label: 'Bookmark', color: '#fbbf24' },
   running: { icon: faPlay, label: 'Running', color: '#22c55e' },
-  suggestion: { icon: faWandMagicSparkles, label: 'AI', color: '#a855f7' }
+  suggestion: { icon: faWandMagicSparkles, label: 'AI', color: '#a855f7' },
+  manual: { icon: faPlus, label: 'Add', color: '#10b981' }
 };
 
 export default function WorkspaceEditor({
@@ -113,6 +114,13 @@ export default function WorkspaceEditor({
     return items;
   }, [urls, apps]);
 
+  // Check if query looks like a URL
+  const isUrl = (str) => {
+    if (!str) return false;
+    // Match URLs with protocol or domain-like patterns
+    return /^https?:\/\//i.test(str) || /^[a-z0-9][-a-z0-9]*\.[a-z]{2,}/i.test(str);
+  };
+
   // Search handler
   const handleSearch = useCallback((query) => {
     if (!query.trim()) {
@@ -124,6 +132,23 @@ export default function WorkspaceEditor({
     setIsSearching(true);
     const q = query.toLowerCase();
     const results = [];
+
+    // If it looks like a URL and not already in workspace, offer to add it directly
+    if (isUrl(query.trim())) {
+      const urlToAdd = query.trim().startsWith('http') ? query.trim() : `https://${query.trim()}`;
+      if (!existingUrlSet.has(urlToAdd.toLowerCase())) {
+        results.push({
+          id: `manual:${urlToAdd}`,
+          type: 'url',
+          title: safeGetHostname(urlToAdd),
+          subtitle: 'Add custom URL',
+          url: urlToAdd,
+          favicon: null,
+          isApp: false,
+          isManual: true
+        });
+      }
+    }
 
     // Search tabs
     tabs
@@ -374,26 +399,26 @@ export default function WorkspaceEditor({
                   <span>Search Results</span>
                 </div>
                 {searchResults.map((item) => {
-                  const typeConfig = TYPE_CONFIG[item.type] || TYPE_CONFIG.url;
+                  const typeConfig = item.isManual ? TYPE_CONFIG.manual : (TYPE_CONFIG[item.type] || TYPE_CONFIG.url);
                   return (
-                    <div key={item.id} className="awm-items-row awm-items-result">
-                      <div className="awm-items-icon" style={item.isApp ? { background: 'rgba(34, 197, 94, 0.1)' } : {}}>
+                    <div key={item.id} className={`awm-items-row awm-items-result ${item.isManual ? 'awm-items-manual' : ''}`}>
+                      <div className="awm-items-icon" style={item.isManual ? { background: 'rgba(16, 185, 129, 0.15)' } : item.isApp ? { background: 'rgba(34, 197, 94, 0.1)' } : {}}>
                         {item.isApp ? (
                           item.icon ? <img src={item.icon} alt="" /> : <FontAwesomeIcon icon={faDesktop} style={{ color: '#22c55e' }} />
                         ) : item.favicon ? (
                           <img src={item.favicon} alt="" onError={(e) => e.target.style.display = 'none'} />
                         ) : (
-                          <FontAwesomeIcon icon={faGlobe} />
+                          <FontAwesomeIcon icon={faGlobe} style={item.isManual ? { color: '#10b981' } : {}} />
                         )}
                       </div>
                       <div className="awm-items-info">
                         <span className="awm-items-title">{item.title}</span>
-                        <span className="awm-items-subtitle">{item.subtitle}</span>
+                        <span className="awm-items-subtitle" style={item.isManual ? { color: '#10b981' } : {}}>{item.subtitle}</span>
                       </div>
                       <span className="awm-items-type" style={{ color: typeConfig.color }}>
                         <FontAwesomeIcon icon={typeConfig.icon} />
                       </span>
-                      <button className="awm-items-add" onClick={() => handleAddItem(item)}>
+                      <button className="awm-items-add" onClick={() => handleAddItem(item)} style={item.isManual ? { background: '#10b981' } : {}}>
                         <FontAwesomeIcon icon={faPlus} />
                       </button>
                     </div>

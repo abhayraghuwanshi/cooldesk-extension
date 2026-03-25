@@ -1946,6 +1946,19 @@
   color: white;
 }
 
+/* Manual URL option - highlighted */
+.awm-items-manual {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px dashed rgba(16, 185, 129, 0.3);
+  border-radius: 6px;
+  margin: 4px 8px;
+}
+
+.awm-items-manual:hover {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
 .awm-items-divider {
   display: flex;
   align-items: center;
