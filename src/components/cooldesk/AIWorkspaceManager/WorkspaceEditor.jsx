@@ -9,6 +9,7 @@ import {
   faLink,
   faPlay,
   faPlus,
+  faFolderPlus,
   faSearch,
   faStar,
   faTimes,
@@ -19,6 +20,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { runningAppsService } from '../../../services/runningAppsService';
 import { safeGetHostname, enrichRunningAppsWithIcons } from '../../../utils/helpers';
+
+import { faCode, faFileLines } from '@fortawesome/free-solid-svg-icons';
 
 const ICONS = [
   { key: 'folder', icon: faFolder },
@@ -79,7 +82,7 @@ export default function WorkspaceEditor({
 
   // Build existing item sets for filtering
   const existingUrlSet = useMemo(() => new Set(urls.map(u => u.url?.toLowerCase())), [urls]);
-  const existingAppSet = useMemo(() => new Set(apps.map(a => a.path?.toLowerCase())), [apps]);
+  const existingAppSet = useMemo(() => new Set(apps.map(a => `${a.path?.toLowerCase()}|${a.appType?.toLowerCase() || 'default'}`)), [apps]);
 
   // Merge URLs and Apps into unified list
   const currentItems = useMemo(() => {
@@ -100,14 +103,18 @@ export default function WorkspaceEditor({
 
     // Add Apps
     apps.forEach((app, idx) => {
+      const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
+      const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
+      
       items.push({
-        id: `app:${app.path}`,
+        id: `app:${app.path}:${app.appType || 'default'}`,
         type: 'app',
         title: app.name,
-        subtitle: 'Desktop App',
+        subtitle: isEditor ? `${app.appType} Project` : (app.appType === 'folder' ? 'Local Folder' : app.appType === 'file' ? 'Local File' : 'Desktop App'),
         icon: app.icon,
         path: app.path,
-        isApp: true
+        isApp: true,
+        appType: app.appType
       });
     });
 
@@ -263,6 +270,15 @@ export default function WorkspaceEditor({
     return () => clearTimeout(searchTimeoutRef.current);
   }, [searchQuery, handleSearch]);
 
+  // State for the modern local item flow
+  const [localItemFlow, setLocalItemFlow] = useState({
+    isOpen: false,
+    step: 'type', // 'type' | 'editor'
+    selectedPath: null,
+    isFolder: false,
+    folderName: null
+  });
+
   // Handle adding an item
   const handleAddItem = (item) => {
     if (item.isApp) {
@@ -280,10 +296,51 @@ export default function WorkspaceEditor({
     setSearchResults([]);
   };
 
+  const handleAddLocalItemClick = () => {
+    const isTauri = window.__TAURI__ || window.__TAURI_INTERNALS__ || navigator.userAgent.includes('Tauri');
+    if (isTauri) {
+      setLocalItemFlow({ isOpen: true, step: 'type', selectedPath: null, isFolder: false, folderName: null });
+    } else {
+      alert("Local file selection is only available in the desktop app.");
+    }
+  };
+
+  const handleSelectLocalType = async (isFolder) => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({
+        ...(isFolder ? { directory: true } : {}),
+        multiple: false,
+        title: isFolder ? 'Select Folder or Project' : 'Select File'
+      });
+      
+      if (selected) {
+        const folderName = selected.split(/\\|\//).pop() || selected;
+        setLocalItemFlow(prev => ({ ...prev, step: 'editor', selectedPath: selected, isFolder, folderName }));
+      } else {
+        // Cancelled dialog
+        setLocalItemFlow(prev => ({ ...prev, isOpen: false }));
+      }
+    } catch (e) {
+      console.error("Failed to add local item", e);
+      setLocalItemFlow(prev => ({ ...prev, isOpen: false }));
+    }
+  };
+
+  const handleSelectEditor = (editorKey) => {
+    const { selectedPath, isFolder, folderName } = localItemFlow;
+    const appType = editorKey || (isFolder ? 'folder' : 'file');
+    onAddItem?.({
+      urls: [],
+      apps: [{ name: folderName, path: selectedPath, icon: null, appType }]
+    });
+    setLocalItemFlow({ isOpen: false, step: 'type', selectedPath: null, isFolder: false, folderName: null });
+  };
+
   // Handle removing an item
   const handleRemoveItem = (item) => {
     if (item.isApp) {
-      onRemoveApp?.(item.path);
+      onRemoveApp?.(item);
     } else {
       onRemoveUrl?.(item.url);
     }
@@ -341,18 +398,100 @@ export default function WorkspaceEditor({
         </label>
 
         <div className="awm-items-container">
-          {/* Search Input */}
-          <div className="awm-items-search">
-            <FontAwesomeIcon icon={faSearch} className="awm-items-search-icon" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search to add tabs, apps, bookmarks..."
-            />
-            {isSearching && <div className="awm-spinner-xs" />}
+          {localItemFlow.isOpen ? (
+            <div style={{ display: 'flex', flexDirection: 'column', padding: '16px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#E2E8F0' }}>
+                  {localItemFlow.step === 'type' ? 'Add Local Item' : 'Open With...'}
+                </h4>
+                <button 
+                  onClick={() => setLocalItemFlow(prev => ({ ...prev, isOpen: false }))}
+                  style={{ background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
+                >
+                  <FontAwesomeIcon icon={faTimes} />
+                </button>
+              </div>
+              
+              {localItemFlow.step === 'type' && (
+                <div>
+                  <p style={{ fontSize: '12px', color: '#94A3B8', marginBottom: '16px', marginTop: 0 }}>
+                    Select what kind of item you want to add from your computer.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <button 
+                      onClick={() => handleSelectLocalType(true)}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '24px 16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '8px', cursor: 'pointer', color: '#E2E8F0', transition: 'all 0.2s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(51, 65, 85, 0.5)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.5)'; }}
+                    >
+                      <FontAwesomeIcon icon={faFolderPlus} style={{ color: '#facc15', fontSize: '24px' }} />
+                      <span style={{ fontSize: '13px', fontWeight: 500 }}>Folder / Project</span>
+                    </button>
+                    <button 
+                      onClick={() => handleSelectLocalType(false)}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '24px 16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '8px', cursor: 'pointer', color: '#E2E8F0', transition: 'all 0.2s' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(51, 65, 85, 0.5)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.5)'; }}
+                    >
+                      <FontAwesomeIcon icon={faFileLines} style={{ color: '#94a3b8', fontSize: '24px' }} />
+                      <span style={{ fontSize: '13px', fontWeight: 500 }}>Local File</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {localItemFlow.step === 'editor' && (
+                <div>
+                  <p style={{ fontSize: '13px', color: '#94A3B8', marginBottom: '16px', marginTop: 0 }}>
+                    How would you like to open loosely <strong style={{color: '#E2E8F0'}}>{localItemFlow.folderName}</strong>?
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
+                    {[
+                      { key: 'vscode', name: 'VS Code', icon: faCode, color: '#38bdf8' },
+                      { key: 'cursor', name: 'Cursor', icon: faCode, color: '#a855f7' },
+                      { key: 'windsurf', name: 'Windsurf', icon: faCode, color: '#f43f5e' },
+                      { key: 'idea', name: 'IntelliJ', icon: faCode, color: '#ec4899' },
+                      { key: 'webstorm', name: 'WebStorm', icon: faCode, color: '#06b6d4' },
+                      { key: '', name: localItemFlow.isFolder ? 'Explorer' : 'Default', icon: localItemFlow.isFolder ? faFolderOpen : faFileLines, color: localItemFlow.isFolder ? '#facc15' : '#94a3b8' }
+                    ].map(editor => (
+                      <button 
+                        key={editor.name} 
+                        onClick={() => handleSelectEditor(editor.key)}
+                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px 8px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '8px', cursor: 'pointer', color: '#E2E8F0', transition: 'all 0.2s' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(51, 65, 85, 0.5)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(30, 41, 59, 0.5)'; }}
+                      >
+                        <FontAwesomeIcon icon={editor.icon} style={{ color: editor.color, fontSize: '18px' }} />
+                        <span style={{ fontSize: '11px', textAlign: 'center', lineHeight: '1.2' }}>{editor.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+            <div className="awm-items-search" style={{ flex: 1, margin: 0 }}>
+              <FontAwesomeIcon icon={faSearch} className="awm-items-search-icon" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search to add tabs, apps, bookmarks..."
+              />
+              {isSearching && <div className="awm-spinner-xs" />}
+            </div>
+            <button
+                className="awm-btn"
+                style={{ padding: '0 12px', background: 'rgba(96, 165, 250, 0.1)', color: '#60a5fa', border: '1px solid rgba(96, 165, 250, 0.3)', borderRadius: '8px', cursor: 'pointer' }}
+                onClick={handleAddLocalItemClick}
+                title="Add Local Folder, Project, or File"
+            >
+                <FontAwesomeIcon icon={faFolderPlus} />
+            </button>
           </div>
+          )}
 
           {/* Items List */}
           <div className="awm-items-list">
@@ -437,11 +576,14 @@ export default function WorkspaceEditor({
             {/* Existing Items */}
             {currentItems.map((item) => {
               const typeConfig = TYPE_CONFIG[item.type] || TYPE_CONFIG.url;
+              const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
+              const isEditor = CUSTOM_EDITORS.includes(item.appType?.toLowerCase());
+              
               return (
                 <div key={item.id} className="awm-items-row">
-                  <div className="awm-items-icon" style={item.isApp ? { background: 'rgba(34, 197, 94, 0.1)' } : {}}>
+                  <div className="awm-items-icon" style={item.isApp ? { background: isEditor ? 'rgba(56, 189, 248, 0.1)' : item.appType === 'folder' ? 'rgba(250, 204, 21, 0.1)' : item.appType === 'file' ? 'rgba(148, 163, 184, 0.1)' : 'rgba(34, 197, 94, 0.1)' } : {}}>
                     {item.isApp ? (
-                      item.icon ? <img src={item.icon} alt="" /> : <FontAwesomeIcon icon={faDesktop} style={{ color: '#22c55e' }} />
+                      item.icon ? <img src={item.icon} alt="" /> : <FontAwesomeIcon icon={isEditor ? faCode : item.appType === 'folder' ? faFolderOpen : item.appType === 'file' ? faFileLines : faDesktop} style={{ color: isEditor ? '#38bdf8' : item.appType === 'folder' ? '#facc15' : item.appType === 'file' ? '#94a3b8' : '#22c55e' }} />
                     ) : item.favicon ? (
                       <img src={item.favicon} alt="" onError={(e) => e.target.style.display = 'none'} />
                     ) : (

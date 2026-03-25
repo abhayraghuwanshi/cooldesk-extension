@@ -454,6 +454,30 @@ const electronAPI = {
         }
     },
 
+    launchAppWithArgs: async (app, args) => {
+        console.log('[TauriShim] launchAppWithArgs called with app:', app, 'args:', args);
+        try {
+            const result = await invoke('launch_app_with_args', { app, args });
+            console.log('[TauriShim] launchAppWithArgs result:', result);
+            return result;
+        } catch (e) {
+            console.error('[TauriShim] Failed to launch app with args:', e);
+            throw e;
+        }
+    },
+
+    openFolder: async (path) => {
+        console.log('[TauriShim] openFolder called with path:', path);
+        try {
+            const result = await invoke('open_folder', { path });
+            console.log('[TauriShim] openFolder result:', result);
+            return result;
+        } catch (e) {
+            console.error('[TauriShim] Failed to open folder:', e);
+            throw e;
+        }
+    },
+
     // ==========================================
     // LLM (via Sidecar WebSocket)
     // ==========================================

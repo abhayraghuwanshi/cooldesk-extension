@@ -51,6 +51,7 @@ urlencoding = "2.1"
 
 # Feedback/RL dependencies
 uuid = { version = "1.0", features = ["v4"] }
+tauri-plugin-dialog = "2"
 
 [dev-dependencies]
 tempfile = "3.10"

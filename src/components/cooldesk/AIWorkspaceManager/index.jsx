@@ -308,9 +308,10 @@ export default function AIWorkspaceManager({
     const existingUrls = new Set(formData.urls.map(u => u.url));
     const uniqueNewUrls = urls.filter(u => !existingUrls.has(u.url));
 
-    // Deduplicate Apps
-    const existingPaths = new Set((formData.apps || []).map(a => a.path));
-    const uniqueNewApps = apps.filter(a => !existingPaths.has(a.path));
+    // Deduplicate Apps by path AND appType
+    const getAppKey = (a) => `${a.path}|${a.appType || 'default'}`;
+    const existingAppKeys = new Set((formData.apps || []).map(getAppKey));
+    const uniqueNewApps = apps.filter(a => !existingAppKeys.has(getAppKey(a)));
 
     setFormData(prev => ({
       ...prev,
@@ -331,10 +332,10 @@ export default function AIWorkspaceManager({
     }));
   }, []);
 
-  const handleRemoveApp = useCallback((appPath) => {
+  const handleRemoveApp = useCallback((appToRemove) => {
     setFormData(prev => ({
       ...prev,
-      apps: (prev.apps || []).filter(a => a.path !== appPath)
+      apps: (prev.apps || []).filter(a => !(a.path === appToRemove.path && a.appType === appToRemove.appType))
     }));
   }, []);
 

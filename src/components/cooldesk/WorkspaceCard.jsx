@@ -10,6 +10,7 @@ import {
   faCode,
   faDesktop,
   faExternalLinkAlt,
+  faFileLines,
   faFilm,
   faFlask,
   faFolder,
@@ -697,31 +698,46 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
               );
             })}
 
-            {/* App Icons - Distinct green styling */}
-            {apps.slice(0, showAll ? apps.length : Math.max(0, visibleCount - groupedItems.length)).map((app, idx) => (
+            {/* App Icons - Distinct styling based on appType */}
+            {apps.slice(0, showAll ? apps.length : Math.max(0, visibleCount - groupedItems.length)).map((app, idx) => {
+              const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
+              const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
+              
+              const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#22C55E';
+              const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
+              
+              return (
               <div
                 key={`app-${idx}`}
                 className="compact-url-icon compact-app-icon"
                 onClick={(e) => {
                   e.stopPropagation();
-                  // Launch or focus the app
-                  if (window.electronAPI?.launchApp && app.path) {
+                  if (!app.path || !window.electronAPI) return;
+                  
+                  if (isEditor && window.electronAPI.launchAppWithArgs) {
+                    const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
+                    window.electronAPI.launchAppWithArgs(cmd, [app.path]);
+                  } else if (app.appType === 'folder' && window.electronAPI.openFolder) {
+                    window.electronAPI.openFolder(app.path);
+                  } else if (app.appType === 'file' && window.electronAPI.launchApp) {
+                    window.electronAPI.launchApp(app.path);
+                  } else if (window.electronAPI.launchApp) {
                     window.electronAPI.launchApp(app.path);
                   }
                 }}
                 title={app.name}
                 style={{
-                  border: '2px solid rgba(34, 197, 94, 0.4)',
-                  background: 'rgba(34, 197, 94, 0.1)'
+                  border: `2px solid ${appColor}66`,
+                  background: `${appColor}1a`
                 }}
               >
                 {app.icon ? (
                   <img src={app.icon} alt="" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
                 ) : (
-                  <FontAwesomeIcon icon={faDesktop} style={{ color: '#22C55E', fontSize: '18px' }} />
+                  <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '18px' }} />
                 )}
               </div>
-            ))}
+            )})}
 
             {/* Inline Add URL Button */}
             {onAddUrl && (showAll || ((groupedItems.length + apps.length) <= visibleCount)) && (
@@ -1059,13 +1075,29 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                 flexWrap: 'wrap',
                 gap: '8px'
               }}>
-                {apps.map((app, idx) => (
+                {apps.map((app, idx) => {
+                  const CUSTOM_EDITORS = ['vscode', 'code', 'cursor', 'windsurf', 'idea', 'webstorm', 'pycharm', 'goland', 'phpstorm', 'rider', 'clion', 'rubymine', 'fleet', 'zed'];
+                  const isEditor = CUSTOM_EDITORS.includes(app.appType?.toLowerCase());
+                  
+                  const appColor = isEditor ? '#38bdf8' : app.appType === 'folder' ? '#facc15' : app.appType === 'file' ? '#94a3b8' : '#22C55E';
+                  const appIcon = isEditor ? faCode : app.appType === 'folder' ? faFolderOpen : app.appType === 'file' ? faFileLines : faDesktop;
+                  
+                  return (
                   <div
                     key={idx}
                     className="workspace-app-chip"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (window.electronAPI?.launchApp && app.path) {
+                      if (!app.path || !window.electronAPI) return;
+                      
+                      if (isEditor && window.electronAPI.launchAppWithArgs) {
+                        const cmd = app.appType.toLowerCase() === 'vscode' ? 'code' : app.appType.toLowerCase();
+                        window.electronAPI.launchAppWithArgs(cmd, [app.path]);
+                      } else if (app.appType === 'folder' && window.electronAPI.openFolder) {
+                        window.electronAPI.openFolder(app.path);
+                      } else if (app.appType === 'file' && window.electronAPI.launchApp) {
+                        window.electronAPI.launchApp(app.path);
+                      } else if (window.electronAPI.launchApp) {
                         window.electronAPI.launchApp(app.path);
                       }
                     }}
@@ -1075,31 +1107,31 @@ export const WorkspaceCard = memo(function WorkspaceCard({ workspace, onClick, i
                       gap: '6px',
                       padding: '6px 10px',
                       borderRadius: '8px',
-                      background: 'rgba(34, 197, 94, 0.1)',
-                      border: '1px solid rgba(34, 197, 94, 0.3)',
+                      background: `${appColor}1a`,
+                      border: `1px solid ${appColor}4d`,
                       cursor: 'pointer',
                       transition: 'all 0.2s',
                       fontSize: '12px',
                       color: '#E2E8F0'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(34, 197, 94, 0.2)';
-                      e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.5)';
+                      e.currentTarget.style.background = `${appColor}33`;
+                      e.currentTarget.style.borderColor = `${appColor}80`;
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(34, 197, 94, 0.1)';
-                      e.currentTarget.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                      e.currentTarget.style.background = `${appColor}1a`;
+                      e.currentTarget.style.borderColor = `${appColor}4d`;
                     }}
                     title={`Launch ${app.name}`}
                   >
                     {app.icon ? (
                       <img src={app.icon} alt="" style={{ width: '16px', height: '16px', objectFit: 'contain' }} />
                     ) : (
-                      <FontAwesomeIcon icon={faDesktop} style={{ color: '#22C55E', fontSize: '12px' }} />
+                      <FontAwesomeIcon icon={appIcon} style={{ color: appColor, fontSize: '12px' }} />
                     )}
                     <span>{app.name}</span>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           )}
