@@ -125,8 +125,11 @@ const openUrl = (url, workspaceName, title) => {
   // Prefer chrome.tabs.create for extensions (more reliable, no popup blocker)
   if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
     chrome.tabs.create({ url });
+  } else if (window.electronAPI?.openExternal) {
+    // Use electronAPI for Tauri/Electron apps (works on Mac)
+    window.electronAPI.openExternal(url);
   } else {
-    // Fallback for Electron or other environments
+    // Fallback for browser environments
     window.open(url, '_blank');
   }
 };

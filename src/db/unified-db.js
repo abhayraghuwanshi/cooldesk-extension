@@ -6,7 +6,7 @@
 // Single database configuration
 export const DB_CONFIG = {
     NAME: 'cooldesk-unified-db',
-    VERSION: 9, // Added status field to WORKSPACE_URLS for draft/active promotion
+    VERSION: 11, // Added APPS store for unified local+web app list with categories
     STORES: {
         WORKSPACES: 'workspaces',
         WORKSPACE_URLS: 'workspace_urls',
@@ -22,7 +22,8 @@ export const DB_CONFIG = {
         DAILY_MEMORY: 'daily_memory', // Daily browsing summaries
         SETTINGS: 'settings', // Application settings
         DASHBOARD: 'dashboard', // Dashboard layout/widgets
-        METADATA: 'metadata' // For tracking migrations, health, etc.
+        METADATA: 'metadata', // For tracking migrations, health, etc.
+        APPS: 'apps' // Unified local + web apps with categories
     }
 }
 
@@ -151,6 +152,20 @@ export const SCHEMAS = {
         indexes: [
             { name: 'by_type', keyPath: 'type', options: { unique: false } },
             { name: 'by_timestamp', keyPath: 'timestamp', options: { unique: false } }
+        ]
+    },
+
+    [DB_CONFIG.STORES.APPS]: {
+        keyPath: 'id', // Format: "local:<path-hash>" or "web:<url-hash>"
+        indexes: [
+            { name: 'by_type', keyPath: 'type', options: { unique: false } }, // 'local' | 'web'
+            { name: 'by_category', keyPath: 'category', options: { unique: false } },
+            { name: 'by_name', keyPath: 'name', options: { unique: false } },
+            { name: 'by_path', keyPath: 'path', options: { unique: false } }, // For local apps
+            { name: 'by_url', keyPath: 'url', options: { unique: false } }, // For web apps
+            { name: 'by_lastUsed', keyPath: 'lastUsed', options: { unique: false } },
+            { name: 'by_usageCount', keyPath: 'usageCount', options: { unique: false } },
+            { name: 'by_type_category', keyPath: ['type', 'category'], options: { unique: false } }
         ]
     }
 }
@@ -451,6 +466,74 @@ export const MIGRATIONS = {
             metadataStore.put({
                 key: 'schema_version',
                 value: 9,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+
+    10: {
+        description: 'Add APPS store for unified local + web apps with categories',
+        up: (db, transaction) => {
+            console.log('[Migration v10] Adding APPS store...')
+
+            if (!db.objectStoreNames.contains(DB_CONFIG.STORES.APPS)) {
+                const schema = SCHEMAS[DB_CONFIG.STORES.APPS]
+                console.log('[Migration v10] Creating apps store')
+                const store = db.createObjectStore(DB_CONFIG.STORES.APPS, { keyPath: schema.keyPath })
+
+                schema.indexes.forEach(indexDef => {
+                    try {
+                        store.createIndex(indexDef.name, indexDef.keyPath, indexDef.options)
+                        console.log(`[Migration v10] Created index: ${indexDef.name}`)
+                    } catch (error) {
+                        console.warn(`[Migration v10] Failed to create index ${indexDef.name}:`, error)
+                    }
+                })
+
+                console.log('[Migration v10] APPS store created successfully')
+            }
+
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 10,
+                type: 'system',
+                timestamp: Date.now(),
+                description: 'Database schema version'
+            })
+        }
+    },
+
+    11: {
+        description: 'Ensure APPS store exists (fix for v10 migration)',
+        up: (db, transaction) => {
+            console.log('[Migration v11] Ensuring APPS store exists...')
+
+            if (!db.objectStoreNames.contains(DB_CONFIG.STORES.APPS)) {
+                const schema = SCHEMAS[DB_CONFIG.STORES.APPS]
+                console.log('[Migration v11] Creating apps store')
+                const store = db.createObjectStore(DB_CONFIG.STORES.APPS, { keyPath: schema.keyPath })
+
+                schema.indexes.forEach(indexDef => {
+                    try {
+                        store.createIndex(indexDef.name, indexDef.keyPath, indexDef.options)
+                        console.log(`[Migration v11] Created index: ${indexDef.name}`)
+                    } catch (error) {
+                        console.warn(`[Migration v11] Failed to create index ${indexDef.name}:`, error)
+                    }
+                })
+
+                console.log('[Migration v11] APPS store created successfully')
+            } else {
+                console.log('[Migration v11] APPS store already exists')
+            }
+
+            const metadataStore = transaction.objectStore(DB_CONFIG.STORES.METADATA)
+            metadataStore.put({
+                key: 'schema_version',
+                value: 11,
                 type: 'system',
                 timestamp: Date.now(),
                 description: 'Database schema version'

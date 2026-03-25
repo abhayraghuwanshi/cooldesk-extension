@@ -6,6 +6,7 @@ use std::sync::{Arc, RwLock};
 mod sidecar;
 mod system;
 mod focus;
+mod categorize;
 
 use system::RunningApp;
 
@@ -88,6 +89,12 @@ async fn get_running_apps(app: tauri::AppHandle) -> Result<serde_json::Value, St
 async fn get_installed_apps(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     // We can use the same pipeline to get the full list of apps (running + not running)
     get_running_apps(app).await
+}
+
+#[tauri::command]
+fn categorize_app(name: String, path: String) -> categorize::AppCategory {
+    let mut categorizer = categorize::Categorizer::new();
+    categorizer.categorize(&name, &path)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -201,6 +208,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
         get_running_apps,
         get_installed_apps,
+        categorize_app,
         focus_window,
         toggle_spotlight,
         hide_spotlight,

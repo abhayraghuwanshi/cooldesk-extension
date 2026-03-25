@@ -1,4 +1,4 @@
-import { faBriefcase, faDesktop, faGamepad, faGraduationCap, faRobot, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faBriefcase, faDesktop, faGamepad, faGraduationCap, faRobot, faRocket, faTimes } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { deleteWorkspace, getUrlAnalytics } from '../../db/index.js';
@@ -7,6 +7,7 @@ import '../../styles/cooldesk.css';
 import { defaultFontFamily } from '../../utils/fontUtils';
 import { ShareToTeamModal } from '../popups/ShareToTeamModal';
 import { WorkspaceCard } from './WorkspaceCard';
+import { AppGrid } from './AppGrid';
 
 // Debounce utility
 function debounce(func, wait) {
@@ -54,8 +55,19 @@ const modeConfigs = {
             autoHideDock: false,
             greeting: "Knowledge Mode"
         }
+    },
+    apps: {
+        label: 'All Apps',
+        icon: faRocket,
+        theme: '#8b5cf6', // Purple
+        activeCategories: [], // Not used - shows AppGrid instead
+        behavior: {
+            allowNotifications: true,
+            autoHideDock: false,
+            greeting: "App Launcher"
+        },
+        isAppMode: true // Flag to show AppGrid instead of workspaces
     }
-    // Note: 'apps' mode removed - apps are now merged into workspaces and shown in WorkspaceCard
 };
 
 export function WorkspaceList({
@@ -456,7 +468,19 @@ export function WorkspaceList({
                     </div>
                 )}
 
-                {savedWorkspaces.length > 0 ? (
+                {/* Apps Mode - Show AppGrid */}
+                {activeMode === 'apps' && (
+                    <AppGrid
+                        viewMode={viewMode}
+                        showRecent={true}
+                        onAppLaunch={(app) => {
+                            console.log('[WorkspaceList] App launched:', app.name);
+                        }}
+                    />
+                )}
+
+                {/* Workspace Modes */}
+                {activeMode !== 'apps' && (savedWorkspaces.length > 0 ? (
                     <>
                         {/* Pinned Workspaces Section */}
                         {pinned.length > 0 && (
@@ -673,6 +697,7 @@ export function WorkspaceList({
                             </div>
                         </div>
                     </div>
+                )
                 )}
             </div>
             {/* Share Modal */}

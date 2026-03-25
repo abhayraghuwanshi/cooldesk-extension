@@ -539,11 +539,29 @@ const electronAPI = {
     }
 };
 
-// Expose globally
-// Expose globally if running in Tauri (checking both public and internal objects)
-if (typeof window !== 'undefined' && (window.__TAURI__ || window.__TAURI_INTERNALS__)) {
-    window.electronAPI = electronAPI;
-    // Also legacy window.electron if used
-    window.electron = electronAPI;
-    console.log('[ElectronShim] Initialized window.electronAPI');
+// Initialize electronAPI for Tauri
+function initElectronAPI() {
+    if (typeof window === 'undefined') return false;
+
+    // Check for Tauri runtime indicators
+    const isTauri = window.__TAURI__ ||
+                    window.__TAURI_INTERNALS__ ||
+                    navigator.userAgent.includes('Tauri');
+
+    if (isTauri && !window.electronAPI) {
+        window.electronAPI = electronAPI;
+        window.electron = electronAPI;
+        console.log('[ElectronShim] Initialized window.electronAPI for Tauri');
+        return true;
+    }
+    return false;
+}
+
+// Try immediate initialization
+initElectronAPI();
+
+// Fallback: retry after a short delay (handles race conditions on Mac)
+if (typeof window !== 'undefined' && !window.electronAPI) {
+    setTimeout(initElectronAPI, 50);
+    setTimeout(initElectronAPI, 200);
 }
