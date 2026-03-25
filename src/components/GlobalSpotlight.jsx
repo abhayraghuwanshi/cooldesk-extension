@@ -144,6 +144,7 @@ export function GlobalSpotlight() {
     const [pinnedItems, setPinnedItems] = useState([]);
     const [loading, setLoading] = useState(false);
     const [deepSearch, setDeepSearch] = useState(false);
+    const [showAllResults, setShowAllResults] = useState(false);
     const inputRef = useRef(null);
     const containerRef = useRef(null);
 
@@ -701,6 +702,8 @@ export function GlobalSpotlight() {
             if (trimmedQuery.length < 1) return;
         }
 
+        // Reset pagination on new query
+        setShowAllResults(false);
         // Increment search ID to track this request
         const currentSearchId = ++searchIdRef.current;
 
@@ -719,9 +722,33 @@ export function GlobalSpotlight() {
                 // In Electron: quickSearch uses in-memory cache (includes apps, tabs, workspaces)
                 // In Chrome: quickSearch uses local index or IPC fallback
                 const isNaturalLanguage = isNaturalLanguageQuery(trimmedQuery);
-                let searchResults = isNaturalLanguage
-                    ? await naturalLanguageSearch(trimmedQuery, 15)
-                    : await quickSearch(trimmedQuery, 15);
+                
+                const searchPromise = isNaturalLanguage
+                    ? naturalLanguageSearch(trimmedQuery, 15)
+                    : quickSearch(trimmedQuery, 15);
+                    
+                const filesPromise = window.electronAPI?.searchFiles
+                    ? window.electronAPI.searchFiles(trimmedQuery)
+                    : Promise.resolve([]);
+
+                let [searchResults, osFiles] = await Promise.all([searchPromise, filesPromise]);
+
+                const mappedFiles = (osFiles || []).map(file => {
+                    const filePath = typeof file === 'string' ? file : (file.path || '');
+                    if (!filePath) return null;
+                    const fileDate = file.date ? ` • ${file.date}` : '';
+                    const parentFolder = filePath.split(/[/\\]/).slice(0, -1).pop() || '';
+                    return {
+                        id: `file:${filePath}`,
+                        type: 'file',
+                        title: filePath.split(/[/\\]/).pop(),
+                        description: `${parentFolder}${fileDate}`,
+                        path: filePath,
+                        icon: 'file'
+                    };
+                }).filter(Boolean);
+                
+                searchResults = [...(searchResults || []), ...mappedFiles];
 
                 // Check if still relevant (user may have typed more)
                 if (searchIdRef.current !== currentSearchId) return;
@@ -1028,6 +1055,20 @@ export function GlobalSpotlight() {
                 console.warn('[Spotlight] Failed to switch to tab:', e);
             }
         }
+        
+        // Handle files natively using OS default viewer
+        if (item.type === 'file') {
+            try {
+                if (window.electronAPI?.launchApp) {
+                    await window.electronAPI.launchApp(item.path);
+                } else {
+                    console.warn('[Spotlight] launchApp not available for files');
+                }
+            } catch (e) {
+                console.error('[Spotlight] Failed to open file:', e);
+            }
+            return;
+        }
 
         // For apps, focus running app or launch installed app
         if (item.type === 'app') {
@@ -1168,6 +1209,7 @@ export function GlobalSpotlight() {
         if (item.type === 'workspace') return 'Space';
         if (item.type === 'history') return 'History';
         if (item.type === 'bookmark') return 'Bookmark';
+        if (item.type === 'file') return 'File';
         if (item.type === 'app') return item.isRunning ? 'Running' : 'App';
         return item.category || 'Link';
     };
@@ -1386,7 +1428,7 @@ export function GlobalSpotlight() {
                 {/* Results - Limited to 10 visible for performance */}
                 {results.length > 0 && !commandMode && (
                     <div className="spotlight-results">
-                        {results.slice(0, 10).map((item, index) => (
+                        {results.slice(0, showAllResults ? results.length : 10).map((item, index) => (
                             <ResultItem
                                 key={item.id || index}
                                 item={item}
@@ -1400,8 +1442,8 @@ export function GlobalSpotlight() {
                                 getAppIcon={getAppIcon}
                             />
                         ))}
-                        {results.length > 10 && (
-                            <div style={{ padding: '8px 14px', color: 'rgba(255,255,255,0.4)', fontSize: '12px', textAlign: 'center' }}>
+                        {!showAllResults && results.length > 10 && (
+                            <div style={{ padding: '8px 14px', color: 'rgba(255,255,255,0.4)', fontSize: '12px', textAlign: 'center', cursor: 'pointer' }} onClick={() => setShowAllResults(true)}>
                                 +{results.length - 10} more results (refine your search)
                             </div>
                         )}
@@ -1491,6 +1533,7 @@ function getIcon(type, name) {
         case 'workspace': return getWorkspaceIcon(name);
         case 'note': return faStickyNote;
         case 'app': return faDesktop;
+        case 'file': return faFile;
         default: return faLink;
     }
 }

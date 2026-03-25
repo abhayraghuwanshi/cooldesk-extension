@@ -478,6 +478,16 @@ const electronAPI = {
         }
     },
 
+    searchFiles: async (query) => {
+        try {
+            const result = await invoke('search_files', { query });
+            return result;
+        } catch (e) {
+            console.error('[TauriShim] Failed to search files:', e);
+            return [];
+        }
+    },
+
     // ==========================================
     // LLM (via Sidecar WebSocket)
     // ==========================================
