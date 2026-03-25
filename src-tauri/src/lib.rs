@@ -156,7 +156,7 @@ fn toggle_spotlight(app: tauri::AppHandle) {
             let _ = window.show();
             let _ = window.set_focus();
         }
-    }
+    }   
 }
 
 #[tauri::command]
@@ -276,6 +276,119 @@ async fn open_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+pub struct SearchFileResult {
+    pub path: String,
+    pub date: String,
+}
+
+/// Search user files (Downloads, Documents, Desktop) cross-platform
+#[tauri::command]
+async fn search_files(query: String) -> Result<Vec<SearchFileResult>, String> {
+    if query.trim().is_empty() {
+        return Ok(vec![]);
+    }
+    
+    let mut targets = Vec::new();
+    if let Some(dl) = dirs::download_dir() { targets.push(dl); }
+    if let Some(doc) = dirs::document_dir() { targets.push(doc); }
+    if let Some(desk) = dirs::desktop_dir() { targets.push(desk); }
+
+    #[cfg(target_os = "macos")]
+    {
+        let mut cmd = std::process::Command::new("mdfind");
+        for target in &targets {
+            cmd.arg("-onlyin").arg(target);
+        }
+        cmd.arg("-name").arg(&query);
+        
+        let output = cmd.output().map_err(|e| e.to_string())?;
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        let results: Vec<String> = output_str.lines()
+            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty())
+            .take(15)
+            .collect();
+            
+        let mut final_results = Vec::new();
+        for path in results {
+            let mut date_str = String::new();
+            if let Ok(metadata) = std::fs::metadata(&path) {
+                if let Ok(modified) = metadata.modified() {
+                    let datetime: chrono::DateTime<chrono::Local> = modified.into();
+                    date_str = datetime.format("%Y-%m-%d %H:%M").to_string();
+                }
+            }
+            final_results.push(SearchFileResult { path, date: date_str });
+        }
+        return Ok(final_results);
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        let mut ps_script = String::from("$con = New-Object -ComObject ADODB.Connection; ");
+        ps_script.push_str("$con.Open(\"Provider=Search.CollatorDSO;Extended Properties='Application=Windows';\"); ");
+        
+        let mut folder_conditions = Vec::new();
+        for target in &targets {
+            // e.g. C:\Users\Raghu\Downloads
+            let path_str = target.to_string_lossy().replace("'", "''");
+            folder_conditions.push(format!("System.ItemFolderPathDisplay LIKE '{}%'", path_str));
+        }
+        
+        // As a fallback, include basic %Downloads% wildcard
+        if folder_conditions.is_empty() {
+            folder_conditions.push("System.ItemFolderPathDisplay LIKE '%Downloads%'".into());
+            folder_conditions.push("System.ItemFolderPathDisplay LIKE '%Documents%'".into());
+            folder_conditions.push("System.ItemFolderPathDisplay LIKE '%Desktop%'".into());
+        }
+        
+        let folder_clause = format!("({})", folder_conditions.join(" OR "));
+        let query_sanitized = query.replace("'", "''");
+        
+        // SQL query for Windows Search using valid CONTAINS syntax
+        let sql = format!(
+            "SELECT TOP 15 System.ItemPathDisplay FROM SystemIndex WHERE CONTAINS(System.FileName, '\"\"*{}*\"\"') AND {}",
+            query_sanitized, folder_clause
+        );
+        
+        ps_script.push_str(&format!("$rs = $con.Execute(\"{}\"); ", sql));
+        ps_script.push_str("while($rs -ne $null -and -not $rs.EOF) { Write-Output $rs.Fields.Item('System.ItemPathDisplay').Value; $rs.MoveNext(); }");
+        
+        let output = std::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-Command")
+            .arg(&ps_script)
+            .output()
+            .map_err(|e| e.to_string())?;
+            
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        let results: Vec<String> = output_str.lines()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+            
+        let mut final_results = Vec::new();
+        for path in results {
+            let mut date_str = String::new();
+            if let Ok(metadata) = std::fs::metadata(&path) {
+                if let Ok(modified) = metadata.modified() {
+                    let datetime: chrono::DateTime<chrono::Local> = modified.into();
+                    date_str = datetime.format("%Y-%m-%d %H:%M").to_string();
+                }
+            }
+            final_results.push(SearchFileResult { path, date: date_str });
+        }
+        return Ok(final_results);
+    }
+    
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Ok(vec![])
+    }
+}
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -291,6 +404,7 @@ pub fn run() {
         launch_app,
         launch_app_with_args,
         open_folder,
+        search_files,
         get_focused_app
     ])
     .setup(|app| {
