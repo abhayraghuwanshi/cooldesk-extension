@@ -454,7 +454,8 @@ fn plist_is_true(plist_path: &Path, key: &str) -> bool {
 
 // ── Icon extraction ───────────────────────────────────────────────────────────
 
-/// Parse an ICNS file and return the bytes of the smallest embedded PNG entry.
+/// Parse an ICNS file and return PNG bytes sized for crisp Retina display.
+/// Picks the smallest PNG that is >= 64px wide; falls back to the largest available.
 /// Modern macOS ICNS files embed raw PNG data in entries like ic07/ic13/ic14.
 #[cfg(target_os = "macos")]
 fn extract_png_from_icns(path: &Path) -> Option<Vec<u8>> {
@@ -463,7 +464,8 @@ fn extract_png_from_icns(path: &Path) -> Option<Vec<u8>> {
         return None;
     }
 
-    let mut best: Option<Vec<u8>> = None;
+    // Collect all PNG entries with their pixel width (read from PNG IHDR).
+    let mut candidates: Vec<(u32, Vec<u8>)> = Vec::new();
     let mut offset = 8usize;
 
     while offset + 8 <= data.len() {
@@ -477,21 +479,37 @@ fn extract_png_from_icns(path: &Path) -> Option<Vec<u8>> {
 
         let payload = &data[offset + 8..offset + size];
 
-        // Modern ICNS entries contain raw PNG data starting with PNG magic bytes
-        if payload.len() > 8 && payload.starts_with(b"\x89PNG") {
-            // Keep the smallest PNG — best for icon thumbnail use and lower JSON weight
-            if best.as_ref().map_or(true, |b: &Vec<u8>| payload.len() < b.len()) {
-                best = Some(payload.to_vec());
+        // Modern ICNS entries contain raw PNG data starting with PNG magic bytes.
+        // PNG layout: 8-byte signature, then IHDR chunk: 4-byte length, 4-byte "IHDR",
+        // 4-byte width, 4-byte height — so width lives at bytes 16..20.
+        if payload.len() > 24 && payload.starts_with(b"\x89PNG") {
+            if let Ok(wb) = payload[16..20].try_into() as Result<[u8; 4], _> {
+                let width = u32::from_be_bytes(wb);
+                if width > 0 {
+                    candidates.push((width, payload.to_vec()));
+                }
             }
         }
 
         offset += size;
     }
 
-    best
+    if candidates.is_empty() {
+        return None;
+    }
+
+    // Sort ascending by size so we can find the minimum acceptable candidate.
+    candidates.sort_by_key(|(w, _)| *w);
+
+    // Prefer the smallest PNG that is >= 64px — renders crisp at 24 CSS px on 2× Retina.
+    // Fall back to the largest available if all entries are smaller.
+    let chosen = candidates.iter().find(|(w, _)| *w >= 64)
+        .or_else(|| candidates.last())?;
+
+    Some(chosen.1.clone())
 }
 
-/// Resolve the .icns path from Info.plist and extract the smallest embedded PNG,
+/// Resolve the .icns path from Info.plist and extract a crisp PNG (>= 64px),
 /// returning it as a `data:image/png;base64,...` string.
 #[cfg(target_os = "macos")]
 fn extract_icon_base64(app_path: &Path, plist: &Path) -> Option<String> {
