@@ -295,6 +295,20 @@ fn get_raw_windows() -> Vec<RawWindow> {
 
 // ── Build WindowEntry list from raw CGWindowList data ─────────────────────────
 
+/// Given an exe path like `/Applications/Foo.app/Contents/MacOS/Foo`,
+/// return the `.app` bundle root (`/Applications/Foo.app`).
+#[cfg(target_os = "macos")]
+fn app_bundle_root(exe_path: &str) -> Option<std::path::PathBuf> {
+    let path = std::path::Path::new(exe_path);
+    let mut current = path.parent()?;
+    loop {
+        if current.extension().and_then(|e| e.to_str()) == Some("app") {
+            return Some(current.to_path_buf());
+        }
+        current = current.parent()?;
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn build_window_entries(raw: Vec<RawWindow>) -> Vec<WindowEntry> {
     let mut sys = System::new_all();
@@ -315,6 +329,37 @@ fn build_window_entries(raw: Vec<RawWindow>) -> Vec<WindowEntry> {
             .and_then(|p| p.exe())
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
+
+        // Skip macOS system infrastructure (Dock, Control Center, Finder bar, etc.)
+        // Skip anything under /System/Library — CoreServices, Frameworks, XPCServices, etc.
+        if exe_path.starts_with("/System/Library/") {
+            continue;
+        }
+
+        // Skip app extensions (.appex bundles — Safari extensions, widgets, etc.)
+        if exe_path.contains(".appex/") {
+            continue;
+        }
+
+        // Skip Electron/CEF sub-process helpers embedded inside another app's Frameworks/
+        // e.g. /Applications/Spotify.app/Contents/Frameworks/Spotify Helper.app/...
+        if exe_path.contains("/Frameworks/") && exe_path.contains(".app/Contents/MacOS/") {
+            continue;
+        }
+
+        // Skip entries with no meaningful path (XPC services without a resolved bundle)
+        if !exe_path.starts_with('/') || exe_path.is_empty() {
+            continue;
+        }
+
+        // For any .app bundle, check LSUIElement / LSBackgroundOnly in its Info.plist.
+        // This catches system agents in /System/Applications (AutoFill, Notification Center…).
+        if let Some(app_root) = app_bundle_root(&exe_path) {
+            let plist = app_root.join("Contents/Info.plist");
+            if plist_is_true(&plist, "LSUIElement") || plist_is_true(&plist, "LSBackgroundOnly") {
+                continue;
+            }
+        }
 
         // Prefer sysinfo process name; fall back to CGWindow owner name
         let exe_name = process
@@ -388,9 +433,29 @@ fn plist_string(plist_path: &Path, key: &str) -> Option<String> {
     }
 }
 
+/// Check if a plist key is set to true (`<true/>`) or "1" (`<string>1</string>`).
+/// Used for LSUIElement and LSBackgroundOnly.
+#[cfg(target_os = "macos")]
+fn plist_is_true(plist_path: &Path, key: &str) -> bool {
+    let content = match std::fs::read_to_string(plist_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let needle = format!("<key>{}</key>", key);
+    let pos = match content.find(&needle) {
+        Some(p) => p,
+        None => return false,
+    };
+    let after = content[pos + needle.len()..].trim_start();
+    after.starts_with("<true/>")
+        || after.starts_with("<string>1</string>")
+        || after.starts_with("<integer>1</integer>")
+}
+
 // ── Icon extraction ───────────────────────────────────────────────────────────
 
-/// Parse an ICNS file and return the bytes of the smallest embedded PNG entry.
+/// Parse an ICNS file and return PNG bytes sized for crisp Retina display.
+/// Picks the smallest PNG that is >= 64px wide; falls back to the largest available.
 /// Modern macOS ICNS files embed raw PNG data in entries like ic07/ic13/ic14.
 #[cfg(target_os = "macos")]
 fn extract_png_from_icns(path: &Path) -> Option<Vec<u8>> {
@@ -399,7 +464,8 @@ fn extract_png_from_icns(path: &Path) -> Option<Vec<u8>> {
         return None;
     }
 
-    let mut best: Option<Vec<u8>> = None;
+    // Collect all PNG entries with their pixel width (read from PNG IHDR).
+    let mut candidates: Vec<(u32, Vec<u8>)> = Vec::new();
     let mut offset = 8usize;
 
     while offset + 8 <= data.len() {
@@ -413,21 +479,37 @@ fn extract_png_from_icns(path: &Path) -> Option<Vec<u8>> {
 
         let payload = &data[offset + 8..offset + size];
 
-        // Modern ICNS entries contain raw PNG data starting with PNG magic bytes
-        if payload.len() > 8 && payload.starts_with(b"\x89PNG") {
-            // Keep the smallest PNG — best for icon thumbnail use and lower JSON weight
-            if best.as_ref().map_or(true, |b: &Vec<u8>| payload.len() < b.len()) {
-                best = Some(payload.to_vec());
+        // Modern ICNS entries contain raw PNG data starting with PNG magic bytes.
+        // PNG layout: 8-byte signature, then IHDR chunk: 4-byte length, 4-byte "IHDR",
+        // 4-byte width, 4-byte height — so width lives at bytes 16..20.
+        if payload.len() > 24 && payload.starts_with(b"\x89PNG") {
+            if let Ok(wb) = payload[16..20].try_into() as Result<[u8; 4], _> {
+                let width = u32::from_be_bytes(wb);
+                if width > 0 {
+                    candidates.push((width, payload.to_vec()));
+                }
             }
         }
 
         offset += size;
     }
 
-    best
+    if candidates.is_empty() {
+        return None;
+    }
+
+    // Sort ascending by size so we can find the minimum acceptable candidate.
+    candidates.sort_by_key(|(w, _)| *w);
+
+    // Prefer the smallest PNG that is >= 64px — renders crisp at 24 CSS px on 2× Retina.
+    // Fall back to the largest available if all entries are smaller.
+    let chosen = candidates.iter().find(|(w, _)| *w >= 64)
+        .or_else(|| candidates.last())?;
+
+    Some(chosen.1.clone())
 }
 
-/// Resolve the .icns path from Info.plist and extract the smallest embedded PNG,
+/// Resolve the .icns path from Info.plist and extract a crisp PNG (>= 64px),
 /// returning it as a `data:image/png;base64,...` string.
 #[cfg(target_os = "macos")]
 fn extract_icon_base64(app_path: &Path, plist: &Path) -> Option<String> {
@@ -490,6 +572,12 @@ fn scan_app_dir(dir: &Path, source: &str) -> Vec<InstalledApp> {
         };
 
         let plist = path.join("Contents/Info.plist");
+
+        // Skip background-only and UI-agent apps (no Dock icon, not user-launchable).
+        // Examples: AutoFill, Notification Center, Control Center, Siri UI.
+        if plist_is_true(&plist, "LSUIElement") || plist_is_true(&plist, "LSBackgroundOnly") {
+            continue;
+        }
 
         let app_name = plist_string(&plist, "CFBundleDisplayName")
             .or_else(|| plist_string(&plist, "CFBundleName"))
@@ -590,6 +678,26 @@ fn add_windowless_app_processes(windows: &mut Vec<WindowEntry>) {
         // Only include .app bundle processes (skips kernel threads, daemons, etc.)
         if !exe_path.contains(".app/Contents/MacOS/") {
             continue;
+        }
+
+        // Skip CoreServices system infrastructure
+        if exe_path.contains("/System/Library/CoreServices/")
+            || exe_path.contains("/System/Library/PrivateFrameworks/")
+        {
+            continue;
+        }
+
+        // Skip app extensions and Electron helpers
+        if exe_path.contains(".appex/") || exe_path.contains("/Frameworks/") {
+            continue;
+        }
+
+        // Skip UI agent / background-only apps
+        if let Some(app_root) = app_bundle_root(&exe_path) {
+            let plist = app_root.join("Contents/Info.plist");
+            if plist_is_true(&plist, "LSUIElement") || plist_is_true(&plist, "LSBackgroundOnly") {
+                continue;
+            }
         }
 
         let exe_name = process.name().to_string();

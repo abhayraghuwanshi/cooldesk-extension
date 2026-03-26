@@ -367,9 +367,14 @@ export function TabManagement() {
           if (systemExactNames.has(appName)) return false;
           if (isMacSystemProcess(appName)) return false;
 
-          // Skip tray/background windows on Windows only (macOS apps are often invisible
-          // but still valid — e.g. background menu-bar apps with cloaked=0)
-          const isMacStyle = app.source === 'macos' || (!app.hwnd && app.pid);
+          // Skip tray/background windows on Windows only.
+          // macOS apps (source: applications/system_applications/user_applications) are
+          // pre-filtered by the scanner — all entries here are valid user apps regardless
+          // of isVisible (macOS apps frequently report isVisible=false even when open).
+          const isMacStyle = app.source === 'applications' ||
+            app.source === 'system_applications' ||
+            app.source === 'user_applications' ||
+            app.source === 'macos';
           if (!isMacStyle) {
             const isTrayOnly = app.isVisible === false && (app.cloaked || 0) !== 2;
             if (isTrayOnly) return false;

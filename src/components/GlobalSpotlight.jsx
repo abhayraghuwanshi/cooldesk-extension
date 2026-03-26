@@ -313,13 +313,33 @@ export function GlobalSpotlight() {
                 'spotlight', 'loginwindow', 'textinputswitcher', 'accessibilityuiserver',
                 'cursoruiviewservice', 'nsattributedstringagent', 'webthumbnailextension',
                 'linkednotesuitservice', 'securityprivacyextension',
+                // macOS system background services
+                'systemuiserver', 'universalaccessd', 'coreaudiod', 'distnoted',
+                'cfprefsd', 'usbd', 'secd', 'trustd', 'nsurlsessiond', 'bird',
+                'sharingd', 'bluetoothd', 'locationd', 'airplayd', 'coreduetd',
+                'backupd', 'mds', 'mdworker', 'mdsync', 'mdflagwriter',
+                'applespell', 'apsd', 'ckdiscretionaryd', 'cloudd', 'assistantd',
+                // macOS system UI agents & panels
+                'autofill', 'passwordmanager', 'passwords',
+                'airplayuiagent', 'wifiagent', 'bluetoothuiserver',
+                'diskmanagementfileserver', 'systempreferences', 'systemsettings',
+                'softwareupdated', 'installd', 'storedownloadd', 'storeassetd',
+                'screensaver', 'legacyscreensaver', 'pboard', 'pasteboard',
+                'translationd', 'siri', 'siriauthd',
+                'useractivityd', 'contextmenuhelper', 'imklaunchagent',
+                'fontd', 'fontregistryuitool', 'universalcontrol',
+                'sharedfilelistd', 'taptoradar',
             ]);
             // macOS system process patterns — filter by name prefix/content
             const isMacSystemProcess = (name) =>
                 name.startsWith('com.apple.') ||   // reverse-DNS = system XPC service
+                name.startsWith('com.microsoft.') || // MS background services
                 name.includes('.xpc.') ||           // XPC helper process
+                name.includes('extensionprocess') || // app extension hosts
                 (name.endsWith('helper') && !name.includes(' ')) ||  // bare lowercase helpers
-                (name.endsWith('agent') && !name.includes(' '));     // bare lowercase agents
+                (name.endsWith('agent') && !name.includes(' ')) ||   // bare lowercase agents
+                (name.endsWith('daemon') && !name.includes(' ')) ||  // bare lowercase daemons
+                (name.endsWith('service') && !name.includes(' '));   // bare lowercase services
             // Browser keywords — matched via substring so macOS full names like
             // "Google Chrome", "Brave Browser", "Microsoft Edge" are also caught.
             const browserKeywords = [
@@ -336,13 +356,15 @@ export function GlobalSpotlight() {
             const activeApps = enrichedRunning
                 .filter(a => {
                     const name = (a.name || '').toLowerCase().replace(/\.exe$/i, '');
+                    const nameNoSpaces = name.replace(/\s+/g, '');
                     const title = (a.title || '').toLowerCase();
 
                     if (usedIds.has(name)) return false;
 
                     // Skip known system noise processes (exact name match or macOS patterns)
-                    if (systemExactNames.has(name)) return false;
-                    if (isMacSystemProcess(name)) return false;
+                    // Check both "notification center" and "notificationcenter" forms
+                    if (systemExactNames.has(name) || systemExactNames.has(nameNoSpaces)) return false;
+                    if (isMacSystemProcess(name) || isMacSystemProcess(nameNoSpaces)) return false;
 
                     // Skip browsers (tabs are shown separately)
                     if (isBrowserApp(name)) return false;
@@ -387,7 +409,9 @@ export function GlobalSpotlight() {
 
                 // Skip browsers (they're shown as tabs instead) and cooldesk
                 const appNameLower = appName.toLowerCase().replace(/\.exe$/i, '');
-                if (isBrowserApp(appNameLower) || systemExactNames.has(appNameLower) || coolDeskNames.has(appNameLower)) continue;
+                const appNameNoSpaces = appNameLower.replace(/\s+/g, '');
+                if (isBrowserApp(appNameLower) || systemExactNames.has(appNameLower) || systemExactNames.has(appNameNoSpaces) || coolDeskNames.has(appNameLower)) continue;
+                if (isMacSystemProcess(appNameLower) || isMacSystemProcess(appNameNoSpaces)) continue;
                 if (appNameLower.includes('cooldesk') || appNameLower.includes('tauri')) continue;
 
                 // Find app in installed apps with flexible matching
@@ -1664,7 +1688,7 @@ const ResultItem = memo(function ResultItem({ item, index, isSelected, onSelect,
                 <span className="result-title">{item.title || item.name}</span>
                 <span className="result-desc">
                     {item.type === 'app'
-                        ? (item.isRunning ? `Running • ${item.title}` : item.path?.split('\\').pop() || 'Application')
+                        ? (item.isRunning ? 'Running' : (item.path?.split(/[/\\]/).pop()?.replace(/\.app$/i, '') || 'Application'))
                         : (item.description || formatUrl(item.url))}
                 </span>
             </div>
