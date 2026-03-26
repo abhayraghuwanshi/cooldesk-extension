@@ -61,7 +61,7 @@ name = "matcher"
 path = "src/bin/matcher.rs"
 
 [[bin]]
-name = "scanner_mac"
+name = "AppScanner"
 path = "src/bin/scanner_mac.rs"
 
 [target.'cfg(windows)'.dependencies]

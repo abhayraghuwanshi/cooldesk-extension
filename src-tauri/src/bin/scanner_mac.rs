@@ -295,6 +295,20 @@ fn get_raw_windows() -> Vec<RawWindow> {
 
 // ── Build WindowEntry list from raw CGWindowList data ─────────────────────────
 
+/// Given an exe path like `/Applications/Foo.app/Contents/MacOS/Foo`,
+/// return the `.app` bundle root (`/Applications/Foo.app`).
+#[cfg(target_os = "macos")]
+fn app_bundle_root(exe_path: &str) -> Option<std::path::PathBuf> {
+    let path = std::path::Path::new(exe_path);
+    let mut current = path.parent()?;
+    loop {
+        if current.extension().and_then(|e| e.to_str()) == Some("app") {
+            return Some(current.to_path_buf());
+        }
+        current = current.parent()?;
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn build_window_entries(raw: Vec<RawWindow>) -> Vec<WindowEntry> {
     let mut sys = System::new_all();
@@ -315,6 +329,37 @@ fn build_window_entries(raw: Vec<RawWindow>) -> Vec<WindowEntry> {
             .and_then(|p| p.exe())
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
+
+        // Skip macOS system infrastructure (Dock, Control Center, Finder bar, etc.)
+        // Skip anything under /System/Library — CoreServices, Frameworks, XPCServices, etc.
+        if exe_path.starts_with("/System/Library/") {
+            continue;
+        }
+
+        // Skip app extensions (.appex bundles — Safari extensions, widgets, etc.)
+        if exe_path.contains(".appex/") {
+            continue;
+        }
+
+        // Skip Electron/CEF sub-process helpers embedded inside another app's Frameworks/
+        // e.g. /Applications/Spotify.app/Contents/Frameworks/Spotify Helper.app/...
+        if exe_path.contains("/Frameworks/") && exe_path.contains(".app/Contents/MacOS/") {
+            continue;
+        }
+
+        // Skip entries with no meaningful path (XPC services without a resolved bundle)
+        if !exe_path.starts_with('/') || exe_path.is_empty() {
+            continue;
+        }
+
+        // For any .app bundle, check LSUIElement / LSBackgroundOnly in its Info.plist.
+        // This catches system agents in /System/Applications (AutoFill, Notification Center…).
+        if let Some(app_root) = app_bundle_root(&exe_path) {
+            let plist = app_root.join("Contents/Info.plist");
+            if plist_is_true(&plist, "LSUIElement") || plist_is_true(&plist, "LSBackgroundOnly") {
+                continue;
+            }
+        }
 
         // Prefer sysinfo process name; fall back to CGWindow owner name
         let exe_name = process
@@ -386,6 +431,25 @@ fn plist_string(plist_path: &Path, key: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Check if a plist key is set to true (`<true/>`) or "1" (`<string>1</string>`).
+/// Used for LSUIElement and LSBackgroundOnly.
+#[cfg(target_os = "macos")]
+fn plist_is_true(plist_path: &Path, key: &str) -> bool {
+    let content = match std::fs::read_to_string(plist_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let needle = format!("<key>{}</key>", key);
+    let pos = match content.find(&needle) {
+        Some(p) => p,
+        None => return false,
+    };
+    let after = content[pos + needle.len()..].trim_start();
+    after.starts_with("<true/>")
+        || after.starts_with("<string>1</string>")
+        || after.starts_with("<integer>1</integer>")
 }
 
 // ── Icon extraction ───────────────────────────────────────────────────────────
@@ -491,6 +555,12 @@ fn scan_app_dir(dir: &Path, source: &str) -> Vec<InstalledApp> {
 
         let plist = path.join("Contents/Info.plist");
 
+        // Skip background-only and UI-agent apps (no Dock icon, not user-launchable).
+        // Examples: AutoFill, Notification Center, Control Center, Siri UI.
+        if plist_is_true(&plist, "LSUIElement") || plist_is_true(&plist, "LSBackgroundOnly") {
+            continue;
+        }
+
         let app_name = plist_string(&plist, "CFBundleDisplayName")
             .or_else(|| plist_string(&plist, "CFBundleName"))
             .unwrap_or_else(|| bundle_name.clone());
@@ -590,6 +660,26 @@ fn add_windowless_app_processes(windows: &mut Vec<WindowEntry>) {
         // Only include .app bundle processes (skips kernel threads, daemons, etc.)
         if !exe_path.contains(".app/Contents/MacOS/") {
             continue;
+        }
+
+        // Skip CoreServices system infrastructure
+        if exe_path.contains("/System/Library/CoreServices/")
+            || exe_path.contains("/System/Library/PrivateFrameworks/")
+        {
+            continue;
+        }
+
+        // Skip app extensions and Electron helpers
+        if exe_path.contains(".appex/") || exe_path.contains("/Frameworks/") {
+            continue;
+        }
+
+        // Skip UI agent / background-only apps
+        if let Some(app_root) = app_bundle_root(&exe_path) {
+            let plist = app_root.join("Contents/Info.plist");
+            if plist_is_true(&plist, "LSUIElement") || plist_is_true(&plist, "LSBackgroundOnly") {
+                continue;
+            }
         }
 
         let exe_name = process.name().to_string();
